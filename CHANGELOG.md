@@ -7,24 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
+## [1.0.0] - 2026-08-08
 
-- Run status and stop use public platform API, so they do not break when the internal execution API changes.
-
-## [1.0.0] - 2026-08-07
+First release.
 
 ### Added
 
-- Run unit tests only for modules whose files changed.
-- Check that modules directly consuming a changed public API still compile.
-- Toolbar button with a live count of affected modules, disabled when nothing changed.
-- List of affected modules with navigation to the sources of each one.
-- Per-module actions for detekt, lint and coverage, shown only when the module declares those Gradle tasks.
-- Toggle to skip the consumer compilation check and run tests only.
-- Base branch detection: configured branch, then `develop`, `main`, `master`.
-- Support for composite builds, so a module is run against the build that owns it.
-- MCP toolset exposing the same analysis and Gradle execution to AI agents.
-- User interface in English, Russian, German, French, Spanish, Italian, Portuguese (Brazil), Polish, Turkish, Japanese, Korean and Simplified Chinese.
+- Tests for the modules you changed, and a compilation check for the modules consuming an API you changed.
+- A toolbar button carrying the number of affected modules, disabled when there are none.
+- A menu listing those modules, with navigation to each, and their detekt, lint and coverage tasks where they exist.
+- A toggle to run tests only, without the consumer check.
+- Composite build support: every module runs against the build that owns it.
+- An MCP toolset giving AI agents the same analysis and execution.
+- Twelve interface languages.
 
 [Unreleased]: https://github.com/aspix2k/affected/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/aspix2k/affected/releases/tag/v1.0.0

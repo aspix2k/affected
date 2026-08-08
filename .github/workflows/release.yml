@@ -41,9 +41,10 @@ jobs:
       - name: Read release notes from the changelog
         id: notes
         run: |
+          notes=$(.github/changelog-section.sh "${GITHUB_REF_NAME#v}")
           {
             echo 'body<<CHANGELOG_EOF'
-            ./gradlew -q getChangelog --no-header --no-summary
+            echo "$notes"
             echo CHANGELOG_EOF
           } >> "$GITHUB_OUTPUT"
 

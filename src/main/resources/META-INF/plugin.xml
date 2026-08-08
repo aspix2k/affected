@@ -4,32 +4,27 @@
     <vendor url="https://github.com/aspix2k/affected">aspix</vendor>
 
     <description><![CDATA[
-        Runs unit tests only for the modules you changed, and checks that modules
-        depending on your changed public API still compile.
+        <b>Test what you changed. Compile what depends on it.</b>
         <br/><br/>
-        In a large multi-module project a full test run takes tens of minutes, so it
-        gets skipped. The usual result: your own module is green, you push, and CI
-        fails somewhere above — in a module you never touched, on a signature you changed.
+        A full test run on a large project takes tens of minutes, so nobody runs it
+        before pushing. Running just your own module is fast but misses the failure
+        that matters: you changed a signature, your module is green, and the build
+        breaks in a module you have never opened.
         <br/><br/>
-        This plugin runs two things and nothing else:
-        <ul>
-            <li>unit tests of every module whose files changed;</li>
-            <li>compilation of modules that directly consume a module whose public API changed.</li>
-        </ul>
-        A change inside a function body, in a private member, in a test or in an XML
-        resource cannot break consumers, so consumers are skipped for those.
+        Affected runs the tests of the modules you touched, and checks that the
+        modules consuming your changed API still compile. Usually seconds, not
+        minutes.
         <br/><br/>
-        The module graph comes from the IDE project model, not from parsing build
-        scripts, so the plugin works with Kotlin and Groovy build files, any dependency
-        DSL, and both single-project and composite builds.
+        The button next to Run carries the number of affected modules, and is
+        disabled when there are none. The menu lists those modules, navigates to any
+        of them, and offers their detekt, lint and coverage tasks. Runs go through
+        the IDE's Gradle integration, so the test tree, the jump from a failure to
+        its source, and the Stop button work as usual.
+        <br/><br/>
+        Works with Kotlin and Groovy builds, any dependency DSL, and composite
+        builds, with no configuration.
     ]]></description>
 
-    <change-notes><![CDATA[
-        <b>1.0.0</b>
-        <ul>
-            <li>Initial release</li>
-        </ul>
-    ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.gradle</depends>

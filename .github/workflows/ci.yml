@@ -33,6 +33,12 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
           df -h /
 
+      - name: The changelog must describe the current version
+        run: |
+          version=$(./gradlew -q printVersion)
+          .github/changelog-section.sh "$version" > /dev/null \
+            || { echo "::error file=CHANGELOG.md::Add a section for $version before bumping the version."; exit 1; }
+
       - run: ./gradlew test koverXmlReport buildPlugin
       - run: ./gradlew verifyPlugin
 
