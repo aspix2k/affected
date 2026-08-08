@@ -25,9 +25,13 @@ The commit dialog gets a checkbox that runs the same verification and cancels th
 commit if it fails, and a push can be aborted the same way. Both are off until you
 turn them on.
 
-Gradle, Maven, Cargo, Go and Node workspaces all work, with no configuration —
+Gradle, Maven, Cargo, Go, npm, .NET and Python all work, with no configuration —
 Kotlin or Groovy build scripts, any dependency DSL, composite builds, npm, yarn
 or pnpm.
+
+A consumer is only checked where the language gives something to check:
+TypeScript is type checked, plain JavaScript is left alone, and Python consumers
+are checked when the project configures mypy.
 
 ## AI agents
 
@@ -38,7 +42,7 @@ stop it.
 ## Requirements
 
 A JetBrains IDE 2025.1+, and a project built by Gradle, Maven, Cargo, Go, npm,
-yarn or pnpm.
+yarn, pnpm, .NET or Python.
 
 Local edits are read from the IDE, so any VCS it supports will do. Comparing
 against a base branch needs git; without it the plugin works from your

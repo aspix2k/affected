@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - npm, yarn and pnpm workspaces: tests of changed packages, and a type check of the packages depending on them.
+- .NET projects: `dotnet test` for changed projects and `dotnet build` for the projects referencing them, with the graph read from `ProjectReference`.
+- Python monorepos: `pytest` for changed packages, and `mypy` for their consumers when the project configures it.
 
 ### Changed
 
