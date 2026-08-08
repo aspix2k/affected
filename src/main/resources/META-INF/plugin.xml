@@ -1,0 +1,78 @@
+<idea-plugin>
+    <id>com.aspix2k.affected</id>
+    <name>Affected</name>
+    <vendor url="https://github.com/aspix2k/affected">aspix</vendor>
+
+    <description><![CDATA[
+        Runs unit tests only for the modules you changed, and checks that modules
+        depending on your changed public API still compile.
+        <br/><br/>
+        In a large multi-module project a full test run takes tens of minutes, so it
+        gets skipped. The usual result: your own module is green, you push, and CI
+        fails somewhere above — in a module you never touched, on a signature you changed.
+        <br/><br/>
+        This plugin runs two things and nothing else:
+        <ul>
+            <li>unit tests of every module whose files changed;</li>
+            <li>compilation of modules that directly consume a module whose public API changed.</li>
+        </ul>
+        A change inside a function body, in a private member, in a test or in an XML
+        resource cannot break consumers, so consumers are skipped for those.
+        <br/><br/>
+        The module graph comes from the IDE project model, not from parsing build
+        scripts, so the plugin works with Kotlin and Groovy build files, any dependency
+        DSL, and both single-project and composite builds.
+    ]]></description>
+
+    <change-notes><![CDATA[
+        <b>1.0.0</b>
+        <ul>
+            <li>Initial release</li>
+        </ul>
+    ]]></change-notes>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.gradle</depends>
+    <depends optional="true" config-file="affected-mcp.xml">com.intellij.mcpServer</depends>
+
+    <resource-bundle>messages.AffectedBundle</resource-bundle>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <notificationGroup id="AffectedTests" displayType="BALLOON" bundle="messages.AffectedBundle"
+                           key="group.title"/>
+        <postStartupActivity implementation="com.aspix2k.affected.StartupRefresh"/>
+    </extensions>
+
+    <applicationListeners>
+        <listener class="com.aspix2k.affected.ChangeListener"
+                  topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+    </applicationListeners>
+
+    <actions>
+        <group id="com.aspix2k.affected.Group"
+               class="com.aspix2k.affected.AffectedGroup"
+               popup="true">
+            <add-to-group group-id="MainToolbarRight" anchor="before" relative-to-action="NewUiRunWidget"/>
+            <add-to-group group-id="RunMenu" anchor="first"/>
+
+            <action id="com.aspix2k.affected.Run"
+                    class="com.aspix2k.affected.RunAffectedTestsAction"
+                    icon="AllIcons.Actions.Execute">
+                <keyboard-shortcut keymap="$default" first-keystroke="control alt shift T"/>
+            </action>
+            <action id="com.aspix2k.affected.Detekt"
+                    class="com.aspix2k.affected.RunDetektAction"/>
+            <action id="com.aspix2k.affected.Lint"
+                    class="com.aspix2k.affected.RunLintAction"/>
+            <action id="com.aspix2k.affected.Coverage"
+                    class="com.aspix2k.affected.RunCoverageAction"/>
+            <separator/>
+            <group id="com.aspix2k.affected.Modules"
+                   class="com.aspix2k.affected.AffectedModulesGroup"
+                   popup="true"/>
+            <separator/>
+            <action id="com.aspix2k.affected.CheckConsumers"
+                    class="com.aspix2k.affected.CheckConsumersToggle"/>
+        </group>
+    </actions>
+</idea-plugin>
