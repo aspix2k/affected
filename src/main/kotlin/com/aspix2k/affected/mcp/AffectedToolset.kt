@@ -3,8 +3,8 @@ package com.aspix2k.affected.mcp
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
-import com.intellij.execution.ExecutionManager
 import com.intellij.execution.executors.DefaultRunExecutor
+import com.intellij.execution.ui.RunContentManager
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.externalSystem.model.execution.ExternalSystemTaskExecutionSettings
@@ -175,9 +175,9 @@ class AffectedToolset : McpToolset {
     suspend fun affected_stop(): String {
         val project = coroutineContext.project
         val stopped = withContext(Dispatchers.EDT) {
-            val descriptors = ExecutionManager.getInstance(project).getRunningDescriptors { true }
-            descriptors.forEach { it.processHandler?.destroyProcess() }
-            descriptors.size
+            val running = runningProcessHandlers(project)
+            running.forEach { it.destroyProcess() }
+            running.size
         }
         return if (stopped == 0) "Nothing is running." else "Stopped $stopped run(s)."
     }
@@ -190,7 +190,7 @@ class AffectedToolset : McpToolset {
         val project = coroutineContext.project
         val state = project.service<AffectedState>()
         val running = withContext(Dispatchers.EDT) {
-            ExecutionManager.getInstance(project).getRunningDescriptors { true }.size
+            runningProcessHandlers(project).size
         }
 
         return buildString {
@@ -244,4 +244,9 @@ class AffectedToolset : McpToolset {
 
         return "Base branch: ${settings.baseBranch}, consumer check: ${if (settings.checkConsumers) "on" else "off"}."
     }
+
+    private fun runningProcessHandlers(project: Project) =
+        RunContentManager.getInstance(project).allDescriptors
+            .mapNotNull { it.processHandler }
+            .filterNot { it.isProcessTerminated || it.isProcessTerminating }
 }
