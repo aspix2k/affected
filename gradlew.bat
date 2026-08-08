@@ -38,97 +38,6 @@ for %%i in ("%APP_HOME%") do set APP_HOME=%%~fi
 @rem Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
 set DEFAULT_JVM_OPTS="-Xmx64m" "-Xms64m"
 
-@rem ---------------------------------------------------------------------------
-@rem Optional project-local Gradle properties (NOT standard Gradle behavior).
-@rem Looks for %APP_HOME%\.tander\gradle-local.properties and passes each entry:
-@rem - org.gradle.* and systemProp.* => -Dkey=value
-@rem - everything else              => -Pkey=value
-@rem ---------------------------------------------------------------------------
-
-set "GRADLE_LOCAL_PROPS_FILE=%APP_HOME%\.tander\gradle-local.properties"
-set "TANDER_LOCAL_ARGS="
-
-if exist "%GRADLE_LOCAL_PROPS_FILE%" (
-    setlocal EnableDelayedExpansion
-
-    set "current="
-
-    for /f "usebackq delims=" %%L in ("%GRADLE_LOCAL_PROPS_FILE%") do (
-        set "raw_line=%%L"
-        set "skipLine="
-
-        @rem If we are NOT in continuation mode, handle empty lines and comments first
-        if not defined current (
-            if "!raw_line!"=="" (
-                set "skipLine=1"
-            ) else (
-                set "firstChar=!raw_line:~0,1!"
-                if "!firstChar!"=="#" set "skipLine=1"
-                if "!firstChar!"=="!" set "skipLine=1"
-            )
-        )
-
-        if not defined skipLine (
-            @rem Merge with previous continued line if needed
-            if defined current (
-                set "line=!current!!raw_line!"
-            ) else (
-                set "line=!raw_line!"
-            )
-
-            @rem Detect multiline continuation: single trailing backslash
-            set "continueLine="
-            set "lastChar=!line:~-1!"
-            if "!lastChar!"=="\" (
-                set "prevChar="
-                if not "!line!"=="\" set "prevChar=!line:~-2,1!"
-                if not "!prevChar!"=="\" (
-                    set "continueLine=1"
-                )
-            )
-
-            if defined continueLine (
-                set "current=!line:~0,-1!"
-            ) else (
-                set "current="
-
-                @rem Parse only key=value (preserve everything after first '=')
-                set "hasEquals="
-                for /f "tokens=1* delims==" %%K in ("!line!") do (
-                    set "propKey=%%K"
-                    set "propValue=%%L"
-                    set "hasEquals=1"
-
-                    @rem Rebuild value from full line preserving '=' inside value
-                    set "tmpLine=!line!"
-                    call set "propValue=%%tmpLine:*%propKey%=%%"
-                    if "!propValue:~0,1!"=="=" set "propValue=!propValue:~1!"
-
-                    if /i "!propKey:~0,11!"=="org.gradle." (
-                        set "TANDER_LOCAL_ARGS=!TANDER_LOCAL_ARGS! "-D!propKey!=!propValue!""
-                    ) else if /i "!propKey:~0,11!"=="systemProp." (
-                        set "TANDER_LOCAL_ARGS=!TANDER_LOCAL_ARGS! "-D!propKey!=!propValue!""
-                    ) else (
-                        set "TANDER_LOCAL_ARGS=!TANDER_LOCAL_ARGS! "-P!propKey!=!propValue!""
-                    )
-                )
-
-                if not defined hasEquals (
-                    1>&2 echo Ignoring malformed line in %GRADLE_LOCAL_PROPS_FILE%: !line!
-                )
-            )
-        )
-    )
-
-    if defined current (
-        1>&2 echo Unsupported multiline property in %GRADLE_LOCAL_PROPS_FILE%: unterminated trailing backslash
-        endlocal
-        goto fail
-    )
-
-    endlocal & set "TANDER_LOCAL_ARGS=%TANDER_LOCAL_ARGS%"
-)
-
 @rem Find java.exe
 if defined JAVA_HOME goto findJavaFromJavaHome
 
@@ -164,7 +73,7 @@ goto fail
 
 
 @rem Execute Gradle
-"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% %TANDER_LOCAL_ARGS% "-Dorg.gradle.appname=%APP_BASE_NAME%" -jar "%APP_HOME%\gradle\wrapper\gradle-wrapper.jar" %*
+"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %GRADLE_OPTS% "-Dorg.gradle.appname=%APP_BASE_NAME%" -jar "%APP_HOME%\gradle\wrapper\gradle-wrapper.jar" %*
 
 :end
 @rem End local scope for the variables with windows NT shell
