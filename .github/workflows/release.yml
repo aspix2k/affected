@@ -52,9 +52,17 @@ jobs:
       - run: ./gradlew buildPlugin
       - run: ./gradlew verifyPlugin
 
+      - name: Name the asset apart from the source archives
+        run: |
+          # GitHub attaches its own "Source code (zip)" named after the tag. It collides
+          # with the plugin zip on the release page, and uploading the wrong one to the
+          # marketplace fails with "Unexpected plugin archive file structure".
+          # Copy, never move: publishPlugin reads the artifact from its original path.
+          cp build/distributions/affected-*.zip "affected-plugin-${GITHUB_REF_NAME#v}.zip"
+
       - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
-          files: build/distributions/*.zip
+          files: affected-plugin-*.zip
           body: ${{ steps.notes.outputs.body }}
           fail_on_unmatched_files: true
 
