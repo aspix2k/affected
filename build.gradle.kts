@@ -6,7 +6,7 @@ plugins {
     id("org.jetbrains.intellij.platform") version "2.18.1"
     id("org.jetbrains.kotlinx.kover") version "0.9.1"
     id("info.solidsoft.pitest") version "1.19.0"
-    id("org.jetbrains.changelog") version "2.4.0"
+    id("org.jetbrains.changelog") version "2.5.0"
 }
 
 group = "com.aspix2k"
