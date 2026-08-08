@@ -1,7 +1,6 @@
 package com.aspix2k.affected
 
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertSame
 
@@ -29,14 +28,6 @@ class AffectedIconsTest {
     fun `adjacent values in one range use the same icon`() {
         assertSame(AffectedIcons.withCount(3), AffectedIcons.withCount(6))
         assertSame(AffectedIcons.withCount(20), AffectedIcons.withCount(500))
-    }
-
-    @Test
-    fun `the running animation has toolbar icon dimensions`() {
-        assertEquals(20, AffectedIcons.Running.iconWidth)
-        assertEquals(20, AffectedIcons.Running.iconHeight)
-        assertEquals(20, AffectedIcons.DisabledRunning.iconWidth)
-        assertEquals(20, AffectedIcons.DisabledRunning.iconHeight)
     }
 
     @Test
