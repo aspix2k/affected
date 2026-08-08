@@ -57,6 +57,11 @@ unit tests. Keep them that way: return data and let the action format it.
 
 ## Releasing
 
+Every version needs its own section in `CHANGELOG.md`. CI fails when the version
+in `build.gradle.kts` has no entries there, and the release fails when the tagged
+version has none — the same section becomes the GitHub release notes and the
+plugin's What's New on the marketplace.
+
 Push a tag. The workflow refuses it if it does not match the version in
 `build.gradle.kts`, attaches the zip to a GitHub release with the notes from
 `CHANGELOG.md`, and uploads to the JetBrains Marketplace when
