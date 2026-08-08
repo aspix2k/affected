@@ -52,6 +52,9 @@ class BundleCompletenessTest {
             if (empty.isEmpty()) null else "${file.name}: ${empty.sorted()}"
         }
 
-        assertTrue(blanks.isEmpty(), "пустые значения читаются как отсутствующий перевод:\n${blanks.joinToString("\n")}")
+        assertTrue(
+            blanks.isEmpty(),
+            "пустые значения читаются как отсутствующий перевод:\n${blanks.joinToString("\n")}",
+        )
     }
 }
