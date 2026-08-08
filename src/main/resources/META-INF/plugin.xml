@@ -25,8 +25,13 @@
         the IDE's Gradle integration, so the test tree, the jump from a failure to
         its source, and the Stop button work as usual.
         <br/><br/>
-        Works with Gradle, Maven, Cargo and Go, Kotlin and Groovy build scripts,
-        any dependency DSL, and composite builds, with no configuration.
+        Works with Gradle, Maven, Cargo, Go, npm, .NET and Python, with no
+        configuration — Kotlin or Groovy build scripts, any dependency DSL,
+        composite builds, npm, yarn or pnpm.
+        <br/><br/>
+        A consumer is only checked where the language gives something to check.
+        TypeScript is type checked, plain JavaScript is left alone, and Python
+        consumers are checked only when the project configures mypy.
         <br/><br/>
         The interface is available in fourteen languages.
     ]]></description>
@@ -49,6 +54,9 @@
     <extensions defaultExtensionNs="com.aspix2k.affected">
         <buildSystem implementation="com.aspix2k.affected.build.CargoBuildSystem"/>
         <buildSystem implementation="com.aspix2k.affected.build.GoBuildSystem"/>
+        <buildSystem implementation="com.aspix2k.affected.build.NodeBuildSystem"/>
+        <buildSystem implementation="com.aspix2k.affected.build.DotnetBuildSystem"/>
+        <buildSystem implementation="com.aspix2k.affected.build.PythonBuildSystem"/>
     </extensions>
 
     <extensions defaultExtensionNs="com.intellij">

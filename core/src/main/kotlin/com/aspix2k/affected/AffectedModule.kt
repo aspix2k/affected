@@ -7,7 +7,7 @@ data class AffectedModule(
     val directory: String,
     val testDirectory: String?,
     val testTask: String,
-    val compileTask: String,
+    val compileTask: String?,
     val hasTests: Boolean,
     val tasks: Set<String>,
 ) {

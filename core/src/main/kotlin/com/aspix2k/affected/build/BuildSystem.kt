@@ -7,7 +7,8 @@ data class BuildModule(
     val root: String,
     val contentRoots: List<String>,
     val testTask: String,
-    val compileTask: String,
+    /** How to check a consumer still builds. Null when the language has nothing to compile. */
+    val compileTask: String?,
     val hasTests: Boolean,
     val dependencies: Set<String> = emptySet(),
     val extraTasks: Set<String> = emptySet(),
