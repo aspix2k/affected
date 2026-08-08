@@ -60,6 +60,15 @@ class MavenBuildSystem : BuildSystem {
         MavenRunConfigurationType.runConfiguration(project, parameters, null)
     }
 
+    /**
+     * Maven runs through its own run configuration, which reports nothing back,
+     * so a caller that needs an answer is told the run cannot be awaited.
+     */
+    override fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean {
+        run(project, root, tasks)
+        return true
+    }
+
     private fun rootOf(manager: MavenProjectsManager, directory: String): String =
         manager.rootProjects.map { it.directory }
             .filter { directory == it || directory.startsWith("$it/") }

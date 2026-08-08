@@ -18,8 +18,12 @@ The button next to Run carries the number of affected modules, and is disabled
 when there are none. The menu lists those modules, navigates to any of them, and
 offers their detekt, lint and coverage tasks.
 
-Runs go through the IDE's Gradle integration, so the test tree, the jump from a
+Runs go through the IDE's own integration, so the test tree, the jump from a
 failure to its source, and the Stop button work as usual.
+
+The commit dialog gets a checkbox that runs the same verification and cancels the
+commit if it fails, and a push can be aborted the same way. Both are off until you
+turn them on.
 
 ## AI agents
 

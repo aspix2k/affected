@@ -30,12 +30,18 @@ class GoBuildSystem : BuildSystem {
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {
-        tasks.groupBy({ it.substringAfterLast(':') }, { it.substringBeforeLast(':') })
-            .forEach { (task, packages) ->
-                val command = listOf("go", if (task == GoPackages.COMPILE) "build" else "test") + packages
-                CommandRunner.run(project, root, command, "go ${command[1]}")
-            }
+        commands(tasks).forEach { (title, command) -> CommandRunner.run(project, root, command, title) }
     }
+
+    private fun commands(tasks: List<String>): List<Pair<String, List<String>>> =
+        tasks.groupBy({ it.substringAfterLast(':') }, { it.substringBeforeLast(':') })
+            .map { (task, packages) ->
+                val verb = if (task == GoPackages.COMPILE) "build" else "test"
+                "go $verb" to listOf("go", verb) + packages
+            }
+
+    override fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean =
+        commands(tasks).all { (title, command) -> CommandRunner.runAndWait(project, root, command, title) }
 
     private fun manifestOf(project: Project): File? =
         project.basePath?.let { File(it, "go.mod") }?.takeIf { it.isFile }

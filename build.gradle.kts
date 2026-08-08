@@ -12,7 +12,7 @@ plugins {
 }
 
 group = "com.aspix2k"
-version = "1.3.0"
+version = "1.4.0"
 
 repositories {
     mavenCentral()
@@ -35,6 +35,7 @@ dependencies {
         } else {
             intellijIdea(providers.gradleProperty("affected.idea.version").get())
         }
+        bundledModule("intellij.platform.vcs.dvcs.impl")
         pluginComposedModule(implementation(project(":core")))
         pluginModule(implementation(project(":mcp")))
     }

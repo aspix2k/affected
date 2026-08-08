@@ -6,6 +6,7 @@ import com.intellij.openapi.externalSystem.model.execution.ExternalSystemTaskExe
 import com.intellij.openapi.externalSystem.model.project.ModuleData
 import com.intellij.openapi.externalSystem.model.task.TaskData
 import com.intellij.openapi.externalSystem.service.execution.ProgressExecutionMode
+import com.intellij.openapi.externalSystem.task.TaskCallback
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil
 import com.intellij.openapi.externalSystem.util.ExternalSystemUtil
 import com.intellij.openapi.module.Module
@@ -15,6 +16,8 @@ import com.intellij.openapi.roots.ModuleRootManager
 import org.jetbrains.plugins.gradle.settings.GradleSettings
 import org.jetbrains.plugins.gradle.util.GradleConstants
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicBoolean
 
 class GradleBuildSystem : BuildSystem {
 
@@ -46,6 +49,36 @@ class GradleBuildSystem : BuildSystem {
             }
 
         return withDependencies(result, ideModules)
+    }
+
+    override fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean {
+        val settings = ExternalSystemTaskExecutionSettings().apply {
+            externalProjectPath = root
+            taskNames = tasks
+            externalSystemIdString = GradleConstants.SYSTEM_ID.id
+        }
+
+        val finished = CountDownLatch(1)
+        val succeeded = AtomicBoolean(false)
+
+        ExternalSystemUtil.runTask(
+            settings,
+            DefaultRunExecutor.EXECUTOR_ID,
+            project,
+            GradleConstants.SYSTEM_ID,
+            object : TaskCallback {
+                override fun onSuccess() {
+                    succeeded.set(true)
+                    finished.countDown()
+                }
+
+                override fun onFailure() = finished.countDown()
+            },
+            ProgressExecutionMode.IN_BACKGROUND_ASYNC,
+        )
+
+        finished.await()
+        return succeeded.get()
     }
 
     private data class Described(
