@@ -4,7 +4,6 @@ import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.BuildSystem
 import com.aspix2k.affected.build.BuildSystems
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.roots.ModuleRootManager
 import java.io.File
 
 class ModuleGraph(private val project: Project) {
@@ -58,16 +57,10 @@ class ModuleGraph(private val project: Project) {
     }
 
     fun directDependents(targets: Set<Node>): List<Node> {
-        val targetModules = targets.mapNotNull { it.module.ideModule }.toSet()
-        val targetRoots = targets.flatMap { it.module.contentRoots }.toSet()
+        val targetKeys = targets.map { it.module.key }.toSet()
 
         return nodes.filter { node ->
-            if (node in targets) return@filter false
-            val ideModule = node.module.ideModule ?: return@filter false
-            ModuleRootManager.getInstance(ideModule).dependencies.any { dependency ->
-                dependency in targetModules ||
-                    ModuleRootManager.getInstance(dependency).contentRoots.any { it.path in targetRoots }
-            }
+            node !in targets && node.module.dependencies.any { it in targetKeys }
         }
     }
 
