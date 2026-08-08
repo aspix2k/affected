@@ -1,6 +1,5 @@
 package com.aspix2k.affected.build
 
-import com.intellij.openapi.externalSystem.model.execution.ExternalSystemTaskExecutionSettings
 import com.intellij.openapi.project.Project
 import org.jetbrains.idea.maven.execution.MavenRunConfigurationType
 import org.jetbrains.idea.maven.execution.MavenRunnerParameters

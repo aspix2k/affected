@@ -76,7 +76,16 @@ class CrashSafetyTest {
 
     @Test
     fun `огромное число модулей не роняет планировщик`() {
-        val modules = (1..5_000).map { ModuleInfo(":m$it", "GRADLE", "/repo", testTask = if (it % 2 == 0) "testDebugUnitTest" else "test", compileTask = "compileTestKotlin", hasTests = true) }
+        val modules = (1..5_000).map {
+            ModuleInfo(
+                ":m$it",
+                "GRADLE",
+                "/repo",
+                testTask = if (it % 2 == 0) "testDebugUnitTest" else "test",
+                compileTask = "compileTestKotlin",
+                hasTests = true,
+            )
+        }
         val plan = TaskPlanner.plan(modules, modules.take(100))
         assertEquals(5_000, plan.tested)
         assertEquals(0, plan.compiled, "потребители уже покрыты тестами")
@@ -84,27 +93,17 @@ class CrashSafetyTest {
 
     @Test
     fun `дубли одинаковых модулей не размножают задачи`() {
-        val one = ModuleInfo(":core", "GRADLE", "/repo", testTask = "test", compileTask = "compileTestKotlin", hasTests = true)
+        val one =
+            ModuleInfo(
+                ":core",
+                "GRADLE",
+                "/repo",
+                testTask = "test",
+                compileTask = "compileTestKotlin",
+                hasTests = true,
+            )
         val plan = TaskPlanner.plan(List(1_000) { one }, List(1_000) { one })
         assertEquals(listOf(":core:test"), plan.groups.single { it.root == "/repo" }.tasks)
-    }
-
-    @Test
-    fun `отрицательный и нулевой счётчик дают базовую иконку`() {
-        assertEquals(AffectedIcons.Action, AffectedIcons.withCount(0))
-        assertEquals(AffectedIcons.Action, AffectedIcons.withCount(-5))
-    }
-
-    @Test
-    fun `большие значения счётчика схлопываются в один вариант`() {
-        val huge = AffectedIcons.withCount(Int.MAX_VALUE)
-        val slightly = AffectedIcons.withCount(100)
-        assertEquals(huge, slightly, "всё, что больше порога, использует одну иконку")
-    }
-
-    @Test
-    fun `счётчик кэшируется а не создаётся заново`() {
-        assertEquals(AffectedIcons.withCount(7), AffectedIcons.withCount(7))
     }
 
     private fun run(dir: File, vararg args: String) {

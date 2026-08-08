@@ -1,19 +1,18 @@
 package com.aspix2k.affected
 
 import com.aspix2k.affected.build.BuildSystems
+import com.intellij.notification.NotificationGroupManager
+import com.intellij.notification.NotificationType
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
-import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
-import com.intellij.notification.NotificationGroupManager
-import com.intellij.notification.NotificationType
-import java.io.File
 
 class RunAffectedTestsAction : AnAction() {
 
@@ -54,15 +53,13 @@ class RunAffectedTestsAction : AnAction() {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val projectDir = project.basePath?.let(::File) ?: return
 
         saveAllDocuments()
 
         val title = AffectedBundle.message("progress.title")
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, title, true) {
             override fun run(indicator: ProgressIndicator) {
-                val settings = AffectedSettings.getInstance()
-                val changes = ChangeAnalyzer(projectDir, settings.baseBranch, BuildSystems.sourceExtensions(project)).collect()
+                val changes = ProjectChanges.collect(project)
                 if (changes.files.isEmpty()) {
                     notify(
                         project,
@@ -92,7 +89,7 @@ class RunAffectedTestsAction : AnAction() {
         })
     }
 
-    private fun buildPlan(project: Project, changes: ChangeAnalyzer.Changes): Plan {
+    private fun buildPlan(project: Project, changes: ProjectChanges.Result): Plan {
         val graph = ModuleGraph(project)
 
         val changed = changes.files.mapNotNull { graph.nodeFor(it) }.distinct()

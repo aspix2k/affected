@@ -8,10 +8,11 @@ plugins {
     id("org.jetbrains.kotlinx.kover") version "0.9.9"
     id("info.solidsoft.pitest") version "1.19.0"
     id("org.jetbrains.changelog") version "2.5.0"
+    id("io.gitlab.arturbosch.detekt") version "1.23.8"
 }
 
 group = "com.aspix2k"
-version = "1.2.0"
+version = "1.3.0"
 
 repositories {
     mavenCentral()
@@ -34,9 +35,8 @@ dependencies {
         } else {
             intellijIdea(providers.gradleProperty("affected.idea.version").get())
         }
-        bundledPlugin("com.intellij.gradle")
-        bundledPlugin("org.jetbrains.idea.maven")
-        plugin("com.intellij.mcpServer", providers.gradleProperty("affected.mcp.version").get())
+        pluginComposedModule(implementation(project(":core")))
+        pluginModule(implementation(project(":mcp")))
     }
 
     testImplementation(kotlin("test"))
@@ -78,6 +78,20 @@ intellijPlatform {
             create(IntelliJPlatformType.AndroidStudio, providers.gradleProperty("affected.studio.version"))
         }
     }
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    // Locally the formatting rules fix themselves; on CI they must fail instead,
+    // otherwise a run repairs the checkout and reports a clean tree.
+    autoCorrect = !providers.environmentVariable("CI").isPresent
+    config.setFrom(files("$rootDir/config/detekt.yml"))
+    source.setFrom(files("src", "core/src", "mcp/src"))
+    parallel = true
+}
+
+dependencies {
+    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.8")
 }
 
 tasks.test {

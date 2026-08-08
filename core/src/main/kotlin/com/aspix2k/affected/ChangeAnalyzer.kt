@@ -19,16 +19,36 @@ class ChangeAnalyzer(
         return Changes(files, files.filter { apiTouched(it, base) }.toSet())
     }
 
+    /** Whether git can answer at all; a project under another VCS cannot be diffed against a branch. */
+    fun isUsable(): Boolean = git("rev-parse", "--git-dir").isNotEmpty()
+
+    /** Files this branch changed relative to where it left the base branch. */
+    fun againstBase(): List<File> {
+        val base = mergeBase() ?: return emptyList()
+        return keepSources(git("diff", "--name-only", "--diff-filter=d", base))
+    }
+
+    /** Which of the given files carry a public declaration among their changed lines. */
+    fun apiTouchedAmong(files: Collection<File>): Set<File> {
+        val base = mergeBase()
+        return files.filterTo(HashSet()) { apiTouched(it, base) }
+    }
+
     private fun changedFiles(base: String?): List<File> {
         val paths = LinkedHashSet<String>()
         if (base != null) paths += git("diff", "--name-only", "--diff-filter=d", base)
         paths += git("diff", "--name-only", "--diff-filter=d", "HEAD")
         paths += git("ls-files", "--others", "--exclude-standard")
 
+        return keepSources(paths)
+    }
+
+    private fun keepSources(paths: Collection<String>): List<File> {
         return paths
             .filter { path -> path.substringAfterLast('.', "") in sourceExtensions }
             .map { File(projectDir, it) }
             .filter { it.isFile }
+            .distinct()
     }
 
     private fun apiTouched(file: File, base: String?): Boolean {

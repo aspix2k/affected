@@ -1,23 +1,23 @@
 package com.aspix2k.affected.mcp
 
+import com.aspix2k.affected.AffectedSettings
+import com.aspix2k.affected.AffectedState
+import com.aspix2k.affected.ModuleGraph
+import com.aspix2k.affected.ProjectChanges
+import com.aspix2k.affected.TaskGroup
+import com.aspix2k.affected.TaskPlanner
+import com.aspix2k.affected.build.BuildSystems
+import com.intellij.execution.ui.RunContentManager
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
-import com.intellij.execution.ui.RunContentManager
 import com.intellij.mcpserver.project
-import com.intellij.openapi.application.readAction
 import com.intellij.openapi.application.EDT
+import com.intellij.openapi.application.readAction
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import com.intellij.openapi.components.service
-import com.aspix2k.affected.AffectedSettings
-import com.aspix2k.affected.build.BuildSystems
-import com.aspix2k.affected.AffectedState
-import com.aspix2k.affected.ChangeAnalyzer
-import com.aspix2k.affected.ModuleGraph
-import com.aspix2k.affected.TaskGroup
-import com.aspix2k.affected.TaskPlanner
 import java.io.File
 import kotlin.coroutines.coroutineContext
 
@@ -56,7 +56,7 @@ class AffectedToolset : McpToolset {
         val project = coroutineContext.project
         val projectDir = project.basePath?.let(::File) ?: return "Project has no base path."
 
-        val changes = ChangeAnalyzer(projectDir, AffectedSettings.getInstance().baseBranch, BuildSystems.sourceExtensions(project)).collect()
+        val changes = ProjectChanges.collect(project)
         if (changes.files.isEmpty()) return "No source changes."
 
         val plan = readAction {
@@ -87,7 +87,7 @@ class AffectedToolset : McpToolset {
         val project = coroutineContext.project
         val projectDir = project.basePath?.let(::File) ?: return "Project has no base path."
 
-        val changes = ChangeAnalyzer(projectDir, AffectedSettings.getInstance().baseBranch, BuildSystems.sourceExtensions(project)).collect()
+        val changes = ProjectChanges.collect(project)
         if (changes.files.isEmpty()) return "No source changes."
 
         return buildString {
@@ -109,7 +109,7 @@ class AffectedToolset : McpToolset {
         val project = coroutineContext.project
         val projectDir = project.basePath?.let(::File) ?: return "Project has no base path."
 
-        val changes = ChangeAnalyzer(projectDir, AffectedSettings.getInstance().baseBranch, BuildSystems.sourceExtensions(project)).collect()
+        val changes = ProjectChanges.collect(project)
         if (changes.files.isEmpty()) return "No source changes; nothing to run."
 
         val plan = readAction {

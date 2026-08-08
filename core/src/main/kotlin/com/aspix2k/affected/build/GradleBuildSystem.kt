@@ -1,6 +1,5 @@
 package com.aspix2k.affected.build
 
-import com.aspix2k.affected.TestRootResolver
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.openapi.externalSystem.model.ProjectKeys
 import com.intellij.openapi.externalSystem.model.execution.ExternalSystemTaskExecutionSettings
@@ -31,29 +30,48 @@ class GradleBuildSystem : BuildSystem {
         val result = LinkedHashMap<String, BuildModule>()
         val ideModules = HashMap<String, Module>()
 
-        for (module in ModuleManager.getInstance(project).modules) {
-            if (!ExternalSystemApiUtil.isExternalSystemAwareModule(GradleConstants.SYSTEM_ID, module)) continue
+        ModuleManager.getInstance(project).modules
+            .mapNotNull { module -> describe(module)?.let { module to it } }
+            .forEach { (module, described) ->
+                val existing = result[described.key]
+                result[described.key] = existing
+                    ?.copy(contentRoots = (existing.contentRoots + described.roots).distinct())
+                    ?: build(
+                        ":${described.path}",
+                        buildRootOf(File(described.projectPath), project),
+                        described.roots,
+                        tasks,
+                    )
+                ideModules[described.key] = module
+            }
 
-            val projectPath = ExternalSystemApiUtil.getExternalProjectPath(module) ?: continue
-            val externalId = ExternalSystemApiUtil.getExternalProjectId(module) ?: continue
-
-            val path = externalId.substringAfter(':', "")
-                .removeSuffix(":main")
-                .removeSuffix(":unitTest")
-                .removeSuffix(":androidTest")
-                .removeSuffix(":test")
-            if (path.isEmpty()) continue
-
-            val roots = ModuleRootManager.getInstance(module).contentRoots.map { it.path }
-            if (roots.isEmpty()) continue
-
-            val key = "$projectPath|$path"
-            val existing = result[key]
-            result[key] = existing?.copy(contentRoots = (existing.contentRoots + roots).distinct())
-                ?: build(":$path", buildRootOf(File(projectPath), project), roots, tasks)
-            ideModules[key] = module
-        }
         return withDependencies(result, ideModules)
+    }
+
+    private data class Described(
+        val key: String,
+        val path: String,
+        val projectPath: String,
+        val roots: List<String>,
+    )
+
+    private fun describe(module: Module): Described? {
+        if (!ExternalSystemApiUtil.isExternalSystemAwareModule(GradleConstants.SYSTEM_ID, module)) return null
+
+        val projectPath = ExternalSystemApiUtil.getExternalProjectPath(module) ?: return null
+        val externalId = ExternalSystemApiUtil.getExternalProjectId(module) ?: return null
+
+        val path = externalId.substringAfter(':', "")
+            .removeSuffix(":main")
+            .removeSuffix(":unitTest")
+            .removeSuffix(":androidTest")
+            .removeSuffix(":test")
+        if (path.isEmpty()) return null
+
+        val roots = ModuleRootManager.getInstance(module).contentRoots.map { it.path }
+        if (roots.isEmpty()) return null
+
+        return Described("$projectPath|$path", path, projectPath, roots)
     }
 
     private fun withDependencies(
@@ -65,7 +83,8 @@ class GradleBuildSystem : BuildSystem {
 
         return modules.map { (key, module) ->
             val ideModule = ideModules[key] ?: return@map module
-            val dependencies = ModuleRootManager.getInstance(ideModule).dependencies.mapNotNullTo(HashSet()) { dependency ->
+            val direct = ModuleRootManager.getInstance(ideModule).dependencies
+            val dependencies = direct.mapNotNullTo(HashSet()) { dependency ->
                 keyByIdeModule[dependency]
                     ?: ModuleRootManager.getInstance(dependency).contentRoots
                         .firstNotNullOfOrNull { keyByContentRoot[it.path] }

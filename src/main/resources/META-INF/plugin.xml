@@ -21,17 +21,20 @@
         the IDE's Gradle integration, so the test tree, the jump from a failure to
         its source, and the Stop button work as usual.
         <br/><br/>
-        Works with Gradle, Maven and Cargo, Kotlin and Groovy build scripts, any
-        dependency DSL, and composite builds, with no configuration.
+        Works with Gradle, Maven, Cargo and Go, Kotlin and Groovy build scripts,
+        any dependency DSL, and composite builds, with no configuration.
     ]]></description>
 
 
     <depends>com.intellij.modules.platform</depends>
     <depends optional="true" config-file="affected-gradle.xml">com.intellij.gradle</depends>
     <depends optional="true" config-file="affected-maven.xml">org.jetbrains.idea.maven</depends>
-    <depends optional="true" config-file="affected-mcp.xml">com.intellij.mcpServer</depends>
 
     <resource-bundle>messages.AffectedBundle</resource-bundle>
+
+    <content>
+        <module name="affected.mcp" loading="optional"/>
+    </content>
 
     <extensionPoints>
         <extensionPoint name="buildSystem" interface="com.aspix2k.affected.build.BuildSystem" dynamic="true"/>
@@ -39,6 +42,7 @@
 
     <extensions defaultExtensionNs="com.aspix2k.affected">
         <buildSystem implementation="com.aspix2k.affected.build.CargoBuildSystem"/>
+        <buildSystem implementation="com.aspix2k.affected.build.GoBuildSystem"/>
     </extensions>
 
     <extensions defaultExtensionNs="com.intellij">

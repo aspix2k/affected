@@ -92,7 +92,8 @@ class ChangeAnalyzerTest {
     @Test
     fun `xml ресурс API не меняет`() = repo { dir ->
         File(dir, "lib/src/main/res/values").mkdirs()
-        File(dir, "lib/src/main/res/values/colors.xml").writeText("<resources><color name=\"c\">#fff</color></resources>")
+        File(dir, "lib/src/main/res/values/colors.xml")
+            .writeText("<resources><color name=\"c\">#fff</color></resources>")
 
         val changes = analyze(dir)
         assertTrue(changes.files.isNotEmpty(), "ресурс попадает в изменения")

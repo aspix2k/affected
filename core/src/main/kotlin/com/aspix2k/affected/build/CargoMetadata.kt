@@ -8,7 +8,6 @@ object CargoMetadata {
     /** cargo reports OS-native paths; the graph is keyed on normalised ones. */
     private fun String.normalizeSeparators(): String = replace('\\', '/')
 
-
     fun parse(json: String, root: String): List<BuildModule> {
         val packages = runCatching {
             JsonParser.parseString(json).asJsonObject.getAsJsonArray("packages")
