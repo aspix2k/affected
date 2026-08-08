@@ -27,6 +27,12 @@ environment variable.
 
 CI runs everything except `pitest` on each push; `pitest` runs weekly.
 
+Every IDE the build or the verifier touches is unpacked into
+`~/.gradle/caches/<gradle>/transforms`, three to five gigabytes each, and old
+ones are never removed. After changing the pinned IDE version a few times that
+directory reaches tens of gigabytes; deleting it is safe and it is rebuilt on
+the next build.
+
 `detekt` runs with `autoCorrect`, so formatting fixes itself and only real
 findings remain. There is no baseline file: the count is zero and stays zero.
 

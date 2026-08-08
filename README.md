@@ -1,6 +1,11 @@
 # Affected
 
 [![CI](https://github.com/aspix2k/affected/actions/workflows/ci.yml/badge.svg)](https://github.com/aspix2k/affected/actions/workflows/ci.yml)
+[![Marketplace](https://img.shields.io/jetbrains/plugin/v/33425?label=marketplace)](https://plugins.jetbrains.com/plugin/33425-affected)
+[![Downloads](https://img.shields.io/jetbrains/plugin/d/33425?label=downloads)](https://plugins.jetbrains.com/plugin/33425-affected)
+[![Rating](https://img.shields.io/jetbrains/plugin/r/rating/33425?label=rating)](https://plugins.jetbrains.com/plugin/33425-affected/reviews)
+[![Since](https://img.shields.io/badge/IDE-2025.3%2B-blue)](https://plugins.jetbrains.com/plugin/33425-affected/versions)
+[![License](https://img.shields.io/github/license/aspix2k/affected)](LICENSE)
 
 Test what you changed. Compile what depends on it.
 
@@ -25,7 +30,8 @@ The commit dialog gets a checkbox that runs the same verification and cancels th
 commit if it fails, and a push can be aborted the same way. Both are off until you
 turn them on.
 
-Gradle, Maven, Cargo, Go, npm, .NET and Python all work, with no configuration —
+Gradle, Maven, Cargo, Go, npm, .NET, Python, composer, Ruby and CMake all work,
+with no configuration —
 Kotlin or Groovy build scripts, any dependency DSL, composite builds, npm, yarn
 or pnpm.
 
@@ -41,12 +47,18 @@ stop it.
 
 ## Requirements
 
-A JetBrains IDE 2025.1+, and a project built by Gradle, Maven, Cargo, Go, npm,
-yarn, pnpm, .NET or Python.
+A JetBrains IDE 2025.3+, and a project built by Gradle, Maven, Cargo, Go, npm,
+yarn, pnpm, .NET, Python, composer, bundler or CMake.
 
 Local edits are read from the IDE, so any VCS it supports will do. Comparing
 against a base branch needs git; without it the plugin works from your
 uncommitted changes.
+
+## Privacy
+
+The plugin collects nothing, sends nothing, and has no server. If it throws, the
+IDE offers to open a prefilled issue on GitHub — you read it and decide whether
+to submit. Details in [PRIVACY.md](PRIVACY.md).
 
 ## Contributing
 

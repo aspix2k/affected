@@ -12,7 +12,7 @@ plugins {
 }
 
 group = "com.aspix2k"
-version = "1.5.0"
+version = "1.6.0"
 
 repositories {
     mavenCentral()
@@ -51,7 +51,7 @@ intellijPlatform {
 
     pluginConfiguration {
         ideaVersion {
-            sinceBuild = "251"
+            sinceBuild = "253"
             untilBuild = provider { null }
         }
         changeNotes = provider {
@@ -74,8 +74,8 @@ intellijPlatform {
     pluginVerification {
         failureLevel = listOf(FailureLevel.INVALID_PLUGIN)
         ides {
-            create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.1")
             create(IntelliJPlatformType.IntellijIdea, "2025.3")
+            create(IntelliJPlatformType.IntellijIdea, "2026.2")
             create(IntelliJPlatformType.AndroidStudio, providers.gradleProperty("affected.studio.version"))
         }
     }
