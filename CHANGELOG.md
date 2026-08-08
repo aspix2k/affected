@@ -11,19 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- New icon: a three-by-three grid where a quiet module is a dot and an affected one fills its cell. How much is affected is read from how much of the grid is filled, which stays legible at 16 px where a number does not.
-- A run animates the grid — a wave crossing it along the diagonals, twelve frames through the platform's own `AnimatedIcon`.
-- Verification orchestration no longer blocks pooled threads. Independent build roots still run concurrently, and the icon returns to the current affected-module state after every run finishes or is cancelled.
-- Keep the toolbar group disabled until the IDE project model is ready, matching the Run and Debug controls during project loading and indexing while showing a muted running animation.
-- Consumer compilation and animation now live in a Settings submenu. Consumer compilation is off by default; animation is on.
+- Replace the numeric badge with a three-by-three matrix that stays legible at toolbar size.
+- Animate the matrix during initialization and verification; restore the affected scope afterward.
+- Run independent build roots concurrently without blocking IDE threads.
+- Group consumer checks, commit and push guards, and animation in Settings. The checks and guards are off by default; animation is on.
 
 ### Fixed
 
-- Keep the toolbar responsive in large mixed monorepos by making build-system detection inspect root markers only and bounding manifest discovery by depth, result count, and ignored dependency or build directories.
-- Detect a root `.csproj`, `.fsproj`, or `.vbproj` even when the project has no solution file.
-- Run Gradle tasks relative to their linked build, including flat or renamed modules and source sets in composite builds, and recognise Android modules without a checked-in manifest from their imported tasks.
-- Capture Git and build metadata through the platform process API so output cannot deadlock a pipe and timeouts are enforced.
-- Keep build-system-neutral UI and MCP messages neutral instead of referring to every unresolved module or running session as Gradle.
+- Bound build-system and manifest discovery so large mixed monorepos stay responsive.
+- Detect root `.csproj`, `.fsproj`, and `.vbproj` files without a solution file.
+- Route Gradle tasks to the owning linked build, including flat modules, renamed modules, composite builds, and source sets.
+- Detect Android modules from imported tasks when no manifest is checked in.
+- Capture process output with enforced timeouts and no pipe deadlocks.
+- Serialize debounced refreshes, skip API diffs during scope-only recounts, and keep build-system caches project-specific.
+- Remove Gradle-specific wording from shared UI and MCP messages.
 
 ## [1.6.0] - 2026-08-08
 

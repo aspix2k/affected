@@ -8,7 +8,9 @@ import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -18,6 +20,8 @@ import kotlin.coroutines.resume
 object CommandRunner {
 
     fun run(project: Project, workingDirectory: String, command: List<String>, title: String) {
+        if (project.isDisposed) return
+
         val commandLine = GeneralCommandLine(command)
             .withWorkDirectory(File(workingDirectory))
             .withCharset(Charsets.UTF_8)
@@ -26,6 +30,10 @@ object CommandRunner {
         ProcessTerminatedListener.attach(handler)
 
         ApplicationManager.getApplication().invokeLater {
+            if (project.isDisposed) {
+                handler.destroyProcess()
+                return@invokeLater
+            }
             RunContentExecutor(project, handler)
                 .withTitle(title)
                 .withActivateToolWindow(true)
@@ -35,6 +43,8 @@ object CommandRunner {
     }
 
     suspend fun runAndWait(project: Project, workingDirectory: String, command: List<String>, title: String): Boolean {
+        if (project.isDisposed) return false
+
         val commandLine = GeneralCommandLine(command)
             .withWorkDirectory(File(workingDirectory))
             .withCharset(Charsets.UTF_8)
@@ -44,9 +54,13 @@ object CommandRunner {
         val completed = AtomicBoolean(false)
 
         return suspendCancellableCoroutine { continuation ->
+            fun complete(passed: Boolean) {
+                if (completed.compareAndSet(false, true) && continuation.isActive) continuation.resume(passed)
+            }
+
             handler.addProcessListener(object : ProcessListener {
                 override fun processTerminated(event: ProcessEvent) {
-                    if (completed.compareAndSet(false, true)) continuation.resume(event.exitCode == 0)
+                    complete(event.exitCode == 0)
                 }
             })
             continuation.invokeOnCancellation {
@@ -54,7 +68,11 @@ object CommandRunner {
             }
 
             ApplicationManager.getApplication().invokeLater {
-                if (!continuation.isActive) return@invokeLater
+                if (!continuation.isActive || project.isDisposed) {
+                    if (!handler.isProcessTerminated) handler.destroyProcess()
+                    complete(false)
+                    return@invokeLater
+                }
                 RunContentExecutor(project, handler)
                     .withTitle(title)
                     .withActivateToolWindow(true)
@@ -73,7 +91,11 @@ object CommandRunner {
         val timeoutMillis = TimeUnit.SECONDS.toMillis(timeoutSeconds).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         val output = CapturingProcessHandler(commandLine).runProcess(timeoutMillis)
         output.stdout.takeIf { output.exitCode == 0 && !output.isTimeout && !output.isCancelled }
-    } catch (e: Exception) {
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: ProcessCanceledException) {
+        throw error
+    } catch (error: Exception) {
         null
     }
 }

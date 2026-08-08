@@ -27,7 +27,7 @@ class AffectedGroup : DefaultActionGroup(), DumbAware {
 
         e.presentation.isEnabled = ready
         e.presentation.icon = AffectedIcons.forState(
-            if (ready) state?.verificationStatus ?: VerificationStatus.IDLE else VerificationStatus.RUNNING,
+            if (ready) state.verificationStatus else VerificationStatus.RUNNING,
             state?.affectedModules ?: 0,
             animate,
         )

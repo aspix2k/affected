@@ -2,8 +2,10 @@ package com.aspix2k.affected
 
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import java.lang.reflect.Proxy
-import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -11,27 +13,36 @@ class AffectedStateTest {
 
     @Test
     fun `status stays running until every run finishes`() {
-        val state = AffectedState(project(), CoroutineScope(EmptyCoroutineContext))
+        withState { state ->
+            state.markRunning()
+            state.markRunning()
+            state.markFinished()
 
-        state.markRunning()
-        state.markRunning()
-        state.markFinished()
+            assertEquals(VerificationStatus.RUNNING, state.verificationStatus)
 
-        assertEquals(VerificationStatus.RUNNING, state.verificationStatus)
+            state.markFinished()
 
-        state.markFinished()
-
-        assertEquals(VerificationStatus.IDLE, state.verificationStatus)
+            assertEquals(VerificationStatus.IDLE, state.verificationStatus)
+        }
     }
 
     @Test
     fun `a completed run returns to idle`() {
-        val state = AffectedState(project(), CoroutineScope(EmptyCoroutineContext))
+        withState { state ->
+            state.markRunning()
+            state.markFinished()
 
-        state.markRunning()
-        state.markFinished()
+            assertEquals(VerificationStatus.IDLE, state.verificationStatus)
+        }
+    }
 
-        assertEquals(VerificationStatus.IDLE, state.verificationStatus)
+    private fun withState(block: (AffectedState) -> Unit) {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        try {
+            block(AffectedState(project(), scope))
+        } finally {
+            scope.cancel()
+        }
     }
 
     private fun project(): Project = Proxy.newProxyInstance(

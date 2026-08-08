@@ -76,7 +76,7 @@ class AffectedToolset : McpToolset {
         val project = coroutineContext.project
         val projectDir = project.basePath?.let(::File) ?: return "Project has no base path."
 
-        val changes = withContext(Dispatchers.IO) { ProjectChanges.collect(project) }
+        val changes = ProjectChanges.collectSuspending(project)
         if (changes.files.isEmpty()) return "No source changes."
 
         return buildString {
@@ -166,6 +166,8 @@ class AffectedToolset : McpToolset {
             appendLine("Affected modules: ${state.affectedModules}")
             appendLine("Base branch: ${settings.baseBranch}")
             appendLine("Consumer check: ${if (settings.checkConsumers) "on" else "off"}")
+            appendLine("Commit guard: ${if (settings.runBeforeCommit) "on" else "off"}")
+            appendLine("Push guard: ${if (settings.runBeforePush) "on" else "off"}")
             appendLine("Animation: ${if (settings.animateWhileRunning) "on" else "off"}")
             appendLine("Verification status: ${state.verificationStatus.name.lowercase()}")
             appendLine("Running sessions: $running")
@@ -197,28 +199,35 @@ class AffectedToolset : McpToolset {
 
     @McpTool
     @McpDescription(
-        "Changes plugin settings: the base branch changes are compared against, and whether modules " +
-            "consuming a changed public API are compiled or running jobs are animated. Pass only what " +
-            "you want to change."
+        "Changes plugin settings: the base branch changes are compared against, consumer compilation, " +
+            "commit and push guards, and running animation. Pass only what you want to change."
     )
     suspend fun affected_configure(
         @McpDescription("Base branch, for example develop, main or master")
         baseBranch: String? = null,
         @McpDescription("Whether to compile modules consuming a changed public API")
         checkConsumers: Boolean? = null,
+        @McpDescription("Whether to run verification before commit")
+        runBeforeCommit: Boolean? = null,
+        @McpDescription("Whether to run verification before push")
+        runBeforePush: Boolean? = null,
         @McpDescription("Whether to animate the toolbar icon while verification is running")
         animateWhileRunning: Boolean? = null,
     ): String {
         val settings = AffectedSettings.getInstance()
         baseBranch?.takeIf { it.isNotBlank() }?.let { settings.baseBranch = it }
         checkConsumers?.let { settings.checkConsumers = it }
+        runBeforeCommit?.let { settings.runBeforeCommit = it }
+        runBeforePush?.let { settings.runBeforePush = it }
         animateWhileRunning?.let { settings.animateWhileRunning = it }
 
         val project = coroutineContext.project
         project.service<AffectedState>().invalidate()
 
         return "Base branch: ${settings.baseBranch}, consumer check: " +
-            "${if (settings.checkConsumers) "on" else "off"}, animation: " +
+            "${if (settings.checkConsumers) "on" else "off"}, commit guard: " +
+            "${if (settings.runBeforeCommit) "on" else "off"}, push guard: " +
+            "${if (settings.runBeforePush) "on" else "off"}, animation: " +
             "${if (settings.animateWhileRunning) "on" else "off"}."
     }
 

@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 class RubyBuildSystem : SuspendingBuildSystem {
 
-    private data class Snapshot(val stamp: Long, val modules: List<BuildModule>)
+    private data class Snapshot(val root: String, val stamp: Long, val modules: List<BuildModule>)
 
     private val cache = AtomicReference<Snapshot?>(null)
 
@@ -20,10 +20,11 @@ class RubyBuildSystem : SuspendingBuildSystem {
         val root = rootOf(project) ?: return emptyList()
         val stamp = File(root, "Gemfile").lastModified()
 
-        cache.get()?.takeIf { it.stamp == stamp }?.let { return it.modules }
+        val rootPath = root.invariantSeparatorsPath
+        cache.get()?.takeIf { it.root == rootPath && it.stamp == stamp }?.let { return it.modules }
 
         val modules = RubyGems.parse(root)
-        cache.set(Snapshot(stamp, modules))
+        cache.set(Snapshot(rootPath, stamp, modules))
         return modules
     }
 

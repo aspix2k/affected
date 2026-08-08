@@ -2,13 +2,8 @@ package com.aspix2k.affected.build
 
 import com.intellij.openapi.project.Project
 import java.io.File
-import java.util.concurrent.atomic.AtomicReference
 
 class DotnetBuildSystem : SuspendingBuildSystem {
-
-    private data class Snapshot(val stamp: Long, val modules: List<BuildModule>)
-
-    private val cache = AtomicReference<Snapshot?>(null)
 
     override val id: String = "DOTNET"
 
@@ -18,13 +13,7 @@ class DotnetBuildSystem : SuspendingBuildSystem {
 
     override fun modules(project: Project): List<BuildModule> {
         val root = rootOf(project) ?: return emptyList()
-        val stamp = DotnetProjects.parse(root).size.toLong() + root.lastModified()
-
-        cache.get()?.takeIf { it.stamp == stamp }?.let { return it.modules }
-
-        val modules = DotnetProjects.parse(root)
-        cache.set(Snapshot(stamp, modules))
-        return modules
+        return DotnetProjects.parse(root)
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {

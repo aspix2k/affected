@@ -11,13 +11,19 @@ import com.intellij.openapi.components.Storage
 class AffectedSettings : PersistentStateComponent<AffectedSettings.State> {
 
     data class State(
+        @Volatile
         var baseBranch: String = "develop",
+        @Volatile
         var checkConsumers: Boolean = false,
+        @Volatile
         var animateWhileRunning: Boolean = true,
+        @Volatile
         var runBeforeCommit: Boolean = false,
+        @Volatile
         var runBeforePush: Boolean = false,
     )
 
+    @Volatile
     private var state = State()
 
     var baseBranch: String

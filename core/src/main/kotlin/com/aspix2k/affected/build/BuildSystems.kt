@@ -12,6 +12,8 @@ object BuildSystems {
 
     fun byId(id: String): BuildSystem? = point.extensionList.firstOrNull { it.id == id }
 
+    fun sourceExtensions(): Set<String> = point.extensionList.flatMapTo(HashSet()) { it.sourceExtensions }
+
     fun sourceExtensions(project: Project): Set<String> =
         of(project).flatMapTo(HashSet()) { it.sourceExtensions }.ifEmpty { ChangeAnalyzer.DEFAULT_EXTENSIONS }
 }

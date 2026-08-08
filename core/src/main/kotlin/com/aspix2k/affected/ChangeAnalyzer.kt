@@ -2,6 +2,8 @@ package com.aspix2k.affected
 
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.CapturingProcessHandler
+import com.intellij.openapi.progress.ProcessCanceledException
+import kotlinx.coroutines.CancellationException
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -119,7 +121,11 @@ class ChangeAnalyzer(
             .withCharset(Charsets.UTF_8)
         val output = CapturingProcessHandler(commandLine).runProcess(GIT_TIMEOUT_MILLIS)
         if (output.exitCode == 0 && !output.isTimeout && !output.isCancelled) output.stdoutLines else emptyList()
-    } catch (e: Exception) {
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: ProcessCanceledException) {
+        throw error
+    } catch (error: Exception) {
         emptyList()
     }
 

@@ -1,11 +1,13 @@
 package com.aspix2k.affected
 
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -33,9 +35,21 @@ class AffectedState(
         private set
 
     private val status = AtomicReference(VerificationStatus.IDLE)
-    private val recountJob = AtomicReference<Job?>()
+    private val invalidations = Channel<Unit>(Channel.CONFLATED)
     private val verificationLock = Any()
     private var runningVerifications = 0
+
+    init {
+        scope.launch {
+            while (true) {
+                invalidations.receive()
+                do {
+                    delay(DEBOUNCE_MS.toLong())
+                } while (invalidations.tryReceive().isSuccess)
+                refresh()
+            }
+        }
+    }
 
     val verificationStatus: VerificationStatus get() = status.get()
     val isRunning: Boolean get() = verificationStatus == VerificationStatus.RUNNING
@@ -55,40 +69,48 @@ class AffectedState(
     }
 
     fun invalidate() {
-        val nextJob = scope.launch(start = CoroutineStart.LAZY) {
-            delay(DEBOUNCE_MS.toLong())
-            recount()
-        }
-        recountJob.getAndSet(nextJob)?.cancel()
-        nextJob.start()
+        invalidations.trySend(Unit)
     }
 
-    private suspend fun recount() {
-        modules = withContext(Dispatchers.IO) {
-            val files = ProjectChanges.paths(project)
-            val graph = ModuleGraph.create(project)
-
-            files.mapNotNull { graph.nodeFor(it) }
-                .distinct()
-                .mapNotNull { node ->
-                    val directory = node.sourceRoot ?: return@mapNotNull null
-                    AffectedModule(
-                        id = node.id,
-                        systemId = node.system.id,
-                        buildRoot = node.buildRoot,
-                        directory = directory,
-                        testDirectory = node.testRoot,
-                        testTask = node.module.testTask,
-                        compileTask = node.module.compileTask,
-                        hasTests = node.hasTests,
-                        tasks = node.module.extraTasks,
-                    )
-                }
+    private suspend fun refresh() {
+        try {
+            modules = analyze()
+            ready = true
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: ProcessCanceledException) {
+            throw error
+        } catch (error: Exception) {
+            modules = emptyList()
+            ready = true
+            LOG.warn("Failed to refresh affected modules", error)
         }
-        ready = true
+    }
+
+    private suspend fun analyze(): List<AffectedModule> = withContext(Dispatchers.Default) {
+        val files = ProjectChanges.pathsSuspending(project)
+        val graph = ModuleGraph.create(project)
+
+        files.mapNotNull { graph.nodeFor(it) }
+            .distinct()
+            .mapNotNull { node ->
+                val directory = node.sourceRoot ?: return@mapNotNull null
+                AffectedModule(
+                    id = node.id,
+                    systemId = node.system.id,
+                    buildRoot = node.buildRoot,
+                    directory = directory,
+                    testDirectory = node.testRoot,
+                    testTask = node.module.testTask,
+                    compileTask = node.module.compileTask,
+                    hasTests = node.hasTests,
+                    tasks = node.module.extraTasks,
+                )
+            }
     }
 
     private companion object {
+        val LOG = logger<AffectedState>()
         const val DEBOUNCE_MS = 1500
     }
 }

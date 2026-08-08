@@ -81,6 +81,8 @@ class GradleBuildSystem : SuspendingBuildSystem {
     }
 
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean {
+        if (project.isDisposed) return false
+
         val settings = ExternalSystemTaskExecutionSettings().apply {
             externalProjectPath = root
             taskNames = tasks
@@ -134,6 +136,8 @@ class GradleBuildSystem : SuspendingBuildSystem {
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {
+        if (project.isDisposed) return
+
         val settings = ExternalSystemTaskExecutionSettings().apply {
             externalProjectPath = root
             taskNames = tasks

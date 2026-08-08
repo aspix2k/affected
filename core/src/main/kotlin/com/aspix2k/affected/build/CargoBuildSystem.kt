@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 class CargoBuildSystem : SuspendingBuildSystem {
 
-    private data class Snapshot(val stamp: Long, val modules: List<BuildModule>)
+    private data class Snapshot(val root: String, val stamp: Long, val modules: List<BuildModule>)
 
     private val cache = AtomicReference<Snapshot?>(null)
 
@@ -21,11 +21,11 @@ class CargoBuildSystem : SuspendingBuildSystem {
         val root = manifest.parentFile.invariantSeparatorsPath
         val stamp = manifest.lastModified()
 
-        cache.get()?.takeIf { it.stamp == stamp }?.let { return it.modules }
+        cache.get()?.takeIf { it.root == root && it.stamp == stamp }?.let { return it.modules }
 
         val output = CommandRunner.capture(root, METADATA) ?: return emptyList()
         val modules = CargoMetadata.parse(output, root)
-        cache.set(Snapshot(stamp, modules))
+        cache.set(Snapshot(root, stamp, modules))
         return modules
     }
 

@@ -15,11 +15,11 @@ object Verification {
     data class Outcome(val plan: Plan, val passed: Boolean)
 
     suspend fun plan(project: Project): Plan {
-        val changes = withContext(Dispatchers.IO) { ProjectChanges.collect(project) }
+        val changes = ProjectChanges.collectSuspending(project)
         return plan(project, changes)
     }
 
-    suspend fun plan(project: Project, changes: ProjectChanges.Result): Plan = withContext(Dispatchers.IO) {
+    suspend fun plan(project: Project, changes: ProjectChanges.Result): Plan = withContext(Dispatchers.Default) {
         if (changes.files.isEmpty()) return@withContext Plan(emptyList(), 0, 0)
 
         val graph = ModuleGraph.create(project)
@@ -43,7 +43,7 @@ object Verification {
         try {
             passed = coroutineScope {
                 plan.groups.map { group ->
-                    async {
+                    async(Dispatchers.Default) {
                         when (val system = BuildSystems.byId(group.systemId)) {
                             null -> true
                             is SuspendingBuildSystem ->

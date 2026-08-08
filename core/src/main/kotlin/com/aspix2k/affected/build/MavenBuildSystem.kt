@@ -75,10 +75,13 @@ class MavenBuildSystem : SuspendingBuildSystem {
     private val MavenId.key: String get() = "$groupId:$artifactId"
 
     override fun run(project: Project, root: String, tasks: List<String>) {
+        if (project.isDisposed) return
         MavenRunConfigurationType.runConfiguration(project, parameters(root, tasks), null)
     }
 
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean {
+        if (project.isDisposed) return false
+
         val parameters = parameters(root, tasks)
         return suspendCancellableCoroutine { continuation ->
             val completed = AtomicBoolean(false)
@@ -88,7 +91,7 @@ class MavenBuildSystem : SuspendingBuildSystem {
             }
 
             ApplicationManager.getApplication().invokeLater {
-                if (!continuation.isActive) return@invokeLater
+                if (!continuation.isActive || project.isDisposed) return@invokeLater complete(false)
                 MavenRunConfigurationType.runConfiguration(
                     project,
                     parameters,

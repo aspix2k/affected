@@ -9,9 +9,7 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.currentThreadCoroutineScope
 import com.intellij.openapi.project.Project
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class RunAffectedTestsAction : AnAction() {
 
@@ -55,7 +53,7 @@ class RunAffectedTestsAction : AnAction() {
 
         FileDocumentManager.getInstance().saveAllDocuments()
         currentThreadCoroutineScope().launch {
-            val changes = withContext(Dispatchers.IO) { ProjectChanges.collect(project) }
+            val changes = ProjectChanges.collectSuspending(project)
             if (changes.files.isEmpty()) {
                 notify(
                     project,

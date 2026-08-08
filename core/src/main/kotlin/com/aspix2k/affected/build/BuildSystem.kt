@@ -2,6 +2,8 @@ package com.aspix2k.affected.build
 
 import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runInterruptible
 
 data class BuildModule(
     val id: String,
@@ -32,7 +34,8 @@ interface BuildSystem {
 }
 
 internal interface SuspendingBuildSystem : BuildSystem {
-    suspend fun modulesSuspending(project: Project): List<BuildModule> = modules(project)
+    suspend fun modulesSuspending(project: Project): List<BuildModule> =
+        runInterruptible(Dispatchers.IO) { modules(project) }
 
     suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean
 
