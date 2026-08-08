@@ -31,7 +31,7 @@ class AffectedModulesGroup : DefaultActionGroup(), DumbAware {
     override fun getChildren(e: AnActionEvent?): Array<AnAction> {
         val project = e?.project ?: return EMPTY_ARRAY
         return project.service<AffectedState>().modules
-            .sortedBy { it.gradlePath }
+            .sortedBy { it.id }
             .map { OpenModuleAction(it) }
             .toTypedArray()
     }
@@ -41,7 +41,7 @@ class AffectedModulesGroup : DefaultActionGroup(), DumbAware {
         override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
         override fun update(e: AnActionEvent) {
-            e.presentation.text = module.gradlePath
+            e.presentation.text = module.id
             e.presentation.description = module.directory
             e.presentation.icon = AffectedIcons.Module
         }

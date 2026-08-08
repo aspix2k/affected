@@ -27,10 +27,14 @@
 
 
     <depends>com.intellij.modules.platform</depends>
-    <depends>com.intellij.gradle</depends>
+    <depends optional="true" config-file="affected-gradle.xml">com.intellij.gradle</depends>
     <depends optional="true" config-file="affected-mcp.xml">com.intellij.mcpServer</depends>
 
     <resource-bundle>messages.AffectedBundle</resource-bundle>
+
+    <extensionPoints>
+        <extensionPoint name="buildSystem" interface="com.aspix2k.affected.build.BuildSystem" dynamic="true"/>
+    </extensionPoints>
 
     <extensions defaultExtensionNs="com.intellij">
         <notificationGroup id="AffectedTests" displayType="BALLOON" bundle="messages.AffectedBundle"

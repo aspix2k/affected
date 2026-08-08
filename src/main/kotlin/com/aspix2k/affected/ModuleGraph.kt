@@ -1,90 +1,37 @@
 package com.aspix2k.affected
 
-import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil
-import com.intellij.openapi.module.Module
-import com.intellij.openapi.module.ModuleManager
+import com.aspix2k.affected.build.BuildModule
+import com.aspix2k.affected.build.BuildSystem
+import com.aspix2k.affected.build.BuildSystems
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ModuleRootManager
-import com.intellij.openapi.vfs.VirtualFile
-import org.jetbrains.plugins.gradle.util.GradleConstants
 import java.io.File
 
 class ModuleGraph(private val project: Project) {
 
-    data class Node(
-        val module: Module,
-        val gradlePath: String,
-        val buildRoot: String,
-        val contentRoots: List<VirtualFile>,
-    ) {
-        val isAndroid: Boolean
-            get() = contentRoots.any { File(it.path, "src/main/AndroidManifest.xml").isFile }
+    data class Node(val module: BuildModule, val system: BuildSystem) {
 
-        val sourceRoot: String?
-            get() = contentRoots
-                .map { it.path }
-                .filterNot { it.contains("/build/") || it.contains("/.gradle/") }
-                .minByOrNull { it.length }
+        val id: String get() = module.id
+        val buildRoot: String get() = module.root
+        val hasTests: Boolean get() = module.hasTests
 
-        val testRoot: String?
-            get() = sourceRoot?.let(TestRootResolver::resolve)
+        val sourceRoot: String? get() = module.contentRoots.minByOrNull { it.length }
 
-        val hasTests: Boolean
-            get() = contentRoots.any { root ->
-                TEST_SOURCE_DIRS.any { dir ->
-                    File(root.path, dir).let { it.isDirectory && it.walkTopDown().any(::isSource) }
-                }
-            }
+        val testRoot: String? get() = sourceRoot?.let(TestRootResolver::resolve)
 
-        fun info(): ModuleInfo = ModuleInfo(gradlePath, buildRoot, isAndroid, hasTests)
-
-        private companion object {
-            val TEST_SOURCE_DIRS = listOf("src/test", "src/testDebug", "src/commonTest", "src/jvmTest")
-
-            fun isSource(file: File) =
-                file.isFile && (file.extension == "kt" || file.extension == "java")
-        }
+        fun info(): ModuleInfo = ModuleInfo(
+            id = module.id,
+            buildRoot = module.root,
+            testTask = module.testTask,
+            compileTask = module.compileTask,
+            hasTests = module.hasTests,
+        )
     }
 
-    private val nodes: List<Node> by lazy { collect() }
-
-    private fun collect(): List<Node> {
-        val result = LinkedHashMap<String, Node>()
-
-        for (module in ModuleManager.getInstance(project).modules) {
-            if (!ExternalSystemApiUtil.isExternalSystemAwareModule(GradleConstants.SYSTEM_ID, module)) continue
-
-            val projectPath = ExternalSystemApiUtil.getExternalProjectPath(module) ?: continue
-            val id = ExternalSystemApiUtil.getExternalProjectId(module) ?: continue
-
-            val gradlePath = id.substringAfter(':', "")
-                .removeSuffix(":main")
-                .removeSuffix(":unitTest")
-                .removeSuffix(":androidTest")
-                .removeSuffix(":test")
-            if (gradlePath.isEmpty()) continue
-
-            val roots = ModuleRootManager.getInstance(module).contentRoots.toList()
-            if (roots.isEmpty()) continue
-
-            val key = "$projectPath|$gradlePath"
-            val existing = result[key]
-            if (existing == null) {
-                result[key] = Node(module, ":$gradlePath", buildRootOf(File(projectPath)), roots)
-            } else {
-                result[key] = existing.copy(contentRoots = (existing.contentRoots + roots).distinct())
-            }
+    private val nodes: List<Node> by lazy {
+        BuildSystems.of(project).flatMap { system ->
+            system.modules(project).map { Node(it, system) }
         }
-        return result.values.toList()
-    }
-
-    private fun buildRootOf(moduleDir: File): String {
-        var current: File? = moduleDir
-        while (current != null) {
-            if (SETTINGS_FILES.any { File(current, it).isFile }) return current.path
-            current = current.parentFile
-        }
-        return project.basePath ?: moduleDir.path
     }
 
     fun nodeFor(file: File): Node? {
@@ -92,11 +39,10 @@ class ModuleGraph(private val project: Project) {
         var best: Node? = null
         var bestLength = -1
         for (node in nodes) {
-            for (root in node.contentRoots) {
-                val rootPath = root.path
-                if (path.startsWith("$rootPath/") && rootPath.length > bestLength) {
+            for (root in node.module.contentRoots) {
+                if (path.startsWith("$root/") && root.length > bestLength) {
                     best = node
-                    bestLength = rootPath.length
+                    bestLength = root.length
                 }
             }
         }
@@ -104,13 +50,13 @@ class ModuleGraph(private val project: Project) {
     }
 
     fun directDependents(targets: Set<Node>): List<Node> {
-        val targetModules = targets.map { it.module }.toSet()
-        val targetRoots = targets.flatMap { it.contentRoots }.map { it.path }.toSet()
+        val targetModules = targets.mapNotNull { it.module.ideModule }.toSet()
+        val targetRoots = targets.flatMap { it.module.contentRoots }.toSet()
 
         return nodes.filter { node ->
             if (node in targets) return@filter false
-            val dependencies = ModuleRootManager.getInstance(node.module).dependencies
-            dependencies.any { dependency ->
+            val ideModule = node.module.ideModule ?: return@filter false
+            ModuleRootManager.getInstance(ideModule).dependencies.any { dependency ->
                 dependency in targetModules ||
                     ModuleRootManager.getInstance(dependency).contentRoots.any { it.path in targetRoots }
             }
@@ -118,8 +64,4 @@ class ModuleGraph(private val project: Project) {
     }
 
     fun all(): List<Node> = nodes
-
-    private companion object {
-        val SETTINGS_FILES = listOf("settings.gradle.kts", "settings.gradle")
-    }
 }

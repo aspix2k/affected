@@ -7,10 +7,10 @@ import kotlin.test.assertTrue
 class TaskPlannerTest {
 
     private fun jvm(path: String, root: String = "/repo", tests: Boolean = true) =
-        ModuleInfo(path, root, isAndroid = false, hasTests = tests)
+        ModuleInfo(path, root, testTask = "test", compileTask = "compileTestKotlin", hasTests = tests)
 
     private fun android(path: String, root: String = "/repo", tests: Boolean = true) =
-        ModuleInfo(path, root, isAndroid = true, hasTests = tests)
+        ModuleInfo(path, root, testTask = "testDebugUnitTest", compileTask = "compileDebugUnitTestKotlin", hasTests = tests)
 
     @Test
     fun `пустой ввод даёт пустой план`() {

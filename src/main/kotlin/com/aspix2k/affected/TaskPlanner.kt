@@ -1,15 +1,15 @@
 package com.aspix2k.affected
 
 data class ModuleInfo(
-    val gradlePath: String,
+    val id: String,
     val buildRoot: String,
-    val isAndroid: Boolean,
+    val testTask: String,
+    val compileTask: String,
     val hasTests: Boolean,
 ) {
-    fun testTask(): String = if (isAndroid) "$gradlePath:testDebugUnitTest" else "$gradlePath:test"
+    fun test(): String = "$id:$testTask"
 
-    fun compileTask(): String =
-        if (isAndroid) "$gradlePath:compileDebugUnitTestKotlin" else "$gradlePath:compileTestKotlin"
+    fun compile(): String = "$id:$compileTask"
 }
 
 data class Plan(val tasksByRoot: Map<String, List<String>>, val tested: Int, val compiled: Int) {
@@ -24,15 +24,15 @@ object TaskPlanner {
 
         val tested = changed.distinct().filter { it.hasTests }
         tested.forEach { module ->
-            tasks.getOrPut(module.buildRoot) { mutableListOf() }.add(module.testTask())
+            tasks.getOrPut(module.buildRoot) { mutableListOf() }.add(module.test())
         }
 
-        val testedPaths = tested.map { it.gradlePath to it.buildRoot }.toSet()
+        val testedIds = tested.map { it.id to it.buildRoot }.toSet()
         val compiled = consumers.distinct()
-            .filter { (it.gradlePath to it.buildRoot) !in testedPaths }
+            .filter { (it.id to it.buildRoot) !in testedIds }
             .filter { it !in changed }
         compiled.forEach { module ->
-            tasks.getOrPut(module.buildRoot) { mutableListOf() }.add(module.compileTask())
+            tasks.getOrPut(module.buildRoot) { mutableListOf() }.add(module.compile())
         }
 
         return Plan(

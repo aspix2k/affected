@@ -1,18 +1,14 @@
 package com.aspix2k.affected
 
-import com.intellij.execution.executors.DefaultRunExecutor
+import com.aspix2k.affected.build.BuildSystems
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
-import com.intellij.openapi.externalSystem.model.execution.ExternalSystemTaskExecutionSettings
-import com.intellij.openapi.externalSystem.service.execution.ProgressExecutionMode
-import com.intellij.openapi.externalSystem.util.ExternalSystemUtil
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
-import org.jetbrains.plugins.gradle.util.GradleConstants
 import javax.swing.Icon
 
 abstract class RunCheckAction(
@@ -40,24 +36,12 @@ abstract class RunCheckAction(
         saveAllDocuments()
 
         modules.groupBy { it.buildRoot }.forEach { (root, group) ->
-            run(project, root, group.map { "${it.gradlePath}:$taskName" })
+            run(project, root, group.map { "${it.id}:$taskName" })
         }
     }
 
     private fun run(project: Project, root: String, tasks: List<String>) {
-        val settings = ExternalSystemTaskExecutionSettings().apply {
-            externalProjectPath = root
-            taskNames = tasks
-            externalSystemIdString = GradleConstants.SYSTEM_ID.id
-        }
-        ExternalSystemUtil.runTask(
-            settings,
-            DefaultRunExecutor.EXECUTOR_ID,
-            project,
-            GradleConstants.SYSTEM_ID,
-            null,
-            ProgressExecutionMode.IN_BACKGROUND_ASYNC,
-        )
+        BuildSystems.forRoot(project, root)?.run(project, root, tasks)
     }
 
     private fun saveAllDocuments() {
