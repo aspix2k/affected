@@ -26,6 +26,8 @@ import kotlin.coroutines.coroutineContext
 
 class AffectedToolset : McpToolset {
 
+    override fun isEnabled(): Boolean = true
+
     @McpTool
     @McpDescription(
         "Lists Gradle modules affected by the current changes: modules whose files changed, " +
