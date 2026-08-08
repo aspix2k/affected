@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - An exception in the plugin offers to open a prefilled issue on GitHub. Nothing leaves the machine until you submit it, and the report contains only what it shows you.
+- A privacy policy, spelling out what is read, stored, executed and reported.
 
 ## [1.5.0] - 2026-08-08
 

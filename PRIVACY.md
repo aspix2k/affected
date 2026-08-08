@@ -59,14 +59,16 @@ what the form shows you. Declining sends nothing.
 Since the issue is filed on GitHub, GitHub's own privacy terms apply to it once
 you submit.
 
-## Statistics from JetBrains
+## Statistics from JetBrains Marketplace
 
-JetBrains Marketplace reports download counts and page visits to us in aggregate,
-which we neither control nor can connect to an individual. The plugin plays no
-part in that; it is how every plugin on the Marketplace works. See the
+Marketplace reports download counts and page visits to us in aggregate, which we
+neither control nor can connect to an individual. The plugin plays no part in
+that; it is how every plugin on the Marketplace works. See the
 [JetBrains Privacy Policy](https://www.jetbrains.com/legal/docs/privacy/privacy/).
 
-The plugin does not use the IDE's Feature Usage Statistics.
+The plugin does not use the IDE's Feature Usage Statistics. That mechanism is
+marked internal to the platform and is not available to third-party plugins, and
+JetBrains does not share its data with plugin vendors in any case.
 
 ## Changes
 
