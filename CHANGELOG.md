@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-08-08
+
+### Changed
+
+- New icon: a three-by-three grid where a quiet module is a dot and an affected one fills its cell. How much is affected is read from how much of the grid is filled, which stays legible at 16 px where a number does not.
+- A run animates the grid — a wave crossing it along the diagonals, twelve frames through the platform's own `AnimatedIcon`.
+
+### Fixed
+
+- Keep the toolbar responsive in large mixed monorepos by making build-system detection inspect root markers only and bounding manifest discovery by depth, result count, and ignored dependency or build directories.
+- Detect a root `.csproj`, `.fsproj`, or `.vbproj` even when the project has no solution file.
+
 ## [1.6.0] - 2026-08-08
 
 ### Changed
@@ -99,7 +111,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/aspix2k/affected/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/aspix2k/affected/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/aspix2k/affected/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/aspix2k/affected/compare/v1.3.0...v1.4.0
