@@ -2,7 +2,7 @@ import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLeve
 import java.util.Properties
 
 plugins {
-    kotlin("jvm") version "2.3.21"
+    kotlin("jvm") version "2.4.10"
     id("org.jetbrains.intellij.platform") version "2.18.1"
     id("org.jetbrains.kotlinx.kover") version "0.9.1"
     id("info.solidsoft.pitest") version "1.19.0"
