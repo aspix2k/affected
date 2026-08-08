@@ -82,7 +82,9 @@ intellijPlatform {
 
 detekt {
     buildUponDefaultConfig = true
-    autoCorrect = true
+    // Locally the formatting rules fix themselves; on CI they must fail instead,
+    // otherwise a run repairs the checkout and reports a clean tree.
+    autoCorrect = !providers.environmentVariable("CI").isPresent
     config.setFrom(files("$rootDir/config/detekt.yml"))
     source.setFrom(files("src", "core/src", "mcp/src"))
     parallel = true
