@@ -53,7 +53,9 @@ class ChangeAnalyzer(
 
     private fun apiTouched(file: File, base: String?): Boolean {
         val relative = file.relativeTo(projectDir).invariantSeparatorsPath
-        if (TEST_SOURCE_MARKERS.any { relative.contains(it) }) return false
+        if (TEST_SOURCE_MARKERS.any { relative == it || relative.startsWith("$it/") || relative.contains("/$it/") }) {
+            return false
+        }
         if (!relative.endsWith(".kt") && !relative.endsWith(".java")) return false
 
         val diff = when {
@@ -65,18 +67,41 @@ class ChangeAnalyzer(
             return file.useLines { lines -> lines.any(::isPublicDeclaration) }
         }
 
-        return diff.any { line ->
-            if (!line.startsWith("+") && !line.startsWith("-")) return@any false
-            if (line.startsWith("+++") || line.startsWith("---")) return@any false
-            isPublicDeclaration(line.drop(1))
-        }
+        // Comparing the declarations either side of the change, rather than
+        // reacting to any changed line that looks like one. A member written on
+        // a single line carries its body with it — `public int value() { return 1; }`
+        // — and editing that body must not count as an API change.
+        val removed = signatures(diff, "-")
+        val added = signatures(diff, "+")
+
+        return removed != added
     }
+
+    private fun signatures(diff: List<String>, marker: String): Set<String> = diff
+        .filter { it.startsWith(marker) && !it.startsWith(marker.repeat(3)) }
+        .map { it.drop(1) }
+        .filter(::isPublicDeclaration)
+        .mapTo(HashSet(), ::signatureOf)
+
+    /** The part a caller depends on: everything before the body or the initialiser. */
+    private fun signatureOf(line: String): String = line
+        .substringBefore('{')
+        .substringBefore('=')
+        .trim()
+        .replace(Regex("\\s+"), " ")
 
     private fun isPublicDeclaration(line: String): Boolean {
         if (line.contains("private") || line.contains("protected")) return false
-        if (!DECLARATION.containsMatchIn(line)) return false
 
         val indent = line.takeWhile { it == ' ' }.length
+
+        // A parameter sitting on its own line is part of a signature, and
+        // changing it breaks callers exactly as changing the first line would.
+        if (PARAMETER.matches(line)) return indent <= PARAMETER_INDENT
+
+        val declaration = DECLARATION.containsMatchIn(line) || TYPED_MEMBER.containsMatchIn(line)
+        if (!declaration) return false
+
         if (indent <= MEMBER_INDENT) return true
 
         return EXPLICIT_MODIFIER.containsMatchIn(line)
@@ -110,11 +135,15 @@ class ChangeAnalyzer(
     companion object {
         val DEFAULT_EXTENSIONS = setOf("kt", "kts", "java", "xml", "json", "pro")
 
-        private val TEST_SOURCE_MARKERS = listOf("/src/test", "/src/androidTest")
+        private val TEST_SOURCE_MARKERS = listOf("src/test", "src/androidTest", "src/androidUnitTest")
         private const val GIT_TIMEOUT_SECONDS = 90L
         private val FALLBACK_BRANCHES = listOf("develop", "main", "master")
 
         private const val MEMBER_INDENT = 4
+
+        // A signature is wrapped one level deeper than the member it belongs to;
+        // anything further in is a value inside a body, not a parameter.
+        private const val PARAMETER_INDENT = 8
 
         private val EXPLICIT_MODIFIER = Regex("""\b(public|internal|open|abstract|sealed|override|const|lateinit)\b""")
 
@@ -125,5 +154,19 @@ class ChangeAnalyzer(
                 """lateinit\s+|const\s+|external\s+|operator\s+|infix\s+|tailrec\s+|static\s+)*""" +
                 """(?:fun|val|var|class|interface|object|typealias|constructor|record)\b"""
         )
+
+        // Java and C-like languages name the type instead of using a keyword:
+        // `public String find(int id)`, `protected List<Item> items;`. Without
+        // this, a changed Java signature reads as an ordinary line and no
+        // consumer is ever checked.
+        private val TYPED_MEMBER = Regex(
+            """^\s*(?:@\w+(?:\([^)]*\))?\s*)*""" +
+                """(?:public\s+|protected\s+|static\s+|final\s+|abstract\s+|synchronized\s+|""" +
+                """native\s+|default\s+|strictfp\s+|transient\s+|volatile\s+)*""" +
+                """[A-Za-z_][\w.<>\[\], ?]*\s+[A-Za-z_]\w*\s*[(;=]"""
+        )
+
+        // A parameter on its own line inside a multi-line signature.
+        private val PARAMETER = Regex("""^\s*(?:@\w+\s*)*[A-Za-z_]\w*\s*:\s*[\w<>\[\]?., ]+,?\s*$""")
     }
 }

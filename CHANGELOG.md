@@ -13,8 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The minimum IDE is 2025.3. The MCP Server plugin does not exist for the 2025.1 platform and lacks the API this plugin uses on 2025.2, which made the verifier report the whole plugin as binary incompatible on both — a red mark on the plugin page for a toolset that could never have run there anyway.
 
+### Fixed
+
+- Java signatures were never recognised as API: the pattern looked for Kotlin keywords, while Java declares a member by its type. Changing a Java signature left every consumer unchecked.
+- A parameter on its own line in a multi-line signature was ignored, so wrapped declarations — the common Kotlin style — went unnoticed.
+- Test sources at the repository root were not excluded, because the marker was matched with a leading slash.
+- A member written on one line together with its body counted as an API change whenever the body was edited. Declarations either side of the change are compared now, so only the signature matters.
+
 ### Added
 
+- CMake projects: targets from `add_executable` and `add_library`, the graph from `target_link_libraries`, tests through `ctest`.
 - composer monorepos: `phpunit` for changed packages, and `phpstan` or `psalm` for their consumers when the package configures one.
 - Ruby monorepos: `rspec` for changed gems. Consumers are not checked — Ruby has nothing to compile and no type checker to stand in for it.
 - An exception in the plugin offers to open a prefilled issue on GitHub. Nothing leaves the machine until you submit it, and the report contains only what it shows you.

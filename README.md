@@ -30,8 +30,8 @@ The commit dialog gets a checkbox that runs the same verification and cancels th
 commit if it fails, and a push can be aborted the same way. Both are off until you
 turn them on.
 
-Gradle, Maven, Cargo, Go, npm, .NET, Python, composer and Ruby all work, with
-no configuration —
+Gradle, Maven, Cargo, Go, npm, .NET, Python, composer, Ruby and CMake all work,
+with no configuration —
 Kotlin or Groovy build scripts, any dependency DSL, composite builds, npm, yarn
 or pnpm.
 
@@ -48,7 +48,7 @@ stop it.
 ## Requirements
 
 A JetBrains IDE 2025.3+, and a project built by Gradle, Maven, Cargo, Go, npm,
-yarn, pnpm, .NET, Python, composer or bundler.
+yarn, pnpm, .NET, Python, composer, bundler or CMake.
 
 Local edits are read from the IDE, so any VCS it supports will do. Comparing
 against a base branch needs git; without it the plugin works from your

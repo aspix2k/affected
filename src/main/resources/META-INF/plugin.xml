@@ -25,8 +25,8 @@
         the IDE's Gradle integration, so the test tree, the jump from a failure to
         its source, and the Stop button work as usual.
         <br/><br/>
-        Works with Gradle, Maven, Cargo, Go, npm, .NET, Python, composer and Ruby,
-        with no configuration — Kotlin or Groovy build scripts, any dependency DSL,
+        Works with Gradle, Maven, Cargo, Go, npm, .NET, Python, composer, Ruby and
+        CMake, with no configuration — Kotlin or Groovy build scripts, any dependency DSL,
         composite builds, npm, yarn or pnpm.
         <br/><br/>
         A consumer is only checked where the language gives something to check.
@@ -62,6 +62,7 @@
         <buildSystem implementation="com.aspix2k.affected.build.PythonBuildSystem"/>
         <buildSystem implementation="com.aspix2k.affected.build.ComposerBuildSystem"/>
         <buildSystem implementation="com.aspix2k.affected.build.RubyBuildSystem"/>
+        <buildSystem implementation="com.aspix2k.affected.build.CMakeBuildSystem"/>
     </extensions>
 
     <extensions defaultExtensionNs="com.intellij">
