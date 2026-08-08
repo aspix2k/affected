@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Both are off by default, and each is remembered separately.
 
+- Czech and Indonesian interface, bringing the count to fourteen languages.
+
 ## [1.3.0] - 2026-08-08
 
 ### Added

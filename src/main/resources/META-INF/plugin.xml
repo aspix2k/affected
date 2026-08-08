@@ -27,6 +27,8 @@
         <br/><br/>
         Works with Gradle, Maven, Cargo and Go, Kotlin and Groovy build scripts,
         any dependency DSL, and composite builds, with no configuration.
+        <br/><br/>
+        The interface is available in fourteen languages.
     ]]></description>
 
 
