@@ -1,3 +1,4 @@
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel
 import java.util.Properties
 
@@ -70,6 +71,11 @@ intellijPlatform {
 
     pluginVerification {
         failureLevel = listOf(FailureLevel.INVALID_PLUGIN)
+        ides {
+            create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.1")
+            create(IntelliJPlatformType.IntellijIdea, "2025.3")
+            create(IntelliJPlatformType.AndroidStudio, providers.gradleProperty("affected.studio.version"))
+        }
     }
 }
 

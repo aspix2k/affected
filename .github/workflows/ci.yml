@@ -28,6 +28,11 @@ jobs:
           java-version: "21"
       - uses: gradle/actions/setup-gradle@06832c7b30a0129d7fb559bcc6e43d26f6374244 # v4.3.1
 
+      - name: Free disk space for the downloaded IDEs
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
       - run: ./gradlew test koverXmlReport buildPlugin
       - run: ./gradlew verifyPlugin
 
