@@ -12,6 +12,8 @@ class MavenBuildSystem : BuildSystem {
 
     override val id: String = "MAVEN"
 
+    override val sourceExtensions: Set<String> = setOf("java", "kt", "xml", "properties")
+
     override fun isPresent(project: Project): Boolean =
         MavenProjectsManager.getInstanceIfCreated(project)?.isMavenizedProject == true
 
@@ -19,7 +21,7 @@ class MavenBuildSystem : BuildSystem {
         val manager = MavenProjectsManager.getInstanceIfCreated(project) ?: return emptyList()
 
         val modules = manager.projects.associate { mavenProject ->
-            val directory = mavenProject.directory
+            val directory = File(mavenProject.directory).invariantSeparatorsPath
             val module = BuildModule(
                 id = mavenProject.mavenId.artifactId ?: directory.substringAfterLast('/'),
                 root = rootOf(manager, directory),

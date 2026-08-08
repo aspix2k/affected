@@ -56,7 +56,7 @@ class AffectedToolset : McpToolset {
         val project = coroutineContext.project
         val projectDir = project.basePath?.let(::File) ?: return "Project has no base path."
 
-        val changes = ChangeAnalyzer(projectDir, AffectedSettings.getInstance().baseBranch).collect()
+        val changes = ChangeAnalyzer(projectDir, AffectedSettings.getInstance().baseBranch, BuildSystems.sourceExtensions(project)).collect()
         if (changes.files.isEmpty()) return "No source changes."
 
         val plan = readAction {
@@ -87,7 +87,7 @@ class AffectedToolset : McpToolset {
         val project = coroutineContext.project
         val projectDir = project.basePath?.let(::File) ?: return "Project has no base path."
 
-        val changes = ChangeAnalyzer(projectDir, AffectedSettings.getInstance().baseBranch).collect()
+        val changes = ChangeAnalyzer(projectDir, AffectedSettings.getInstance().baseBranch, BuildSystems.sourceExtensions(project)).collect()
         if (changes.files.isEmpty()) return "No source changes."
 
         return buildString {
@@ -109,7 +109,7 @@ class AffectedToolset : McpToolset {
         val project = coroutineContext.project
         val projectDir = project.basePath?.let(::File) ?: return "Project has no base path."
 
-        val changes = ChangeAnalyzer(projectDir, AffectedSettings.getInstance().baseBranch).collect()
+        val changes = ChangeAnalyzer(projectDir, AffectedSettings.getInstance().baseBranch, BuildSystems.sourceExtensions(project)).collect()
         if (changes.files.isEmpty()) return "No source changes; nothing to run."
 
         val plan = readAction {

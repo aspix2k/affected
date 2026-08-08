@@ -12,11 +12,13 @@ class CargoBuildSystem : BuildSystem {
 
     override val id: String = "CARGO"
 
+    override val sourceExtensions: Set<String> = setOf("rs", "toml")
+
     override fun isPresent(project: Project): Boolean = manifestOf(project) != null
 
     override fun modules(project: Project): List<BuildModule> {
         val manifest = manifestOf(project) ?: return emptyList()
-        val root = manifest.parent
+        val root = manifest.parentFile.invariantSeparatorsPath
         val stamp = manifest.lastModified()
 
         cache.get()?.takeIf { it.stamp == stamp }?.let { return it.modules }

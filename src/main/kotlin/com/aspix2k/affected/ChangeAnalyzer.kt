@@ -3,7 +3,11 @@ package com.aspix2k.affected
 import java.io.File
 import java.util.concurrent.TimeUnit
 
-class ChangeAnalyzer(private val projectDir: File, private val baseBranch: String) {
+class ChangeAnalyzer(
+    private val projectDir: File,
+    private val baseBranch: String,
+    private val sourceExtensions: Set<String> = DEFAULT_EXTENSIONS,
+) {
 
     data class Changes(val files: List<File>, val apiTouched: Set<File>)
 
@@ -22,7 +26,7 @@ class ChangeAnalyzer(private val projectDir: File, private val baseBranch: Strin
         paths += git("ls-files", "--others", "--exclude-standard")
 
         return paths
-            .filter { path -> SOURCE_SUFFIXES.any { path.endsWith(it) } }
+            .filter { path -> path.substringAfterLast('.', "") in sourceExtensions }
             .map { File(projectDir, it) }
             .filter { it.isFile }
     }
@@ -83,17 +87,18 @@ class ChangeAnalyzer(private val projectDir: File, private val baseBranch: Strin
         emptyList()
     }
 
-    private companion object {
-        val SOURCE_SUFFIXES = listOf(".kt", ".kts", ".java", ".xml", ".json", ".pro")
-        val TEST_SOURCE_MARKERS = listOf("/src/test", "/src/androidTest")
-        const val GIT_TIMEOUT_SECONDS = 90L
-        val FALLBACK_BRANCHES = listOf("develop", "main", "master")
+    companion object {
+        val DEFAULT_EXTENSIONS = setOf("kt", "kts", "java", "xml", "json", "pro")
 
-        const val MEMBER_INDENT = 4
+        private val TEST_SOURCE_MARKERS = listOf("/src/test", "/src/androidTest")
+        private const val GIT_TIMEOUT_SECONDS = 90L
+        private val FALLBACK_BRANCHES = listOf("develop", "main", "master")
 
-        val EXPLICIT_MODIFIER = Regex("""\b(public|internal|open|abstract|sealed|override|const|lateinit)\b""")
+        private const val MEMBER_INDENT = 4
 
-        val DECLARATION = Regex(
+        private val EXPLICIT_MODIFIER = Regex("""\b(public|internal|open|abstract|sealed|override|const|lateinit)\b""")
+
+        private val DECLARATION = Regex(
             """^\s*(?:@\w+(?:\([^)]*\))?\s*)*""" +
                 """(?:public\s+|internal\s+|open\s+|abstract\s+|sealed\s+|final\s+|override\s+|""" +
                 """data\s+|value\s+|annotation\s+|enum\s+|inline\s+|suspend\s+|expect\s+|actual\s+|""" +

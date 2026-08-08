@@ -5,6 +5,10 @@ import java.io.File
 
 object CargoMetadata {
 
+    /** cargo reports OS-native paths; the graph is keyed on normalised ones. */
+    private fun String.normalizeSeparators(): String = replace('\\', '/')
+
+
     fun parse(json: String, root: String): List<BuildModule> {
         val packages = runCatching {
             JsonParser.parseString(json).asJsonObject.getAsJsonArray("packages")
@@ -15,8 +19,8 @@ object CargoMetadata {
         return packages.mapNotNull { element ->
             val json = element.asJsonObject
             val name = json.get("name")?.asString ?: return@mapNotNull null
-            val manifest = json.get("manifest_path")?.asString ?: return@mapNotNull null
-            val directory = File(manifest).parent ?: return@mapNotNull null
+            val manifest = json.get("manifest_path")?.asString?.normalizeSeparators() ?: return@mapNotNull null
+            val directory = manifest.substringBeforeLast('/', "").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
 
             val dependencies = json.getAsJsonArray("dependencies")
                 ?.mapNotNull { it.asJsonObject.get("name")?.asString }

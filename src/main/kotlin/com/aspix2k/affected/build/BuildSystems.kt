@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.ChangeAnalyzer
 import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.project.Project
 
@@ -10,4 +11,8 @@ object BuildSystems {
     fun of(project: Project): List<BuildSystem> = point.extensionList.filter { it.isPresent(project) }
 
     fun byId(id: String): BuildSystem? = point.extensionList.firstOrNull { it.id == id }
+
+    /** Extensions worth analysing: the union over the systems this project actually uses. */
+    fun sourceExtensions(project: Project): Set<String> =
+        of(project).flatMapTo(HashSet()) { it.sourceExtensions }.ifEmpty { ChangeAnalyzer.DEFAULT_EXTENSIONS }
 }
