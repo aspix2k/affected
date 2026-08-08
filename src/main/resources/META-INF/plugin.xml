@@ -21,13 +21,14 @@
         the IDE's Gradle integration, so the test tree, the jump from a failure to
         its source, and the Stop button work as usual.
         <br/><br/>
-        Works with Kotlin and Groovy builds, any dependency DSL, and composite
-        builds, with no configuration.
+        Works with Gradle and Maven, Kotlin and Groovy build scripts, any
+        dependency DSL, and composite builds, with no configuration.
     ]]></description>
 
 
     <depends>com.intellij.modules.platform</depends>
     <depends optional="true" config-file="affected-gradle.xml">com.intellij.gradle</depends>
+    <depends optional="true" config-file="affected-maven.xml">org.jetbrains.idea.maven</depends>
     <depends optional="true" config-file="affected-mcp.xml">com.intellij.mcpServer</depends>
 
     <resource-bundle>messages.AffectedBundle</resource-bundle>

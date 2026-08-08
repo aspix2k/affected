@@ -1,0 +1,5 @@
+<idea-plugin>
+    <extensions defaultExtensionNs="com.aspix2k.affected">
+        <buildSystem implementation="com.aspix2k.affected.build.MavenBuildSystem"/>
+    </extensions>
+</idea-plugin>

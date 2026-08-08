@@ -35,14 +35,11 @@ abstract class RunCheckAction(
 
         saveAllDocuments()
 
-        modules.groupBy { it.buildRoot }.forEach { (root, group) ->
-            run(project, root, group.map { "${it.id}:$taskName" })
+        modules.groupBy { Pair(it.systemId, it.buildRoot) }.forEach { (key, group) ->
+            BuildSystems.byId(key.first)?.run(project, key.second, group.map { "${it.id}:$taskName" })
         }
     }
 
-    private fun run(project: Project, root: String, tasks: List<String>) {
-        BuildSystems.forRoot(project, root)?.run(project, root, tasks)
-    }
 
     private fun saveAllDocuments() {
         val application = ApplicationManager.getApplication()

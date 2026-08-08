@@ -21,6 +21,7 @@ class ModuleGraph(private val project: Project) {
 
         fun info(): ModuleInfo = ModuleInfo(
             id = module.id,
+            systemId = system.id,
             buildRoot = module.root,
             testTask = module.testTask,
             compileTask = module.compileTask,
@@ -34,19 +35,26 @@ class ModuleGraph(private val project: Project) {
         }
     }
 
-    fun nodeFor(file: File): Node? {
-        val path = file.invariantSeparatorsPath
-        var best: Node? = null
-        var bestLength = -1
+    private val byContentRoot: Map<String, Node> by lazy {
+        val index = HashMap<String, Node>()
         for (node in nodes) {
             for (root in node.module.contentRoots) {
-                if (path.startsWith("$root/") && root.length > bestLength) {
-                    best = node
-                    bestLength = root.length
+                val existing = index[root]
+                if (existing == null || node.module.id.length > existing.module.id.length) {
+                    index[root] = node
                 }
             }
         }
-        return best
+        index
+    }
+
+    fun nodeFor(file: File): Node? {
+        var directory = file.parentFile
+        while (directory != null) {
+            byContentRoot[directory.invariantSeparatorsPath]?.let { return it }
+            directory = directory.parentFile
+        }
+        return null
     }
 
     fun directDependents(targets: Set<Node>): List<Node> {

@@ -108,8 +108,8 @@ class RunAffectedTestsAction : AnAction() {
 
     private fun execute(project: Project, plan: Plan) {
         project.service<AffectedState>().markRunning(true)
-        plan.tasksByRoot.forEach { (root, tasks) ->
-            BuildSystems.forRoot(project, root)?.run(project, root, tasks)
+        plan.groups.forEach { group ->
+            BuildSystems.byId(group.systemId)?.run(project, group.root, group.tasks)
         }
         notify(
             project,

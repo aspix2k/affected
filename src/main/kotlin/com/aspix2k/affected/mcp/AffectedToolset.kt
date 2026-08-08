@@ -16,6 +16,7 @@ import com.aspix2k.affected.build.BuildSystems
 import com.aspix2k.affected.AffectedState
 import com.aspix2k.affected.ChangeAnalyzer
 import com.aspix2k.affected.ModuleGraph
+import com.aspix2k.affected.TaskGroup
 import com.aspix2k.affected.TaskPlanner
 import java.io.File
 import kotlin.coroutines.coroutineContext
@@ -70,7 +71,7 @@ class AffectedToolset : McpToolset {
 
         return buildString {
             appendLine("Modules to test: ${plan.tested}, consumers to compile: ${plan.compiled}")
-            plan.tasksByRoot.forEach { (root, tasks) ->
+            plan.groups.forEach { (_, root, tasks) ->
                 appendLine("In $root:")
                 tasks.forEach { appendLine("  $it") }
             }
@@ -120,11 +121,11 @@ class AffectedToolset : McpToolset {
         }
         if (plan.isEmpty) return "Nothing to run."
 
-        plan.tasksByRoot.forEach { (root, tasks) -> runTasks(project, root, tasks) }
+        plan.groups.forEach { runTasks(project, it) }
 
         return buildString {
             appendLine("Started. Modules tested: ${plan.tested}, consumers compiled: ${plan.compiled}")
-            plan.tasksByRoot.forEach { (root, tasks) -> appendLine("$root: ${tasks.joinToString(" ")}") }
+            plan.groups.forEach { (_, root, tasks) -> appendLine("$root: ${tasks.joinToString(" ")}") }
         }
     }
 
@@ -141,15 +142,15 @@ class AffectedToolset : McpToolset {
         val modules = project.service<AffectedState>().modules.filter { it.supports(task) }
         if (modules.isEmpty()) return "No affected module declares task '$task'."
 
-        modules.groupBy { it.buildRoot }.forEach { (root, group) ->
-            runTasks(project, root, group.map { "${it.id}:$task" })
+        modules.groupBy { Pair(it.systemId, it.buildRoot) }.forEach { (key, group) ->
+            runTasks(project, TaskGroup(key.first, key.second, group.map { "${it.id}:$task" }))
         }
         return "Started '$task' on ${modules.size} module(s)."
     }
 
-    private suspend fun runTasks(project: Project, root: String, tasks: List<String>) {
+    private suspend fun runTasks(project: Project, group: TaskGroup) {
         withContext(Dispatchers.EDT) {
-            BuildSystems.forRoot(project, root)?.run(project, root, tasks)
+            BuildSystems.byId(group.systemId)?.run(project, group.root, group.tasks)
         }
     }
 

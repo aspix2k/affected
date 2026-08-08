@@ -2,12 +2,15 @@
 
 ## Building
 
-The build compiles against an IDE. It downloads the Android Studio build pinned
-in `gradle.properties`, unless you point it at one you already have:
+The build compiles against an IDE that bundles every integration the plugin
+supports. Android Studio ships Gradle but not Maven, so the build downloads the
+IntelliJ IDEA version pinned in `gradle.properties`.
+
+You can point it at an installed IDE, as long as that IDE bundles both:
 
 ```properties
 # local.properties
-ide.path=/Users/you/Applications/Android Studio.app
+ide.path=/Applications/IntelliJ IDEA.app
 ```
 
 The same path works as `-Paffected.ide.path=...` or as the `AFFECTED_IDE_PATH`
@@ -39,10 +42,14 @@ build scripts, which is what makes build script language, dependency DSL and
 composite builds irrelevant. Modules are attributed to the build that owns them
 by walking up to the nearest `settings.gradle[.kts]`.
 
-`TaskPlanner` turns that into Gradle tasks, grouped per build root:
-`testDebugUnitTest` or `test` for changed modules, `compileDebugUnitTestKotlin`
-or `compileTestKotlin` for their direct consumers. A module already being tested
-is never also compiled.
+`TaskPlanner` turns that into task groups, one per build system and build root,
+so a Gradle module and a Maven module never end up in the same command. A module
+already being tested is never also compiled.
+
+A `BuildSystem` supplies module identity, task names and execution, and registers
+itself through the `com.aspix2k.affected.buildSystem` extension point behind an
+optional dependency on its IDE integration. Adding one is a single class plus a
+four-line XML file; nothing else in the plugin changes.
 
 `ChangeAnalyzer` and `TaskPlanner` have no IDE dependencies and are covered by
 unit tests. Keep them that way: return data and let the action format it.

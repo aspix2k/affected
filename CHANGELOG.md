@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-08
+
+### Added
+
+- Maven projects: tests of changed modules and `test-compile` of the modules consuming a changed API.
+
+### Changed
+
+- The build system is a plug point rather than a hard dependency, so the plugin installs in IDEs without Gradle and can grow to other build systems.
+
 ## [1.0.1] - 2026-08-08
 
 ### Fixed
@@ -27,6 +37,7 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/aspix2k/affected/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/aspix2k/affected/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/aspix2k/affected/releases/tag/v1.0.0

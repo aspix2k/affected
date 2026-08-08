@@ -47,6 +47,7 @@ class AffectedState(private val project: Project) {
                     val directory = node.sourceRoot ?: return@mapNotNull null
                     AffectedModule(
                         id = node.id,
+                        systemId = node.system.id,
                         buildRoot = node.buildRoot,
                         directory = directory,
                         testDirectory = node.testRoot,
