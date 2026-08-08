@@ -30,13 +30,18 @@ class CargoBuildSystem : BuildSystem {
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {
-        tasks.groupBy({ it.substringAfterLast(':') }, { it.substringBeforeLast(':') })
-            .forEach { (task, packages) ->
-                val arguments = if (task == CargoMetadata.COMPILE) listOf("check", "--tests") else listOf("test")
-                val command = listOf("cargo") + arguments + packages.flatMap { listOf("-p", it) }
-                CommandRunner.run(project, root, command, "cargo ${arguments.first()}")
-            }
+        commands(tasks).forEach { (title, command) -> CommandRunner.run(project, root, command, title) }
     }
+
+    private fun commands(tasks: List<String>): List<Pair<String, List<String>>> =
+        tasks.groupBy({ it.substringAfterLast(':') }, { it.substringBeforeLast(':') })
+            .map { (task, packages) ->
+                val arguments = if (task == CargoMetadata.COMPILE) listOf("check", "--tests") else listOf("test")
+                "cargo ${arguments.first()}" to listOf("cargo") + arguments + packages.flatMap { listOf("-p", it) }
+            }
+
+    override fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean =
+        commands(tasks).all { (title, command) -> CommandRunner.runAndWait(project, root, command, title) }
 
     private fun manifestOf(project: Project): File? =
         project.basePath?.let { File(it, "Cargo.toml") }?.takeIf { it.isFile }

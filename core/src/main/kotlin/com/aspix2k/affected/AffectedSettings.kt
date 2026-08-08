@@ -13,6 +13,8 @@ class AffectedSettings : PersistentStateComponent<AffectedSettings.State> {
     data class State(
         var baseBranch: String = "develop",
         var checkConsumers: Boolean = true,
+        var runBeforeCommit: Boolean = false,
+        var runBeforePush: Boolean = false,
     )
 
     private var state = State()
@@ -24,6 +26,14 @@ class AffectedSettings : PersistentStateComponent<AffectedSettings.State> {
     var checkConsumers: Boolean
         get() = state.checkConsumers
         set(value) { state.checkConsumers = value }
+
+    var runBeforeCommit: Boolean
+        get() = state.runBeforeCommit
+        set(value) { state.runBeforeCommit = value }
+
+    var runBeforePush: Boolean
+        get() = state.runBeforePush
+        set(value) { state.runBeforePush = value }
 
     override fun getState(): State = state
 

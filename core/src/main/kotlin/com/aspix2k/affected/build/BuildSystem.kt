@@ -27,4 +27,10 @@ interface BuildSystem {
     fun modules(project: Project): List<BuildModule>
 
     fun run(project: Project, root: String, tasks: List<String>)
+
+    /**
+     * Runs and waits, reporting whether it succeeded. Used where the answer
+     * decides something — a commit that must not happen, a push to abort.
+     */
+    fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean
 }

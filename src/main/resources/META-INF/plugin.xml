@@ -15,6 +15,10 @@
         modules consuming your changed API still compile. Usually seconds, not
         minutes.
         <br/><br/>
+        A checkbox in the commit dialog runs the same verification and cancels the
+        commit when it fails, and a check before push aborts the push. Both are off
+        until you turn them on.
+        <br/><br/>
         The button next to Run carries the number of affected modules, and is
         disabled when there are none. The menu lists those modules, navigates to any
         of them, and offers their detekt, lint and coverage tasks. Runs go through
@@ -23,6 +27,8 @@
         <br/><br/>
         Works with Gradle, Maven, Cargo and Go, Kotlin and Groovy build scripts,
         any dependency DSL, and composite builds, with no configuration.
+        <br/><br/>
+        The interface is available in fourteen languages.
     ]]></description>
 
 
@@ -49,6 +55,11 @@
         <notificationGroup id="AffectedTests" displayType="BALLOON" bundle="messages.AffectedBundle"
                            key="group.title"/>
         <postStartupActivity implementation="com.aspix2k.affected.StartupRefresh"/>
+        <checkinHandlerFactory implementation="com.aspix2k.affected.AffectedCheckinHandlerFactory"/>
+    </extensions>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <vcs.prePushHandler implementation="com.aspix2k.affected.AffectedPrePushHandler"/>
     </extensions>
 
     <applicationListeners>

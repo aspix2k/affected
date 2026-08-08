@@ -27,6 +27,27 @@ object CommandRunner {
         }
     }
 
+    /** Runs in the same console, waits for the process, and reports its exit code. */
+    fun runAndWait(project: Project, workingDirectory: String, command: List<String>, title: String): Boolean {
+        val commandLine = GeneralCommandLine(command)
+            .withWorkDirectory(File(workingDirectory))
+            .withCharset(Charsets.UTF_8)
+
+        val handler = OSProcessHandler(commandLine)
+        ProcessTerminatedListener.attach(handler)
+
+        ApplicationManager.getApplication().invokeLater {
+            RunContentExecutor(project, handler)
+                .withTitle(title)
+                .withActivateToolWindow(true)
+                .withStop({ handler.destroyProcess() }, { !handler.isProcessTerminated })
+                .run()
+        }
+
+        handler.waitFor()
+        return handler.exitCode == 0
+    }
+
     fun capture(workingDirectory: String, command: List<String>, timeoutSeconds: Long = 60): String? = try {
         val process = ProcessBuilder(command)
             .directory(File(workingDirectory))

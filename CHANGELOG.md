@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-08
+
+### Added
+
+- A checkbox in the commit dialog that runs the affected tests and cancels the commit when they fail.
+- A check before push that aborts the push on a failed run.
+
+Both are off by default, and each is remembered separately.
+
+- Czech and Indonesian interface, bringing the count to fourteen languages.
+
 ## [1.3.0] - 2026-08-08
 
 ### Added
@@ -55,7 +66,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/aspix2k/affected/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/aspix2k/affected/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/aspix2k/affected/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/aspix2k/affected/compare/v1.0.1...v1.1.0
