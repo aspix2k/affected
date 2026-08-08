@@ -40,21 +40,21 @@ class AffectedState(private val project: Project) {
         val files = ChangeAnalyzer(projectDir, settings.baseBranch).collectPaths()
 
         val graph = ModuleGraph(project)
-        val tasks = GradleTasks(project)
         modules = ApplicationManager.getApplication().runReadAction<List<AffectedModule>> {
             files.mapNotNull { graph.nodeFor(it) }
                 .distinct()
                 .mapNotNull { node ->
-                    val directory = node.sourceRoot ?: node.contentRoots.firstOrNull()?.path
-                    if (directory == null) return@mapNotNull null
+                    val directory = node.sourceRoot ?: return@mapNotNull null
                     AffectedModule(
-                        gradlePath = node.gradlePath,
+                        id = node.id,
+                        systemId = node.system.id,
                         buildRoot = node.buildRoot,
                         directory = directory,
                         testDirectory = node.testRoot,
-                        isAndroid = node.isAndroid,
+                        testTask = node.module.testTask,
+                        compileTask = node.module.compileTask,
                         hasTests = node.hasTests,
-                        tasks = tasks.namesFor(directory),
+                        tasks = node.module.extraTasks,
                     )
                 }
         }

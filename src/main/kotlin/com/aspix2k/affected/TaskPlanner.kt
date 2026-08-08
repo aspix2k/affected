@@ -1,42 +1,45 @@
 package com.aspix2k.affected
 
 data class ModuleInfo(
-    val gradlePath: String,
+    val id: String,
+    val systemId: String,
     val buildRoot: String,
-    val isAndroid: Boolean,
+    val testTask: String,
+    val compileTask: String,
     val hasTests: Boolean,
 ) {
-    fun testTask(): String = if (isAndroid) "$gradlePath:testDebugUnitTest" else "$gradlePath:test"
+    fun test(): String = "$id:$testTask"
 
-    fun compileTask(): String =
-        if (isAndroid) "$gradlePath:compileDebugUnitTestKotlin" else "$gradlePath:compileTestKotlin"
+    fun compile(): String = "$id:$compileTask"
 }
 
-data class Plan(val tasksByRoot: Map<String, List<String>>, val tested: Int, val compiled: Int) {
+data class TaskGroup(val systemId: String, val root: String, val tasks: List<String>)
 
-    val isEmpty: Boolean get() = tasksByRoot.isEmpty()
+data class Plan(val groups: List<TaskGroup>, val tested: Int, val compiled: Int) {
+
+    val isEmpty: Boolean get() = groups.isEmpty()
 }
 
 object TaskPlanner {
 
     fun plan(changed: List<ModuleInfo>, consumers: List<ModuleInfo>): Plan {
-        val tasks = LinkedHashMap<String, MutableList<String>>()
+        val tasks = LinkedHashMap<Pair<String, String>, MutableList<String>>()
 
         val tested = changed.distinct().filter { it.hasTests }
         tested.forEach { module ->
-            tasks.getOrPut(module.buildRoot) { mutableListOf() }.add(module.testTask())
+            tasks.getOrPut(module.systemId to module.buildRoot) { mutableListOf() }.add(module.test())
         }
 
-        val testedPaths = tested.map { it.gradlePath to it.buildRoot }.toSet()
+        val testedKeys = tested.map { it.id to it.buildRoot }.toSet()
         val compiled = consumers.distinct()
-            .filter { (it.gradlePath to it.buildRoot) !in testedPaths }
+            .filter { (it.id to it.buildRoot) !in testedKeys }
             .filter { it !in changed }
         compiled.forEach { module ->
-            tasks.getOrPut(module.buildRoot) { mutableListOf() }.add(module.compileTask())
+            tasks.getOrPut(module.systemId to module.buildRoot) { mutableListOf() }.add(module.compile())
         }
 
         return Plan(
-            tasksByRoot = tasks.mapValues { (_, value) -> value.distinct() },
+            groups = tasks.map { (key, value) -> TaskGroup(key.first, key.second, value.distinct()) },
             tested = tested.size,
             compiled = compiled.size,
         )

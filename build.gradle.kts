@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "com.aspix2k"
-version = "1.0.1"
+version = "1.1.0"
 
 repositories {
     mavenCentral()
@@ -32,9 +32,10 @@ dependencies {
         if (localIde != null) {
             local(localIde)
         } else {
-            androidStudio(providers.gradleProperty("affected.studio.version"))
+            intellijIdea(providers.gradleProperty("affected.idea.version").get())
         }
         bundledPlugin("com.intellij.gradle")
+        bundledPlugin("org.jetbrains.idea.maven")
         plugin("com.intellij.mcpServer", providers.gradleProperty("affected.mcp.version").get())
     }
 

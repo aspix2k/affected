@@ -1,0 +1,13 @@
+package com.aspix2k.affected.build
+
+import com.intellij.openapi.extensions.ExtensionPointName
+import com.intellij.openapi.project.Project
+
+object BuildSystems {
+
+    private val point = ExtensionPointName<BuildSystem>("com.aspix2k.affected.buildSystem")
+
+    fun of(project: Project): List<BuildSystem> = point.extensionList.filter { it.isPresent(project) }
+
+    fun byId(id: String): BuildSystem? = point.extensionList.firstOrNull { it.id == id }
+}

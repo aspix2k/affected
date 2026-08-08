@@ -3,23 +3,20 @@ package com.aspix2k.affected.mcp
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
-import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.ui.RunContentManager
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.readAction
-import com.intellij.openapi.externalSystem.model.execution.ExternalSystemTaskExecutionSettings
-import com.intellij.openapi.externalSystem.service.execution.ProgressExecutionMode
-import com.intellij.openapi.externalSystem.util.ExternalSystemUtil
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.jetbrains.plugins.gradle.util.GradleConstants
 import com.intellij.openapi.components.service
 import com.aspix2k.affected.AffectedSettings
+import com.aspix2k.affected.build.BuildSystems
 import com.aspix2k.affected.AffectedState
 import com.aspix2k.affected.ChangeAnalyzer
 import com.aspix2k.affected.ModuleGraph
+import com.aspix2k.affected.TaskGroup
 import com.aspix2k.affected.TaskPlanner
 import java.io.File
 import kotlin.coroutines.coroutineContext
@@ -30,7 +27,7 @@ class AffectedToolset : McpToolset {
 
     @McpTool
     @McpDescription(
-        "Lists Gradle modules affected by the current changes: modules whose files changed, " +
+        "Lists the modules affected by the current changes: modules whose files changed, " +
             "and whether their public API changed. Use before running tests to know the minimal scope."
     )
     suspend fun affected_modules(): String {
@@ -42,8 +39,8 @@ class AffectedToolset : McpToolset {
 
         return buildString {
             appendLine("Affected modules: ${modules.size}")
-            modules.sortedBy { it.gradlePath }.forEach { module ->
-                append("  ${module.gradlePath}")
+            modules.sortedBy { it.id }.forEach { module ->
+                append("  ${module.id}")
                 if (!module.hasTests) append("  (no tests)")
                 appendLine()
             }
@@ -74,7 +71,7 @@ class AffectedToolset : McpToolset {
 
         return buildString {
             appendLine("Modules to test: ${plan.tested}, consumers to compile: ${plan.compiled}")
-            plan.tasksByRoot.forEach { (root, tasks) ->
+            plan.groups.forEach { (_, root, tasks) ->
                 appendLine("In $root:")
                 tasks.forEach { appendLine("  $it") }
             }
@@ -124,11 +121,11 @@ class AffectedToolset : McpToolset {
         }
         if (plan.isEmpty) return "Nothing to run."
 
-        plan.tasksByRoot.forEach { (root, tasks) -> runTasks(project, root, tasks) }
+        plan.groups.forEach { runTasks(project, it) }
 
         return buildString {
             appendLine("Started. Modules tested: ${plan.tested}, consumers compiled: ${plan.compiled}")
-            plan.tasksByRoot.forEach { (root, tasks) -> appendLine("$root: ${tasks.joinToString(" ")}") }
+            plan.groups.forEach { (_, root, tasks) -> appendLine("$root: ${tasks.joinToString(" ")}") }
         }
     }
 
@@ -145,27 +142,15 @@ class AffectedToolset : McpToolset {
         val modules = project.service<AffectedState>().modules.filter { it.supports(task) }
         if (modules.isEmpty()) return "No affected module declares task '$task'."
 
-        modules.groupBy { it.buildRoot }.forEach { (root, group) ->
-            runTasks(project, root, group.map { "${it.gradlePath}:$task" })
+        modules.groupBy { Pair(it.systemId, it.buildRoot) }.forEach { (key, group) ->
+            runTasks(project, TaskGroup(key.first, key.second, group.map { "${it.id}:$task" }))
         }
         return "Started '$task' on ${modules.size} module(s)."
     }
 
-    private suspend fun runTasks(project: Project, root: String, tasks: List<String>) {
-        val settings = ExternalSystemTaskExecutionSettings().apply {
-            externalProjectPath = root
-            taskNames = tasks
-            externalSystemIdString = GradleConstants.SYSTEM_ID.id
-        }
+    private suspend fun runTasks(project: Project, group: TaskGroup) {
         withContext(Dispatchers.EDT) {
-            ExternalSystemUtil.runTask(
-                settings,
-                DefaultRunExecutor.EXECUTOR_ID,
-                project,
-                GradleConstants.SYSTEM_ID,
-                null,
-                ProgressExecutionMode.IN_BACKGROUND_ASYNC,
-            )
+            BuildSystems.byId(group.systemId)?.run(project, group.root, group.tasks)
         }
     }
 
