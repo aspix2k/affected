@@ -34,6 +34,9 @@
         consumers are checked only when the project configures mypy.
         <br/><br/>
         The interface is available in fourteen languages.
+        <br/><br/>
+        The plugin collects nothing. If it throws, the IDE offers to open a
+        prefilled issue on GitHub — you read it and decide whether to submit.
     ]]></description>
 
 
@@ -64,6 +67,7 @@
                            key="group.title"/>
         <postStartupActivity implementation="com.aspix2k.affected.StartupRefresh"/>
         <checkinHandlerFactory implementation="com.aspix2k.affected.AffectedCheckinHandlerFactory"/>
+        <errorHandler implementation="com.aspix2k.affected.AffectedErrorReportSubmitter"/>
     </extensions>
 
     <extensions defaultExtensionNs="com.intellij">
