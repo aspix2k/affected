@@ -69,5 +69,15 @@ clone python-httpx         https://github.com/encode/httpx.git
 # .NET, project references
 clone dotnet-serilog       https://github.com/serilog/serilog.git
 
+# composer monorepo — packages under a single repository
+clone php-symfony          https://github.com/symfony/symfony.git
+
+# Ruby monorepo — a gemspec per component
+clone ruby-rails           https://github.com/rails/rails.git
+
+# CMake targets
+clone cmake-fmt            https://github.com/fmtlib/fmt.git
+clone cmake-spdlog         https://github.com/gabime/spdlog.git
+
 echo
 du -sh "$fixtures" 2>/dev/null | awk '{print "total    " $1}'
