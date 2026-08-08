@@ -25,7 +25,7 @@
         the IDE's Gradle integration, so the test tree, the jump from a failure to
         its source, and the Stop button work as usual.
         <br/><br/>
-        Works with Gradle, Maven, Cargo and Go, Kotlin and Groovy build scripts,
+        Works with Gradle, Maven, Cargo, Go and Node workspaces, Kotlin and Groovy build scripts,
         any dependency DSL, and composite builds, with no configuration.
         <br/><br/>
         The interface is available in fourteen languages.
@@ -49,6 +49,7 @@
     <extensions defaultExtensionNs="com.aspix2k.affected">
         <buildSystem implementation="com.aspix2k.affected.build.CargoBuildSystem"/>
         <buildSystem implementation="com.aspix2k.affected.build.GoBuildSystem"/>
+        <buildSystem implementation="com.aspix2k.affected.build.NodeBuildSystem"/>
     </extensions>
 
     <extensions defaultExtensionNs="com.intellij">

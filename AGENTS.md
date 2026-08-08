@@ -17,6 +17,11 @@ Paths must survive Windows. Compare and store paths through
 
 The plugin id is permanent. Changing it breaks updates for every existing user.
 
+Kotlin nests block comments. A glob like `packages/*` inside a KDoc opens an
+inner comment, and the next `*/` closes only that one — the rest of the file
+silently becomes comment. The symptom is an unresolved reference to a function
+that is plainly there.
+
 Formatting belongs to the action, not to the planner. An earlier version built
 user-facing strings inside `TaskPlanner`, which quietly made pure logic depend on
 a running IDE and broke four tests.

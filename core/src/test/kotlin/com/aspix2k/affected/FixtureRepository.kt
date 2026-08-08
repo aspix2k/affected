@@ -5,7 +5,11 @@ import java.util.concurrent.TimeUnit
 
 object FixtureRepository {
 
-    val root: File = File(System.getProperty("user.dir"), "fixtures")
+    /** Tests run from the module directory, while fixtures live at the repository root. */
+    val root: File = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
+        .map { File(it, "fixtures") }
+        .firstOrNull { it.isDirectory }
+        ?: File(System.getProperty("user.dir"), "fixtures")
 
     fun available(name: String): Boolean = File(root, "$name/.git").isDirectory
 

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-08
+
+### Added
+
+- npm, yarn and pnpm workspaces: tests of changed packages, and a type check of the packages depending on them.
+
+### Changed
+
+- A consumer is only checked when its language has something to check. Plain JavaScript has nothing to compile, so those consumers are skipped instead of being run pointlessly.
+
 ## [1.4.0] - 2026-08-08
 
 ### Added
@@ -66,7 +76,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/aspix2k/affected/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/aspix2k/affected/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/aspix2k/affected/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/aspix2k/affected/compare/v1.1.0...v1.2.0
