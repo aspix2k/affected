@@ -21,6 +21,8 @@ class GradleBuildSystem : BuildSystem {
 
     override val id: String = GradleConstants.SYSTEM_ID.id
 
+    override val sourceExtensions: Set<String> = setOf("kt", "kts", "java", "xml", "json", "pro")
+
     override fun isPresent(project: Project): Boolean =
         GradleSettings.getInstance(project).linkedProjectsSettings.isNotEmpty()
 
@@ -114,10 +116,10 @@ class GradleBuildSystem : BuildSystem {
     private fun buildRootOf(moduleDir: File, project: Project): String {
         var current: File? = moduleDir
         while (current != null) {
-            if (SETTINGS_FILES.any { File(current, it).isFile }) return current.path
+            if (SETTINGS_FILES.any { File(current, it).isFile }) return current.invariantSeparatorsPath
             current = current.parentFile
         }
-        return project.basePath ?: moduleDir.path
+        return project.basePath ?: moduleDir.invariantSeparatorsPath
     }
 
     private fun tasksByDirectory(project: Project): Map<String, Set<String>> {

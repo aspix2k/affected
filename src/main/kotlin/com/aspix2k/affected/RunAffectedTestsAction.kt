@@ -62,7 +62,7 @@ class RunAffectedTestsAction : AnAction() {
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, title, true) {
             override fun run(indicator: ProgressIndicator) {
                 val settings = AffectedSettings.getInstance()
-                val changes = ChangeAnalyzer(projectDir, settings.baseBranch).collect()
+                val changes = ChangeAnalyzer(projectDir, settings.baseBranch, BuildSystems.sourceExtensions(project)).collect()
                 if (changes.files.isEmpty()) {
                     notify(
                         project,

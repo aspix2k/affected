@@ -1,5 +1,6 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.BuildSystems
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
@@ -37,7 +38,7 @@ class AffectedState(private val project: Project) {
     private fun recount() {
         val projectDir = project.basePath?.let(::File) ?: return
         val settings = AffectedSettings.getInstance()
-        val files = ChangeAnalyzer(projectDir, settings.baseBranch).collectPaths()
+        val files = ChangeAnalyzer(projectDir, settings.baseBranch, BuildSystems.sourceExtensions(project)).collectPaths()
 
         val graph = ModuleGraph(project)
         modules = ApplicationManager.getApplication().runReadAction<List<AffectedModule>> {

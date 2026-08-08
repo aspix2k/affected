@@ -19,6 +19,9 @@ interface BuildSystem {
 
     val id: String
 
+    /** File types whose change can affect a module of this system. */
+    val sourceExtensions: Set<String>
+
     fun isPresent(project: Project): Boolean
 
     fun modules(project: Project): List<BuildModule>
