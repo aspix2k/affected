@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- composer monorepos: `phpunit` for changed packages, and `phpstan` or `psalm` for their consumers when the package configures one.
+- Ruby monorepos: `rspec` for changed gems. Consumers are not checked — Ruby has nothing to compile and no type checker to stand in for it.
 - An exception in the plugin offers to open a prefilled issue on GitHub. Nothing leaves the machine until you submit it, and the report contains only what it shows you.
 - A privacy policy, spelling out what is read, stored, executed and reported.
 
