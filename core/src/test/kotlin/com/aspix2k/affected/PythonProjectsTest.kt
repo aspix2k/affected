@@ -38,7 +38,7 @@ class PythonProjectsTest {
     }
 
     @Test
-    fun `монорепо из нескольких пакетов даёт модули`() {
+    fun `a multipackage monorepo yields modules`() {
         val root = workspace()
         packageAt(root, ".", "root-app")
         packageAt(root, "libs/core", "app-core")
@@ -50,19 +50,19 @@ class PythonProjectsTest {
     }
 
     @Test
-    fun `одиночный пакет не считается монорепо`() {
+    fun `a single package is not a monorepo`() {
         val root = workspace()
         packageAt(root, ".", "single")
 
         assertEquals(
             emptyList(),
             PythonProjects.parse(root),
-            "для одного пакета выборочный прогон не имеет смысла",
+            "selective execution is pointless for a single package",
         )
     }
 
     @Test
-    fun `зависимостями считаются только свои пакеты`() {
+    fun `only local packages are dependencies`() {
         val root = workspace()
         packageAt(root, "libs/core", "app-core")
         packageAt(root, "libs/api", "app-api", dependencies = listOf("app-core>=1.0", "httpx[cli]>=0.27"))
@@ -72,12 +72,12 @@ class PythonProjectsTest {
         assertEquals(
             setOf("${root.invariantSeparatorsPath}|app-core"),
             api.dependencies,
-            "httpx ставится из индекса и потребителем быть не может",
+            "httpx comes from the package index and cannot be a consumer",
         )
     }
 
     @Test
-    fun `потребителя проверяем только когда настроен mypy`() {
+    fun `a consumer is checked only when mypy is configured`() {
         val root = workspace()
         packageAt(root, "libs/typed", "typed-pkg", mypy = true)
         packageAt(root, "libs/plain", "plain-pkg")
@@ -87,12 +87,12 @@ class PythonProjectsTest {
         assertEquals("typecheck", modules.single { it.id == "typed-pkg" }.compileTask)
         assertNull(
             modules.single { it.id == "plain-pkg" }.compileTask,
-            "без mypy проверить потребителя нечем",
+            "without mypy there is no consumer check",
         )
     }
 
     @Test
-    fun `каталог tests делает пакет тестируемым`() {
+    fun `a tests directory makes a package testable`() {
         val root = workspace()
         packageAt(root, "libs/with", "with-tests", tests = true)
         packageAt(root, "libs/without", "without-tests")
@@ -103,7 +103,7 @@ class PythonProjectsTest {
     }
 
     @Test
-    fun `файл test_ рядом с кодом тоже считается тестами`() {
+    fun `a test file beside code also counts as tests`() {
         val root = workspace()
         packageAt(root, "libs/a", "pkg-a")
         packageAt(root, "libs/b", "pkg-b")
@@ -115,7 +115,7 @@ class PythonProjectsTest {
     }
 
     @Test
-    fun `версии зависимостей отбрасываются`() {
+    fun `dependency versions are discarded`() {
         val root = workspace()
         packageAt(root, "libs/core", "app-core")
         packageAt(root, "libs/api", "app-api", dependencies = listOf("app-core == 2.1.0"))

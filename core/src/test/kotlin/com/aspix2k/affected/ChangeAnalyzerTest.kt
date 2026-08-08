@@ -41,136 +41,136 @@ class ChangeAnalyzerTest {
     private fun analyze(dir: File) = ChangeAnalyzer(dir, "main").collect()
 
     @Test
-    fun `без изменений список пуст`() = repo { dir ->
-        assertTrue(analyze(dir).files.isEmpty(), "чистое дерево не должно давать изменений")
+    fun `the list is empty without changes`() = repo { dir ->
+        assertTrue(analyze(dir).files.isEmpty(), "a clean tree must not have changes")
     }
 
     @Test
-    fun `правка внутри тела не трогает публичный API`() = repo { dir ->
+    fun `an edit inside a body does not affect the public API`() = repo { dir ->
         val file = File(dir, "lib/src/main/kotlin/Sample.kt")
         file.writeText(file.readText().replace("val internalValue = 1", "val internalValue = 2"))
 
         val changes = analyze(dir)
-        assertEquals(1, changes.files.size, "файл должен попасть в изменённые")
-        assertTrue(changes.apiTouched.isEmpty(), "правка тела не меняет API")
+        assertEquals(1, changes.files.size, "the file must be listed as changed")
+        assertTrue(changes.apiTouched.isEmpty(), "a body edit does not change the API")
     }
 
     @Test
-    fun `новая публичная функция меняет API`() = repo { dir ->
+    fun `a new public function changes the API`() = repo { dir ->
         val file = File(dir, "lib/src/main/kotlin/Sample.kt")
         file.appendText("\nfun added(): Int = 5\n")
 
-        assertEquals(1, analyze(dir).apiTouched.size, "новое публичное объявление меняет API")
+        assertEquals(1, analyze(dir).apiTouched.size, "a new public declaration changes the API")
     }
 
     @Test
-    fun `приватная функция API не меняет`() = repo { dir ->
+    fun `a private function does not change the API`() = repo { dir ->
         val file = File(dir, "lib/src/main/kotlin/Sample.kt")
         file.appendText("\nprivate fun hidden(): Int = 5\n")
 
-        assertTrue(analyze(dir).apiTouched.isEmpty(), "приватное объявление наружу не видно")
+        assertTrue(analyze(dir).apiTouched.isEmpty(), "a private declaration is not externally visible")
     }
 
     @Test
-    fun `изменение сигнатуры меняет API`() = repo { dir ->
+    fun `a signature change changes the API`() = repo { dir ->
         val file = File(dir, "lib/src/main/kotlin/Sample.kt")
         file.writeText(file.readText().replace("fun visible(): Int", "fun visible(flag: Boolean): Int"))
 
-        assertEquals(1, analyze(dir).apiTouched.size, "смена сигнатуры ломает потребителей")
+        assertEquals(1, analyze(dir).apiTouched.size, "a signature change breaks consumers")
     }
 
     @Test
-    fun `тестовые исходники API не меняют`() = repo { dir ->
+    fun `test sources do not change the API`() = repo { dir ->
         File(dir, "lib/src/test/kotlin").mkdirs()
         File(dir, "lib/src/test/kotlin/SampleTest.kt").writeText("class SampleTest { fun check() {} }")
 
         val changes = analyze(dir)
-        assertTrue(changes.files.isNotEmpty(), "тестовый файл всё равно попадает в изменения")
-        assertTrue(changes.apiTouched.isEmpty(), "тесты не входят в артефакт модуля")
+        assertTrue(changes.files.isNotEmpty(), "a test file is still listed as changed")
+        assertTrue(changes.apiTouched.isEmpty(), "tests are not part of the module artifact")
     }
 
     @Test
-    fun `xml ресурс API не меняет`() = repo { dir ->
+    fun `an XML resource does not change the API`() = repo { dir ->
         File(dir, "lib/src/main/res/values").mkdirs()
         File(dir, "lib/src/main/res/values/colors.xml")
             .writeText("<resources><color name=\"c\">#fff</color></resources>")
 
         val changes = analyze(dir)
-        assertTrue(changes.files.isNotEmpty(), "ресурс попадает в изменения")
-        assertTrue(changes.apiTouched.isEmpty(), "цвет иконки потребителей не ломает")
+        assertTrue(changes.files.isNotEmpty(), "the resource is listed as changed")
+        assertTrue(changes.apiTouched.isEmpty(), "an icon color does not break consumers")
     }
 
     @Test
-    fun `новый файл с публичным объявлением меняет API`() = repo { dir ->
+    fun `a new file with a public declaration changes the API`() = repo { dir ->
         File(dir, "lib/src/main/kotlin/Added.kt").writeText("package probe\n\nclass Added\n")
 
-        assertEquals(1, analyze(dir).apiTouched.size, "новый публичный класс расширяет API")
+        assertEquals(1, analyze(dir).apiTouched.size, "a new public class extends the API")
     }
 
     @Test
-    fun `новый файл только с приватным содержимым API не меняет`() = repo { dir ->
+    fun `a new file with only private content does not change the API`() = repo { dir ->
         File(dir, "lib/src/main/kotlin/Hidden.kt").writeText("package probe\n\nprivate fun x() = 1\n")
 
-        assertTrue(analyze(dir).apiTouched.isEmpty(), "приватное содержимое наружу не видно")
+        assertTrue(analyze(dir).apiTouched.isEmpty(), "private content is not externally visible")
     }
 
     @Test
-    fun `посторонние файлы игнорируются`() = repo { dir ->
+    fun `unrelated files are ignored`() = repo { dir ->
         File(dir, "README.md").writeText("# doc")
         File(dir, "notes.txt").writeText("hello")
 
-        assertTrue(analyze(dir).files.isEmpty(), "документация не влияет на сборку")
+        assertTrue(analyze(dir).files.isEmpty(), "documentation does not affect the build")
     }
 
     @Test
-    fun `удалённые файлы не попадают в список`() = repo { dir ->
+    fun `deleted files are not listed`() = repo { dir ->
         File(dir, "lib/src/main/kotlin/Sample.kt").delete()
 
-        assertTrue(analyze(dir).files.none { it.name == "Sample.kt" }, "удалённого файла на диске нет")
+        assertTrue(analyze(dir).files.none { it.name == "Sample.kt" }, "a deleted file does not exist on disk")
     }
 
     @Test
-    fun `коммит в ветке остаётся видимым`() = repo { dir ->
+    fun `a branch commit remains visible`() = repo { dir ->
         run(dir, "git", "checkout", "-qb", "feature")
         File(dir, "lib/src/main/kotlin/Sample.kt").appendText("\nfun afterCommit(): Int = 7\n")
         run(dir, "git", "add", "-A")
         run(dir, "git", "commit", "-qm", "work")
 
         val changes = analyze(dir)
-        assertTrue(changes.files.isNotEmpty(), "закоммиченная работа в ветке всё ещё требует тестов")
-        assertEquals(1, changes.apiTouched.size, "и её API-изменение тоже видно")
+        assertTrue(changes.files.isNotEmpty(), "committed branch work still requires tests")
+        assertEquals(1, changes.apiTouched.size, "its API change remains visible too")
     }
 
     @Test
-    fun `отсутствие базовой ветки не роняет анализ`() = repo { dir ->
+    fun `a missing base branch does not crash analysis`() = repo { dir ->
         File(dir, "lib/src/main/kotlin/Sample.kt").appendText("\nfun another(): Int = 1\n")
 
         val changes = ChangeAnalyzer(dir, "no-such-branch").collect()
-        assertTrue(changes.files.isNotEmpty(), "рабочее дерево читается и без базовой ветки")
+        assertTrue(changes.files.isNotEmpty(), "the working tree is read without a base branch")
     }
 
     @Test
-    fun `androidTest исходники API не меняют`() = repo { dir ->
+    fun `androidTest sources do not change the API`() = repo { dir ->
         File(dir, "lib/src/androidTest/kotlin").mkdirs()
         File(dir, "lib/src/androidTest/kotlin/UiTest.kt").writeText("class UiTest { fun check() {} }")
 
         val changes = analyze(dir)
         assertTrue(changes.files.isNotEmpty())
-        assertTrue(changes.apiTouched.isEmpty(), "инструментальные тесты в артефакт модуля не входят")
+        assertTrue(changes.apiTouched.isEmpty(), "instrumented tests are not part of the module artifact")
     }
 
     @Test
-    fun `java файл участвует в анализе API`() = repo { dir ->
+    fun `a Java file participates in API analysis`() = repo { dir ->
         File(dir, "lib/src/main/java/probe").mkdirs()
         File(dir, "lib/src/main/java/probe/Legacy.java").writeText(
             "package probe;\n\npublic class Legacy {\n    public int value() { return 1; }\n}\n"
         )
 
-        assertEquals(1, analyze(dir).apiTouched.size, "публичный java-класс тоже расширяет API")
+        assertEquals(1, analyze(dir).apiTouched.size, "a public Java class also extends the API")
     }
 
     @Test
-    fun `правка тела java метода API не меняет`() = repo { dir ->
+    fun `editing a Java method body does not change the API`() = repo { dir ->
         val file = File(dir, "lib/src/main/java/probe/Legacy.java")
         file.parentFile.mkdirs()
         file.writeText("package probe;\n\npublic class Legacy {\n    public int value() { return 1; }\n}\n")
@@ -179,20 +179,20 @@ class ChangeAnalyzerTest {
 
         file.writeText("package probe;\n\npublic class Legacy {\n    public int value() { return 2; }\n}\n")
 
-        assertTrue(analyze(dir).apiTouched.isEmpty(), "изменилось только тело метода")
+        assertTrue(analyze(dir).apiTouched.isEmpty(), "only the method body changed")
     }
 
     @Test
-    fun `kts файл попадает в изменения но не в анализ API`() = repo { dir ->
+    fun `a KTS file is changed but excluded from API analysis`() = repo { dir ->
         File(dir, "lib/build.gradle.kts").writeText("// changed\n")
 
         val changes = analyze(dir)
         assertTrue(changes.files.any { it.name == "build.gradle.kts" })
-        assertTrue(changes.apiTouched.isEmpty(), "скрипт сборки не является публичным API модуля")
+        assertTrue(changes.apiTouched.isEmpty(), "a build script is not the module public API")
     }
 
     @Test
-    fun `быстрый путь возвращает те же файлы что и полный`() = repo { dir ->
+    fun `the fast path returns the same files as the full path`() = repo { dir ->
         File(dir, "lib/src/main/kotlin/Sample.kt").appendText("\nfun quick(): Int = 1\n")
 
         val quick = ChangeAnalyzer(dir, "main").collectPaths()
@@ -201,13 +201,13 @@ class ChangeAnalyzerTest {
     }
 
     @Test
-    fun `быстрый путь не падает вне репозитория`() {
+    fun `the fast path does not fail outside a repository`() {
         val dir = createTempDirectory("affected-quick").toFile()
         assertTrue(ChangeAnalyzer(dir, "main").collectPaths().isEmpty())
     }
 
     @Test
-    fun `быстрый путь отсекает посторонние расширения`() = repo { dir ->
+    fun `the fast path filters unrelated extensions`() = repo { dir ->
         File(dir, "notes.txt").writeText("x")
         File(dir, "lib/src/main/kotlin/Sample.kt").appendText("\nfun q(): Int = 1\n")
 
@@ -217,19 +217,19 @@ class ChangeAnalyzerTest {
     }
 
     @Test
-    fun `база определяется автоматически если настроенной ветки нет`() = repo { dir ->
+    fun `the base is detected when the configured branch is absent`() = repo { dir ->
         run(dir, "git", "checkout", "-qb", "feature")
         File(dir, "lib/src/main/kotlin/Sample.kt").appendText("\nfun auto(): Int = 1\n")
         run(dir, "git", "add", "-A")
         run(dir, "git", "commit", "-qm", "work")
 
         val changes = ChangeAnalyzer(dir, "no-such-branch").collect()
-        assertTrue(changes.files.isNotEmpty(), "должен найти main как запасную базу")
+        assertTrue(changes.files.isNotEmpty(), "main must be found as a fallback base")
         assertEquals(1, changes.apiTouched.size)
     }
 
     @Test
-    fun `настроенная ветка имеет приоритет над запасными`() = repo { dir ->
+    fun `the configured branch takes priority over fallbacks`() = repo { dir ->
         run(dir, "git", "checkout", "-qb", "release")
         File(dir, "lib/src/main/kotlin/Sample.kt").appendText("\nfun onRelease(): Int = 1\n")
         run(dir, "git", "add", "-A")
@@ -240,26 +240,26 @@ class ChangeAnalyzerTest {
         run(dir, "git", "commit", "-qm", "feature work")
 
         val fromRelease = ChangeAnalyzer(dir, "release").collect().files.map { it.name }
-        assertTrue(fromRelease.contains("Other.kt"), "относительно release видна только работа ветки")
-        assertFalse(fromRelease.contains("Sample.kt"), "то, что уже в release, повторно не тестируем")
+        assertTrue(fromRelease.contains("Other.kt"), "only branch work is visible relative to release")
+        assertFalse(fromRelease.contains("Sample.kt"), "work already in release is not tested again")
     }
 
     @Test
-    fun `путь к тестам распознаётся независимо от разделителя ОС`() = repo { dir ->
+    fun `a test path is recognized with any OS separator`() = repo { dir ->
         File(dir, "lib/src/test/kotlin").mkdirs()
         File(dir, "lib/src/test/kotlin/PlatformTest.kt").writeText("class PlatformTest { fun check() {} }")
 
         val changes = analyze(dir)
         val relative = changes.files.single().relativeTo(dir).invariantSeparatorsPath
-        assertTrue(relative.contains("/src/test"), "разделители приводятся к прямым слешам")
-        assertTrue(changes.apiTouched.isEmpty(), "тестовый исходник не меняет API на любой ОС")
+        assertTrue(relative.contains("/src/test"), "separators are normalized to forward slashes")
+        assertTrue(changes.apiTouched.isEmpty(), "a test source does not change the API on any OS")
     }
 
     @Test
-    fun `не git каталог не роняет анализ`() {
+    fun `a non Git directory does not crash analysis`() {
         val dir = createTempDirectory("affected-nogit").toFile()
         val changes = ChangeAnalyzer(dir, "main").collect()
-        assertTrue(changes.files.isEmpty(), "вне репозитория анализатор просто молчит")
+        assertTrue(changes.files.isEmpty(), "the analyzer stays silent outside a repository")
         assertFalse(dir.resolve(".git").exists())
     }
 }

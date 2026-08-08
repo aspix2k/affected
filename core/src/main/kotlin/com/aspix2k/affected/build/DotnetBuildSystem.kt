@@ -4,7 +4,7 @@ import com.intellij.openapi.project.Project
 import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 
-class DotnetBuildSystem : BuildSystem {
+class DotnetBuildSystem : SuspendingBuildSystem {
 
     private data class Snapshot(val stamp: Long, val modules: List<BuildModule>)
 
@@ -33,7 +33,7 @@ class DotnetBuildSystem : BuildSystem {
         }
     }
 
-    override fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean =
+    override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         commands(project, root, tasks).all { (title, command) ->
             CommandRunner.runAndWait(project, root, command, title)
         }

@@ -1,13 +1,26 @@
 package com.aspix2k.affected
 
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
-import com.intellij.util.Alarm
-import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicReference
+
+enum class VerificationStatus {
+    IDLE,
+    RUNNING,
+}
 
 @Service(Service.Level.PROJECT)
-class AffectedState(private val project: Project) {
+class AffectedState(
+    private val project: Project,
+    private val scope: CoroutineScope,
+) {
 
     @Volatile
     var modules: List<AffectedModule> = emptyList()
@@ -19,25 +32,42 @@ class AffectedState(private val project: Project) {
     var ready: Boolean = false
         private set
 
-    private val running = AtomicBoolean(false)
-    private val alarm = Alarm(Alarm.ThreadToUse.POOLED_THREAD, project)
+    private val status = AtomicReference(VerificationStatus.IDLE)
+    private val recountJob = AtomicReference<Job?>()
+    private val verificationLock = Any()
+    private var runningVerifications = 0
 
-    val isRunning: Boolean get() = running.get()
+    val verificationStatus: VerificationStatus get() = status.get()
+    val isRunning: Boolean get() = verificationStatus == VerificationStatus.RUNNING
 
-    fun markRunning(value: Boolean) {
-        running.set(value)
+    fun markRunning() {
+        synchronized(verificationLock) {
+            runningVerifications++
+            status.set(VerificationStatus.RUNNING)
+        }
+    }
+
+    fun markFinished() {
+        synchronized(verificationLock) {
+            runningVerifications = (runningVerifications - 1).coerceAtLeast(0)
+            if (runningVerifications == 0) status.set(VerificationStatus.IDLE)
+        }
     }
 
     fun invalidate() {
-        alarm.cancelAllRequests()
-        alarm.addRequest(::recount, DEBOUNCE_MS)
+        val nextJob = scope.launch(start = CoroutineStart.LAZY) {
+            delay(DEBOUNCE_MS.toLong())
+            recount()
+        }
+        recountJob.getAndSet(nextJob)?.cancel()
+        nextJob.start()
     }
 
-    private fun recount() {
-        val files = ProjectChanges.paths(project)
+    private suspend fun recount() {
+        modules = withContext(Dispatchers.IO) {
+            val files = ProjectChanges.paths(project)
+            val graph = ModuleGraph.create(project)
 
-        val graph = ModuleGraph(project)
-        modules = ApplicationManager.getApplication().runReadAction<List<AffectedModule>> {
             files.mapNotNull { graph.nodeFor(it) }
                 .distinct()
                 .mapNotNull { node ->

@@ -12,7 +12,6 @@ object BuildSystems {
 
     fun byId(id: String): BuildSystem? = point.extensionList.firstOrNull { it.id == id }
 
-    /** Extensions worth analysing: the union over the systems this project actually uses. */
     fun sourceExtensions(project: Project): Set<String> =
         of(project).flatMapTo(HashSet()) { it.sourceExtensions }.ifEmpty { ChangeAnalyzer.DEFAULT_EXTENSIONS }
 }

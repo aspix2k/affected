@@ -3,10 +3,11 @@ package com.aspix2k.affected
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.BuildSystem
 import com.aspix2k.affected.build.BuildSystems
+import com.aspix2k.affected.build.SuspendingBuildSystem
 import com.intellij.openapi.project.Project
 import java.io.File
 
-class ModuleGraph(private val project: Project) {
+class ModuleGraph private constructor(private val nodes: List<Node>) {
 
     data class Node(val module: BuildModule, val system: BuildSystem) {
 
@@ -26,12 +27,6 @@ class ModuleGraph(private val project: Project) {
             compileTask = module.compileTask,
             hasTests = module.hasTests,
         )
-    }
-
-    private val nodes: List<Node> by lazy {
-        BuildSystems.of(project).flatMap { system ->
-            system.modules(project).map { Node(it, system) }
-        }
     }
 
     private val byContentRoot: Map<String, Node> by lazy {
@@ -65,4 +60,18 @@ class ModuleGraph(private val project: Project) {
     }
 
     fun all(): List<Node> = nodes
+
+    companion object {
+        suspend fun create(project: Project): ModuleGraph {
+            val nodes = BuildSystems.of(project).flatMap { system ->
+                val modules = if (system is SuspendingBuildSystem) {
+                    system.modulesSuspending(project)
+                } else {
+                    system.modules(project)
+                }
+                modules.map { Node(it, system) }
+            }
+            return ModuleGraph(nodes)
+        }
+    }
 }

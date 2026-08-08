@@ -5,7 +5,6 @@ import java.util.concurrent.TimeUnit
 
 object FixtureRepository {
 
-    /** Tests run from the module directory, while fixtures live at the repository root. */
     val root: File = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
         .map { File(it, "fixtures") }
         .firstOrNull { it.isDirectory }
@@ -19,10 +18,6 @@ object FixtureRepository {
         ?.sorted()
         .orEmpty()
 
-    /**
-     * Copies a fixture into a scratch clone so a test can commit, branch and edit
-     * without touching the checkout that took a network round trip to fetch.
-     */
     fun checkout(name: String): File {
         val source = File(root, name)
         val target = File.createTempFile("affected-$name", "").apply {

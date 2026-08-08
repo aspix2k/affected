@@ -2,10 +2,9 @@ package com.aspix2k.affected.mcp
 
 import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.AffectedState
-import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.ProjectChanges
 import com.aspix2k.affected.TaskGroup
-import com.aspix2k.affected.TaskPlanner
+import com.aspix2k.affected.Verification
 import com.aspix2k.affected.build.BuildSystems
 import com.intellij.execution.ui.RunContentManager
 import com.intellij.mcpserver.McpToolset
@@ -13,7 +12,6 @@ import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.EDT
-import com.intellij.openapi.application.readAction
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.Dispatchers
@@ -49,23 +47,14 @@ class AffectedToolset : McpToolset {
 
     @McpTool
     @McpDescription(
-        "Returns the exact Gradle tasks that verify the current changes: unit tests of changed " +
+        "Returns the exact build tasks that verify the current changes: tests of changed " +
             "modules plus compilation of modules consuming a changed public API."
     )
     suspend fun affected_verification_plan(): String {
         val project = coroutineContext.project
-        val projectDir = project.basePath?.let(::File) ?: return "Project has no base path."
+        if (project.basePath == null) return "Project has no base path."
 
-        val changes = ProjectChanges.collect(project)
-        if (changes.files.isEmpty()) return "No source changes."
-
-        val plan = readAction {
-            val graph = ModuleGraph(project)
-            val changed = changes.files.mapNotNull { graph.nodeFor(it) }.distinct()
-            val apiNodes = changes.apiTouched.mapNotNull { graph.nodeFor(it) }.toSet()
-            val consumers = if (apiNodes.isEmpty()) emptyList() else graph.directDependents(apiNodes)
-            TaskPlanner.plan(changed.map { it.info() }, consumers.map { it.info() })
-        }
+        val plan = Verification.plan(project)
 
         if (plan.isEmpty) return "Nothing to verify."
 
@@ -87,7 +76,7 @@ class AffectedToolset : McpToolset {
         val project = coroutineContext.project
         val projectDir = project.basePath?.let(::File) ?: return "Project has no base path."
 
-        val changes = ProjectChanges.collect(project)
+        val changes = withContext(Dispatchers.IO) { ProjectChanges.collect(project) }
         if (changes.files.isEmpty()) return "No source changes."
 
         return buildString {
@@ -102,36 +91,28 @@ class AffectedToolset : McpToolset {
     @McpTool
     @McpDescription(
         "Runs the verification for current changes: unit tests of changed modules and, when their " +
-            "public API changed, compilation of the modules consuming them. Tasks run through the IDE " +
-            "Gradle integration; results appear in the Run tool window."
+            "public API changed, compilation of the modules consuming them. Tasks run through each " +
+            "build system's IDE integration and results appear in the Run tool window."
     )
     suspend fun affected_run_verification(): String {
         val project = coroutineContext.project
-        val projectDir = project.basePath?.let(::File) ?: return "Project has no base path."
+        if (project.basePath == null) return "Project has no base path."
 
-        val changes = ProjectChanges.collect(project)
-        if (changes.files.isEmpty()) return "No source changes; nothing to run."
-
-        val plan = readAction {
-            val graph = ModuleGraph(project)
-            val changed = changes.files.mapNotNull { graph.nodeFor(it) }.distinct()
-            val apiNodes = changes.apiTouched.mapNotNull { graph.nodeFor(it) }.toSet()
-            val consumers = if (apiNodes.isEmpty()) emptyList() else graph.directDependents(apiNodes)
-            TaskPlanner.plan(changed.map { it.info() }, consumers.map { it.info() })
-        }
+        val plan = Verification.plan(project)
         if (plan.isEmpty) return "Nothing to run."
 
-        plan.groups.forEach { runTasks(project, it) }
+        val outcome = Verification.runAndWait(project, plan)
 
         return buildString {
-            appendLine("Started. Modules tested: ${plan.tested}, consumers compiled: ${plan.compiled}")
+            val result = if (outcome.passed) "Passed" else "Failed"
+            appendLine("$result. Modules tested: ${plan.tested}, consumers compiled: ${plan.compiled}")
             plan.groups.forEach { (_, root, tasks) -> appendLine("$root: ${tasks.joinToString(" ")}") }
         }
     }
 
     @McpTool
     @McpDescription(
-        "Runs a named Gradle task on every affected module that actually declares it, for example " +
+        "Runs a named task on every affected module that declares it, for example " +
             "detekt, lint or koverHtmlReport. Modules without the task are skipped."
     )
     suspend fun affected_run_task(
@@ -156,7 +137,7 @@ class AffectedToolset : McpToolset {
 
     @McpTool
     @McpDescription(
-        "Stops Gradle runs started from the IDE, including verification started by this toolset. " +
+        "Stops build runs started from the IDE, including verification started by this toolset. " +
             "Returns how many were stopped."
     )
     suspend fun affected_stop(): String {
@@ -176,15 +157,18 @@ class AffectedToolset : McpToolset {
     suspend fun affected_status(): String {
         val project = coroutineContext.project
         val state = project.service<AffectedState>()
+        val settings = AffectedSettings.getInstance()
         val running = withContext(Dispatchers.EDT) {
             runningProcessHandlers(project).size
         }
 
         return buildString {
             appendLine("Affected modules: ${state.affectedModules}")
-            appendLine("Base branch: ${AffectedSettings.getInstance().baseBranch}")
-            appendLine("Consumer check: ${if (AffectedSettings.getInstance().checkConsumers) "on" else "off"}")
-            appendLine("Running Gradle sessions: $running")
+            appendLine("Base branch: ${settings.baseBranch}")
+            appendLine("Consumer check: ${if (settings.checkConsumers) "on" else "off"}")
+            appendLine("Animation: ${if (settings.animateWhileRunning) "on" else "off"}")
+            appendLine("Verification status: ${state.verificationStatus.name.lowercase()}")
+            appendLine("Running sessions: $running")
         }
     }
 
@@ -214,22 +198,28 @@ class AffectedToolset : McpToolset {
     @McpTool
     @McpDescription(
         "Changes plugin settings: the base branch changes are compared against, and whether modules " +
-            "consuming a changed public API are compiled. Pass only what you want to change."
+            "consuming a changed public API are compiled or running jobs are animated. Pass only what " +
+            "you want to change."
     )
     suspend fun affected_configure(
         @McpDescription("Base branch, for example develop, main or master")
         baseBranch: String? = null,
         @McpDescription("Whether to compile modules consuming a changed public API")
         checkConsumers: Boolean? = null,
+        @McpDescription("Whether to animate the toolbar icon while verification is running")
+        animateWhileRunning: Boolean? = null,
     ): String {
         val settings = AffectedSettings.getInstance()
         baseBranch?.takeIf { it.isNotBlank() }?.let { settings.baseBranch = it }
         checkConsumers?.let { settings.checkConsumers = it }
+        animateWhileRunning?.let { settings.animateWhileRunning = it }
 
         val project = coroutineContext.project
         project.service<AffectedState>().invalidate()
 
-        return "Base branch: ${settings.baseBranch}, consumer check: ${if (settings.checkConsumers) "on" else "off"}."
+        return "Base branch: ${settings.baseBranch}, consumer check: " +
+            "${if (settings.checkConsumers) "on" else "off"}, animation: " +
+            "${if (settings.animateWhileRunning) "on" else "off"}."
     }
 
     private fun runningProcessHandlers(project: Project) =

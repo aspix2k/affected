@@ -7,10 +7,6 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
-/**
- * Parses what the real toolchain prints for a real project, which synthetic
- * fixtures cannot vouch for. Skips when the fixture or the toolchain is absent.
- */
 class GoFixtureTest {
 
     private val fixture = "go-gin"
@@ -27,26 +23,26 @@ class GoFixtureTest {
     }
 
     @Test
-    fun `реальный вывод go list разбирается в пакеты с зависимостями`() {
+    fun `real go list output is parsed into packages with dependencies`() {
         val listing = listing()
         assumeTrue(listing != null)
         val (root, output) = listing!!
 
         val modules = GoPackages.parse(output, root.invariantSeparatorsPath)
 
-        assertTrue(modules.size >= 5, "в gin больше пяти пакетов, разобрали ${modules.size}")
+        assertTrue(modules.size >= 5, "Gin has more than five packages, parsed ${modules.size}")
         assertTrue(
             modules.any { it.dependencies.isNotEmpty() },
-            "внутренние импорты обязаны давать рёбра графа",
+            "internal imports must create graph edges",
         )
         assertTrue(
             modules.any { it.hasTests },
-            "в gin есть пакеты с тестами",
+            "Gin has packages with tests",
         )
     }
 
     @Test
-    fun `каталоги пакетов существуют на диске`() {
+    fun `package directories exist on disk`() {
         val listing = listing()
         assumeTrue(listing != null)
         val (root, output) = listing!!
@@ -55,11 +51,11 @@ class GoFixtureTest {
             .map { File(it.contentRoots.single()) }
             .filterNot { it.isDirectory }
 
-        assertTrue(missing.isEmpty(), "каталоги из go list должны существовать: $missing")
+        assertTrue(missing.isEmpty(), "directories from go list must exist: $missing")
     }
 
     @Test
-    fun `зависимости ссылаются на существующие пакеты`() {
+    fun `dependencies reference existing packages`() {
         val listing = listing()
         assumeTrue(listing != null)
         val (root, output) = listing!!
@@ -68,6 +64,6 @@ class GoFixtureTest {
         val keys = modules.map { it.key }.toSet()
         val dangling = modules.flatMap { it.dependencies }.filterNot { it in keys }
 
-        assertTrue(dangling.isEmpty(), "ребро не может указывать в пустоту: $dangling")
+        assertTrue(dangling.isEmpty(), "an edge cannot point nowhere: $dangling")
     }
 }

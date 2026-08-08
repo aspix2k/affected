@@ -8,13 +8,13 @@ import kotlin.test.assertSame
 class AffectedIconsTest {
 
     @Test
-    fun `нулевой и отрицательный счётчик дают спокойную сетку`() {
+    fun `zero and negative counts use the idle grid`() {
         assertSame(AffectedIcons.Action, AffectedIcons.withCount(0))
         assertSame(AffectedIcons.Action, AffectedIcons.withCount(-5))
     }
 
     @Test
-    fun `сетка заполняется по мере роста числа модулей`() {
+    fun `the grid fills as the module count grows`() {
         val few = AffectedIcons.withCount(1)
         val some = AffectedIcons.withCount(4)
         val many = AffectedIcons.withCount(10)
@@ -26,14 +26,27 @@ class AffectedIconsTest {
     }
 
     @Test
-    fun `соседние значения одного диапазона дают одну иконку`() {
+    fun `adjacent values in one range use the same icon`() {
         assertSame(AffectedIcons.withCount(3), AffectedIcons.withCount(6))
         assertSame(AffectedIcons.withCount(20), AffectedIcons.withCount(500))
     }
 
     @Test
-    fun `анимация запуска имеет размер иконки тулбара`() {
+    fun `the running animation has toolbar icon dimensions`() {
         assertEquals(20, AffectedIcons.Running.iconWidth)
         assertEquals(20, AffectedIcons.Running.iconHeight)
+        assertEquals(20, AffectedIcons.DisabledRunning.iconWidth)
+        assertEquals(20, AffectedIcons.DisabledRunning.iconHeight)
+    }
+
+    @Test
+    fun `animation respects its setting`() {
+        assertSame(AffectedIcons.Running, AffectedIcons.forState(VerificationStatus.RUNNING, 4, true))
+        assertSame(AffectedIcons.withCount(4), AffectedIcons.forState(VerificationStatus.RUNNING, 4, false))
+    }
+
+    @Test
+    fun `idle state shows the current module count`() {
+        assertSame(AffectedIcons.withCount(4), AffectedIcons.forState(VerificationStatus.IDLE, 4, true))
     }
 }

@@ -9,11 +9,6 @@ object GoPackages {
     const val TEST = "test"
     const val COMPILE = "build"
 
-    /**
-     * `go list -json` writes a stream of objects rather than an array, so the
-     * parser reads them one by one. A package is a module here: Go tests and
-     * builds packages, not the module the go.mod file declares.
-     */
     fun parse(json: String, root: String): List<BuildModule> {
         val packages = read(json)
         val paths = packages.mapNotNull { it.string("ImportPath") }.toSet()

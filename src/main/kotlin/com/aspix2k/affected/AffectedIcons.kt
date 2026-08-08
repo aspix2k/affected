@@ -19,13 +19,27 @@ object AffectedIcons {
         16..Int.MAX_VALUE to load("affected_all"),
     )
 
+    private val runningFrames: Array<Icon> by lazy {
+        Array(FRAMES) { load("affected_run${it + 1}") }
+    }
+
     @Suppress("SpreadOperator")
     val Running: Icon by lazy {
-        AnimatedIcon(FRAME_DELAY_MS, *Array(FRAMES) { load("affected_run${it + 1}") })
+        AnimatedIcon(FRAME_DELAY_MS, *runningFrames)
+    }
+
+    @Suppress("SpreadOperator")
+    val DisabledRunning: Icon by lazy {
+        AnimatedIcon(FRAME_DELAY_MS, *runningFrames.map(IconLoader::getDisabledIcon).toTypedArray())
     }
 
     fun withCount(count: Int): Icon =
         counts.firstOrNull { count in it.first }?.second ?: Action
+
+    fun forState(status: VerificationStatus, count: Int, animate: Boolean): Icon = when (status) {
+        VerificationStatus.RUNNING -> if (animate) Running else withCount(count)
+        VerificationStatus.IDLE -> withCount(count)
+    }
 
     private fun load(name: String): Icon =
         IconLoader.getIcon("/icons/$name.svg", AffectedIcons::class.java)

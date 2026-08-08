@@ -3,12 +3,6 @@ package com.aspix2k.affected.build
 import com.google.gson.JsonParser
 import java.io.File
 
-/**
- * Packages of an npm, yarn or pnpm workspace.
- *
- * npm and yarn declare members in `package.json`, pnpm in `pnpm-workspace.yaml`.
- * Both are globs, and both are resolved against the directory holding them.
- */
 object NodeWorkspaces {
 
     const val TEST = "test"
@@ -36,8 +30,6 @@ object NodeWorkspaces {
                 root = rootPath,
                 contentRoots = listOf(entry.directory),
                 testTask = TEST,
-                // Only TypeScript gives a consumer something to check; plain
-                // JavaScript has nothing to compile, so consumers are skipped.
                 compileTask = "typecheck".takeIf { entry.typed },
                 hasTests = entry.hasTests,
                 dependencies = dependencies - "$rootPath|${entry.name}",
@@ -96,7 +88,6 @@ object NodeWorkspaces {
         }
     }
 
-    /** Reads the `packages:` list without pulling in a YAML parser for four lines of it. */
     private fun readPnpm(file: File): List<String> {
         val patterns = mutableListOf<String>()
         var inPackages = false
@@ -115,7 +106,6 @@ object NodeWorkspaces {
         return patterns
     }
 
-    // A trailing /* takes the immediate children, a trailing /** the whole subtree.
     private fun expandPattern(root: File, pattern: String): List<File> {
         val clean = pattern.trim().removePrefix("./").removeSuffix("/")
 

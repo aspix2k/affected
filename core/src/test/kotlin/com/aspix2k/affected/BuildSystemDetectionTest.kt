@@ -17,7 +17,7 @@ import kotlin.test.assertTrue
 class BuildSystemDetectionTest {
 
     @Test
-    fun `корневой маркер не требует готового графа модулей`() {
+    fun `a root marker does not require a populated module graph`() {
         systems.forEach { (system, marker) ->
             val root = createTempDirectory("detection").toFile()
             File(root, marker).writeText("")
@@ -27,7 +27,7 @@ class BuildSystemDetectionTest {
     }
 
     @Test
-    fun `вложенный маркер не подменяет корень проекта`() {
+    fun `a nested marker does not replace the project root`() {
         systems.forEach { (system, marker) ->
             val root = createTempDirectory("nested-detection").toFile()
             File(root, "nested/$marker").apply {

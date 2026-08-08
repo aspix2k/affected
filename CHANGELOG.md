@@ -13,11 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - New icon: a three-by-three grid where a quiet module is a dot and an affected one fills its cell. How much is affected is read from how much of the grid is filled, which stays legible at 16 px where a number does not.
 - A run animates the grid — a wave crossing it along the diagonals, twelve frames through the platform's own `AnimatedIcon`.
+- Verification orchestration no longer blocks pooled threads. Independent build roots still run concurrently, and the icon returns to the current affected-module state after every run finishes or is cancelled.
+- Keep the toolbar group disabled until the IDE project model is ready, matching the Run and Debug controls during project loading and indexing while showing a muted running animation.
+- Consumer compilation and animation now live in a Settings submenu. Consumer compilation is off by default; animation is on.
 
 ### Fixed
 
 - Keep the toolbar responsive in large mixed monorepos by making build-system detection inspect root markers only and bounding manifest discovery by depth, result count, and ignored dependency or build directories.
 - Detect a root `.csproj`, `.fsproj`, or `.vbproj` even when the project has no solution file.
+- Run Gradle tasks relative to their linked build, including flat or renamed modules and source sets in composite builds, and recognise Android modules without a checked-in manifest from their imported tasks.
+- Capture Git and build metadata through the platform process API so output cannot deadlock a pipe and timeouts are enforced.
+- Keep build-system-neutral UI and MCP messages neutral instead of referring to every unresolved module or running session as Gradle.
 
 ## [1.6.0] - 2026-08-08
 

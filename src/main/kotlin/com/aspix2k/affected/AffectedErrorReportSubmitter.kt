@@ -12,17 +12,8 @@ import java.awt.Component
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
-/**
- * Turns a plugin exception into a prefilled issue.
- *
- * Nothing is sent anywhere on its own: the browser opens on a filled-in form
- * that the user reads and submits, so what leaves the machine is visible and
- * chosen. That rules out collecting anything the report does not show.
- */
 class AffectedErrorReportSubmitter : ErrorReportSubmitter() {
 
-    // getPluginDescriptor is annotated OverrideOnly, so the descriptor is kept
-    // from the setter the platform calls instead of being read back.
     private var descriptor: PluginDescriptor? = null
 
     override fun setPluginDescriptor(plugin: PluginDescriptor) {
@@ -89,8 +80,6 @@ class AffectedErrorReportSubmitter : ErrorReportSubmitter() {
         const val ISSUES_URL = "https://github.com/aspix2k/affected/issues/new"
         const val TITLE_LIMIT = 120
 
-        // A GitHub URL stops working somewhere past 8 kB, and the useful part of a
-        // trace is at the top anyway.
         const val TRACE_LIMIT = 4000
     }
 }

@@ -20,7 +20,7 @@ class TaskPlannerTest {
         )
 
     @Test
-    fun `пустой ввод даёт пустой план`() {
+    fun `empty input yields an empty plan`() {
         val plan = TaskPlanner.plan(emptyList(), emptyList())
         assertTrue(plan.isEmpty)
         assertEquals(0, plan.tested)
@@ -28,26 +28,26 @@ class TaskPlannerTest {
     }
 
     @Test
-    fun `jvm модуль получает задачу test`() {
+    fun `a JVM module gets the test task`() {
         val plan = TaskPlanner.plan(listOf(jvm(":core")), emptyList())
         assertEquals(listOf(":core:test"), plan.groups.single { it.root == "/repo" }.tasks)
     }
 
     @Test
-    fun `android модуль получает задачу с вариантом`() {
+    fun `an Android module gets a variant task`() {
         val plan = TaskPlanner.plan(listOf(android(":app")), emptyList())
         assertEquals(listOf(":app:testDebugUnitTest"), plan.groups.single { it.root == "/repo" }.tasks)
     }
 
     @Test
-    fun `модуль без тестов пропускается`() {
+    fun `a module without tests is skipped`() {
         val plan = TaskPlanner.plan(listOf(jvm(":no-tests", tests = false)), emptyList())
-        assertTrue(plan.isEmpty, "запускать тесты там, где их нет, незачем")
+        assertTrue(plan.isEmpty, "there is no reason to run missing tests")
         assertEquals(0, plan.tested)
     }
 
     @Test
-    fun `потребитель получает задачу компиляции`() {
+    fun `a consumer gets a compilation task`() {
         val plan = TaskPlanner.plan(listOf(jvm(":core")), listOf(android(":app")))
         assertEquals(
             listOf(":core:test", ":app:compileDebugUnitTestKotlin"),
@@ -57,21 +57,21 @@ class TaskPlannerTest {
     }
 
     @Test
-    fun `потребитель без тестов всё равно компилируется`() {
+    fun `a consumer without tests is still compiled`() {
         val plan = TaskPlanner.plan(emptyList(), listOf(jvm(":consumer", tests = false)))
         assertEquals(listOf(":consumer:compileTestKotlin"), plan.groups.single { it.root == "/repo" }.tasks)
     }
 
     @Test
-    fun `модуль не проверяется дважды если он и изменён и потребитель`() {
+    fun `a changed consumer module is not checked twice`() {
         val core = jvm(":core")
         val plan = TaskPlanner.plan(listOf(core), listOf(core))
         assertEquals(listOf(":core:test"), plan.groups.single { it.root == "/repo" }.tasks)
-        assertEquals(0, plan.compiled, "тесты уже покрывают компиляцию этого модуля")
+        assertEquals(0, plan.compiled, "tests already cover this module compilation")
     }
 
     @Test
-    fun `задачи группируются по своим сборкам`() {
+    fun `tasks are grouped by their builds`() {
         val plan = TaskPlanner.plan(
             listOf(jvm(":core", root = "/repo/features")),
             listOf(android(":app", root = "/repo/app")),
@@ -81,7 +81,7 @@ class TaskPlannerTest {
     }
 
     @Test
-    fun `дубликаты схлопываются`() {
+    fun `duplicates are collapsed`() {
         val core = jvm(":core")
         val plan = TaskPlanner.plan(listOf(core, core, core), emptyList())
         assertEquals(listOf(":core:test"), plan.groups.single { it.root == "/repo" }.tasks)
@@ -89,7 +89,7 @@ class TaskPlannerTest {
     }
 
     @Test
-    fun `дубликаты среди потребителей схлопываются`() {
+    fun `duplicate consumers are collapsed`() {
         val app = android(":app")
         val plan = TaskPlanner.plan(listOf(jvm(":core")), listOf(app, app, app))
         assertEquals(1, plan.compiled)
@@ -100,7 +100,7 @@ class TaskPlannerTest {
     }
 
     @Test
-    fun `потребитель совпадающий по пути с тестируемым не дублируется`() {
+    fun `a consumer sharing a tested path is not duplicated`() {
         val core = jvm(":core")
         val sameCore = jvm(":core")
         val plan = TaskPlanner.plan(listOf(core), listOf(sameCore))
@@ -109,7 +109,7 @@ class TaskPlannerTest {
     }
 
     @Test
-    fun `изменённый модуль без тестов всё равно компилируется как потребитель`() {
+    fun `a changed module without tests is still compiled as a consumer`() {
         val noTests = jvm(":no-tests", tests = false)
         val plan = TaskPlanner.plan(listOf(noTests), listOf(jvm(":other")))
         assertEquals(0, plan.tested)
@@ -117,36 +117,36 @@ class TaskPlannerTest {
     }
 
     @Test
-    fun `только потребители без изменённых модулей дают план`() {
+    fun `consumers alone can produce a plan`() {
         val plan = TaskPlanner.plan(emptyList(), listOf(jvm(":app")))
         assertEquals(0, plan.tested)
         assertEquals(1, plan.compiled)
     }
 
     @Test
-    fun `план считает обе группы`() {
+    fun `the plan counts both groups`() {
         val plan = TaskPlanner.plan(listOf(jvm(":core")), listOf(jvm(":app")))
         assertEquals(1, plan.tested)
         assertEquals(1, plan.compiled)
     }
 
     @Test
-    fun `один и тот же модуль в разных сборках это разные модули`() {
+    fun `the same module in different builds is distinct`() {
         val plan = TaskPlanner.plan(
             listOf(jvm(":app-integration", root = "/repo/online")),
             listOf(jvm(":app-integration", root = "/repo/market")),
         )
-        assertEquals(2, plan.groups.size, "одинаковое имя в разных сборках не должно схлопываться")
+        assertEquals(2, plan.groups.size, "the same name in different builds must not collapse")
     }
 
     @Test
-    fun `модули разных систем сборки не смешиваются в одну команду`() {
+    fun `modules from different build systems do not share a command`() {
         val gradle = ModuleInfo(":core", "GRADLE", "/repo", "test", "compileTestKotlin", hasTests = true)
         val maven = ModuleInfo("core", "MAVEN", "/repo", "test", "test-compile", hasTests = true)
 
         val plan = TaskPlanner.plan(listOf(gradle, maven), emptyList())
 
-        assertEquals(2, plan.groups.size, "у каждой системы своя команда, даже при общем корне")
+        assertEquals(2, plan.groups.size, "each system has its own command even with a shared root")
         assertEquals(listOf(":core:test"), plan.groups.single { it.systemId == "GRADLE" }.tasks)
         assertEquals(listOf("core:test"), plan.groups.single { it.systemId == "MAVEN" }.tasks)
     }

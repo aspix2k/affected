@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 class DetectionCostTest {
 
     @Test
-    fun `разбор ruby не читает глубоко вложенный манифест`() {
+    fun `Ruby parsing does not read a deeply nested manifest`() {
         val root = createTempDirectory("ruby-cost").toFile()
         val buried = buryManifest(root, "buried.gemspec")
         File(root, "Gemfile").writeText("source 'https://rubygems.org'")
@@ -24,7 +24,7 @@ class DetectionCostTest {
     }
 
     @Test
-    fun `разбор composer не читает глубоко вложенный манифест`() {
+    fun `Composer parsing does not read a deeply nested manifest`() {
         val root = createTempDirectory("composer-cost").toFile()
         val buried = buryManifest(root, "composer.json")
         File(root, "composer.json").writeText("""{ "name": "acme/root" }""")
@@ -35,7 +35,7 @@ class DetectionCostTest {
     }
 
     @Test
-    fun `разбор python не читает глубоко вложенный манифест`() {
+    fun `Python parsing does not read a deeply nested manifest`() {
         val root = createTempDirectory("python-cost").toFile()
         val buried = buryManifest(root, "pyproject.toml")
         File(root, "pyproject.toml").writeText("[project]\nname = \"root\"\n")
@@ -46,7 +46,7 @@ class DetectionCostTest {
     }
 
     @Test
-    fun `разбор cmake не читает глубоко вложенный манифест`() {
+    fun `CMake parsing does not read a deeply nested manifest`() {
         val root = createTempDirectory("cmake-cost").toFile()
         val buried = buryManifest(root, "CMakeLists.txt")
         File(root, "CMakeLists.txt").writeText("add_executable(app main.cpp)")

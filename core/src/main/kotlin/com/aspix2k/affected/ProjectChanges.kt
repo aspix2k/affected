@@ -5,14 +5,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vcs.changes.ChangeListManager
 import java.io.File
 
-/**
- * What changed, asking the IDE first.
- *
- * The IDE already tracks the working tree for whichever VCS the project uses,
- * so local edits cost no processes and work outside git. Comparing against a
- * base branch is git-specific and stays with [ChangeAnalyzer]; a project under
- * another VCS simply gets its local changes.
- */
 object ProjectChanges {
 
     data class Result(val files: List<File>, val apiTouched: Set<File>, val comparedToBase: Boolean)
@@ -25,8 +17,6 @@ object ProjectChanges {
         val analyzer = ChangeAnalyzer(projectDir, AffectedSettings.getInstance().baseBranch, extensions)
 
         if (!analyzer.isUsable()) {
-            // Without git there is nothing to diff against, so every changed file
-            // is treated as capable of touching API and consumers are checked.
             return Result(local, local.toSet(), comparedToBase = false)
         }
 

@@ -14,18 +14,18 @@ class RealMonorepoTest {
         File(FixtureRepository.root, name).takeIf { it.isDirectory }
 
     private fun assertGraphIsSound(modules: List<com.aspix2k.affected.build.BuildModule>, minimum: Int) {
-        assertTrue(modules.size >= minimum, "ожидали не меньше $minimum модулей, разобрали ${modules.size}")
+        assertTrue(modules.size >= minimum, "expected at least $minimum modules, parsed ${modules.size}")
 
         val missing = modules.map { File(it.contentRoots.single()) }.filterNot { it.isDirectory }
-        assertTrue(missing.isEmpty(), "каталоги модулей должны существовать: ${missing.take(3)}")
+        assertTrue(missing.isEmpty(), "module directories must exist: ${missing.take(3)}")
 
         val keys = modules.map { it.key }.toSet()
         val dangling = modules.flatMap { it.dependencies }.filterNot { it in keys }
-        assertTrue(dangling.isEmpty(), "ребро не может указывать в пустоту: ${dangling.take(3)}")
+        assertTrue(dangling.isEmpty(), "an edge cannot point nowhere: ${dangling.take(3)}")
     }
 
     @Test
-    fun `symfony разбирается как монорепо composer`() {
+    fun `Symfony is parsed as a Composer monorepo`() {
         val root = fixture("php-symfony")
         assumeTrue(root != null)
 
@@ -34,13 +34,13 @@ class RealMonorepoTest {
         assertGraphIsSound(modules, minimum = 50)
         assertTrue(
             modules.any { it.dependencies.isNotEmpty() },
-            "компоненты symfony зависят друг от друга",
+            "Symfony components depend on each other",
         )
-        assertTrue(modules.any { it.hasTests }, "у компонентов symfony есть тесты")
+        assertTrue(modules.any { it.hasTests }, "Symfony components have tests")
     }
 
     @Test
-    fun `у symfony находится проверка потребителей через статический анализ`() {
+    fun `Symfony consumer checks use static analysis`() {
         val root = fixture("php-symfony")
         assumeTrue(root != null)
 
@@ -48,12 +48,12 @@ class RealMonorepoTest {
 
         assertTrue(
             modules.any { it.compileTask != null },
-            "хотя бы один компонент symfony должен запускать статический анализ",
+            "at least one Symfony component must run static analysis",
         )
     }
 
     @Test
-    fun `rails разбирается как монорепо гемов`() {
+    fun `Rails is parsed as a gem monorepo`() {
         val root = fixture("ruby-rails")
         assumeTrue(root != null)
 
@@ -62,13 +62,13 @@ class RealMonorepoTest {
         assertGraphIsSound(modules, minimum = 8)
         assertTrue(
             modules.any { it.dependencies.isNotEmpty() },
-            "actionpack зависит от activesupport и подобного",
+            "actionpack depends on activesupport and related gems",
         )
-        assertTrue(modules.all { it.compileTask == null }, "в ruby потребители не проверяются")
+        assertTrue(modules.all { it.compileTask == null }, "Ruby consumers are not checked")
     }
 
     @Test
-    fun `цели fmt разбираются из cmake`() {
+    fun `fmt targets are parsed from CMake`() {
         val root = fixture("cmake-fmt")
         assumeTrue(root != null)
 
@@ -78,7 +78,7 @@ class RealMonorepoTest {
     }
 
     @Test
-    fun `цели spdlog разбираются из cmake`() {
+    fun `spdlog targets are parsed from CMake`() {
         val root = fixture("cmake-spdlog")
         assumeTrue(root != null)
 
@@ -88,7 +88,7 @@ class RealMonorepoTest {
     }
 
     @Test
-    fun `ни один разбор не занимает недопустимо долго`() {
+    fun `no parser takes unacceptably long`() {
         val root = fixture("php-symfony")
         assumeTrue(root != null)
 
@@ -96,6 +96,6 @@ class RealMonorepoTest {
         ComposerPackages.parse(root!!)
         val took = (System.nanoTime() - started) / 1_000_000
 
-        assertTrue(took < 10_000, "разбор 194 пакетов занял $took мс, это уже заметно пользователю")
+        assertTrue(took < 10_000, "parsing 194 packages took $took ms and is user-visible")
     }
 }

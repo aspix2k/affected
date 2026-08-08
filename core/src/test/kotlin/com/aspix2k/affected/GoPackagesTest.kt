@@ -34,7 +34,7 @@ class GoPackagesTest {
     """.trimIndent()
 
     @Test
-    fun `каждый пакет становится модулем`() {
+    fun `every package becomes a module`() {
         val modules = GoPackages.parse(stream, "/ws/app")
 
         assertEquals(
@@ -44,41 +44,45 @@ class GoPackagesTest {
     }
 
     @Test
-    fun `зависимостями считаются только пакеты этого модуля`() {
+    fun `only packages from this module are dependencies`() {
         val app = GoPackages.parse(stream, "/ws/app").single { it.id == "example.com/app" }
 
         assertEquals(
             setOf("/ws/app|example.com/app/internal/store"),
             app.dependencies,
-            "fmt из стандартной библиотеки и cobra из сети потребителями быть не могут",
+            "fmt from the standard library and remote cobra cannot be consumers",
         )
     }
 
     @Test
-    fun `внешние тесты тоже делают пакет тестируемым`() {
+    fun `external tests also make a package testable`() {
         val modules = GoPackages.parse(stream, "/ws/app")
 
         assertTrue(modules.single { it.id == "example.com/app" }.hasTests)
-        assertTrue(modules.single { it.id == "example.com/app/cmd" }.hasTests, "XTestGoFiles — тоже тесты")
+        assertTrue(modules.single { it.id == "example.com/app/cmd" }.hasTests, "XTestGoFiles are tests too")
         assertFalse(modules.single { it.id.endsWith("/store") }.hasTests)
     }
 
     @Test
-    fun `поток объектов без запятых разбирается целиком`() {
-        assertEquals(3, GoPackages.parse(stream, "/ws/app").size, "go list пишет объекты подряд, а не массивом")
+    fun `a stream of objects without commas is fully parsed`() {
+        assertEquals(
+            3,
+            GoPackages.parse(stream, "/ws/app").size,
+            "go list emits consecutive objects rather than an array",
+        )
     }
 
     @Test
-    fun `обрыв вывода не роняет разбор`() {
+    fun `truncated output does not crash parsing`() {
         val truncated = stream.substring(0, stream.length / 2)
 
         val modules = GoPackages.parse(truncated, "/ws/app")
 
-        assertTrue(modules.size <= 3, "оборванный поток даёт то, что успело разобраться, без исключения")
+        assertTrue(modules.size <= 3, "a truncated stream returns parsed data without throwing")
     }
 
     @Test
-    fun `windows-пути приводятся к прямым слэшам`() {
+    fun `Windows paths use forward slashes`() {
         val windows = """{ "Dir": "C:\\ws\\app\\cmd", "ImportPath": "example.com/app/cmd", "Imports": [] }"""
 
         val module = GoPackages.parse(windows, "C:/ws/app").single()

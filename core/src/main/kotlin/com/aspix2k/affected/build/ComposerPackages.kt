@@ -4,17 +4,6 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import java.io.File
 
-/**
- * PHP packages of a composer monorepo.
- *
- * Members are the packages the root repository points at with `type: path`,
- * which is how composer wires a monorepo together. Only those become graph
- * edges; everything from Packagist is a normal dependency and cannot be a
- * consumer.
- *
- * PHP has nothing to compile, so a consumer is checked by static analysis, and
- * only when the package configures phpstan or psalm.
- */
 object ComposerPackages {
 
     const val TEST = "test"

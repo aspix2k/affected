@@ -35,7 +35,7 @@ class ManifestSearchTest {
     }
 
     @Test
-    fun `исключённые каталоги не просматриваются`() {
+    fun `excluded directories are not scanned`() {
         val root = tree(
             breadth = 2,
             depth = 2,
@@ -49,11 +49,11 @@ class ManifestSearchTest {
             generateSequence(file.parentFile) { it.parentFile }
                 .any { it.name in setOf("vendor", "node_modules", "build") }
         }
-        assertTrue(fromExcluded.isEmpty(), "внутрь vendor и node_modules заходить нельзя: $fromExcluded")
+        assertTrue(fromExcluded.isEmpty(), "vendor and node_modules must not be scanned: $fromExcluded")
     }
 
     @Test
-    fun `обход не уходит глубже разумного`() {
+    fun `traversal stays within a reasonable depth`() {
         val root = createTempDirectory("deep").toFile()
         var current = root
         repeat(15) { level ->
@@ -63,12 +63,12 @@ class ManifestSearchTest {
 
         val found = ManifestSearch.find(root, "composer.json")
 
-        assertTrue(found.isNotEmpty(), "верхние уровни должны находиться")
-        assertTrue(found.size < 15, "глубокая цепочка обрезается, нашли ${found.size}")
+        assertTrue(found.isNotEmpty(), "upper levels must be found")
+        assertTrue(found.size < 15, "a deep chain is truncated, found ${found.size}")
     }
 
     @Test
-    fun `скрытые каталоги пропускаются`() {
+    fun `hidden directories are skipped`() {
         val root = createTempDirectory("hidden").toFile()
         File(root, ".git/objects").mkdirs()
         File(root, ".git/objects/composer.json").writeText("{}")
@@ -81,7 +81,7 @@ class ManifestSearchTest {
     }
 
     @Test
-    fun `предел количества найденного соблюдается`() {
+    fun `the result limit is respected`() {
         val root = createTempDirectory("limit").toFile()
         repeat(20) { File(root, "$it.gemspec").writeText("") }
 

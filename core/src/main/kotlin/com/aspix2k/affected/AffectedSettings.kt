@@ -12,7 +12,8 @@ class AffectedSettings : PersistentStateComponent<AffectedSettings.State> {
 
     data class State(
         var baseBranch: String = "develop",
-        var checkConsumers: Boolean = true,
+        var checkConsumers: Boolean = false,
+        var animateWhileRunning: Boolean = true,
         var runBeforeCommit: Boolean = false,
         var runBeforePush: Boolean = false,
     )
@@ -26,6 +27,10 @@ class AffectedSettings : PersistentStateComponent<AffectedSettings.State> {
     var checkConsumers: Boolean
         get() = state.checkConsumers
         set(value) { state.checkConsumers = value }
+
+    var animateWhileRunning: Boolean
+        get() = state.animateWhileRunning
+        set(value) { state.animateWhileRunning = value }
 
     var runBeforeCommit: Boolean
         get() = state.runBeforeCommit

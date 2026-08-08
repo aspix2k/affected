@@ -18,7 +18,7 @@ class CMakeTargetsTest {
     }
 
     @Test
-    fun `библиотеки и исполняемые файлы становятся модулями`() {
+    fun `libraries and executables become modules`() {
         val root = project()
         lists(root, "src/core", "add_library(core STATIC core.cpp)")
         lists(root, "src/app", "add_executable(app main.cpp)")
@@ -27,7 +27,7 @@ class CMakeTargetsTest {
     }
 
     @Test
-    fun `связывание целей даёт ребро графа`() {
+    fun `linking targets creates a graph edge`() {
         val root = project()
         lists(root, "src/core", "add_library(core STATIC core.cpp)")
         lists(
@@ -45,7 +45,7 @@ class CMakeTargetsTest {
     }
 
     @Test
-    fun `ключевые слова видимости не считаются целями`() {
+    fun `visibility keywords are not targets`() {
         val root = project()
         lists(root, "src/core", "add_library(core STATIC core.cpp)")
         lists(
@@ -62,12 +62,12 @@ class CMakeTargetsTest {
         assertEquals(
             setOf("${root.invariantSeparatorsPath}|core"),
             app.dependencies,
-            "PUBLIC и PRIVATE — модификаторы, а pthread не объявлен в проекте",
+            "PUBLIC and PRIVATE are modifiers, and pthread is not declared in the project",
         )
     }
 
     @Test
-    fun `зарегистрированный тест делает цель тестируемой`() {
+    fun `a registered test makes a target testable`() {
         val root = project()
         lists(root, "src/core", "add_library(core STATIC core.cpp)")
         lists(
@@ -86,7 +86,7 @@ class CMakeTargetsTest {
     }
 
     @Test
-    fun `каталоги сборки не просматриваются`() {
+    fun `build directories are not scanned`() {
         val root = project()
         lists(root, "src/core", "add_library(core STATIC core.cpp)")
         lists(root, "src/app", "add_executable(app main.cpp)")
@@ -96,7 +96,7 @@ class CMakeTargetsTest {
     }
 
     @Test
-    fun `проект с одной целью не даёт модулей`() {
+    fun `a project with one target yields no modules`() {
         val root = project()
         lists(root, ".", "add_executable(single main.cpp)")
 
@@ -104,7 +104,7 @@ class CMakeTargetsTest {
     }
 
     @Test
-    fun `внешняя библиотека потребителем не считается`() {
+    fun `an external library is not a consumer`() {
         val root = project()
         lists(root, "src/a", "add_library(a STATIC a.cpp)")
         lists(

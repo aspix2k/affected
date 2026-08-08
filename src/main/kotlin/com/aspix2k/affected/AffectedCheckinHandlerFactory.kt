@@ -1,6 +1,7 @@
 package com.aspix2k.affected
 
 import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.vcs.CheckinProjectPanel
 import com.intellij.openapi.vcs.changes.CommitContext
 import com.intellij.openapi.vcs.checkin.CheckinHandler
@@ -41,8 +42,10 @@ private class AffectedCheckinHandler(private val panel: CheckinProjectPanel) : C
         val project = panel.project
         val outcome = ProgressManager.getInstance().runProcessWithProgressSynchronously<Verification.Outcome, Nothing>(
             {
-                val plan = Verification.plan(project)
-                Verification.runAndWait(project, plan)
+                runBlockingCancellable {
+                    val plan = Verification.plan(project)
+                    Verification.runAndWait(project, plan)
+                }
             },
             AffectedBundle.message("progress.title"),
             true,

@@ -34,7 +34,7 @@ class RubyGemsTest {
     }
 
     @Test
-    fun `гемы монорепо находятся`() {
+    fun `monorepo gems are found`() {
         val root = monorepo()
         gem(root, "gems/core", "acme-core")
         gem(root, "gems/api", "acme-api")
@@ -43,7 +43,7 @@ class RubyGemsTest {
     }
 
     @Test
-    fun `зависимостями считаются только свои гемы`() {
+    fun `only local gems are dependencies`() {
         val root = monorepo()
         gem(root, "gems/core", "acme-core")
         gem(root, "gems/api", "acme-api", dependencies = listOf("acme-core", "rails"))
@@ -53,12 +53,12 @@ class RubyGemsTest {
         assertEquals(
             setOf("${root.invariantSeparatorsPath}|acme-core"),
             api.dependencies,
-            "rails ставится с rubygems и потребителем быть не может",
+            "Rails comes from RubyGems and cannot be a consumer",
         )
     }
 
     @Test
-    fun `development-зависимости тоже дают ребро`() {
+    fun `development dependencies also create an edge`() {
         val root = monorepo()
         gem(root, "gems/core", "acme-core")
         val directory = File(root, "gems/tools").apply { mkdirs() }
@@ -77,20 +77,20 @@ class RubyGemsTest {
     }
 
     @Test
-    fun `потребители в ruby не проверяются`() {
+    fun `Ruby consumers are not checked`() {
         val root = monorepo()
         gem(root, "gems/core", "acme-core")
         gem(root, "gems/api", "acme-api")
 
         assertTrue(
             RubyGems.parse(root).all { it.compileTask == null },
-            "в ruby нечего компилировать, поэтому потребитель не проверяется",
+            "Ruby has nothing to compile, so consumers are not checked",
         )
         assertNull(RubyGems.parse(root).first().compileTask)
     }
 
     @Test
-    fun `каталог spec делает гем тестируемым`() {
+    fun `a spec directory makes a gem testable`() {
         val root = monorepo()
         gem(root, "gems/with", "acme-with", specs = true)
         gem(root, "gems/without", "acme-without")
@@ -102,7 +102,7 @@ class RubyGemsTest {
     }
 
     @Test
-    fun `одиночный гем не считается монорепо`() {
+    fun `a single gem is not a monorepo`() {
         val root = monorepo()
         gem(root, ".", "acme-single")
 
@@ -110,7 +110,7 @@ class RubyGemsTest {
     }
 
     @Test
-    fun `gemspec без имени не роняет разбор`() {
+    fun `a gemspec without a name does not crash parsing`() {
         val root = monorepo()
         gem(root, "gems/core", "acme-core")
         File(root, "gems/broken").mkdirs()
@@ -119,6 +119,6 @@ class RubyGemsTest {
         val modules = RubyGems.parse(root)
 
         assertTrue(modules.any { it.id == "acme-core" })
-        assertTrue(modules.any { it.id == "broken" }, "имя берётся из файла, когда его нет в тексте")
+        assertTrue(modules.any { it.id == "broken" }, "the filename supplies a missing name")
     }
 }

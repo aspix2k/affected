@@ -2,18 +2,6 @@ package com.aspix2k.affected.build
 
 import java.io.File
 
-/**
- * Gems of a Ruby monorepo.
- *
- * A gemspec is Ruby code, so only the two declarations that matter are read:
- * the gem name and the dependencies it adds. Both follow a fixed shape that
- * every gemspec uses, and anything unparseable is simply skipped rather than
- * guessed at.
- *
- * Ruby has nothing to compile, so consumers are never checked — a changed
- * signature surfaces when the consumer's own tests run, which is not something
- * this plugin can shortcut.
- */
 object RubyGems {
 
     const val TEST = "test"

@@ -4,7 +4,7 @@ import com.intellij.openapi.project.Project
 import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 
-class NodeBuildSystem : BuildSystem {
+class NodeBuildSystem : SuspendingBuildSystem {
 
     private data class Snapshot(val stamp: Long, val modules: List<BuildModule>)
 
@@ -31,7 +31,7 @@ class NodeBuildSystem : BuildSystem {
         commands(root, tasks).forEach { (title, command) -> CommandRunner.run(project, root, command, title) }
     }
 
-    override fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean =
+    override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         commands(root, tasks).all { (title, command) -> CommandRunner.runAndWait(project, root, command, title) }
 
     private fun commands(root: String, tasks: List<String>): List<Pair<String, List<String>>> {

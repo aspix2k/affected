@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 class CrashSafetyTest {
 
     @Test
-    fun `несуществующий каталог не роняет анализ`() {
+    fun `a missing directory does not crash analysis`() {
         val missing = File("/definitely/does/not/exist/anywhere")
         val changes = ChangeAnalyzer(missing, "main").collect()
         assertTrue(changes.files.isEmpty())
@@ -19,13 +19,13 @@ class CrashSafetyTest {
     }
 
     @Test
-    fun `пустая строка вместо ветки не роняет анализ`() {
+    fun `an empty branch does not crash analysis`() {
         val dir = createTempDirectory("crash-empty-branch").toFile()
         assertTrue(ChangeAnalyzer(dir, "").collect().files.isEmpty())
     }
 
     @Test
-    fun `каталог без прав на чтение не роняет анализ`() {
+    fun `an unreadable directory does not crash analysis`() {
         val dir = createTempDirectory("crash-perms").toFile()
         val locked = File(dir, "locked").apply { mkdirs() }
         locked.setReadable(false, false)
@@ -37,7 +37,7 @@ class CrashSafetyTest {
     }
 
     @Test
-    fun `бинарный файл с расширением исходника не роняет анализ`() {
+    fun `a binary file with a source extension does not crash analysis`() {
         val dir = createTempDirectory("crash-binary").toFile()
         run(dir, "git", "init", "-q", "-b", "main")
         run(dir, "git", "config", "user.email", "t@e.com")
@@ -48,11 +48,11 @@ class CrashSafetyTest {
         Files.write(File(dir, "lib/Broken.kt").toPath(), byteArrayOf(0, -1, -2, 65, 0, 66))
 
         val changes = ChangeAnalyzer(dir, "main").collect()
-        assertTrue(changes.files.any { it.name == "Broken.kt" }, "файл всё равно попадает в список")
+        assertTrue(changes.files.any { it.name == "Broken.kt" }, "the file is still listed")
     }
 
     @Test
-    fun `очень длинная строка в дифе не роняет разбор`() {
+    fun `a very long diff line does not crash parsing`() {
         val dir = createTempDirectory("crash-longline").toFile()
         run(dir, "git", "init", "-q", "-b", "main")
         run(dir, "git", "config", "user.email", "t@e.com")
@@ -66,7 +66,7 @@ class CrashSafetyTest {
     }
 
     @Test
-    fun `план с пустыми путями не роняет планировщик`() {
+    fun `a plan with empty paths does not crash the planner`() {
         val plan = TaskPlanner.plan(
             listOf(ModuleInfo("", "GRADLE", "", testTask = "test", compileTask = "compileTestKotlin", hasTests = true)),
             emptyList(),
@@ -75,7 +75,7 @@ class CrashSafetyTest {
     }
 
     @Test
-    fun `огромное число модулей не роняет планировщик`() {
+    fun `a large module count does not crash the planner`() {
         val modules = (1..5_000).map {
             ModuleInfo(
                 ":m$it",
@@ -88,11 +88,11 @@ class CrashSafetyTest {
         }
         val plan = TaskPlanner.plan(modules, modules.take(100))
         assertEquals(5_000, plan.tested)
-        assertEquals(0, plan.compiled, "потребители уже покрыты тестами")
+        assertEquals(0, plan.compiled, "consumers are already covered by tests")
     }
 
     @Test
-    fun `дубли одинаковых модулей не размножают задачи`() {
+    fun `duplicate modules do not multiply tasks`() {
         val one =
             ModuleInfo(
                 ":core",

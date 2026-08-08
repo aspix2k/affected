@@ -105,8 +105,13 @@
                    class="com.aspix2k.affected.AffectedModulesGroup"
                    popup="true"/>
             <separator/>
-            <action id="com.aspix2k.affected.CheckConsumers"
-                    class="com.aspix2k.affected.CheckConsumersToggle"/>
+            <group id="com.aspix2k.affected.Settings"
+                   popup="true">
+                <action id="com.aspix2k.affected.CheckConsumers"
+                        class="com.aspix2k.affected.CheckConsumersToggle"/>
+                <action id="com.aspix2k.affected.AnimateWhileRunning"
+                        class="com.aspix2k.affected.AnimateWhileRunningToggle"/>
+            </group>
         </group>
     </actions>
 </idea-plugin>

@@ -1,13 +1,23 @@
 package com.aspix2k.affected.build
 
+import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessListener
+import com.intellij.execution.runners.ProgramRunner
+import com.intellij.execution.ui.RunContentDescriptor
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.readAction
+import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.jetbrains.idea.maven.execution.MavenRunConfigurationType
 import org.jetbrains.idea.maven.execution.MavenRunnerParameters
 import org.jetbrains.idea.maven.model.MavenId
 import org.jetbrains.idea.maven.project.MavenProjectsManager
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.resume
 
-class MavenBuildSystem : BuildSystem {
+class MavenBuildSystem : SuspendingBuildSystem {
 
     override val id: String = "MAVEN"
 
@@ -16,57 +26,103 @@ class MavenBuildSystem : BuildSystem {
     override fun isPresent(project: Project): Boolean =
         MavenProjectsManager.getInstanceIfCreated(project)?.isMavenizedProject == true
 
-    override fun modules(project: Project): List<BuildModule> {
-        val manager = MavenProjectsManager.getInstanceIfCreated(project) ?: return emptyList()
+    override fun modules(project: Project): List<BuildModule> =
+        runBlockingCancellable { modulesSuspending(project) }
 
-        val modules = manager.projects.associate { mavenProject ->
-            val directory = File(mavenProject.directory).invariantSeparatorsPath
-            val module = BuildModule(
-                id = mavenProject.mavenId.artifactId ?: directory.substringAfterLast('/'),
-                root = rootOf(manager, directory),
-                contentRoots = listOf(directory),
+    override suspend fun modulesSuspending(project: Project): List<BuildModule> =
+        modules(readAction { describe(project) })
+
+    private fun modules(described: List<Described>): List<BuildModule> {
+        val modules = described.associate { data ->
+            data.mavenKey to BuildModule(
+                id = data.id,
+                root = data.root,
+                contentRoots = listOf(data.directory),
                 testTask = TEST_GOAL,
                 compileTask = COMPILE_GOAL,
-                hasTests = File(directory, "src/test").isDirectory,
+                hasTests = File(data.directory, "src/test").isDirectory,
             )
-            mavenProject.mavenId.key to module
         }
-
-        return modules.values.map { module ->
-            val mavenProject = manager.projects.first { it.directory == module.contentRoots.single() }
-            val dependencies = mavenProject.dependencies
-                .mapNotNullTo(HashSet()) { modules[it.mavenId.key]?.key }
+        return described.map { data ->
+            val module = modules.getValue(data.mavenKey)
+            val dependencies = data.dependencies.mapNotNullTo(HashSet()) { modules[it]?.key }
             module.copy(dependencies = dependencies - module.key)
+        }
+    }
+
+    private data class Described(
+        val mavenKey: String,
+        val id: String,
+        val root: String,
+        val directory: String,
+        val dependencies: Set<String>,
+    )
+
+    private fun describe(project: Project): List<Described> {
+        val manager = MavenProjectsManager.getInstanceIfCreated(project) ?: return emptyList()
+        return manager.projects.map { mavenProject ->
+            val directory = File(mavenProject.directory).invariantSeparatorsPath
+            Described(
+                mavenKey = mavenProject.mavenId.key,
+                id = mavenProject.mavenId.artifactId ?: directory.substringAfterLast('/'),
+                root = rootOf(manager, directory),
+                directory = directory,
+                dependencies = mavenProject.dependencies.mapTo(HashSet()) { it.mavenId.key },
+            )
         }
     }
 
     private val MavenId.key: String get() = "$groupId:$artifactId"
 
     override fun run(project: Project, root: String, tasks: List<String>) {
+        MavenRunConfigurationType.runConfiguration(project, parameters(root, tasks), null)
+    }
+
+    override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean {
+        val parameters = parameters(root, tasks)
+        return suspendCancellableCoroutine { continuation ->
+            val completed = AtomicBoolean(false)
+
+            fun complete(passed: Boolean) {
+                if (completed.compareAndSet(false, true) && continuation.isActive) continuation.resume(passed)
+            }
+
+            ApplicationManager.getApplication().invokeLater {
+                if (!continuation.isActive) return@invokeLater
+                MavenRunConfigurationType.runConfiguration(
+                    project,
+                    parameters,
+                    object : ProgramRunner.Callback {
+                        override fun processStarted(descriptor: RunContentDescriptor) {
+                            val handler = descriptor.processHandler ?: return complete(false)
+                            continuation.invokeOnCancellation {
+                                if (!handler.isProcessTerminated) handler.destroyProcess()
+                            }
+                            handler.addProcessListener(object : ProcessListener {
+                                override fun processTerminated(event: ProcessEvent) = complete(event.exitCode == 0)
+                            })
+                            if (handler.isProcessTerminated) complete(handler.exitCode == 0)
+                        }
+
+                        override fun processNotStarted(error: Throwable?) = complete(false)
+                    },
+                )
+            }
+        }
+    }
+
+    private fun parameters(root: String, tasks: List<String>): MavenRunnerParameters {
         val goals = tasks.map { it.substringAfterLast(':') }.distinct()
         val projects = tasks.mapNotNull { it.substringBeforeLast(':').takeIf(String::isNotBlank) }.distinct()
-
-        val parameters = MavenRunnerParameters(
+        return MavenRunnerParameters(
             true,
             root,
             null as String?,
             goals,
             emptyList(),
-        )
-        if (projects.isNotEmpty()) {
-            parameters.projectsCmdOptionValues = projects
+        ).apply {
+            if (projects.isNotEmpty()) projectsCmdOptionValues = projects
         }
-
-        MavenRunConfigurationType.runConfiguration(project, parameters, null)
-    }
-
-    /**
-     * Maven runs through its own run configuration, which reports nothing back,
-     * so a caller that needs an answer is told the run cannot be awaited.
-     */
-    override fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean {
-        run(project, root, tasks)
-        return true
     }
 
     private fun rootOf(manager: MavenProjectsManager, directory: String): String =

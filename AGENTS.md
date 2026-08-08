@@ -9,6 +9,11 @@ Module names inside a composite build are flat and hyphenated. Never rebuild a
 filesystem path from a module name: `app-integration` is one directory, not
 `app/integration`.
 
+An imported Gradle id may begin with the included-build identity. When tasks run
+against that build's linked root, remove the identity and keep the remaining
+project path. Source-set suffixes are metadata, but projects legally named
+`main` or `test` must remain intact.
+
 Android and JVM modules have different task names. `test` does not accept
 `--tests` in an Android module; the task is `testDebugUnitTest`.
 

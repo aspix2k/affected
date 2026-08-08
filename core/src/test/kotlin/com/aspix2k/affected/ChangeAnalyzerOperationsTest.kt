@@ -7,10 +7,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * The analyser was one call doing everything. Local edits now come from the IDE,
- * so the git-specific parts have to stand on their own.
- */
 class ChangeAnalyzerOperationsTest {
 
     private fun repository(): File {
@@ -27,19 +23,19 @@ class ChangeAnalyzerOperationsTest {
     private fun analyzer(directory: File) = ChangeAnalyzer(directory, "main", setOf("kt"))
 
     @Test
-    fun `каталог без git не считается пригодным`() {
+    fun `a directory without Git is not usable`() {
         val plain = createTempDirectory("no-vcs").toFile()
 
-        assertFalse(analyzer(plain).isUsable(), "без git сравнивать с веткой не с чем")
+        assertFalse(analyzer(plain).isUsable(), "without Git there is nothing to compare with a branch")
     }
 
     @Test
-    fun `репозиторий с git пригоден`() {
+    fun `a Git repository is usable`() {
         assertTrue(analyzer(repository()).isUsable())
     }
 
     @Test
-    fun `сравнение с базой видит только коммиты ветки`() {
+    fun `comparison with the base sees only branch commits`() {
         val directory = repository()
         run(directory, "git", "checkout", "-q", "-b", "feature")
         File(directory, "Committed.kt").writeText("fun committed() {}\n")
@@ -49,11 +45,11 @@ class ChangeAnalyzerOperationsTest {
 
         val againstBase = analyzer(directory).againstBase().map { it.name }
 
-        assertEquals(listOf("Committed.kt"), againstBase, "незакоммиченное к базе не относится")
+        assertEquals(listOf("Committed.kt"), againstBase, "uncommitted work is unrelated to the base comparison")
     }
 
     @Test
-    fun `публичное объявление среди изменённых файлов находится`() {
+    fun `a public declaration is found among changed files`() {
         val directory = repository()
         run(directory, "git", "checkout", "-q", "-b", "feature")
         val api = File(directory, "Api.kt").apply { writeText("fun added(): Int = 1\n") }
@@ -61,12 +57,12 @@ class ChangeAnalyzerOperationsTest {
 
         val touched = analyzer(directory).apiTouchedAmong(listOf(api, body))
 
-        assertTrue(api in touched, "новая функция — изменение API")
-        assertFalse(body in touched, "комментарий — нет")
+        assertTrue(api in touched, "a new function is an API change")
+        assertFalse(body in touched, "a comment is not")
     }
 
     @Test
-    fun `сравнение с базой ничего не даёт когда базы нет`() {
+    fun `comparison with the base is empty when no base exists`() {
         val directory = createTempDirectory("no-base").toFile()
         run(directory, "git", "init", "-q", "-b", "solo")
         run(directory, "git", "config", "user.email", "t@e.com")
@@ -77,7 +73,11 @@ class ChangeAnalyzerOperationsTest {
 
         val analyzer = ChangeAnalyzer(directory, "nonexistent", setOf("kt"))
 
-        assertEquals(emptyList(), analyzer.againstBase(), "нет ни настроенной, ни запасной ветки — нет и сравнения")
+        assertEquals(
+            emptyList(),
+            analyzer.againstBase(),
+            "without a configured or fallback branch there is no comparison",
+        )
     }
 
     private fun run(directory: File, vararg args: String) {

@@ -15,7 +15,7 @@ class TestRootResolverTest {
     }
 
     @Test
-    fun `спускается по цепочке пакетов до первой папки с исходниками`() {
+    fun `descends through packages to the first source directory`() {
         val dir = module {
             File(it, "src/test/kotlin/com/example/app/integration").mkdirs()
             File(it, "src/test/kotlin/com/example/app/integration/SomeTest.kt").writeText("class SomeTest")
@@ -27,7 +27,7 @@ class TestRootResolverTest {
     }
 
     @Test
-    fun `останавливается там где пакет разветвляется`() {
+    fun `stops where a package branches`() {
         val dir = module {
             File(it, "src/test/kotlin/com/example/first").mkdirs()
             File(it, "src/test/kotlin/com/example/second").mkdirs()
@@ -37,12 +37,12 @@ class TestRootResolverTest {
         assertEquals(
             File(dir, "src/test/kotlin/com/example").path,
             TestRootResolver.resolve(dir.path),
-            "при двух ветках нельзя выбирать одну наугад",
+            "one branch cannot be selected arbitrarily",
         )
     }
 
     @Test
-    fun `останавливается на папке где есть и файлы и подпапки`() {
+    fun `stops at a directory containing files and subdirectories`() {
         val dir = module {
             File(it, "src/test/kotlin/ru/nested").mkdirs()
             File(it, "src/test/kotlin/ru/Top.kt").writeText("class Top")
@@ -55,7 +55,7 @@ class TestRootResolverTest {
     }
 
     @Test
-    fun `java исходники тоже находятся`() {
+    fun `Java sources are also found`() {
         val dir = module {
             File(it, "src/test/java/com/example").mkdirs()
             File(it, "src/test/java/com/example/LegacyTest.java").writeText("class LegacyTest {}")
@@ -67,7 +67,7 @@ class TestRootResolverTest {
     }
 
     @Test
-    fun `модуль без тестов даёт null`() {
+    fun `a module without tests returns null`() {
         val dir = module {
             File(it, "src/main/kotlin").mkdirs()
             File(it, "src/main/kotlin/Main.kt").writeText("class Main")
@@ -76,13 +76,13 @@ class TestRootResolverTest {
     }
 
     @Test
-    fun `пустая папка тестов даёт саму папку`() {
+    fun `an empty test directory returns itself`() {
         val dir = module { File(it, "src/test/kotlin").mkdirs() }
         assertEquals(File(dir, "src/test/kotlin").path, TestRootResolver.resolve(dir.path))
     }
 
     @Test
-    fun `kmp раскладка находится`() {
+    fun `a KMP layout is found`() {
         val dir = module {
             File(it, "src/commonTest/kotlin/app").mkdirs()
             File(it, "src/commonTest/kotlin/app/CommonTest.kt").writeText("class CommonTest")
@@ -94,7 +94,7 @@ class TestRootResolverTest {
     }
 
     @Test
-    fun `несуществующий модуль не роняет резолвер`() {
+    fun `a missing module does not crash the resolver`() {
         assertNull(TestRootResolver.resolve("/no/such/module/anywhere"))
     }
 }

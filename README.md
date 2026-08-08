@@ -14,14 +14,20 @@ before pushing. Running just your own module is fast but misses the failure that
 matters: you changed a signature, your module is green, and the build breaks in
 a module you have never opened.
 
-Affected runs the tests of the modules you touched, and checks that the modules
+Affected runs the tests of the modules you touched and can check that the modules
 consuming your changed API still compile. Usually seconds, not minutes.
 
 ## Using it
 
-The button next to Run carries the number of affected modules, and is disabled
-when there are none. The menu lists those modules, navigates to any of them, and
-offers their detekt, lint and coverage tasks.
+The button next to Run fills a three-by-three grid as more modules are affected,
+and is disabled when there are none. While verification runs the grid animates;
+after completion or cancellation it returns to the current affected-module state.
+The whole group stays disabled until the IDE project model is ready, with the running
+animation shown in the platform's muted disabled style. The menu lists the modules,
+navigates to any of them, and offers their detekt, lint and coverage tasks.
+
+The Settings submenu controls consumer compilation and the running animation.
+Consumer compilation is off by default; animation is on.
 
 Runs go through the IDE's own integration, so the test tree, the jump from a
 failure to its source, and the Stop button work as usual.

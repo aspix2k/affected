@@ -1,11 +1,19 @@
 <svg width="40" height="40" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+<mask id="h" maskUnits="userSpaceOnUse" x="0" y="0" width="20" height="20">
+  <rect width="20" height="20" fill="white"/>
+  <circle cx="15.75" cy="15.75" r="4.75" fill="black"/>
+</mask>
+<g mask="url(#h)">
 <rect x="2.75" y="2.75" width="4" height="4" rx="1.25" fill="#548AF7"/>
-<circle cx="10.0" cy="4.75" r="1" fill="#CED0D6"/>
+<circle cx="10" cy="4.75" r="1" fill="#CED0D6"/>
 <rect x="13.25" y="2.75" width="4" height="4" rx="1.25" fill="#548AF7"/>
-<rect x="2.75" y="8.0" width="4" height="4" rx="1.25" fill="#548AF7"/>
-<rect x="8.0" y="8.0" width="4" height="4" rx="1.25" fill="#548AF7"/>
-<rect x="13.25" y="8.0" width="4" height="4" rx="1.25" fill="#548AF7"/>
+<circle cx="4.75" cy="10" r="1" fill="#CED0D6"/>
+<rect x="8" y="8" width="4" height="4" rx="1.25" fill="#548AF7"/>
+<circle cx="15.25" cy="10" r="1" fill="#CED0D6"/>
 <circle cx="4.75" cy="15.25" r="1" fill="#CED0D6"/>
-<rect x="8.0" y="13.25" width="4" height="4" rx="1.25" fill="#548AF7"/>
-<rect x="13.25" y="13.25" width="4" height="4" rx="1.25" fill="#548AF7"/>
+<rect x="8" y="13.25" width="4" height="4" rx="1.25" fill="#548AF7"/>
+<circle cx="15.25" cy="15.25" r="1" fill="#CED0D6"/>
+</g>
+<circle cx="15.75" cy="15.75" r="3.5" fill="#5FAD65"/>
+<path d="M14.2 15.75l1.05 1.1 2.05-2.25" stroke="#1E1F22" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

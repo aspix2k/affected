@@ -2,14 +2,6 @@ package com.aspix2k.affected.build
 
 import java.io.File
 
-/**
- * Targets of a CMake project.
- *
- * CMakeLists.txt is a script, but the three commands that matter follow a fixed
- * shape and are read directly: what a target is called, which libraries it links,
- * and whether it is registered as a test. Anything else is ignored rather than
- * guessed at.
- */
 object CMakeTargets {
 
     const val TEST = "test"

@@ -1,18 +1,17 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.BuildSystems
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileDocumentManager
-import com.intellij.openapi.progress.ProgressIndicator
-import com.intellij.openapi.progress.ProgressManager
-import com.intellij.openapi.progress.Task
+import com.intellij.openapi.progress.currentThreadCoroutineScope
 import com.intellij.openapi.project.Project
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class RunAffectedTestsAction : AnAction() {
 
@@ -54,66 +53,42 @@ class RunAffectedTestsAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
 
-        saveAllDocuments()
-
-        val title = AffectedBundle.message("progress.title")
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, title, true) {
-            override fun run(indicator: ProgressIndicator) {
-                val changes = ProjectChanges.collect(project)
-                if (changes.files.isEmpty()) {
-                    notify(
-                        project,
-                        AffectedBundle.message("notification.nothing.title"),
-                        AffectedBundle.message("notification.nothing.text"),
-                        NotificationType.INFORMATION,
-                    )
-                    return
-                }
-
-                val plan = ApplicationManager.getApplication().runReadAction<Plan> {
-                    buildPlan(project, changes)
-                }
-
-                if (plan.isEmpty) {
-                    notify(
-                        project,
-                        AffectedBundle.message("notification.unresolved.title"),
-                        AffectedBundle.message("notification.unresolved.text", changes.files.size),
-                        NotificationType.WARNING,
-                    )
-                    return
-                }
-
-                ApplicationManager.getApplication().invokeLater { execute(project, plan) }
+        FileDocumentManager.getInstance().saveAllDocuments()
+        currentThreadCoroutineScope().launch {
+            val changes = withContext(Dispatchers.IO) { ProjectChanges.collect(project) }
+            if (changes.files.isEmpty()) {
+                notify(
+                    project,
+                    AffectedBundle.message("notification.nothing.title"),
+                    AffectedBundle.message("notification.nothing.text"),
+                    NotificationType.INFORMATION,
+                )
+                return@launch
             }
-        })
+
+            val plan = Verification.plan(project, changes)
+            if (plan.isEmpty) {
+                notify(
+                    project,
+                    AffectedBundle.message("notification.unresolved.title"),
+                    AffectedBundle.message("notification.unresolved.text", changes.files.size),
+                    NotificationType.WARNING,
+                )
+                return@launch
+            }
+
+            execute(project, plan)
+        }
     }
 
-    private fun buildPlan(project: Project, changes: ProjectChanges.Result): Plan {
-        val graph = ModuleGraph(project)
-
-        val changed = changes.files.mapNotNull { graph.nodeFor(it) }.distinct()
-        val apiNodes = changes.apiTouched.mapNotNull { graph.nodeFor(it) }.toSet()
-        val consumers = when {
-            !AffectedSettings.getInstance().checkConsumers -> emptyList()
-            apiNodes.isEmpty() -> emptyList()
-            else -> graph.directDependents(apiNodes)
-        }
-
-        return TaskPlanner.plan(changed.map { it.info() }, consumers.map { it.info() })
-    }
-
-    private fun execute(project: Project, plan: Plan) {
-        project.service<AffectedState>().markRunning(true)
-        plan.groups.forEach { group ->
-            BuildSystems.byId(group.systemId)?.run(project, group.root, group.tasks)
-        }
+    private suspend fun execute(project: Project, plan: Plan) {
         notify(
             project,
             AffectedBundle.message("notification.started.title"),
             describe(plan),
             NotificationType.INFORMATION,
         )
+        Verification.runAndWait(project, plan)
     }
 
     private fun describe(plan: Plan): String =
@@ -128,14 +103,5 @@ class RunAffectedTestsAction : AnAction() {
             .getNotificationGroup("AffectedTests")
             .createNotification(title, content, type)
             .notify(project)
-    }
-
-    private fun saveAllDocuments() {
-        val application = ApplicationManager.getApplication()
-        if (application.isDispatchThread) {
-            FileDocumentManager.getInstance().saveAllDocuments()
-        } else {
-            application.invokeAndWait { FileDocumentManager.getInstance().saveAllDocuments() }
-        }
     }
 }

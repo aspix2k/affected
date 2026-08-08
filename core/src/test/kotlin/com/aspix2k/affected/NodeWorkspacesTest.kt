@@ -35,7 +35,7 @@ class NodeWorkspacesTest {
     }
 
     @Test
-    fun `npm workspaces раскрываются из package json`() {
+    fun `npm workspaces expand from package json`() {
         val root = workspace("""{ "name": "root", "workspaces": ["packages/*"] }""")
         addPackage(root, "packages/core", "@app/core")
         addPackage(root, "packages/ui", "@app/ui")
@@ -46,7 +46,7 @@ class NodeWorkspacesTest {
     }
 
     @Test
-    fun `pnpm workspaces читаются из своего файла`() {
+    fun `pnpm workspaces are read from their own file`() {
         val root = workspace(
             """{ "name": "root" }""",
             pnpm = "packages:\n  - 'packages/*'\n  - docs\n",
@@ -61,7 +61,7 @@ class NodeWorkspacesTest {
     }
 
     @Test
-    fun `зависимостями считаются только пакеты воркспейса`() {
+    fun `only workspace packages are dependencies`() {
         val root = workspace("""{ "name": "root", "workspaces": ["packages/*"] }""")
         addPackage(root, "packages/core", "@app/core")
         addPackage(root, "packages/ui", "@app/ui", dependencies = """{ "@app/core": "workspace:*", "react": "^18" }""")
@@ -71,12 +71,12 @@ class NodeWorkspacesTest {
         assertEquals(
             setOf("${root.invariantSeparatorsPath}|@app/core"),
             ui.dependencies,
-            "react ставится из реестра и потребителем быть не может",
+            "React comes from the registry and cannot be a consumer",
         )
     }
 
     @Test
-    fun `потребителя проверяем только когда есть typescript`() {
+    fun `a consumer is checked only when TypeScript is present`() {
         val root = workspace("""{ "name": "root", "workspaces": ["packages/*"] }""")
         addPackage(root, "packages/typed", "@app/typed", typed = true)
         addPackage(root, "packages/plain", "@app/plain")
@@ -86,12 +86,12 @@ class NodeWorkspacesTest {
         assertEquals("typecheck", modules.single { it.id == "@app/typed" }.compileTask)
         assertNull(
             modules.single { it.id == "@app/plain" }.compileTask,
-            "в чистом javascript компилировать нечего",
+            "plain JavaScript has nothing to compile",
         )
     }
 
     @Test
-    fun `скрипт test делает пакет тестируемым`() {
+    fun `a test script makes a package testable`() {
         val root = workspace("""{ "name": "root", "workspaces": ["packages/*"] }""")
         addPackage(root, "packages/tested", "@app/tested", scripts = """{ "test": "vitest" }""")
         addPackage(root, "packages/bare", "@app/bare")
@@ -103,7 +103,7 @@ class NodeWorkspacesTest {
     }
 
     @Test
-    fun `node_modules не попадает в пакеты`() {
+    fun `node_modules is excluded from packages`() {
         val root = workspace("""{ "name": "root", "workspaces": ["packages/*"] }""")
         addPackage(root, "packages/core", "@app/core")
         addPackage(root, "packages/node_modules", "should-not-appear")
@@ -114,31 +114,31 @@ class NodeWorkspacesTest {
     }
 
     @Test
-    fun `проект без воркспейсов не даёт модулей`() {
+    fun `a project without workspaces yields no modules`() {
         val root = workspace("""{ "name": "single-package" }""")
 
         assertEquals(emptyList(), NodeWorkspaces.parse(root))
     }
 
     @Test
-    fun `реальный pnpm-воркспейс vite разбирается`() {
+    fun `a real Vite pnpm workspace is parsed`() {
         assumeTrue(FixtureRepository.available("npm-vite"))
         val root = File(FixtureRepository.root, "npm-vite")
 
         val modules = NodeWorkspaces.parse(root)
 
-        assertTrue(modules.size >= 3, "в vite несколько пакетов, разобрали ${modules.size}")
-        assertTrue(modules.all { File(it.contentRoots.single()).isDirectory }, "каталоги должны существовать")
+        assertTrue(modules.size >= 3, "Vite has several packages, parsed ${modules.size}")
+        assertTrue(modules.all { File(it.contentRoots.single()).isDirectory }, "directories must exist")
     }
 
     @Test
-    fun `реальный yarn-воркспейс babel разбирается`() {
+    fun `a real Babel Yarn workspace is parsed`() {
         assumeTrue(FixtureRepository.available("npm-babel"))
         val root = File(FixtureRepository.root, "npm-babel")
 
         val modules = NodeWorkspaces.parse(root)
 
-        assertTrue(modules.size >= 10, "в babel десятки пакетов, разобрали ${modules.size}")
-        assertTrue(modules.any { it.dependencies.isNotEmpty() }, "между пакетами babel есть зависимости")
+        assertTrue(modules.size >= 10, "Babel has dozens of packages, parsed ${modules.size}")
+        assertTrue(modules.any { it.dependencies.isNotEmpty() }, "Babel packages have dependencies")
     }
 }
