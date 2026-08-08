@@ -59,7 +59,18 @@ jobs:
 
       - name: Publish to JetBrains Marketplace
         if: ${{ env.PUBLISH_TOKEN != '' }}
-        run: ./gradlew publishPlugin
+        run: |
+          id=$(curl -sf "https://plugins.jetbrains.com/api/plugins/intellij/com.aspix2k.affected" | jq -r '.id // empty')
+          if [ -z "$id" ]; then
+            echo "::notice::The plugin is not on the marketplace yet. The first version has to be uploaded through the web form; later tags publish from here."
+            exit 0
+          fi
+          published=$(curl -sf "https://plugins.jetbrains.com/api/plugins/$id/updates" | jq -r --arg v "${GITHUB_REF_NAME#v}" 'map(select(.version == $v)) | length')
+          if [ "$published" != "0" ]; then
+            echo "::notice::Version ${GITHUB_REF_NAME#v} is already on the marketplace."
+            exit 0
+          fi
+          ./gradlew publishPlugin
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
