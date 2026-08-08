@@ -8,7 +8,6 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.DumbAware
-import com.intellij.openapi.project.Project
 import javax.swing.Icon
 
 abstract class RunCheckAction(
@@ -39,7 +38,6 @@ abstract class RunCheckAction(
             BuildSystems.byId(key.first)?.run(project, key.second, group.map { "${it.id}:$taskName" })
         }
     }
-
 
     private fun saveAllDocuments() {
         val application = ApplicationManager.getApplication()

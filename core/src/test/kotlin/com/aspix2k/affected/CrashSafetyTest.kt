@@ -76,7 +76,16 @@ class CrashSafetyTest {
 
     @Test
     fun `огромное число модулей не роняет планировщик`() {
-        val modules = (1..5_000).map { ModuleInfo(":m$it", "GRADLE", "/repo", testTask = if (it % 2 == 0) "testDebugUnitTest" else "test", compileTask = "compileTestKotlin", hasTests = true) }
+        val modules = (1..5_000).map {
+            ModuleInfo(
+                ":m$it",
+                "GRADLE",
+                "/repo",
+                testTask = if (it % 2 == 0) "testDebugUnitTest" else "test",
+                compileTask = "compileTestKotlin",
+                hasTests = true,
+            )
+        }
         val plan = TaskPlanner.plan(modules, modules.take(100))
         assertEquals(5_000, plan.tested)
         assertEquals(0, plan.compiled, "потребители уже покрыты тестами")
@@ -84,7 +93,15 @@ class CrashSafetyTest {
 
     @Test
     fun `дубли одинаковых модулей не размножают задачи`() {
-        val one = ModuleInfo(":core", "GRADLE", "/repo", testTask = "test", compileTask = "compileTestKotlin", hasTests = true)
+        val one =
+            ModuleInfo(
+                ":core",
+                "GRADLE",
+                "/repo",
+                testTask = "test",
+                compileTask = "compileTestKotlin",
+                hasTests = true,
+            )
         val plan = TaskPlanner.plan(List(1_000) { one }, List(1_000) { one })
         assertEquals(listOf(":core:test"), plan.groups.single { it.root == "/repo" }.tasks)
     }

@@ -1,10 +1,10 @@
 package com.aspix2k.affected
 
+import org.junit.Assume.assumeTrue
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import org.junit.Assume.assumeTrue
 
 /**
  * Runs the analyser against real projects instead of fixtures written for it.
@@ -12,7 +12,8 @@ import org.junit.Assume.assumeTrue
  */
 class ChangeAnalyzerFixtureTest {
 
-    private val ALL_EXTENSIONS = setOf("kt", "kts", "java", "xml", "json", "pro", "rs", "toml", "go", "ts", "js", "py", "cs")
+    private val ALL_EXTENSIONS =
+        setOf("kt", "kts", "java", "xml", "json", "pro", "rs", "toml", "go", "ts", "js", "py", "cs")
 
     private fun analyzer(repository: File, extensions: Set<String> = ChangeAnalyzer.DEFAULT_EXTENSIONS) =
         ChangeAnalyzer(repository, "", extensions)

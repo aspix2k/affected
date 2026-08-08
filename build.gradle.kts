@@ -8,6 +8,7 @@ plugins {
     id("org.jetbrains.kotlinx.kover") version "0.9.9"
     id("info.solidsoft.pitest") version "1.19.0"
     id("org.jetbrains.changelog") version "2.5.0"
+    id("io.gitlab.arturbosch.detekt") version "1.23.8"
 }
 
 group = "com.aspix2k"
@@ -77,6 +78,18 @@ intellijPlatform {
             create(IntelliJPlatformType.AndroidStudio, providers.gradleProperty("affected.studio.version"))
         }
     }
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    autoCorrect = true
+    config.setFrom(files("$rootDir/config/detekt.yml"))
+    source.setFrom(files("src", "core/src", "mcp/src"))
+    parallel = true
+}
+
+dependencies {
+    detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.8")
 }
 
 tasks.test {

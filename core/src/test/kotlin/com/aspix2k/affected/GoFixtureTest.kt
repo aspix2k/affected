@@ -2,10 +2,10 @@ package com.aspix2k.affected
 
 import com.aspix2k.affected.build.CommandRunner
 import com.aspix2k.affected.build.GoPackages
+import org.junit.Assume.assumeTrue
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import org.junit.Assume.assumeTrue
 
 /**
  * Parses what the real toolchain prints for a real project, which synthetic

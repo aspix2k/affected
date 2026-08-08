@@ -38,7 +38,8 @@ class AffectedState(private val project: Project) {
     private fun recount() {
         val projectDir = project.basePath?.let(::File) ?: return
         val settings = AffectedSettings.getInstance()
-        val files = ChangeAnalyzer(projectDir, settings.baseBranch, BuildSystems.sourceExtensions(project)).collectPaths()
+        val extensions = BuildSystems.sourceExtensions(project)
+        val files = ChangeAnalyzer(projectDir, settings.baseBranch, extensions).collectPaths()
 
         val graph = ModuleGraph(project)
         modules = ApplicationManager.getApplication().runReadAction<List<AffectedModule>> {

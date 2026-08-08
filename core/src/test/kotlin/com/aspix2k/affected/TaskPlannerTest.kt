@@ -10,7 +10,14 @@ class TaskPlannerTest {
         ModuleInfo(path, "GRADLE", root, testTask = "test", compileTask = "compileTestKotlin", hasTests = tests)
 
     private fun android(path: String, root: String = "/repo", tests: Boolean = true) =
-        ModuleInfo(path, "GRADLE", root, testTask = "testDebugUnitTest", compileTask = "compileDebugUnitTestKotlin", hasTests = tests)
+        ModuleInfo(
+            path,
+            "GRADLE",
+            root,
+            testTask = "testDebugUnitTest",
+            compileTask = "compileDebugUnitTestKotlin",
+            hasTests = tests,
+        )
 
     @Test
     fun `пустой ввод даёт пустой план`() {

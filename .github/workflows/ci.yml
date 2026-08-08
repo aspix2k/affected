@@ -39,6 +39,7 @@ jobs:
           .github/changelog-section.sh "$version" > /dev/null \
             || { echo "::error file=CHANGELOG.md::Add a section for $version before bumping the version."; exit 1; }
 
+      - run: ./gradlew detekt
       - run: ./gradlew test koverXmlReport buildPlugin
       - run: ./gradlew verifyPlugin
 

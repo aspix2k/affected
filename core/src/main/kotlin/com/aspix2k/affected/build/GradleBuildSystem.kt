@@ -1,6 +1,5 @@
 package com.aspix2k.affected.build
 
-import com.aspix2k.affected.TestRootResolver
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.openapi.externalSystem.model.ProjectKeys
 import com.intellij.openapi.externalSystem.model.execution.ExternalSystemTaskExecutionSettings
@@ -65,7 +64,8 @@ class GradleBuildSystem : BuildSystem {
 
         return modules.map { (key, module) ->
             val ideModule = ideModules[key] ?: return@map module
-            val dependencies = ModuleRootManager.getInstance(ideModule).dependencies.mapNotNullTo(HashSet()) { dependency ->
+            val direct = ModuleRootManager.getInstance(ideModule).dependencies
+            val dependencies = direct.mapNotNullTo(HashSet()) { dependency ->
                 keyByIdeModule[dependency]
                     ?: ModuleRootManager.getInstance(dependency).contentRoots
                         .firstNotNullOfOrNull { keyByContentRoot[it.path] }

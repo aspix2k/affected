@@ -17,6 +17,7 @@ The same path works as `-Paffected.ide.path=...` or as the `AFFECTED_IDE_PATH`
 environment variable.
 
 ```sh
+./gradlew detekt        # static analysis and formatting, autocorrecting
 ./gradlew test          # unit tests
 ./gradlew runIde        # sandbox IDE with the plugin installed
 ./gradlew buildPlugin   # zip in build/distributions
@@ -25,6 +26,9 @@ environment variable.
 ```
 
 CI runs everything except `pitest` on each push; `pitest` runs weekly.
+
+`detekt` runs with `autoCorrect`, so formatting fixes itself and only real
+findings remain. There is no baseline file: the count is zero and stays zero.
 
 ## How it works
 
