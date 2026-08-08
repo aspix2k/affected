@@ -53,7 +53,7 @@ class CargoMetadataTest {
     """.trimIndent()
 
     @Test
-    fun `пакеты воркспейса становятся модулями`() {
+    fun `workspace packages become modules`() {
         val root = workspace()
 
         val modules = CargoMetadata.parse(metadata(root), root.path)
@@ -62,7 +62,7 @@ class CargoMetadataTest {
     }
 
     @Test
-    fun `внешние зависимости не попадают в граф`() {
+    fun `external dependencies are excluded from the graph`() {
         val root = workspace()
 
         val app = CargoMetadata.parse(metadata(root), root.path).single { it.id == "app" }
@@ -70,12 +70,12 @@ class CargoMetadataTest {
         assertEquals(
             setOf("${root.path}|core-lib"),
             app.dependencies,
-            "serde живёт в реестре, а не в воркспейсе, и потребителем быть не может",
+            "serde comes from the registry, not the workspace, and cannot be a consumer",
         )
     }
 
     @Test
-    fun `пакет с юнит-тестами внутри исходников считается тестируемым`() {
+    fun `a package with unit tests in its sources is testable`() {
         val root = workspace()
 
         val modules = CargoMetadata.parse(metadata(root), root.path)
@@ -85,7 +85,7 @@ class CargoMetadataTest {
     }
 
     @Test
-    fun `битый вывод не роняет разбор`() {
+    fun `malformed output does not crash parsing`() {
         assertEquals(emptyList(), CargoMetadata.parse("not json at all", "/repo"))
         assertEquals(emptyList(), CargoMetadata.parse("", "/repo"))
     }

@@ -4,9 +4,9 @@ import com.intellij.openapi.project.Project
 import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 
-class GoBuildSystem : BuildSystem {
+class GoBuildSystem : SuspendingBuildSystem {
 
-    private data class Snapshot(val stamp: Long, val modules: List<BuildModule>)
+    private data class Snapshot(val root: String, val stamp: Long, val modules: List<BuildModule>)
 
     private val cache = AtomicReference<Snapshot?>(null)
 
@@ -21,11 +21,11 @@ class GoBuildSystem : BuildSystem {
         val root = manifest.parentFile.invariantSeparatorsPath
         val stamp = manifest.lastModified()
 
-        cache.get()?.takeIf { it.stamp == stamp }?.let { return it.modules }
+        cache.get()?.takeIf { it.root == root && it.stamp == stamp }?.let { return it.modules }
 
         val output = CommandRunner.capture(root, LIST, timeoutSeconds = 120) ?: return emptyList()
         val modules = GoPackages.parse(output, root)
-        cache.set(Snapshot(stamp, modules))
+        cache.set(Snapshot(root, stamp, modules))
         return modules
     }
 
@@ -40,7 +40,7 @@ class GoBuildSystem : BuildSystem {
                 "go $verb" to listOf("go", verb) + packages
             }
 
-    override fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean =
+    override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         commands(tasks).all { (title, command) -> CommandRunner.runAndWait(project, root, command, title) }
 
     private fun manifestOf(project: Project): File? =

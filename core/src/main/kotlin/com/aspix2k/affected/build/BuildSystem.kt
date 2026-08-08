@@ -1,13 +1,15 @@
 package com.aspix2k.affected.build
 
+import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runInterruptible
 
 data class BuildModule(
     val id: String,
     val root: String,
     val contentRoots: List<String>,
     val testTask: String,
-    /** How to check a consumer still builds. Null when the language has nothing to compile. */
     val compileTask: String?,
     val hasTests: Boolean,
     val dependencies: Set<String> = emptySet(),
@@ -20,7 +22,6 @@ interface BuildSystem {
 
     val id: String
 
-    /** File types whose change can affect a module of this system. */
     val sourceExtensions: Set<String>
 
     fun isPresent(project: Project): Boolean
@@ -29,9 +30,15 @@ interface BuildSystem {
 
     fun run(project: Project, root: String, tasks: List<String>)
 
-    /**
-     * Runs and waits, reporting whether it succeeded. Used where the answer
-     * decides something — a commit that must not happen, a push to abort.
-     */
     fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean
+}
+
+internal interface SuspendingBuildSystem : BuildSystem {
+    suspend fun modulesSuspending(project: Project): List<BuildModule> =
+        runInterruptible(Dispatchers.IO) { modules(project) }
+
+    suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean
+
+    override fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean =
+        runBlockingCancellable { runAndWaitSuspending(project, root, tasks) }
 }

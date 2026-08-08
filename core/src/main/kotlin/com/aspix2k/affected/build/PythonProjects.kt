@@ -2,17 +2,6 @@ package com.aspix2k.affected.build
 
 import java.io.File
 
-/**
- * Python packages declared by `pyproject.toml`.
- *
- * There is nothing to compile, so a consumer is checked by type checking it,
- * and only when the project actually configures mypy. Without that, a consumer
- * cannot be verified at all and is left alone.
- *
- * Only the handful of fields that matter are read, rather than pulling a TOML
- * parser into the plugin: the package name, its dependencies, the uv workspace
- * members, and whether mypy is configured.
- */
 object PythonProjects {
 
     const val TEST = "test"
@@ -66,7 +55,6 @@ object PythonProjects {
         )
     }
 
-    /** Reads `name = "value"` from the first section that declares it. */
     private fun valueOf(lines: List<String>, key: String): String? = lines
         .map { it.trim() }
         .firstOrNull { it.startsWith("$key ") && it.contains('=') }
@@ -75,10 +63,6 @@ object PythonProjects {
         ?.trim('"', '\'')
         ?.takeIf { it.isNotEmpty() }
 
-    /**
-     * Collects entries of every dependency list, keeping only the distribution
-     * name: `httpx[cli] >= 0.27` is a dependency on `httpx`.
-     */
     private fun dependenciesOf(lines: List<String>): Set<String> {
         val result = HashSet<String>()
         var inList = false
@@ -112,10 +96,7 @@ object PythonProjects {
             .any { it.isFile && it.name.startsWith("test_") && it.extension == "py" }
     }
 
-    private fun findManifests(root: File): List<File> = root.walkTopDown()
-        .onEnter { it.name != ".git" && it.name != ".venv" && it.name != "node_modules" && it.name != "build" }
-        .filter { it.isFile && it.name == "pyproject.toml" }
-        .toList()
+    private fun findManifests(root: File): List<File> = ManifestSearch.find(root, "pyproject.toml")
 
     private val DEPENDENCY_KEYS = listOf("dependencies =", "dependencies=", "install_requires =")
     private val TEST_DIRS = listOf("tests", "test")

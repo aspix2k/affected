@@ -1,13 +1,28 @@
 package com.aspix2k.affected
 
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
-import com.intellij.util.Alarm
-import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicReference
+
+enum class VerificationStatus {
+    IDLE,
+    RUNNING,
+}
 
 @Service(Service.Level.PROJECT)
-class AffectedState(private val project: Project) {
+class AffectedState(
+    private val project: Project,
+    private val scope: CoroutineScope,
+) {
 
     @Volatile
     var modules: List<AffectedModule> = emptyList()
@@ -19,46 +34,83 @@ class AffectedState(private val project: Project) {
     var ready: Boolean = false
         private set
 
-    private val running = AtomicBoolean(false)
-    private val alarm = Alarm(Alarm.ThreadToUse.POOLED_THREAD, project)
+    private val status = AtomicReference(VerificationStatus.IDLE)
+    private val invalidations = Channel<Unit>(Channel.CONFLATED)
+    private val verificationLock = Any()
+    private var runningVerifications = 0
 
-    val isRunning: Boolean get() = running.get()
+    init {
+        scope.launch {
+            while (true) {
+                invalidations.receive()
+                do {
+                    delay(DEBOUNCE_MS.toLong())
+                } while (invalidations.tryReceive().isSuccess)
+                refresh()
+            }
+        }
+    }
 
-    fun markRunning(value: Boolean) {
-        running.set(value)
+    val verificationStatus: VerificationStatus get() = status.get()
+    val isRunning: Boolean get() = verificationStatus == VerificationStatus.RUNNING
+
+    fun markRunning() {
+        synchronized(verificationLock) {
+            runningVerifications++
+            status.set(VerificationStatus.RUNNING)
+        }
+    }
+
+    fun markFinished() {
+        synchronized(verificationLock) {
+            runningVerifications = (runningVerifications - 1).coerceAtLeast(0)
+            if (runningVerifications == 0) status.set(VerificationStatus.IDLE)
+        }
     }
 
     fun invalidate() {
-        alarm.cancelAllRequests()
-        alarm.addRequest(::recount, DEBOUNCE_MS)
+        invalidations.trySend(Unit)
     }
 
-    private fun recount() {
-        val files = ProjectChanges.paths(project)
-
-        val graph = ModuleGraph(project)
-        modules = ApplicationManager.getApplication().runReadAction<List<AffectedModule>> {
-            files.mapNotNull { graph.nodeFor(it) }
-                .distinct()
-                .mapNotNull { node ->
-                    val directory = node.sourceRoot ?: return@mapNotNull null
-                    AffectedModule(
-                        id = node.id,
-                        systemId = node.system.id,
-                        buildRoot = node.buildRoot,
-                        directory = directory,
-                        testDirectory = node.testRoot,
-                        testTask = node.module.testTask,
-                        compileTask = node.module.compileTask,
-                        hasTests = node.hasTests,
-                        tasks = node.module.extraTasks,
-                    )
-                }
+    private suspend fun refresh() {
+        try {
+            modules = analyze()
+            ready = true
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: ProcessCanceledException) {
+            throw error
+        } catch (error: Exception) {
+            modules = emptyList()
+            ready = true
+            LOG.warn("Failed to refresh affected modules", error)
         }
-        ready = true
+    }
+
+    private suspend fun analyze(): List<AffectedModule> = withContext(Dispatchers.Default) {
+        val files = ProjectChanges.pathsSuspending(project)
+        val graph = ModuleGraph.create(project)
+
+        files.mapNotNull { graph.nodeFor(it) }
+            .distinct()
+            .mapNotNull { node ->
+                val directory = node.sourceRoot ?: return@mapNotNull null
+                AffectedModule(
+                    id = node.id,
+                    systemId = node.system.id,
+                    buildRoot = node.buildRoot,
+                    directory = directory,
+                    testDirectory = node.testRoot,
+                    testTask = node.module.testTask,
+                    compileTask = node.module.compileTask,
+                    hasTests = node.hasTests,
+                    tasks = node.module.extraTasks,
+                )
+            }
     }
 
     private companion object {
+        val LOG = logger<AffectedState>()
         const val DEBOUNCE_MS = 1500
     }
 }

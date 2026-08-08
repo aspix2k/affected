@@ -6,6 +6,7 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.DumbAware
+import com.intellij.openapi.project.DumbService
 
 class AffectedGroup : DefaultActionGroup(), DumbAware {
 
@@ -19,9 +20,18 @@ class AffectedGroup : DefaultActionGroup(), DumbAware {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun update(e: AnActionEvent) {
-        val state = e.project?.service<AffectedState>()
-        e.presentation.icon = AffectedIcons.withCount(state?.affectedModules ?: 0)
-        e.presentation.disabledIcon = e.presentation.icon
+        val project = e.project
+        val state = project?.service<AffectedState>()
+        val ready = project != null && state?.ready == true && !DumbService.isDumb(project)
+        val animate = AffectedSettings.getInstance().animateWhileRunning
+
+        e.presentation.isEnabled = ready
+        e.presentation.icon = AffectedIcons.forState(
+            if (ready) state.verificationStatus else VerificationStatus.RUNNING,
+            state?.affectedModules ?: 0,
+            animate,
+        )
+        e.presentation.disabledIcon = if (!ready && animate) AffectedIcons.DisabledRunning else null
         e.presentation.text = when {
             state == null || !state.ready -> AffectedBundle.message("group.title")
             state.isRunning -> AffectedBundle.message("group.title.running")

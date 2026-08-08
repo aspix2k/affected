@@ -20,7 +20,7 @@ class DotnetProjectsTest {
     }
 
     @Test
-    fun `проекты находятся по всему дереву`() {
+    fun `projects are found across the tree`() {
         val root = solution()
         project(root, "src/Lib/Lib.csproj", "")
         project(root, "test/Lib.Tests/Lib.Tests.csproj", "")
@@ -31,7 +31,7 @@ class DotnetProjectsTest {
     }
 
     @Test
-    fun `ссылка с обратными слэшами разрешается на любой системе`() {
+    fun `a backslash reference resolves on every system`() {
         val root = solution()
         project(root, "src/Lib/Lib.csproj", "")
         project(
@@ -45,12 +45,12 @@ class DotnetProjectsTest {
         assertEquals(
             setOf("${root.invariantSeparatorsPath}|Lib"),
             tests.dependencies,
-            "MSBuild пишет разделители Windows даже на macOS",
+            "MSBuild emits Windows separators even on macOS",
         )
     }
 
     @Test
-    fun `ссылка на несуществующий проект не создаёт ребра`() {
+    fun `a reference to a missing project creates no edge`() {
         val root = solution()
         project(
             root,
@@ -62,7 +62,7 @@ class DotnetProjectsTest {
     }
 
     @Test
-    fun `тестовым считается проект со ссылкой на тестовый фреймворк`() {
+    fun `a project referencing a test framework is testable`() {
         val root = solution()
         project(root, "src/Lib/Lib.csproj", "")
         project(
@@ -78,7 +78,7 @@ class DotnetProjectsTest {
     }
 
     @Test
-    fun `каталоги сборки не просматриваются`() {
+    fun `build directories are not scanned`() {
         val root = solution()
         project(root, "src/Lib/Lib.csproj", "")
         project(root, "src/Lib/obj/Debug/Ghost.csproj", "")
@@ -88,7 +88,7 @@ class DotnetProjectsTest {
     }
 
     @Test
-    fun `fsproj и vbproj тоже проекты`() {
+    fun `fsproj and vbproj files are also projects`() {
         val root = solution()
         project(root, "src/Fs/Fs.fsproj", "")
         project(root, "src/Vb/Vb.vbproj", "")
@@ -97,18 +97,18 @@ class DotnetProjectsTest {
     }
 
     @Test
-    fun `реальный serilog разбирается с рёбрами графа`() {
+    fun `real Serilog data is parsed with graph edges`() {
         assumeTrue(FixtureRepository.available("dotnet-serilog"))
         val root = File(FixtureRepository.root, "dotnet-serilog")
 
         val modules = DotnetProjects.parse(root)
 
-        assertTrue(modules.size >= 4, "в serilog несколько проектов, разобрали ${modules.size}")
-        assertTrue(modules.any { it.dependencies.isNotEmpty() }, "тестовые проекты ссылаются на Serilog")
-        assertTrue(modules.any { it.hasTests }, "в serilog есть тестовые проекты")
+        assertTrue(modules.size >= 4, "Serilog has several projects, parsed ${modules.size}")
+        assertTrue(modules.any { it.dependencies.isNotEmpty() }, "test projects reference Serilog")
+        assertTrue(modules.any { it.hasTests }, "Serilog has test projects")
 
         val keys = modules.map { it.key }.toSet()
         val dangling = modules.flatMap { it.dependencies }.filterNot { it in keys }
-        assertTrue(dangling.isEmpty(), "ребро не может указывать в пустоту: $dangling")
+        assertTrue(dangling.isEmpty(), "an edge cannot point nowhere: $dangling")
     }
 }

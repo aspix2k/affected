@@ -3,67 +3,75 @@
 [![CI](https://github.com/aspix2k/affected/actions/workflows/ci.yml/badge.svg)](https://github.com/aspix2k/affected/actions/workflows/ci.yml)
 [![Marketplace](https://img.shields.io/jetbrains/plugin/v/33425?label=marketplace)](https://plugins.jetbrains.com/plugin/33425-affected)
 [![Downloads](https://img.shields.io/jetbrains/plugin/d/33425?label=downloads)](https://plugins.jetbrains.com/plugin/33425-affected)
-[![Rating](https://img.shields.io/jetbrains/plugin/r/rating/33425?label=rating)](https://plugins.jetbrains.com/plugin/33425-affected/reviews)
 [![Since](https://img.shields.io/badge/IDE-2025.3%2B-blue)](https://plugins.jetbrains.com/plugin/33425-affected/versions)
 [![License](https://img.shields.io/github/license/aspix2k/affected)](LICENSE)
 
-Test what you changed. Compile what depends on it.
+**Run only what your change can affect.**
 
-A full test run on a large project takes tens of minutes, so nobody runs it
-before pushing. Running just your own module is fast but misses the failure that
-matters: you changed a signature, your module is green, and the build breaks in
-a module you have never opened.
+Affected maps changed files to build modules, tests the modules you touched, and
+can verify their direct consumers when a public API changes. Unrelated modules are
+skipped; independent build roots run concurrently.
 
-Affected runs the tests of the modules you touched, and checks that the modules
-consuming your changed API still compile. Usually seconds, not minutes.
+## Why use it
 
-## Using it
+- **Focused feedback.** Catch a broken consumer without waiting for the entire monorepo.
+- **Native workflow.** Gradle and Maven use their IDE integrations; other tools use the standard Run window.
+- **One plan everywhere.** Use the same analysis from the toolbar, commit dialog, push check, or MCP.
+- **No project setup.** Project models and standard manifests define the module graph.
+- **Lightweight and local.** The plugin ZIP is under 400 KB. There is no server, account, or telemetry.
 
-The button next to Run carries the number of affected modules, and is disabled
-when there are none. The menu lists those modules, navigates to any of them, and
-offers their detekt, lint and coverage tasks.
+## Workflow
 
-Runs go through the IDE's own integration, so the test tree, the jump from a
-failure to its source, and the Stop button work as usual.
+The toolbar matrix fills as more modules are affected. It is muted and animated
+while the IDE initializes, animates during verification, and returns to the current
+affected state when the run ends.
 
-The commit dialog gets a checkbox that runs the same verification and cancels the
-commit if it fails, and a push can be aborted the same way. Both are off until you
-turn them on.
+Open the menu to inspect or navigate to affected modules, then run with
+`Ctrl+Alt+Shift+T`. Settings contains four switches in three groups:
 
-Gradle, Maven, Cargo, Go, npm, .NET, Python, composer, Ruby and CMake all work,
-with no configuration —
-Kotlin or Groovy build scripts, any dependency DSL, composite builds, npm, yarn
-or pnpm.
+- **Check consumers:** off by default.
+- **Run before commit:** off by default.
+- **Run before push:** off by default.
+- **Animate while running:** on by default.
 
-A consumer is only checked where the language gives something to check:
-TypeScript is type checked, plain JavaScript is left alone, and Python consumers
-are checked when the project configures mypy.
+## Supported stacks
 
-## AI agents
+| Stack | Changed modules | Direct consumers |
+| --- | --- | --- |
+| Gradle | `test` / `testDebugUnitTest` | test compilation |
+| Maven | `test` | `test-compile` |
+| Rust / Cargo | `cargo test -p` | `cargo check --tests -p` |
+| Go | `go test` | `go build` |
+| npm, Yarn, pnpm | workspace test | TypeScript `tsc --noEmit` |
+| .NET | `dotnet test` | `dotnet build` |
+| Python | `pytest` | `mypy` when configured |
+| PHP / Composer | PHPUnit | static analysis when configured |
+| Ruby / Bundler | RSpec | — |
+| CMake | CTest | dependent target build |
 
-With the [MCP Server](https://plugins.jetbrains.com/plugin/26071) plugin
-installed, an agent can list the affected modules, start the run, follow it and
-stop it.
+Gradle composite builds, Kotlin and Groovy build scripts, flat or renamed modules,
+and Android source sets are supported.
 
 ## Requirements
 
-A JetBrains IDE 2025.3+, and a project built by Gradle, Maven, Cargo, Go, npm,
-yarn, pnpm, .NET, Python, composer, bundler or CMake.
+- A JetBrains IDE 2025.3 or newer.
+- One of the supported build tools available to the IDE or on `PATH`.
 
-Local edits are read from the IDE, so any VCS it supports will do. Comparing
-against a base branch needs git; without it the plugin works from your
-uncommitted changes.
+Local edits come from the IDE, so any VCS it supports works. Comparing with a base
+branch requires Git; without Git, Affected still handles uncommitted changes.
+
+The optional [MCP Server](https://plugins.jetbrains.com/plugin/26071) integration
+lets an AI agent inspect the plan and start or follow verification.
+
+## Interface languages
+
+English, Czech, German, Spanish, French, Indonesian, Italian, Japanese, Korean,
+Polish, Brazilian Portuguese, Russian, Simplified Chinese, and Turkish.
 
 ## Privacy
 
-The plugin collects nothing, sends nothing, and has no server. If it throws, the
-IDE offers to open a prefilled issue on GitHub — you read it and decide whether
-to submit. Details in [PRIVACY.md](PRIVACY.md).
+Affected reads project metadata and changes locally. It sends no analytics or
+source code. Error reporting only opens a prefilled GitHub issue for you to review.
+See [PRIVACY.md](PRIVACY.md).
 
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## License
-
-MIT
+[Contributing](CONTRIBUTING.md) · [MIT License](LICENSE)

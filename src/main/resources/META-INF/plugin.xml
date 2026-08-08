@@ -4,41 +4,38 @@
     <vendor url="https://github.com/aspix2k/affected">aspix</vendor>
 
     <description><![CDATA[
-        <b>Test what you changed. Compile what depends on it.</b>
+        <b>Run only what your change can affect.</b>
         <br/><br/>
-        A full test run on a large project takes tens of minutes, so nobody runs it
-        before pushing. Running just your own module is fast but misses the failure
-        that matters: you changed a signature, your module is green, and the build
-        breaks in a module you have never opened.
+        Affected maps changed files to build modules, tests the modules you touched,
+        and can verify their direct consumers when a public API changes. Unrelated
+        modules are skipped; independent build roots run concurrently.
         <br/><br/>
-        Affected runs the tests of the modules you touched, and checks that the
-        modules consuming your changed API still compile. Usually seconds, not
-        minutes.
+        <ul>
+            <li><b>Focused:</b> catch a broken consumer without running the entire monorepo.</li>
+            <li><b>Native:</b> Gradle and Maven use their IDE integrations; other tools use the Run window.</li>
+            <li><b>Consistent:</b> use one plan from the toolbar, commit dialog, push check, or MCP.</li>
+            <li><b>No project setup:</b> project models and standard manifests define the module graph.</li>
+            <li><b>Lightweight:</b> under 400 KB, with no server, account, or telemetry.</li>
+        </ul>
+        <b>Supported stacks</b>
         <br/><br/>
-        A checkbox in the commit dialog runs the same verification and cancels the
-        commit when it fails, and a check before push aborts the push. Both are off
-        until you turn them on.
+        Gradle, Maven, Cargo, Go, npm, Yarn, pnpm, .NET, Python, Composer, Bundler,
+        and CMake. Gradle composite builds, Kotlin and Groovy build scripts, flat or
+        renamed modules, and Android source sets are supported.
         <br/><br/>
-        The button next to Run carries the number of affected modules, and is
-        disabled when there are none. The menu lists those modules, navigates to any
-        of them, and offers their detekt, lint and coverage tasks. Runs go through
-        the IDE's Gradle integration, so the test tree, the jump from a failure to
-        its source, and the Stop button work as usual.
+        The toolbar matrix shows the current affected scope and animates during
+        initialization and verification. Consumer checks are off by default;
+        animation is on. Settings also exposes separate commit and push guards;
+        both are off by default.
         <br/><br/>
-        Works with Gradle, Maven, Cargo, Go, npm, .NET, Python, composer, Ruby and
-        CMake, with no configuration — Kotlin or Groovy build scripts, any dependency DSL,
-        composite builds, npm, yarn or pnpm.
+        <b>Interface languages</b>
         <br/><br/>
-        A consumer is only checked where the language gives something to check.
-        TypeScript is type checked, plain JavaScript is left alone, and Python
-        consumers are checked only when the project configures mypy.
+        English, Czech, German, Spanish, French, Indonesian, Italian, Japanese,
+        Korean, Polish, Brazilian Portuguese, Russian, Simplified Chinese, and Turkish.
         <br/><br/>
-        The interface is available in fourteen languages.
-        <br/><br/>
-        The plugin collects nothing. If it throws, the IDE offers to open a
-        prefilled issue on GitHub — you read it and decide whether to submit.
+        Affected sends no analytics or source code. Error reporting only opens a
+        prefilled GitHub issue for you to review.
     ]]></description>
-
 
     <depends>com.intellij.modules.platform</depends>
     <depends optional="true" config-file="affected-gradle.xml">com.intellij.gradle</depends>
@@ -105,8 +102,19 @@
                    class="com.aspix2k.affected.AffectedModulesGroup"
                    popup="true"/>
             <separator/>
-            <action id="com.aspix2k.affected.CheckConsumers"
-                    class="com.aspix2k.affected.CheckConsumersToggle"/>
+            <group id="com.aspix2k.affected.Settings"
+                   popup="true">
+                <action id="com.aspix2k.affected.CheckConsumers"
+                        class="com.aspix2k.affected.CheckConsumersToggle"/>
+                <separator/>
+                <action id="com.aspix2k.affected.RunBeforeCommit"
+                        class="com.aspix2k.affected.RunBeforeCommitToggle"/>
+                <action id="com.aspix2k.affected.RunBeforePush"
+                        class="com.aspix2k.affected.RunBeforePushToggle"/>
+                <separator/>
+                <action id="com.aspix2k.affected.AnimateWhileRunning"
+                        class="com.aspix2k.affected.AnimateWhileRunningToggle"/>
+            </group>
         </group>
     </actions>
 </idea-plugin>

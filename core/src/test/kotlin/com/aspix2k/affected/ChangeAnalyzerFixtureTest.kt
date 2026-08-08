@@ -6,10 +6,6 @@ import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Runs the analyser against real projects instead of fixtures written for it.
- * Skips itself when `scripts/fixtures.sh` has not been run, so CI stays offline.
- */
 class ChangeAnalyzerFixtureTest {
 
     private val allExtensions =
@@ -24,17 +20,17 @@ class ChangeAnalyzerFixtureTest {
     }
 
     @Test
-    fun `нетронутый клон реального проекта не даёт изменений`() {
+    fun `an untouched clone of a real project has no changes`() {
         assumeTrue(FixtureRepository.available("gradle-okhttp"))
         val repository = FixtureRepository.checkout("gradle-okhttp")
 
         val changed = analyzer(repository).collectPaths()
 
-        assertTrue(changed.isEmpty(), "чистое дерево не может давать изменения, получили ${changed.size}")
+        assertTrue(changed.isEmpty(), "a clean tree cannot have changes, got ${changed.size}")
     }
 
     @Test
-    fun `правка исходника в реальном проекте находится`() {
+    fun `a source edit in a real project is found`() {
         assumeTrue(FixtureRepository.available("gradle-okhttp"))
         val repository = onBranch(FixtureRepository.checkout("gradle-okhttp"))
         val source = FixtureRepository.sourcesIn(repository, "kt").first()
@@ -43,11 +39,11 @@ class ChangeAnalyzerFixtureTest {
 
         val changed = analyzer(repository).collectPaths()
 
-        assertTrue(source in changed, "изменённый файл ${source.name} обязан попасть в список")
+        assertTrue(source in changed, "changed file ${source.name} must be listed")
     }
 
     @Test
-    fun `новый непроиндексированный файл находится`() {
+    fun `a new untracked file is found`() {
         assumeTrue(FixtureRepository.available("cargo-ripgrep"))
         val repository = onBranch(FixtureRepository.checkout("cargo-ripgrep"))
         val created = File(repository, "crates/core/flag/brand_new.rs").apply {
@@ -57,11 +53,11 @@ class ChangeAnalyzerFixtureTest {
 
         val changed = analyzer(repository, setOf("rs", "toml")).collectPaths()
 
-        assertTrue(created in changed, "untracked-файл обязан считаться изменением")
+        assertTrue(created in changed, "an untracked file must count as a change")
     }
 
     @Test
-    fun `изменение внутри тела функции не считается изменением API`() {
+    fun `a change inside a function body is not an API change`() {
         assumeTrue(FixtureRepository.available("gradle-detekt"))
         val repository = onBranch(FixtureRepository.checkout("gradle-detekt"))
 
@@ -75,12 +71,12 @@ class ChangeAnalyzerFixtureTest {
 
         val changes = analyzer(repository).collect()
 
-        assertTrue(source in changes.files, "файл должен считаться изменённым")
-        assertFalse(source in changes.apiTouched, "комментарий в теле не меняет публичный API")
+        assertTrue(source in changes.files, "the file must count as changed")
+        assertFalse(source in changes.apiTouched, "a comment in the body does not change the public API")
     }
 
     @Test
-    fun `добавление публичной функции считается изменением API`() {
+    fun `adding a public function is an API change`() {
         assumeTrue(FixtureRepository.available("gradle-detekt"))
         val repository = onBranch(FixtureRepository.checkout("gradle-detekt"))
         val source = FixtureRepository.sourcesIn(repository, "kt", limit = 200)
@@ -90,11 +86,11 @@ class ChangeAnalyzerFixtureTest {
 
         val changes = analyzer(repository).collect()
 
-        assertTrue(source in changes.apiTouched, "новая публичная функция обязана считаться изменением API")
+        assertTrue(source in changes.apiTouched, "a new public function must count as an API change")
     }
 
     @Test
-    fun `анализ проходит по каждому доступному проекту без исключений`() {
+    fun `analysis completes for every available project`() {
         val names = FixtureRepository.names()
         assumeTrue(names.isNotEmpty())
 
@@ -105,6 +101,6 @@ class ChangeAnalyzerFixtureTest {
             }.exceptionOrNull()?.let { "$name: ${it.message}" }
         }
 
-        assertTrue(failures.isEmpty(), "анализатор упал на: $failures")
+        assertTrue(failures.isEmpty(), "analyzer failed on: $failures")
     }
 }

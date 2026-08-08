@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-08-08
+
+### Changed
+
+- Replace the numeric badge with a three-by-three matrix that stays legible at toolbar size.
+- Animate the matrix during initialization and verification; restore the affected scope afterward.
+- Run independent build roots concurrently without blocking IDE threads.
+- Group consumer checks, commit and push guards, and animation in Settings. The checks and guards are off by default; animation is on.
+
+### Fixed
+
+- Bound build-system and manifest discovery so large mixed monorepos stay responsive.
+- Detect root `.csproj`, `.fsproj`, and `.vbproj` files without a solution file.
+- Route Gradle tasks to the owning linked build, including flat modules, renamed modules, composite builds, and source sets.
+- Detect Android modules from imported tasks when no manifest is checked in.
+- Capture process output with enforced timeouts and no pipe deadlocks.
+- Serialize debounced refreshes, skip API diffs during scope-only recounts, and keep build-system caches project-specific.
+- Remove Gradle-specific wording from shared UI and MCP messages.
+
 ## [1.6.0] - 2026-08-08
 
 ### Changed
@@ -99,7 +118,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/aspix2k/affected/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/aspix2k/affected/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/aspix2k/affected/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/aspix2k/affected/compare/v1.3.0...v1.4.0

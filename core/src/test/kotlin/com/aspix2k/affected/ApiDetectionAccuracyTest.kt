@@ -6,12 +6,6 @@ import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * The consumer check rests entirely on this: a missed API change means a
- * consumer is never compiled and the breakage is found by CI instead. False
- * alarms only cost time, so every case here is written from the consumer's
- * point of view.
- */
 class ApiDetectionAccuracyTest {
 
     private fun repository(vararg files: Pair<String, String>): File {
@@ -43,7 +37,7 @@ class ApiDetectionAccuracyTest {
     }
 
     @Test
-    fun `изменение сигнатуры java-метода считается изменением API`() {
+    fun `changing a Java method signature is an API change`() {
         val directory = repository(
             "Service.java" to """
                 public class Service {
@@ -56,11 +50,11 @@ class ApiDetectionAccuracyTest {
 
         edit(directory, "Service.java") { it.replace("public String find(int id)", "public String find(long id)") }
 
-        assertTrue(apiTouched(directory, "Service.java"), "смена типа параметра ломает каждого потребителя")
+        assertTrue(apiTouched(directory, "Service.java"), "changing a parameter type breaks every consumer")
     }
 
     @Test
-    fun `новый публичный java-метод считается изменением API`() {
+    fun `a new public Java method is an API change`() {
         val directory = repository(
             "Service.java" to """
                 public class Service {
@@ -77,7 +71,7 @@ class ApiDetectionAccuracyTest {
     }
 
     @Test
-    fun `изменение тела java-метода не считается изменением API`() {
+    fun `changing a Java method body is not an API change`() {
         val directory = repository(
             "Service.java" to """
                 public class Service {
@@ -90,11 +84,11 @@ class ApiDetectionAccuracyTest {
 
         edit(directory, "Service.java") { it.replace("""return "x";""", """return "y";""") }
 
-        assertFalse(apiTouched(directory, "Service.java"), "тело метода потребителя не касается")
+        assertFalse(apiTouched(directory, "Service.java"), "a method body does not affect consumers")
     }
 
     @Test
-    fun `изменение параметра в многострочной сигнатуре считается изменением API`() {
+    fun `changing a parameter in a multiline signature is an API change`() {
         val directory = repository(
             "Repository.kt" to """
                 class Repository {
@@ -110,12 +104,12 @@ class ApiDetectionAccuracyTest {
 
         assertTrue(
             apiTouched(directory, "Repository.kt"),
-            "параметр на отдельной строке — такая же смена сигнатуры",
+            "a parameter on its own line is still a signature change",
         )
     }
 
     @Test
-    fun `удаление публичной функции считается изменением API`() {
+    fun `removing a public function is an API change`() {
         val directory = repository(
             "Api.kt" to """
                 object Api {
@@ -127,11 +121,11 @@ class ApiDetectionAccuracyTest {
 
         edit(directory, "Api.kt") { it.replace("    fun second() {}\n", "") }
 
-        assertTrue(apiTouched(directory, "Api.kt"), "удалённая функция ломает потребителя сильнее прочего")
+        assertTrue(apiTouched(directory, "Api.kt"), "a removed function breaks consumers")
     }
 
     @Test
-    fun `сужение видимости считается изменением API`() {
+    fun `reducing visibility is an API change`() {
         val directory = repository(
             "Api.kt" to """
                 object Api {
@@ -146,7 +140,7 @@ class ApiDetectionAccuracyTest {
     }
 
     @Test
-    fun `локальная переменная внутри функции не считается изменением API`() {
+    fun `a local variable inside a function is not an API change`() {
         val directory = repository(
             "Worker.kt" to """
                 class Worker {
@@ -160,11 +154,11 @@ class ApiDetectionAccuracyTest {
 
         edit(directory, "Worker.kt") { it.replace("val step = 1", "val step = 2") }
 
-        assertFalse(apiTouched(directory, "Worker.kt"), "локальная переменная не видна снаружи")
+        assertFalse(apiTouched(directory, "Worker.kt"), "a local variable is not externally visible")
     }
 
     @Test
-    fun `приватный член не считается изменением API`() {
+    fun `a private member is not an API change`() {
         val directory = repository(
             "Worker.kt" to """
                 class Worker {
@@ -179,7 +173,7 @@ class ApiDetectionAccuracyTest {
     }
 
     @Test
-    fun `изменения в тестовых исходниках не считаются изменением API`() {
+    fun `changes in test sources are not API changes`() {
         val directory = repository(
             "src/test/kotlin/WorkerTest.kt" to """
                 class WorkerTest {
@@ -194,12 +188,12 @@ class ApiDetectionAccuracyTest {
 
         assertFalse(
             apiTouched(directory, "src/test/kotlin/WorkerTest.kt"),
-            "у теста нет потребителей",
+            "tests have no consumers",
         )
     }
 
     @Test
-    fun `комментарий над публичной функцией не считается изменением API`() {
+    fun `a comment above a public function is not an API change`() {
         val directory = repository(
             "Api.kt" to """
                 object Api {
@@ -210,6 +204,6 @@ class ApiDetectionAccuracyTest {
 
         edit(directory, "Api.kt") { it.replace("    fun documented()", "    // explains why\n    fun documented()") }
 
-        assertFalse(apiTouched(directory, "Api.kt"), "комментарий ничего не меняет для потребителя")
+        assertFalse(apiTouched(directory, "Api.kt"), "a comment changes nothing for consumers")
     }
 }

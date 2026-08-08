@@ -4,9 +4,9 @@ import com.intellij.openapi.project.Project
 import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 
-class PythonBuildSystem : BuildSystem {
+class PythonBuildSystem : SuspendingBuildSystem {
 
-    private data class Snapshot(val stamp: Long, val modules: List<BuildModule>)
+    private data class Snapshot(val root: String, val stamp: Long, val modules: List<BuildModule>)
 
     private val cache = AtomicReference<Snapshot?>(null)
 
@@ -20,10 +20,11 @@ class PythonBuildSystem : BuildSystem {
         val root = rootOf(project) ?: return emptyList()
         val stamp = File(root, "pyproject.toml").lastModified()
 
-        cache.get()?.takeIf { it.stamp == stamp }?.let { return it.modules }
+        val rootPath = root.invariantSeparatorsPath
+        cache.get()?.takeIf { it.root == rootPath && it.stamp == stamp }?.let { return it.modules }
 
         val modules = PythonProjects.parse(root)
-        cache.set(Snapshot(stamp, modules))
+        cache.set(Snapshot(rootPath, stamp, modules))
         return modules
     }
 
@@ -33,7 +34,7 @@ class PythonBuildSystem : BuildSystem {
         }
     }
 
-    override fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean =
+    override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         commands(project, root, tasks).all { (title, command) ->
             CommandRunner.runAndWait(project, root, command, title)
         }
@@ -54,9 +55,6 @@ class PythonBuildSystem : BuildSystem {
         }
     }
 
-    private fun rootOf(project: Project): File? {
-        val base = project.basePath?.let(::File) ?: return null
-        if (!File(base, "pyproject.toml").isFile) return null
-        return base.takeIf { PythonProjects.parse(it).isNotEmpty() }
-    }
+    private fun rootOf(project: Project): File? =
+        project.basePath?.let(::File)?.takeIf { File(it, "pyproject.toml").isFile }
 }

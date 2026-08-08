@@ -19,20 +19,20 @@ class BuildModuleTest {
         )
 
     @Test
-    fun `ключ различает одинаковые имена в разных сборках`() {
+    fun `the key distinguishes identical names in different builds`() {
         val one = module(":app", root = "/repo")
         val other = module(":app", root = "/repo/included")
 
-        assertNotEquals(one.key, other.key, "модули из разных сборок обязаны различаться")
+        assertNotEquals(one.key, other.key, "modules from different builds must differ")
     }
 
     @Test
-    fun `ключ совпадает у одного и того же модуля`() {
+    fun `the key matches for the same module`() {
         assertEquals(module(":core").key, module(":core").key)
     }
 
     @Test
-    fun `зависимость записывается ключом, а не именем`() {
+    fun `a dependency uses the key rather than the name`() {
         val core = module(":core")
         val app = module(":app", dependencies = setOf(core.key))
 

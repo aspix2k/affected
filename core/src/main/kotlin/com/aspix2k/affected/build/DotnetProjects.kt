@@ -2,13 +2,6 @@ package com.aspix2k.affected.build
 
 import java.io.File
 
-/**
- * .NET projects and the references between them.
- *
- * A project file lists its dependencies as `ProjectReference` paths, written
- * with Windows separators regardless of the host, and relative to the project
- * that declares them.
- */
 object DotnetProjects {
 
     const val TEST = "test"
@@ -52,16 +45,14 @@ object DotnetProjects {
         }
     }
 
-    // A reference reads as ..\..\src\Lib\Lib.csproj and has to become a path we can look up.
-    // normalize resolves the parent segments without touching the disk, so it does not
-    // follow symlinks and the result still matches the paths the walk produced.
+    internal fun isProjectFile(file: File): Boolean =
+        file.isFile && file.extension.lowercase() in PROJECT_EXTENSIONS
+
     private fun resolve(from: File, reference: String): String? {
         val normalised = reference.replace('\\', '/')
         return runCatching { File(from, normalised).normalize().invariantSeparatorsPath }.getOrNull()
     }
 
-    private fun findProjects(root: File): List<File> = root.walkTopDown()
-        .onEnter { it.name != ".git" && it.name != "bin" && it.name != "obj" }
-        .filter { it.isFile && it.extension.lowercase() in PROJECT_EXTENSIONS }
-        .toList()
+    private fun findProjects(root: File): List<File> =
+        PROJECT_EXTENSIONS.flatMap { ManifestSearch.findByExtension(root, it) }
 }

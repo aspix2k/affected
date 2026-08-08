@@ -4,9 +4,9 @@ import com.intellij.openapi.project.Project
 import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 
-class CMakeBuildSystem : BuildSystem {
+class CMakeBuildSystem : SuspendingBuildSystem {
 
-    private data class Snapshot(val stamp: Long, val modules: List<BuildModule>)
+    private data class Snapshot(val root: String, val stamp: Long, val modules: List<BuildModule>)
 
     private val cache = AtomicReference<Snapshot?>(null)
 
@@ -20,10 +20,11 @@ class CMakeBuildSystem : BuildSystem {
         val root = rootOf(project) ?: return emptyList()
         val stamp = File(root, "CMakeLists.txt").lastModified()
 
-        cache.get()?.takeIf { it.stamp == stamp }?.let { return it.modules }
+        val rootPath = root.invariantSeparatorsPath
+        cache.get()?.takeIf { it.root == rootPath && it.stamp == stamp }?.let { return it.modules }
 
         val modules = CMakeTargets.parse(root)
-        cache.set(Snapshot(stamp, modules))
+        cache.set(Snapshot(rootPath, stamp, modules))
         return modules
     }
 
@@ -31,7 +32,7 @@ class CMakeBuildSystem : BuildSystem {
         commands(tasks).forEach { (title, command) -> CommandRunner.run(project, root, command, title) }
     }
 
-    override fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean =
+    override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         commands(tasks).all { (title, command) -> CommandRunner.runAndWait(project, root, command, title) }
 
     private fun commands(tasks: List<String>): List<Pair<String, List<String>>> =
@@ -45,15 +46,10 @@ class CMakeBuildSystem : BuildSystem {
             }
         }
 
-    private fun rootOf(project: Project): File? {
-        val base = project.basePath?.let(::File) ?: return null
-        if (!File(base, "CMakeLists.txt").isFile) return null
-        return base.takeIf { CMakeTargets.parse(it).isNotEmpty() }
-    }
+    private fun rootOf(project: Project): File? =
+        project.basePath?.let(::File)?.takeIf { File(it, "CMakeLists.txt").isFile }
 
     private companion object {
-        // What CLion creates by default; a project configured elsewhere still
-        // builds, cmake just resolves the directory itself.
         const val BUILD_DIRECTORY = "cmake-build-debug"
     }
 }

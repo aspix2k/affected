@@ -33,7 +33,7 @@ class ComposerPackagesTest {
     }
 
     @Test
-    fun `пакеты монорепо находятся`() {
+    fun `monorepo packages are found`() {
         val root = monorepo()
         packageAt(root, ".", "acme/root")
         packageAt(root, "packages/core", "acme/core")
@@ -45,7 +45,7 @@ class ComposerPackagesTest {
     }
 
     @Test
-    fun `зависимостями считаются только свои пакеты`() {
+    fun `only local packages are dependencies`() {
         val root = monorepo()
         packageAt(root, "packages/core", "acme/core")
         packageAt(
@@ -60,12 +60,12 @@ class ComposerPackagesTest {
         assertEquals(
             setOf("${root.invariantSeparatorsPath}|acme/core"),
             api.dependencies,
-            "symfony ставится с packagist и потребителем быть не может",
+            "symfony comes from Packagist and cannot be a consumer",
         )
     }
 
     @Test
-    fun `require-dev тоже создаёт ребро`() {
+    fun `require-dev also creates an edge`() {
         val root = monorepo()
         packageAt(root, "packages/core", "acme/core")
         packageAt(root, "packages/test-utils", "acme/test-utils", requireDev = mapOf("acme/core" to "*"))
@@ -76,7 +76,7 @@ class ComposerPackagesTest {
     }
 
     @Test
-    fun `потребителя проверяем только при статическом анализаторе`() {
+    fun `a consumer is checked only with a static analyzer`() {
         val root = monorepo()
         packageAt(root, "packages/analysed", "acme/analysed", phpstan = true)
         packageAt(root, "packages/plain", "acme/plain")
@@ -86,12 +86,12 @@ class ComposerPackagesTest {
         assertEquals("analyse", modules.single { it.id == "acme/analysed" }.compileTask)
         assertNull(
             modules.single { it.id == "acme/plain" }.compileTask,
-            "в php компилировать нечего, а без phpstan и проверять нечем",
+            "PHP has nothing to compile and no check without phpstan",
         )
     }
 
     @Test
-    fun `psalm в зависимостях тоже включает проверку`() {
+    fun `a psalm dependency also enables checking`() {
         val root = monorepo()
         packageAt(root, "packages/a", "acme/a", requireDev = mapOf("vimeo/psalm" to "^5.0"))
         packageAt(root, "packages/b", "acme/b")
@@ -102,7 +102,7 @@ class ComposerPackagesTest {
     }
 
     @Test
-    fun `каталог tests делает пакет тестируемым`() {
+    fun `a tests directory makes a package testable`() {
         val root = monorepo()
         packageAt(root, "packages/with", "acme/with", tests = true)
         packageAt(root, "packages/without", "acme/without")
@@ -114,7 +114,7 @@ class ComposerPackagesTest {
     }
 
     @Test
-    fun `vendor не просматривается`() {
+    fun `vendor is not scanned`() {
         val root = monorepo()
         packageAt(root, "packages/core", "acme/core")
         packageAt(root, "packages/api", "acme/api")
@@ -124,7 +124,7 @@ class ComposerPackagesTest {
     }
 
     @Test
-    fun `одиночный пакет не считается монорепо`() {
+    fun `a single package is not a monorepo`() {
         val root = monorepo()
         packageAt(root, ".", "acme/single")
 

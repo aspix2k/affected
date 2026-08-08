@@ -2,13 +2,8 @@ package com.aspix2k.affected.build
 
 import com.intellij.openapi.project.Project
 import java.io.File
-import java.util.concurrent.atomic.AtomicReference
 
-class DotnetBuildSystem : BuildSystem {
-
-    private data class Snapshot(val stamp: Long, val modules: List<BuildModule>)
-
-    private val cache = AtomicReference<Snapshot?>(null)
+class DotnetBuildSystem : SuspendingBuildSystem {
 
     override val id: String = "DOTNET"
 
@@ -18,13 +13,7 @@ class DotnetBuildSystem : BuildSystem {
 
     override fun modules(project: Project): List<BuildModule> {
         val root = rootOf(project) ?: return emptyList()
-        val stamp = DotnetProjects.parse(root).size.toLong() + root.lastModified()
-
-        cache.get()?.takeIf { it.stamp == stamp }?.let { return it.modules }
-
-        val modules = DotnetProjects.parse(root)
-        cache.set(Snapshot(stamp, modules))
-        return modules
+        return DotnetProjects.parse(root)
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {
@@ -33,7 +22,7 @@ class DotnetBuildSystem : BuildSystem {
         }
     }
 
-    override fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean =
+    override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         commands(project, root, tasks).all { (title, command) ->
             CommandRunner.runAndWait(project, root, command, title)
         }
@@ -57,9 +46,13 @@ class DotnetBuildSystem : BuildSystem {
 
     private fun rootOf(project: Project): File? {
         val base = project.basePath?.let(::File) ?: return null
-        val hasSolution = base.listFiles()
-            ?.any { it.extension.lowercase() == "sln" || it.name == "global.json" } == true
-        if (!hasSolution && DotnetProjects.parse(base).isEmpty()) return null
-        return base
+        val children = base.listFiles() ?: return null
+        return base.takeIf { _ ->
+            children.any {
+                it.extension.lowercase() == "sln" ||
+                    it.name == "global.json" ||
+                    DotnetProjects.isProjectFile(it)
+            }
+        }
     }
 }

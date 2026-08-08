@@ -11,12 +11,19 @@ import com.intellij.openapi.components.Storage
 class AffectedSettings : PersistentStateComponent<AffectedSettings.State> {
 
     data class State(
+        @Volatile
         var baseBranch: String = "develop",
-        var checkConsumers: Boolean = true,
+        @Volatile
+        var checkConsumers: Boolean = false,
+        @Volatile
+        var animateWhileRunning: Boolean = true,
+        @Volatile
         var runBeforeCommit: Boolean = false,
+        @Volatile
         var runBeforePush: Boolean = false,
     )
 
+    @Volatile
     private var state = State()
 
     var baseBranch: String
@@ -26,6 +33,10 @@ class AffectedSettings : PersistentStateComponent<AffectedSettings.State> {
     var checkConsumers: Boolean
         get() = state.checkConsumers
         set(value) { state.checkConsumers = value }
+
+    var animateWhileRunning: Boolean
+        get() = state.animateWhileRunning
+        set(value) { state.animateWhileRunning = value }
 
     var runBeforeCommit: Boolean
         get() = state.runBeforeCommit
