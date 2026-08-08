@@ -49,7 +49,10 @@ class TaskPlannerTest {
     @Test
     fun `потребитель получает задачу компиляции`() {
         val plan = TaskPlanner.plan(listOf(jvm(":core")), listOf(android(":app")))
-        assertEquals(listOf(":core:test", ":app:compileDebugUnitTestKotlin"), plan.groups.single { it.root == "/repo" }.tasks)
+        assertEquals(
+            listOf(":core:test", ":app:compileDebugUnitTestKotlin"),
+            plan.groups.single { it.root == "/repo" }.tasks,
+        )
         assertEquals(1, plan.compiled)
     }
 
@@ -90,7 +93,10 @@ class TaskPlannerTest {
         val app = android(":app")
         val plan = TaskPlanner.plan(listOf(jvm(":core")), listOf(app, app, app))
         assertEquals(1, plan.compiled)
-        assertEquals(listOf(":core:test", ":app:compileDebugUnitTestKotlin"), plan.groups.single { it.root == "/repo" }.tasks)
+        assertEquals(
+            listOf(":core:test", ":app:compileDebugUnitTestKotlin"),
+            plan.groups.single { it.root == "/repo" }.tasks,
+        )
     }
 
     @Test

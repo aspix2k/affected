@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
  */
 class ChangeAnalyzerFixtureTest {
 
-    private val ALL_EXTENSIONS =
+    private val allExtensions =
         setOf("kt", "kts", "java", "xml", "json", "pro", "rs", "toml", "go", "ts", "js", "py", "cs")
 
     private fun analyzer(repository: File, extensions: Set<String> = ChangeAnalyzer.DEFAULT_EXTENSIONS) =
@@ -101,7 +101,7 @@ class ChangeAnalyzerFixtureTest {
         val failures = names.mapNotNull { name ->
             runCatching {
                 val repository = File(FixtureRepository.root, name)
-                ChangeAnalyzer(repository, "", ALL_EXTENSIONS).collectPaths()
+                ChangeAnalyzer(repository, "", allExtensions).collectPaths()
             }.exceptionOrNull()?.let { "$name: ${it.message}" }
         }
 

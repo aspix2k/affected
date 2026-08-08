@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Local edits come from the IDE rather than from running git, so a project under Mercurial, SVN or Perforce is analysed too, and a recount costs no processes. Comparing against the base branch still needs git; without it, every changed file is treated as able to affect consumers.
 - The MCP toolset moved into a separate, optionally loaded plugin module. Its classes now live in their own jar and cannot be loaded — or fail to load — in an IDE without the MCP Server plugin.
 - The project is split into a core module holding the analysis and the build systems, the plugin itself, and the MCP module.
 

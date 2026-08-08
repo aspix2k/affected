@@ -29,7 +29,11 @@ stop it.
 
 ## Requirements
 
-A JetBrains IDE 2025.2+, a Gradle, Maven, Cargo or Go project, and git.
+A JetBrains IDE 2025.1+, and a Gradle, Maven, Cargo or Go project.
+
+Local edits are read from the IDE, so any VCS it supports will do. Comparing
+against a base branch needs git; without it the plugin works from your
+uncommitted changes.
 
 ## Contributing
 
