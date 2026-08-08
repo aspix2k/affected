@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.6.0] - 2026-08-08
 
+### Changed
+
+- The minimum IDE is 2025.3. The MCP Server plugin does not exist for the 2025.1 platform and lacks the API this plugin uses on 2025.2, which made the verifier report the whole plugin as binary incompatible on both — a red mark on the plugin page for a toolset that could never have run there anyway.
+
 ### Added
 
 - An exception in the plugin offers to open a prefilled issue on GitHub. Nothing leaves the machine until you submit it, and the report contains only what it shows you.

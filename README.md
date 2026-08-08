@@ -4,7 +4,7 @@
 [![Marketplace](https://img.shields.io/jetbrains/plugin/v/33425?label=marketplace)](https://plugins.jetbrains.com/plugin/33425-affected)
 [![Downloads](https://img.shields.io/jetbrains/plugin/d/33425?label=downloads)](https://plugins.jetbrains.com/plugin/33425-affected)
 [![Rating](https://img.shields.io/jetbrains/plugin/r/rating/33425?label=rating)](https://plugins.jetbrains.com/plugin/33425-affected/reviews)
-[![Since](https://img.shields.io/badge/IDE-2025.1%2B-blue)](https://plugins.jetbrains.com/plugin/33425-affected/versions)
+[![Since](https://img.shields.io/badge/IDE-2025.3%2B-blue)](https://plugins.jetbrains.com/plugin/33425-affected/versions)
 [![License](https://img.shields.io/github/license/aspix2k/affected)](LICENSE)
 
 Test what you changed. Compile what depends on it.
@@ -46,7 +46,7 @@ stop it.
 
 ## Requirements
 
-A JetBrains IDE 2025.1+, and a project built by Gradle, Maven, Cargo, Go, npm,
+A JetBrains IDE 2025.3+, and a project built by Gradle, Maven, Cargo, Go, npm,
 yarn, pnpm, .NET or Python.
 
 Local edits are read from the IDE, so any VCS it supports will do. Comparing
