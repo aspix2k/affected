@@ -20,7 +20,11 @@ class AffectedGroup : DefaultActionGroup(), DumbAware {
 
     override fun update(e: AnActionEvent) {
         val state = e.project?.service<AffectedState>()
-        e.presentation.icon = AffectedIcons.withCount(state?.affectedModules ?: 0)
+
+        e.presentation.icon = when {
+            state?.isRunning == true -> AffectedIcons.Running
+            else -> AffectedIcons.withCount(state?.affectedModules ?: 0)
+        }
         e.presentation.disabledIcon = e.presentation.icon
         e.presentation.text = when {
             state == null || !state.ready -> AffectedBundle.message("group.title")
