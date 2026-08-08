@@ -85,10 +85,7 @@ object ComposerPackages {
         return requires.any { it.contains("phpstan") || it.contains("psalm") }
     }
 
-    private fun findManifests(root: File): List<File> = root.walkTopDown()
-        .onEnter { it.name != ".git" && it.name != "vendor" && it.name != "node_modules" }
-        .filter { it.isFile && it.name == "composer.json" }
-        .toList()
+    private fun findManifests(root: File): List<File> = ManifestSearch.find(root, "composer.json")
 
     private val TEST_DIRS = listOf("tests", "test", "Tests")
     private val CONFIGS = listOf("phpunit.xml", "phpunit.xml.dist", "phpunit.dist.xml")

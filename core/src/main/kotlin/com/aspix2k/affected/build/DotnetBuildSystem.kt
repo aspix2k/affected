@@ -57,9 +57,13 @@ class DotnetBuildSystem : BuildSystem {
 
     private fun rootOf(project: Project): File? {
         val base = project.basePath?.let(::File) ?: return null
-        val hasSolution = base.listFiles()
-            ?.any { it.extension.lowercase() == "sln" || it.name == "global.json" } == true
-        if (!hasSolution && DotnetProjects.parse(base).isEmpty()) return null
-        return base
+        val children = base.listFiles() ?: return null
+        return base.takeIf { _ ->
+            children.any {
+                it.extension.lowercase() == "sln" ||
+                    it.name == "global.json" ||
+                    DotnetProjects.isProjectFile(it)
+            }
+        }
     }
 }

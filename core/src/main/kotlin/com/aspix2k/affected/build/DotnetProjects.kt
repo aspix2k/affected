@@ -52,6 +52,9 @@ object DotnetProjects {
         }
     }
 
+    internal fun isProjectFile(file: File): Boolean =
+        file.isFile && file.extension.lowercase() in PROJECT_EXTENSIONS
+
     // A reference reads as ..\..\src\Lib\Lib.csproj and has to become a path we can look up.
     // normalize resolves the parent segments without touching the disk, so it does not
     // follow symlinks and the result still matches the paths the walk produced.
@@ -60,8 +63,6 @@ object DotnetProjects {
         return runCatching { File(from, normalised).normalize().invariantSeparatorsPath }.getOrNull()
     }
 
-    private fun findProjects(root: File): List<File> = root.walkTopDown()
-        .onEnter { it.name != ".git" && it.name != "bin" && it.name != "obj" }
-        .filter { it.isFile && it.extension.lowercase() in PROJECT_EXTENSIONS }
-        .toList()
+    private fun findProjects(root: File): List<File> =
+        PROJECT_EXTENSIONS.flatMap { ManifestSearch.findByExtension(root, it) }
 }

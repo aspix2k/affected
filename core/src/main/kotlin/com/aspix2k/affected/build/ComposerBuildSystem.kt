@@ -54,9 +54,6 @@ class ComposerBuildSystem : BuildSystem {
         }
     }
 
-    private fun rootOf(project: Project): File? {
-        val base = project.basePath?.let(::File) ?: return null
-        if (!File(base, "composer.json").isFile) return null
-        return base.takeIf { ComposerPackages.parse(it).isNotEmpty() }
-    }
+    private fun rootOf(project: Project): File? =
+        project.basePath?.let(::File)?.takeIf { File(it, "composer.json").isFile }
 }

@@ -54,9 +54,6 @@ class PythonBuildSystem : BuildSystem {
         }
     }
 
-    private fun rootOf(project: Project): File? {
-        val base = project.basePath?.let(::File) ?: return null
-        if (!File(base, "pyproject.toml").isFile) return null
-        return base.takeIf { PythonProjects.parse(it).isNotEmpty() }
-    }
+    private fun rootOf(project: Project): File? =
+        project.basePath?.let(::File)?.takeIf { File(it, "pyproject.toml").isFile }
 }

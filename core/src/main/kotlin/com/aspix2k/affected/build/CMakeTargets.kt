@@ -73,8 +73,5 @@ object CMakeTargets {
         }
     }
 
-    private fun findLists(root: File): List<File> = root.walkTopDown()
-        .onEnter { it.name != ".git" && it.name != "build" && it.name != "cmake-build-debug" }
-        .filter { it.isFile && it.name == "CMakeLists.txt" }
-        .toList()
+    private fun findLists(root: File): List<File> = ManifestSearch.find(root, "CMakeLists.txt")
 }

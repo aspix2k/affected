@@ -8,10 +8,6 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
-/**
- * The newer parsers against monorepos nobody wrote for this plugin. Synthetic
- * fixtures prove the shape a parser expects; these prove the shape it meets.
- */
 class RealMonorepoTest {
 
     private fun fixture(name: String): File? =
@@ -51,8 +47,8 @@ class RealMonorepoTest {
         val modules = ComposerPackages.parse(root!!)
 
         assertTrue(
-            modules.any { it.compileTask != null } || modules.all { it.compileTask == null },
-            "решение о проверке принимается по каждому пакету и не падает",
+            modules.any { it.compileTask != null },
+            "хотя бы один компонент symfony должен запускать статический анализ",
         )
     }
 

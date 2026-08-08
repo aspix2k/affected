@@ -45,11 +45,8 @@ class CMakeBuildSystem : BuildSystem {
             }
         }
 
-    private fun rootOf(project: Project): File? {
-        val base = project.basePath?.let(::File) ?: return null
-        if (!File(base, "CMakeLists.txt").isFile) return null
-        return base.takeIf { CMakeTargets.parse(it).isNotEmpty() }
-    }
+    private fun rootOf(project: Project): File? =
+        project.basePath?.let(::File)?.takeIf { File(it, "CMakeLists.txt").isFile }
 
     private companion object {
         // What CLion creates by default; a project configured elsewhere still

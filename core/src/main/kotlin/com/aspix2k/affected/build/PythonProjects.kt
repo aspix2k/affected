@@ -112,10 +112,7 @@ object PythonProjects {
             .any { it.isFile && it.name.startsWith("test_") && it.extension == "py" }
     }
 
-    private fun findManifests(root: File): List<File> = root.walkTopDown()
-        .onEnter { it.name != ".git" && it.name != ".venv" && it.name != "node_modules" && it.name != "build" }
-        .filter { it.isFile && it.name == "pyproject.toml" }
-        .toList()
+    private fun findManifests(root: File): List<File> = ManifestSearch.find(root, "pyproject.toml")
 
     private val DEPENDENCY_KEYS = listOf("dependencies =", "dependencies=", "install_requires =")
     private val TEST_DIRS = listOf("tests", "test")

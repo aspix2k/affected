@@ -73,10 +73,6 @@ class NodeBuildSystem : BuildSystem {
         File(root, "pnpm-workspace.yaml").takeIf { it.isFile },
     )
 
-    private fun rootOf(project: Project): File? {
-        val base = project.basePath?.let(::File) ?: return null
-        val manifest = File(base, "package.json")
-        if (!manifest.isFile) return null
-        return base.takeIf { NodeWorkspaces.parse(it).isNotEmpty() }
-    }
+    private fun rootOf(project: Project): File? =
+        project.basePath?.let(::File)?.takeIf { File(it, "package.json").isFile }
 }

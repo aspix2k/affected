@@ -69,10 +69,7 @@ object RubyGems {
         )
     }
 
-    private fun findGemspecs(root: File): List<File> = root.walkTopDown()
-        .onEnter { it.name != ".git" && it.name != "vendor" && it.name != "node_modules" }
-        .filter { it.isFile && it.extension == "gemspec" }
-        .toList()
+    private fun findGemspecs(root: File): List<File> = ManifestSearch.findByExtension(root, "gemspec")
 
     private val TEST_DIRS = listOf("spec", "test")
 }
