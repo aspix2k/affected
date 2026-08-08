@@ -21,7 +21,7 @@
         the IDE's Gradle integration, so the test tree, the jump from a failure to
         its source, and the Stop button work as usual.
         <br/><br/>
-        Works with Gradle and Maven, Kotlin and Groovy build scripts, any
+        Works with Gradle, Maven and Cargo, Kotlin and Groovy build scripts, any
         dependency DSL, and composite builds, with no configuration.
     ]]></description>
 
@@ -36,6 +36,10 @@
     <extensionPoints>
         <extensionPoint name="buildSystem" interface="com.aspix2k.affected.build.BuildSystem" dynamic="true"/>
     </extensionPoints>
+
+    <extensions defaultExtensionNs="com.aspix2k.affected">
+        <buildSystem implementation="com.aspix2k.affected.build.CargoBuildSystem"/>
+    </extensions>
 
     <extensions defaultExtensionNs="com.intellij">
         <notificationGroup id="AffectedTests" displayType="BALLOON" bundle="messages.AffectedBundle"

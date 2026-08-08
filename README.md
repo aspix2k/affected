@@ -29,7 +29,7 @@ stop it.
 
 ## Requirements
 
-IntelliJ IDEA or Android Studio 2025.1+, a Gradle or Maven project, and git.
+A JetBrains IDE 2025.1+, a Gradle, Maven or Cargo project, and git.
 
 ## Contributing
 

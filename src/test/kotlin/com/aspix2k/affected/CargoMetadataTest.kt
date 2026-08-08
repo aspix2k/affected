@@ -1,0 +1,92 @@
+package com.aspix2k.affected
+
+import com.aspix2k.affected.build.CargoMetadata
+import java.io.File
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+class CargoMetadataTest {
+
+    private fun workspace(): File {
+        val root = File.createTempFile("cargo", "").let {
+            it.delete()
+            it.mkdirs()
+            it
+        }
+        File(root, "crates/core/src").mkdirs()
+        File(root, "crates/app/src").mkdirs()
+        File(root, "crates/core/src/lib.rs").writeText(
+            """
+            pub fn add(a: i32, b: i32) -> i32 { a + b }
+
+            #[cfg(test)]
+            mod tests {
+                #[test]
+                fn works() { assert_eq!(super::add(1, 2), 3); }
+            }
+            """.trimIndent()
+        )
+        File(root, "crates/app/src/main.rs").writeText("fn main() {}")
+        return root
+    }
+
+    private fun metadata(root: File): String = """
+        {
+          "packages": [
+            {
+              "name": "core-lib",
+              "manifest_path": "${root.path}/crates/core/Cargo.toml",
+              "dependencies": []
+            },
+            {
+              "name": "app",
+              "manifest_path": "${root.path}/crates/app/Cargo.toml",
+              "dependencies": [
+                { "name": "core-lib" },
+                { "name": "serde" }
+              ]
+            }
+          ]
+        }
+    """.trimIndent()
+
+    @Test
+    fun `пакеты воркспейса становятся модулями`() {
+        val root = workspace()
+
+        val modules = CargoMetadata.parse(metadata(root), root.path)
+
+        assertEquals(setOf("core-lib", "app"), modules.map { it.id }.toSet())
+    }
+
+    @Test
+    fun `внешние зависимости не попадают в граф`() {
+        val root = workspace()
+
+        val app = CargoMetadata.parse(metadata(root), root.path).single { it.id == "app" }
+
+        assertEquals(
+            setOf("${root.path}|core-lib"),
+            app.dependencies,
+            "serde живёт в реестре, а не в воркспейсе, и потребителем быть не может",
+        )
+    }
+
+    @Test
+    fun `пакет с юнит-тестами внутри исходников считается тестируемым`() {
+        val root = workspace()
+
+        val modules = CargoMetadata.parse(metadata(root), root.path)
+
+        assertTrue(modules.single { it.id == "core-lib" }.hasTests)
+        assertFalse(modules.single { it.id == "app" }.hasTests)
+    }
+
+    @Test
+    fun `битый вывод не роняет разбор`() {
+        assertEquals(emptyList(), CargoMetadata.parse("not json at all", "/repo"))
+        assertEquals(emptyList(), CargoMetadata.parse("", "/repo"))
+    }
+}
