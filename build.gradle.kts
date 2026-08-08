@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "com.aspix2k"
-version = "1.2.0"
+version = "1.3.0"
 
 repositories {
     mavenCentral()
@@ -34,9 +34,8 @@ dependencies {
         } else {
             intellijIdea(providers.gradleProperty("affected.idea.version").get())
         }
-        bundledPlugin("com.intellij.gradle")
-        bundledPlugin("org.jetbrains.idea.maven")
-        plugin("com.intellij.mcpServer", providers.gradleProperty("affected.mcp.version").get())
+        pluginComposedModule(implementation(project(":core")))
+        pluginModule(implementation(project(":mcp")))
     }
 
     testImplementation(kotlin("test"))

@@ -64,6 +64,21 @@ unit tests. Keep them that way: return data and let the action format it.
 
 ## Releasing
 
+A release is not only a tag. Everything below describes the same change to a
+different audience, and a user who never opens the repository sees only the last
+two:
+
+1. `version` in `build.gradle.kts`.
+2. A section for that version in `CHANGELOG.md` — CI fails without it, and the
+   text becomes both the GitHub release notes and What's New on the marketplace.
+3. `README.md` when the change affects what the plugin does or needs.
+4. The `<description>` in `plugin.xml` when the supported systems change — it is
+   the marketplace page and updates itself on publish.
+5. **Getting Started on the marketplace page** — the one thing no automation
+   touches. It is edited through the web form and goes stale silently.
+6. The compatibility matrix in the vault when a system, product or minimum IDE
+   version changes.
+
 Every version needs its own section in `CHANGELOG.md`. CI fails when the version
 in `build.gradle.kts` has no entries there, and the release fails when the tagged
 version has none — the same section becomes the GitHub release notes and the

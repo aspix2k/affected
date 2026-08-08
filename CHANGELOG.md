@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-08
+
+### Added
+
+- Go modules: `go test` for the packages you changed and `go build` for the packages importing them.
+
+### Changed
+
+- The MCP toolset moved into a separate, optionally loaded plugin module. Its classes now live in their own jar and cannot be loaded — or fail to load — in an IDE without the MCP Server plugin.
+- The project is split into a core module holding the analysis and the build systems, the plugin itself, and the MCP module.
+
 ## [1.2.0] - 2026-08-08
 
 ### Added
@@ -43,7 +54,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/aspix2k/affected/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/aspix2k/affected/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/aspix2k/affected/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/aspix2k/affected/compare/v1.0.0...v1.0.1

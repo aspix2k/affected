@@ -89,24 +89,6 @@ class CrashSafetyTest {
         assertEquals(listOf(":core:test"), plan.groups.single { it.root == "/repo" }.tasks)
     }
 
-    @Test
-    fun `отрицательный и нулевой счётчик дают базовую иконку`() {
-        assertEquals(AffectedIcons.Action, AffectedIcons.withCount(0))
-        assertEquals(AffectedIcons.Action, AffectedIcons.withCount(-5))
-    }
-
-    @Test
-    fun `большие значения счётчика схлопываются в один вариант`() {
-        val huge = AffectedIcons.withCount(Int.MAX_VALUE)
-        val slightly = AffectedIcons.withCount(100)
-        assertEquals(huge, slightly, "всё, что больше порога, использует одну иконку")
-    }
-
-    @Test
-    fun `счётчик кэшируется а не создаётся заново`() {
-        assertEquals(AffectedIcons.withCount(7), AffectedIcons.withCount(7))
-    }
-
     private fun run(dir: File, vararg args: String) {
         ProcessBuilder(*args).directory(dir).redirectErrorStream(true).start().waitFor()
     }

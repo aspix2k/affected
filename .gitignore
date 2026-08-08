@@ -1,8 +1,14 @@
-/.gradle/
+# Build output of the root project and of every module, without swallowing
+# the source package named "build".
 /build/
+/*/build/
+/.gradle/
+/*/.gradle/
 /.idea/
 /.kotlin/
+/*/.kotlin/
 /.intellijPlatform/
+/*/.intellijPlatform/
 *.iml
 /local.properties
 /fixtures/
