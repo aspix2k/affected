@@ -55,9 +55,9 @@ uncommitted changes.
 
 ## Privacy
 
-The plugin collects and sends nothing. If it throws an exception, the IDE offers
-to open a prefilled issue on GitHub — the report is visible before you submit it,
-and it contains only what you can see in it.
+The plugin collects nothing, sends nothing, and has no server. If it throws, the
+IDE offers to open a prefilled issue on GitHub — you read it and decide whether
+to submit. Details in [PRIVACY.md](PRIVACY.md).
 
 ## Contributing
 
