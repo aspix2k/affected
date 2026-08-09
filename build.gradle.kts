@@ -1,6 +1,8 @@
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
+import org.jetbrains.intellij.platform.gradle.tasks.BuildPluginTask
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel
 import java.util.Properties
+import java.util.zip.ZipFile
 
 plugins {
     kotlin("jvm") version "2.4.10"
@@ -96,6 +98,26 @@ dependencies {
 tasks.test {
     useJUnit()
     testLogging { events("passed", "failed", "skipped") }
+}
+
+val pluginLicense = layout.projectDirectory.file("LICENSE")
+val pluginDirectory = project.name
+
+tasks.named<BuildPluginTask>("buildPlugin") {
+    from(pluginLicense)
+
+    doLast {
+        val distribution = destinationDirectory.file(archiveFileName).get().asFile
+        ZipFile(distribution).use { archive ->
+            val path = "$pluginDirectory/LICENSE"
+            val packagedLicenses = archive.entries().asSequence().filter { it.name == path }.toList()
+            check(packagedLicenses.size == 1) { "Plugin distribution must contain exactly one $path" }
+            val packagedLicense = archive.getInputStream(packagedLicenses.single()).use { it.readBytes() }
+            check(packagedLicense.contentEquals(pluginLicense.asFile.readBytes())) {
+                "Packaged LICENSE must match the root LICENSE"
+            }
+        }
+    }
 }
 
 pitest {

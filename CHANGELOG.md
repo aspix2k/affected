@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Include the MIT license in every plugin distribution and verify that the packaged copy matches the repository license.
+
 ## [1.7.1] - 2026-08-09
 
 ### Fixed
