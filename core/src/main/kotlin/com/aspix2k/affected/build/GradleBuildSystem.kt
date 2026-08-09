@@ -16,6 +16,7 @@ import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ModuleRootManager
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.jetbrains.plugins.gradle.service.project.GradleModuleDataIndex
 import org.jetbrains.plugins.gradle.settings.GradleSettings
 import org.jetbrains.plugins.gradle.util.GradleConstants
 import java.io.File
@@ -42,13 +43,22 @@ class GradleBuildSystem : SuspendingBuildSystem {
             val first = descriptions.first()
             val roots = descriptions.flatMap(Described::roots).distinct()
             val dependencies = descriptions.flatMapTo(HashSet(), Described::dependencies) - first.key
+            val ownerRoot = buildRootOf(File(first.projectPath), project)
+            val (executionRoot, executionId) = gradleExecutionCoordinates(
+                ownerRoot,
+                first.path,
+                first.directoryToRunTask,
+                first.identityPath,
+            )
 
             build(
                 first.path,
                 first.projectPath,
-                buildRootOf(File(first.projectPath), project),
+                ownerRoot,
                 roots,
                 snapshot.tasks,
+                executionRoot,
+                executionId,
             ).copy(dependencies = dependencies)
         }
     }
@@ -116,6 +126,8 @@ class GradleBuildSystem : SuspendingBuildSystem {
         val path: String,
         val projectPath: String,
         val roots: List<String>,
+        val directoryToRunTask: String?,
+        val identityPath: String?,
         val dependencies: Set<String> = emptySet(),
     )
 
@@ -131,8 +143,16 @@ class GradleBuildSystem : SuspendingBuildSystem {
 
         val roots = ModuleRootManager.getInstance(module).contentRoots.map { it.path }
         if (roots.isEmpty()) return null
+        val gradleData = GradleModuleDataIndex.findGradleModuleData(module)
 
-        return Described("$projectPath|$path", path, projectPath, roots)
+        return Described(
+            key = "$projectPath|$path",
+            path = path,
+            projectPath = projectPath,
+            roots = roots,
+            directoryToRunTask = gradleData?.directoryToRunTask,
+            identityPath = gradleData?.gradleIdentityPathOrNull,
+        )
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {
@@ -159,6 +179,8 @@ class GradleBuildSystem : SuspendingBuildSystem {
         root: String,
         roots: List<String>,
         tasks: Map<String, Set<String>>,
+        executionRoot: String,
+        executionId: String,
     ): BuildModule {
         val source = roots.filterNot { it.contains("/build/") || it.contains("/.gradle/") }.minByOrNull { it.length }
         val availableTasks = tasks[projectPath] ?: source?.let(tasks::get).orEmpty()
@@ -172,6 +194,8 @@ class GradleBuildSystem : SuspendingBuildSystem {
             compileTask = if (android) "compileDebugUnitTestKotlin" else "compileTestKotlin",
             hasTests = roots.any(::holdsTests),
             extraTasks = availableTasks,
+            executionRoot = executionRoot,
+            executionId = executionId,
         )
     }
 
@@ -224,6 +248,16 @@ internal fun gradleProjectPath(externalId: String, buildName: String?, sourceSet
     if (parts.firstOrNull() == buildName) parts.removeFirst()
     if (sourceSet && parts.lastOrNull() in SOURCE_SET_NAMES) parts.removeLast()
     return parts.joinToString(":", prefix = if (parts.isEmpty()) "" else ":")
+}
+
+internal fun gradleExecutionCoordinates(
+    ownerRoot: String,
+    ownerId: String,
+    directoryToRunTask: String?,
+    identityPath: String?,
+): Pair<String, String> {
+    if (directoryToRunTask.isNullOrBlank() || identityPath.isNullOrBlank()) return ownerRoot to ownerId
+    return File(directoryToRunTask).invariantSeparatorsPath to identityPath.removeSuffix(":")
 }
 
 private val SOURCE_SET_NAMES = setOf("main", "unitTest", "androidTest", "test")

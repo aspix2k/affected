@@ -1,10 +1,80 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.gradleExecutionCoordinates
 import com.aspix2k.affected.build.gradleProjectPath
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class GradleTaskPathTest {
+
+    @Test
+    fun `an included build uses the composite execution coordinates`() {
+        assertEquals(
+            "/repo" to ":features:generic-screen-flow-ui",
+            gradleExecutionCoordinates(
+                ownerRoot = "/repo/features",
+                ownerId = ":generic-screen-flow-ui",
+                directoryToRunTask = "/repo",
+                identityPath = ":features:generic-screen-flow-ui",
+            ),
+        )
+    }
+
+    @Test
+    fun `the Gradle root identity becomes an empty task prefix`() {
+        assertEquals(
+            "/repo" to "",
+            gradleExecutionCoordinates("/repo", "", "/repo", ":"),
+        )
+    }
+
+    @Test
+    fun `a renamed included build identity is preserved`() {
+        assertEquals(
+            "/repo" to ":market-renamed:app-integration",
+            gradleExecutionCoordinates(
+                "/repo/magnit-market",
+                ":app-integration",
+                "/repo",
+                ":market-renamed:app-integration",
+            ),
+        )
+    }
+
+    @Test
+    fun `a source set model keeps its Gradle identity path`() {
+        assertEquals(
+            "/repo" to ":features:generic-screen-data",
+            gradleExecutionCoordinates(
+                "/repo/features",
+                ":generic-screen-data",
+                "/repo",
+                ":features:generic-screen-data",
+            ),
+        )
+    }
+
+    @Test
+    fun `incomplete Gradle execution data falls back to owning coordinates`() {
+        assertEquals(
+            "/repo/features" to ":generic-screen-data",
+            gradleExecutionCoordinates(
+                "/repo/features",
+                ":generic-screen-data",
+                "/repo",
+                null,
+            ),
+        )
+        assertEquals(
+            "/repo/features" to ":generic-screen-data",
+            gradleExecutionCoordinates(
+                "/repo/features",
+                ":generic-screen-data",
+                null,
+                ":features:generic-screen-data",
+            ),
+        )
+    }
 
     @Test
     fun `a composite build identity path becomes a path inside its build root`() {
