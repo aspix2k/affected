@@ -32,6 +32,16 @@ class BuildModuleTest {
     }
 
     @Test
+    fun `execution coordinates do not change the owning key`() {
+        val module = module(":app", root = "/repo/included").copy(
+            executionRoot = "/repo",
+            executionId = ":included:app",
+        )
+
+        assertEquals("/repo/included|:app", module.key)
+    }
+
+    @Test
     fun `a dependency uses the key rather than the name`() {
         val core = module(":core")
         val app = module(":app", dependencies = setOf(core.key))

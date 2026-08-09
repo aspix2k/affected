@@ -26,6 +26,8 @@ class ModuleGraph private constructor(private val nodes: List<Node>) {
             testTask = module.testTask,
             compileTask = module.compileTask,
             hasTests = module.hasTests,
+            executionRoot = module.executionRoot,
+            executionId = module.executionId,
         )
     }
 

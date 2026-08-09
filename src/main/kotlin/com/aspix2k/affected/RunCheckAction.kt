@@ -34,8 +34,8 @@ abstract class RunCheckAction(
 
         saveAllDocuments()
 
-        modules.groupBy { Pair(it.systemId, it.buildRoot) }.forEach { (key, group) ->
-            BuildSystems.byId(key.first)?.run(project, key.second, group.map { "${it.id}:$taskName" })
+        TaskPlanner.groups(modules.map(AffectedModule::info), taskName).forEach { group ->
+            BuildSystems.byId(group.systemId)?.run(project, group.root, group.tasks)
         }
     }
 

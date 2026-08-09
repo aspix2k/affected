@@ -1,9 +1,11 @@
 package com.aspix2k.affected.mcp
 
+import com.aspix2k.affected.AffectedModule
 import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.AffectedState
 import com.aspix2k.affected.ProjectChanges
 import com.aspix2k.affected.TaskGroup
+import com.aspix2k.affected.TaskPlanner
 import com.aspix2k.affected.Verification
 import com.aspix2k.affected.build.BuildSystems
 import com.intellij.execution.ui.RunContentManager
@@ -123,8 +125,8 @@ class AffectedToolset : McpToolset {
         val modules = project.service<AffectedState>().modules.filter { it.supports(task) }
         if (modules.isEmpty()) return "No affected module declares task '$task'."
 
-        modules.groupBy { Pair(it.systemId, it.buildRoot) }.forEach { (key, group) ->
-            runTasks(project, TaskGroup(key.first, key.second, group.map { "${it.id}:$task" }))
+        TaskPlanner.groups(modules.map(AffectedModule::info), task).forEach { group ->
+            runTasks(project, group)
         }
         return "Started '$task' on ${modules.size} module(s)."
     }

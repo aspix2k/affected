@@ -6,8 +6,22 @@ import kotlin.test.assertTrue
 
 class TaskPlannerTest {
 
-    private fun jvm(path: String, root: String = "/repo", tests: Boolean = true) =
-        ModuleInfo(path, "GRADLE", root, testTask = "test", compileTask = "compileTestKotlin", hasTests = tests)
+    private fun jvm(
+        path: String,
+        root: String = "/repo",
+        tests: Boolean = true,
+        executionRoot: String = root,
+        executionId: String = path,
+    ) = ModuleInfo(
+        path,
+        "GRADLE",
+        root,
+        testTask = "test",
+        compileTask = "compileTestKotlin",
+        hasTests = tests,
+        executionRoot = executionRoot,
+        executionId = executionId,
+    )
 
     private fun android(path: String, root: String = "/repo", tests: Boolean = true) =
         ModuleInfo(
@@ -81,11 +95,135 @@ class TaskPlannerTest {
     }
 
     @Test
+    fun `included builds sharing an execution tree use one command`() {
+        val plan = TaskPlanner.plan(
+            changed = listOf(
+                jvm(
+                    ":app-integration",
+                    root = "/repo/magnit-market",
+                    executionRoot = "/repo",
+                    executionId = ":magnit-market:app-integration",
+                ),
+                jvm(
+                    ":generic-screen-flow-ui",
+                    root = "/repo/features",
+                    executionRoot = "/repo",
+                    executionId = ":features:generic-screen-flow-ui",
+                ),
+            ),
+            consumers = emptyList(),
+        )
+
+        assertEquals(1, plan.groups.size)
+        assertEquals("/repo", plan.groups.single().root)
+        assertEquals(
+            listOf(
+                ":magnit-market:app-integration:test",
+                ":features:generic-screen-flow-ui:test",
+            ),
+            plan.groups.single().tasks,
+        )
+    }
+
+    @Test
+    fun `independent execution trees keep separate commands`() {
+        val plan = TaskPlanner.plan(
+            changed = listOf(
+                jvm(":core", root = "/repo/one", executionRoot = "/repo/one"),
+                jvm(":core", root = "/repo/two", executionRoot = "/repo/two"),
+            ),
+            consumers = emptyList(),
+        )
+
+        assertEquals(2, plan.groups.size)
+    }
+
+    @Test
+    fun `a named task uses shared execution coordinates`() {
+        val groups = TaskPlanner.groups(
+            modules = listOf(
+                jvm(
+                    ":app-integration",
+                    root = "/repo/magnit-market",
+                    executionRoot = "/repo",
+                    executionId = ":magnit-market:app-integration",
+                ),
+                jvm(
+                    ":generic-screen-flow-ui",
+                    root = "/repo/features",
+                    executionRoot = "/repo",
+                    executionId = ":features:generic-screen-flow-ui",
+                ),
+            ),
+            task = "detekt",
+        )
+
+        assertEquals(1, groups.size)
+        assertEquals(
+            listOf(
+                ":magnit-market:app-integration:detekt",
+                ":features:generic-screen-flow-ui:detekt",
+            ),
+            groups.single().tasks,
+        )
+    }
+
+    @Test
     fun `duplicates are collapsed`() {
         val core = jvm(":core")
         val plan = TaskPlanner.plan(listOf(core, core, core), emptyList())
         assertEquals(listOf(":core:test"), plan.groups.single { it.root == "/repo" }.tasks)
         assertEquals(1, plan.tested)
+    }
+
+    @Test
+    fun `conflicting execution coordinates fall back to one owning module`() {
+        val plan = TaskPlanner.plan(
+            changed = listOf(
+                jvm(
+                    ":core",
+                    root = "/repo/features",
+                    executionRoot = "/repo",
+                    executionId = ":features:core",
+                ),
+                jvm(
+                    ":core",
+                    root = "/repo/features",
+                    executionRoot = "/repo/other",
+                    executionId = ":renamed:core",
+                ),
+            ),
+            consumers = emptyList(),
+        )
+
+        assertEquals(1, plan.tested)
+        assertEquals("/repo/features", plan.groups.single().root)
+        assertEquals(listOf(":core:test"), plan.groups.single().tasks)
+    }
+
+    @Test
+    fun `named tasks deduplicate by owning module`() {
+        val groups = TaskPlanner.groups(
+            modules = listOf(
+                jvm(
+                    ":core",
+                    root = "/repo/features",
+                    executionRoot = "/repo",
+                    executionId = ":features:core",
+                ),
+                jvm(
+                    ":core",
+                    root = "/repo/features",
+                    executionRoot = "/repo/other",
+                    executionId = ":renamed:core",
+                ),
+            ),
+            task = "detekt",
+        )
+
+        assertEquals(1, groups.size)
+        assertEquals("/repo/features", groups.single().root)
+        assertEquals(listOf(":core:detekt"), groups.single().tasks)
     }
 
     @Test

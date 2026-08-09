@@ -14,6 +14,8 @@ data class BuildModule(
     val hasTests: Boolean,
     val dependencies: Set<String> = emptySet(),
     val extraTasks: Set<String> = emptySet(),
+    val executionRoot: String = root,
+    val executionId: String = id,
 ) {
     val key: String get() = "$root|$id"
 }

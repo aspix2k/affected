@@ -10,8 +10,9 @@
 
 Affected maps changed source files to build modules and runs the tests of the
 modules they belong to. It can also check direct consumers after a Kotlin or
-Java public API change. Unrelated modules are skipped, and independent build
-roots run concurrently.
+Java public API change. Unrelated modules are skipped. Compatible Gradle modules
+inside one composite build share an IDE invocation and Run tab; independent
+build roots run concurrently.
 
 There is no Affected-specific project configuration. Gradle and Maven modules
 come from the IDE project model; the other integrations read their standard

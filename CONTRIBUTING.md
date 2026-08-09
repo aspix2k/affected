@@ -50,11 +50,14 @@ it deliberately errs toward running too much.
 `ModuleGraph` reads the module graph from the IDE project model rather than from
 build scripts, which is what makes build script language, dependency DSL and
 composite builds irrelevant. Modules are attributed to the build that owns them
-by walking up to the nearest `settings.gradle[.kts]`.
+by walking up to the nearest `settings.gradle[.kts]`. Gradle execution
+coordinates come separately from the imported model, so included builds keep
+their ownership while compatible tasks can run through the composite root.
 
-`TaskPlanner` turns that into task groups, one per build system and build root,
-so a Gradle module and a Maven module never end up in the same command. A module
-already being tested is never also compiled.
+`TaskPlanner` turns that into task groups, one per build system and execution
+root, so compatible Gradle modules share a command while independent roots and
+different build systems stay separate. A module already being tested is never
+also compiled.
 
 A `BuildSystem` supplies module identity, task names and execution, and registers
 itself through the `com.aspix2k.affected.buildSystem` extension point behind an

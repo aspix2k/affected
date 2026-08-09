@@ -105,6 +105,8 @@ class AffectedState(
                     compileTask = node.module.compileTask,
                     hasTests = node.hasTests,
                     tasks = node.module.extraTasks,
+                    executionRoot = node.module.executionRoot,
+                    executionId = node.module.executionId,
                 )
             }
     }

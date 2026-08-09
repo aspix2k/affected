@@ -8,7 +8,8 @@
         <br/><br/>
         Affected maps changed source files to build modules and runs the tests of
         the modules they belong to. It can also check direct consumers after a
-        Kotlin or Java public API change. Unrelated modules are skipped, and
+        Kotlin or Java public API change. Unrelated modules are skipped.
+        Compatible Gradle modules inside one composite build share an IDE run;
         independent build roots run concurrently.
         <br/><br/>
         <b>Workflow</b>
