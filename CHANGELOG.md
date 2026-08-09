@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add the pure dependency-map and fail-closed selection model required for exact JVM test-class impact analysis. It is not connected to task execution yet.
+
 ### Fixed
 
 - Use stable Gradle module APIs for composite-build execution coordinates and fail verification on future experimental API usage.
