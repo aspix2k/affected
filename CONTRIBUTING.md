@@ -25,7 +25,8 @@ environment variable.
 ./gradlew pitest        # mutation testing, slow
 ```
 
-CI runs everything except `pitest` on each push; `pitest` runs weekly.
+Pull-request CI runs everything except `pitest`; `pitest` runs weekly. A push
+to `main` only promotes the already verified pull-request artifact.
 
 Every IDE the build or the verifier touches is unpacked into
 `~/.gradle/caches/<gradle>/transforms`, three to five gigabytes each, and old
@@ -97,15 +98,17 @@ in `build.gradle.kts` has no entries there, and the release fails when the tagge
 version has none — the same section becomes the GitHub release notes and the
 plugin's What's New on the marketplace.
 
-Merge the release changes into `main`. After the required CI job succeeds, it
-creates the annotated `v<version>` tag when that version is not tagged yet and
-calls the reusable Release workflow with that tag. The workflow refuses a
-mismatched tag, attaches the zip to a GitHub release with the notes from
-`CHANGELOG.md`, and uploads to the JetBrains Marketplace when
-`JETBRAINS_MARKETPLACE_TOKEN` is set. An existing GitHub release makes the
-automatic preparation idempotent.
+The pull-request CI job records the verified Git tree and plugin SHA-256 beside
+the plugin zip. After merge, the Release workflow finds that successful CI run,
+requires the verified tree to match `main`, creates the annotated `v<version>`
+tag, and promotes the exact same zip to a GitHub release and JetBrains
+Marketplace. It does not rebuild or rerun tests. A missing artifact, a non-green
+CI run, or any tree/hash mismatch stops the release.
 
 ```sh
 ./gradlew patchChangelog
-gh workflow run release.yml -f tag=v1.0.0 # recovery for an existing tag
+gh workflow run release.yml -f run_id=123456789 -f source_ref=v1.0.0
 ```
+
+Add `-f retry_marketplace=true` only to retry Marketplace submission after the
+GitHub release already exists.
