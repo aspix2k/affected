@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: ["main"]
   pull_request:
   workflow_dispatch:
 
@@ -11,7 +9,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 jobs:
   verify:
@@ -34,14 +32,42 @@ jobs:
           df -h /
 
       - name: The changelog must describe the current version
+        id: version
         run: |
           version=$(./gradlew -q printVersion)
           .github/changelog-section.sh "$version" > /dev/null \
             || { echo "::error file=CHANGELOG.md::Add a section for $version before bumping the version."; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - run: ./gradlew detekt
       - run: ./gradlew test koverXmlReport buildPlugin
       - run: ./gradlew verifyPlugin
+
+      - name: Record the verified plugin artifact
+        env:
+          PLUGIN_VERSION: ${{ steps.version.outputs.version }}
+          SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          archives=(build/distributions/affected-*.zip)
+          if [ "${#archives[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one plugin archive, found ${#archives[@]}."
+            exit 1
+          fi
+
+          archive=${archives[0]}
+          archive_name=$(basename "$archive")
+          sha256=$(sha256sum "$archive" | awk '{print $1}')
+          source_tree=$(git rev-parse 'HEAD^{tree}')
+          jq -n \
+            --arg version "$PLUGIN_VERSION" \
+            --arg archive "$archive_name" \
+            --arg sha256 "$sha256" \
+            --arg sourceCommit "$SOURCE_COMMIT" \
+            --arg sourceTree "$source_tree" \
+            '{version: $version, archive: $archive, sha256: $sha256, sourceCommit: $sourceCommit, sourceTree: $sourceTree}' \
+            > build/distributions/release-metadata.json
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
@@ -56,74 +82,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: plugin
-          path: build/distributions/*.zip
+          path: |
+            build/distributions/*.zip
+            build/distributions/release-metadata.json
           if-no-files-found: error
-
-  prepare-release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: verify
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    outputs:
-      release: ${{ steps.release.outputs.release }}
-      tag: ${{ steps.release.outputs.tag }}
-    env:
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
-        with:
-          distribution: temurin
-          java-version: "21"
-      - uses: gradle/actions/setup-gradle@06832c7b30a0129d7fb559bcc6e43d26f6374244 # v4.3.1
-
-      - name: Prepare the current version
-        id: release
-        run: |
-          set -euo pipefail
-
-          version=$(./gradlew -q printVersion)
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error::Invalid plugin version: $version"
-            exit 1
-          fi
-
-          .github/changelog-section.sh "$version" > /dev/null
-          tag="v$version"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-
-          if git show-ref --verify --quiet "refs/tags/$tag"; then
-            if gh release view "$tag" > /dev/null 2>&1; then
-              echo "::notice::Release $tag already exists."
-              echo "release=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          else
-            tag_object=$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/tags" \
-              -f tag="$tag" \
-              -f message="Affected $version" \
-              -f object="$GITHUB_SHA" \
-              -f type=commit \
-              --jq .sha)
-            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
-              -f ref="refs/tags/$tag" \
-              -f sha="$tag_object" > /dev/null
-            echo "::notice::Created annotated tag $tag at $GITHUB_SHA."
-          fi
-
-          echo "release=true" >> "$GITHUB_OUTPUT"
-
-  release-current-version:
-    if: needs.prepare-release.outputs.release == 'true'
-    needs: [verify, prepare-release]
-    permissions:
-      contents: write
-    uses: ./.github/workflows/release.yml
-    with:
-      tag: ${{ needs.prepare-release.outputs.tag }}
-    secrets: inherit

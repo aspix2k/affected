@@ -2,108 +2,313 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
-  workflow_call:
-    inputs:
-      tag:
-        description: Existing release tag
-        required: true
-        type: string
-    secrets:
-      JETBRAINS_MARKETPLACE_TOKEN:
-        required: false
+    branches: ["main"]
   workflow_dispatch:
     inputs:
-      tag:
-        description: Existing release tag
+      run_id:
+        description: Successful pull-request CI run containing the plugin artifact
         required: true
         type: string
+      source_ref:
+        description: Git ref whose tree must match the verified artifact
+        required: true
+        type: string
+      retry_marketplace:
+        description: Retry Marketplace upload for an existing GitHub release
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 concurrency:
-  group: affected-release-${{ inputs.tag || github.ref_name }}
-  cancel-in-progress: false
+  group: affected-release
+  queue: max
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 15
     permissions:
+      actions: read
       contents: write
     env:
-      PUBLISH_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
-      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: ${{ env.RELEASE_TAG }}
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
-        with:
-          distribution: temurin
-          java-version: "21"
-      - uses: gradle/actions/setup-gradle@06832c7b30a0129d7fb559bcc6e43d26f6374244 # v4.3.1
+          ref: ${{ inputs.source_ref || github.sha }}
 
-      - name: Match plugin version to tag
+      - name: Resolve the verified pull-request CI run
+        id: ci
+        env:
+          REQUESTED_RUN_ID: ${{ inputs.run_id }}
         run: |
-          version=$(./gradlew -q printVersion)
-          if [ "$RELEASE_TAG" != "v$version" ]; then
-            echo "Tag $RELEASE_TAG does not match plugin version $version" >&2
+          set -euo pipefail
+
+          run_id=$REQUESTED_RUN_ID
+          if [ -z "$run_id" ]; then
+            pulls=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls")
+            matching=$(jq --arg sha "$GITHUB_SHA" \
+              '[.[] | select(.merged_at != null and .merge_commit_sha == $sha)]' <<< "$pulls")
+            if [ "$(jq 'length' <<< "$matching")" -ne 1 ]; then
+              echo "::error::Expected exactly one merged pull request for $GITHUB_SHA."
+              exit 1
+            fi
+
+            head_sha=$(jq -r '.[0].head.sha' <<< "$matching")
+            runs=$(gh api --method GET \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
+              -f event=pull_request \
+              -f status=success \
+              -f head_sha="$head_sha" \
+              -f per_page=20)
+            run_id=$(jq -r \
+              '[.workflow_runs[] | select(.status == "completed" and .conclusion == "success")] | sort_by(.created_at, .run_attempt) | last | .id // empty' \
+              <<< "$runs")
+          fi
+
+          if [[ ! "$run_id" =~ ^[0-9]+$ ]]; then
+            echo "::error::No successful pull-request CI run was found."
             exit 1
           fi
 
-      - name: Read release notes from the changelog
-        id: notes
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id")
+          if [ "$(jq -r '.path' <<< "$run")" != ".github/workflows/ci.yml" ] ||
+             [ "$(jq -r '.event' <<< "$run")" != "pull_request" ] ||
+             [ "$(jq -r '.status' <<< "$run")" != "completed" ] ||
+             [ "$(jq -r '.conclusion' <<< "$run")" != "success" ]; then
+            echo "::error::Run $run_id is not a successful pull-request CI run."
+            exit 1
+          fi
+
+          {
+            echo "run-id=$run_id"
+            echo "head-sha=$(jq -r '.head_sha' <<< "$run")"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: plugin
+          path: release-artifact
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.ci.outputs.run-id }}
+
+      - name: Validate the promoted artifact
+        id: artifact
+        env:
+          VERIFIED_HEAD_SHA: ${{ steps.ci.outputs.head-sha }}
         run: |
-          notes=$(.github/changelog-section.sh "${RELEASE_TAG#v}")
+          set -euo pipefail
+          mapfile -t metadata_files < <(find release-artifact -type f -name release-metadata.json -print)
+          if [ "${#metadata_files[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one release-metadata.json file."
+            exit 1
+          fi
+
+          metadata=${metadata_files[0]}
+          version=$(jq -er '.version' "$metadata")
+          archive_name=$(jq -er '.archive' "$metadata")
+          expected_sha=$(jq -er '.sha256' "$metadata")
+          source_commit=$(jq -er '.sourceCommit' "$metadata")
+          expected_tree=$(jq -er '.sourceTree' "$metadata")
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] ||
+             [[ "$archive_name" != "affected-$version.zip" ]] ||
+             [[ ! "$expected_sha" =~ ^[0-9a-f]{64}$ ]] ||
+             [[ ! "$source_commit" =~ ^[0-9a-f]{40}$ ]] ||
+             [[ ! "$expected_tree" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Release metadata is invalid."
+            exit 1
+          fi
+
+          if [ "$source_commit" != "$VERIFIED_HEAD_SHA" ]; then
+            echo "::error::Artifact source $source_commit does not match CI head $VERIFIED_HEAD_SHA."
+            exit 1
+          fi
+
+          actual_tree=$(git rev-parse 'HEAD^{tree}')
+          if [ "$actual_tree" != "$expected_tree" ]; then
+            echo "::error::Verified tree $expected_tree does not match release tree $actual_tree."
+            exit 1
+          fi
+
+          mapfile -t archives < <(find release-artifact -type f -name "$archive_name" -print)
+          if [ "${#archives[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one $archive_name archive."
+            exit 1
+          fi
+
+          source_archive=${archives[0]}
+          actual_sha=$(sha256sum "$source_archive" | awk '{print $1}')
+          if [ "$actual_sha" != "$expected_sha" ]; then
+            echo "::error::Plugin archive SHA-256 does not match release metadata."
+            exit 1
+          fi
+
+          tag="v$version"
+          asset="affected-plugin-$version.zip"
+          cp "$source_archive" "$asset"
+          {
+            echo "tag=$tag"
+            echo "version=$version"
+            echo "asset=$asset"
+            echo "sha256=$actual_sha"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Prepare the release tag
+        id: state
+        env:
+          ASSET: ${{ steps.artifact.outputs.asset }}
+          EXPECTED_SHA: ${{ steps.artifact.outputs.sha256 }}
+          RELEASE_TAG: ${{ steps.artifact.outputs.tag }}
+          RETRY_MARKETPLACE: ${{ inputs.retry_marketplace }}
+        run: |
+          set -euo pipefail
+
+          current_commit=$(git rev-parse HEAD)
+          tagged_commit=
+          if git rev-parse -q --verify "refs/tags/$RELEASE_TAG^{commit}" > /dev/null; then
+            tagged_commit=$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")
+          fi
+
+          if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            echo "::notice::GitHub release $RELEASE_TAG already exists."
+            if [ -z "$tagged_commit" ]; then
+              echo "::error::GitHub release $RELEASE_TAG has no local tag."
+              exit 1
+            fi
+            if [ "$tagged_commit" != "$current_commit" ]; then
+              echo "::notice::$RELEASE_TAG was released from an earlier commit; nothing to promote."
+              {
+                echo "release=false"
+                echo "marketplace=false"
+              } >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            asset_count=$(gh release view "$RELEASE_TAG" --json assets \
+              --jq "[.assets[] | select(.name == \"$ASSET\")] | length")
+            recovered=false
+            if [ "$asset_count" = "0" ]; then
+              gh release upload "$RELEASE_TAG" "$ASSET"
+              recovered=true
+              asset_count=1
+              echo "::notice::Recovered the missing $ASSET release asset."
+            fi
+            if [ "$asset_count" != "1" ]; then
+              echo "::error::Expected exactly one $ASSET asset on $RELEASE_TAG."
+              exit 1
+            fi
+
+            mkdir existing-release-asset
+            gh release download "$RELEASE_TAG" \
+              --pattern "$ASSET" \
+              --dir existing-release-asset
+            released_sha=$(sha256sum "existing-release-asset/$ASSET" | awk '{print $1}')
+            if [ "$released_sha" != "$EXPECTED_SHA" ]; then
+              echo "::error::Existing $ASSET does not match the verified artifact."
+              exit 1
+            fi
+
+            if [ "$recovered" = "true" ] ||
+               { [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$RETRY_MARKETPLACE" = "true" ]; }; then
+              marketplace=true
+            else
+              marketplace=false
+            fi
+            {
+              echo "release=false"
+              echo "marketplace=$marketplace"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -n "$tagged_commit" ]; then
+            if [ "$tagged_commit" != "$current_commit" ]; then
+              echo "::error::Tag $RELEASE_TAG points to $tagged_commit, not $current_commit."
+              exit 1
+            fi
+          else
+            version=${RELEASE_TAG#v}
+            tag_object=$(gh api --method POST "repos/$GITHUB_REPOSITORY/git/tags" \
+              -f tag="$RELEASE_TAG" \
+              -f message="Affected $version" \
+              -f object="$(git rev-parse HEAD)" \
+              -f type=commit \
+              --jq .sha)
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$RELEASE_TAG" \
+              -f sha="$tag_object" > /dev/null
+            echo "::notice::Created annotated tag $RELEASE_TAG."
+          fi
+
+          {
+            echo "release=true"
+            echo "marketplace=true"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Read release notes from the changelog
+        if: steps.state.outputs.release == 'true'
+        id: notes
+        env:
+          VERSION: ${{ steps.artifact.outputs.version }}
+        run: |
+          notes=$(.github/changelog-section.sh "$VERSION")
           {
             echo 'body<<CHANGELOG_EOF'
             echo "$notes"
             echo CHANGELOG_EOF
           } >> "$GITHUB_OUTPUT"
 
-      - run: ./gradlew test
-      - run: ./gradlew buildPlugin
-      - run: ./gradlew verifyPlugin
-
-      - name: Name the asset apart from the source archives
-        run: |
-          # GitHub attaches its own "Source code (zip)" named after the tag. It collides
-          # with the plugin zip on the release page, and uploading the wrong one to the
-          # marketplace fails with "Unexpected plugin archive file structure".
-          # Copy, never move: publishPlugin reads the artifact from its original path.
-          cp build/distributions/affected-*.zip "affected-plugin-${RELEASE_TAG#v}.zip"
-
       - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        if: steps.state.outputs.release == 'true'
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: affected-plugin-*.zip
+          tag_name: ${{ steps.artifact.outputs.tag }}
+          files: ${{ steps.artifact.outputs.asset }}
           body: ${{ steps.notes.outputs.body }}
           fail_on_unmatched_files: true
 
-      - name: Publish to JetBrains Marketplace
-        if: ${{ env.PUBLISH_TOKEN != '' }}
+      - name: Publish the verified archive to JetBrains Marketplace
+        if: steps.state.outputs.marketplace == 'true'
+        env:
+          ASSET: ${{ steps.artifact.outputs.asset }}
+          PUBLISH_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
+          VERSION: ${{ steps.artifact.outputs.version }}
         run: |
-          id=$(curl -sf "https://plugins.jetbrains.com/api/plugins/intellij/com.aspix2k.affected" | jq -r '.id // empty')
-          if [ -z "$id" ]; then
-            echo "::notice::The plugin is not on the marketplace yet. The first version has to be uploaded through the web form; later tags publish from here."
-            exit 0
+          set -euo pipefail
+          if [ -z "$PUBLISH_TOKEN" ]; then
+            echo "::error::JETBRAINS_MARKETPLACE_TOKEN is not configured."
+            exit 1
           fi
-          published=$(curl -sf "https://plugins.jetbrains.com/api/plugins/$id/updates" | jq -r --arg v "${RELEASE_TAG#v}" 'map(select(.version == $v)) | length')
-          if [ "$published" != "0" ]; then
-            echo "::notice::Version ${RELEASE_TAG#v} is already on the marketplace."
-            exit 0
-          fi
-          ./gradlew publishPlugin
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: failure()
-        with:
-          name: release-reports
-          path: |
-            build/reports/tests
-            build/reports/pluginVerifier
-          if-no-files-found: warn
+          published=$(curl --fail --silent --show-error --connect-timeout 20 --max-time 30 \
+            "https://plugins.jetbrains.com/api/plugins/33425/updates" \
+            | jq -r --arg version "$VERSION" 'map(select(.version == $version)) | length')
+          if [ "$published" != "0" ]; then
+            echo "::notice::Version $VERSION is already public on JetBrains Marketplace."
+            exit 0
+          fi
+
+          curl --fail-with-body --silent --show-error --connect-timeout 20 --max-time 300 \
+            --header "Authorization: Bearer $PUBLISH_TOKEN" \
+            --form pluginId=33425 \
+            --form "file=@$ASSET" \
+            https://plugins.jetbrains.com/api/updates/upload
+
+      - name: Summarize the promoted artifact
+        if: steps.state.outputs.release == 'true' || steps.state.outputs.marketplace == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.artifact.outputs.tag }}
+          SHA256: ${{ steps.artifact.outputs.sha256 }}
+          SOURCE_RUN: ${{ steps.ci.outputs.run-id }}
+        run: |
+          {
+            echo "### $RELEASE_TAG"
+            echo
+            echo "- Verified CI run: $SOURCE_RUN"
+            echo "- Plugin SHA-256: \`$SHA256\`"
+          } >> "$GITHUB_STEP_SUMMARY"
