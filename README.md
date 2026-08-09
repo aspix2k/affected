@@ -8,70 +8,90 @@
 
 **Run only what your change can affect.**
 
-Affected maps changed files to build modules, tests the modules you touched, and
-can verify their direct consumers when a public API changes. Unrelated modules are
-skipped; independent build roots run concurrently.
+Affected maps changed source files to build modules and runs the tests of the
+modules they belong to. It can also check direct consumers after a Kotlin or
+Java public API change. Unrelated modules are skipped, and independent build
+roots run concurrently.
 
-## Why use it
+There is no Affected-specific project configuration. Gradle and Maven modules
+come from the IDE project model; the other integrations read their standard
+manifests.
 
-- **Focused feedback.** Catch a broken consumer without waiting for the entire monorepo.
-- **Native workflow.** Gradle and Maven use their IDE integrations; other tools use the standard Run window.
-- **One plan everywhere.** Use the same analysis from the toolbar, commit dialog, push check, or MCP.
-- **No project setup.** Project models and standard manifests define the module graph.
-- **Lightweight and local.** The plugin ZIP is under 400 KB. There is no server, account, or telemetry.
+## Supported projects
 
-## Workflow
+| Project type | Changed module | Direct consumer |
+| --- | --- | --- |
+| Gradle JVM | `test` | `compileTestKotlin` |
+| Gradle Android | `testDebugUnitTest` | `compileDebugUnitTestKotlin` |
+| Maven | `test` | `test-compile` |
+| Cargo workspace | `cargo test -p` | `cargo check --tests -p` |
+| Go module | `go test` | `go build` |
+| npm, Yarn or pnpm workspace | workspace `test` | `tsc --noEmit` when the package has `tsconfig.json` |
+| .NET solution or project | `dotnet test` | `dotnet build` |
+| Python multi-project repository | `pytest` | `mypy` when configured |
+| Composer multi-package repository | PHPUnit | PHPStan when static analysis is configured |
+| Bundler multi-gem repository | RSpec | — |
+| CMake project with multiple targets | CTest | dependent target build |
 
-The toolbar matrix fills as more modules are affected. It is muted and animated
-while the IDE initializes, animates during verification, and returns to the current
-affected state when the run ends.
+The recognised languages are Kotlin, Java, Rust, Go, JavaScript, TypeScript,
+C#, F#, Visual Basic, Python, PHP, Ruby, C and C++. JSX, TSX, Vue, Svelte and
+Razor files are recognised too. Gradle projects may use Kotlin or Groovy build
+scripts; linked and composite builds, renamed or flat modules, and Android
+source sets are supported.
 
-Open the menu to inspect or navigate to affected modules, then run with
-`Ctrl+Alt+Shift+T`. Settings contains four switches in three groups:
+Python and Composer repositories need at least two package manifests, Bundler
+repositories need at least two gemspecs, and CMake projects need at least two
+`add_executable` or `add_library` targets.
+
+## Change scope
+
+Local changes come from the IDE's VCS integration. In a Git repository, Affected
+also compares the current branch with the merge base of the configured base
+branch, falling back to `develop`, `main`, then `master`.
+
+With Git available, public API detection compares Kotlin and Java declarations.
+Consumer checking is optional and covers direct consumers only. Without Git,
+local source changes still work, but they are conservatively treated as possible
+API changes.
+
+## Using the plugin
+
+The toolbar matrix shows the current number of affected modules and animates
+while the project is initializing or verification is running. Open its menu to
+inspect the modules or navigate to them, then run verification with
+`Ctrl+Alt+Shift+T`.
+
+The same menu contains these settings:
 
 - **Check consumers:** off by default.
 - **Run before commit:** off by default.
 - **Run before push:** off by default.
 - **Animate while running:** on by default.
 
-## Supported stacks
+Gradle and Maven run through their IDE integrations. Other build systems launch
+their command-line tools in the Run tool window, so the relevant tool must be
+available on `PATH`.
 
-| Stack | Changed modules | Direct consumers |
-| --- | --- | --- |
-| Gradle | `test` / `testDebugUnitTest` | test compilation |
-| Maven | `test` | `test-compile` |
-| Rust / Cargo | `cargo test -p` | `cargo check --tests -p` |
-| Go | `go test` | `go build` |
-| npm, Yarn, pnpm | workspace test | TypeScript `tsc --noEmit` |
-| .NET | `dotnet test` | `dotnet build` |
-| Python | `pytest` | `mypy` when configured |
-| PHP / Composer | PHPUnit | static analysis when configured |
-| Ruby / Bundler | RSpec | — |
-| CMake | CTest | dependent target build |
-
-Gradle composite builds, Kotlin and Groovy build scripts, flat or renamed modules,
-and Android source sets are supported.
+The optional [MCP Server](https://plugins.jetbrains.com/plugin/26071) integration
+exposes the affected modules, changed files, verification plan and run controls
+to AI agents.
 
 ## Requirements
 
-- A JetBrains IDE 2025.3 or newer.
-- One of the supported build tools available to the IDE or on `PATH`.
-
-Local edits come from the IDE, so any VCS it supports works. Comparing with a base
-branch requires Git; without Git, Affected still handles uncommitted changes.
-
-The optional [MCP Server](https://plugins.jetbrains.com/plugin/26071) integration
-lets an AI agent inspect the plan and start or follow verification.
+- A JetBrains IDE based on IntelliJ Platform 2025.3 or newer.
+- The IDE integration for Gradle or Maven when using those project types.
+- The relevant command-line tools for the other project types.
 
 ## Interface languages
 
 English, Czech, German, Spanish, French, Indonesian, Italian, Japanese, Korean,
-Polish, Brazilian Portuguese, Russian, Simplified Chinese, and Turkish.
+Polish, Brazilian Portuguese, Russian, Simplified Chinese and Turkish.
 
 ## Privacy
 
-Affected reads project metadata and changes locally. It sends no analytics or
-source code. Error reporting only opens a prefilled GitHub issue for you to review.
-See [PRIVACY.md](PRIVACY.md).
+Affected analyzes project metadata and changes locally. It has no server,
+account or telemetry and makes no network requests of its own. Error reporting
+only opens a prefilled GitHub issue for you to review. See
+[PRIVACY.md](PRIVACY.md).
 
 [Contributing](CONTRIBUTING.md) · [MIT License](LICENSE)
