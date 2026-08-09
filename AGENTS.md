@@ -6,8 +6,8 @@ commands live there. This file covers what tends to go wrong.
 ## Traps
 
 Module names inside a composite build are flat and hyphenated. Never rebuild a
-filesystem path from a module name: `app-integration` is one directory, not
-`app/integration`.
+filesystem path from a module name: `ui-shell` is one directory, not
+`ui/shell`.
 
 An imported Gradle id may begin with the included-build identity. When tasks run
 against that build's linked root, remove the identity and keep the remaining
