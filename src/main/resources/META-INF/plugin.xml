@@ -6,35 +6,48 @@
     <description><![CDATA[
         <b>Run only what your change can affect.</b>
         <br/><br/>
-        Affected maps changed files to build modules, tests the modules you touched,
-        and can verify their direct consumers when a public API changes. Unrelated
-        modules are skipped; independent build roots run concurrently.
+        Affected maps changed source files to build modules and runs the tests of
+        the modules they belong to. It can also check direct consumers after a
+        Kotlin or Java public API change. Unrelated modules are skipped, and
+        independent build roots run concurrently.
         <br/><br/>
+        <b>Workflow</b>
+        <br/>
         <ul>
-            <li><b>Focused:</b> catch a broken consumer without running the entire monorepo.</li>
-            <li><b>Native:</b> Gradle and Maven use their IDE integrations; other tools use the Run window.</li>
-            <li><b>Consistent:</b> use one plan from the toolbar, commit dialog, push check, or MCP.</li>
-            <li><b>No project setup:</b> project models and standard manifests define the module graph.</li>
-            <li><b>Lightweight:</b> under 400 KB, with no server, account, or telemetry.</li>
+            <li>The toolbar matrix shows the current affected scope.</li>
+            <li>Run from the toolbar, Run menu, commit dialog, push check or optional MCP toolset.</li>
+            <li>Gradle and Maven use their IDE integrations; other systems run
+                their command-line tools in the Run window.</li>
+            <li>No Affected config file: module graphs come from imported project models or standard manifests.</li>
         </ul>
-        <b>Supported stacks</b>
+        <b>Supported project types</b>
+        <br/>
+        <ul>
+            <li>Gradle JVM and Android projects, including linked and composite builds, and Maven projects.</li>
+            <li>Cargo workspaces, Go modules, and npm, Yarn or pnpm workspaces.</li>
+            <li>.NET solutions and projects.</li>
+            <li>Python multi-project repositories, Composer multi-package
+                repositories and Bundler multi-gem repositories.</li>
+            <li>CMake projects with multiple executable or library targets.</li>
+        </ul>
+        Recognised languages: Kotlin, Java, Rust, Go, JavaScript, TypeScript,
+        C#, F#, Visual Basic, Python, PHP, Ruby, C and C++. JSX, TSX, Vue, Svelte
+        and Razor files are recognised too.
         <br/><br/>
-        Gradle, Maven, Cargo, Go, npm, Yarn, pnpm, .NET, Python, Composer, Bundler,
-        and CMake. Gradle composite builds, Kotlin and Groovy build scripts, flat or
-        renamed modules, and Android source sets are supported.
+        With Git available, public API detection compares Kotlin and Java
+        declarations, and optional consumer checking covers direct consumers only.
+        Without Git, local source changes still work and are treated conservatively
+        as possible API changes.
         <br/><br/>
-        The toolbar matrix shows the current affected scope and animates during
-        initialization and verification. Consumer checks are off by default;
-        animation is on. Settings also exposes separate commit and push guards;
-        both are off by default.
+        Requires a JetBrains IDE based on IntelliJ Platform 2025.3 or newer. The
+        relevant IDE integration or command-line build tools must be installed.
         <br/><br/>
-        <b>Interface languages</b>
+        Interface languages: English, Czech, German, Spanish, French, Indonesian,
+        Italian, Japanese, Korean, Polish, Brazilian Portuguese, Russian,
+        Simplified Chinese and Turkish.
         <br/><br/>
-        English, Czech, German, Spanish, French, Indonesian, Italian, Japanese,
-        Korean, Polish, Brazilian Portuguese, Russian, Simplified Chinese, and Turkish.
-        <br/><br/>
-        Affected sends no analytics or source code. Error reporting only opens a
-        prefilled GitHub issue for you to review.
+        Affected has no server, account or telemetry and makes no network requests
+        of its own. Error reporting only opens a prefilled GitHub issue for review.
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
