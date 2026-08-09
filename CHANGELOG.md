@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Include the MIT license in every plugin distribution and verify that the packaged copy matches the repository license.
+- Keep deleted source paths in affected-module and API analysis, and treat renames as a deletion plus an addition so both module owners are verified.
 
 ## [1.7.1] - 2026-08-09
 

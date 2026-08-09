@@ -27,7 +27,7 @@ class ChangeAnalyzer(
 
     fun againstBase(): List<File> {
         val base = mergeBase() ?: return emptyList()
-        return keepSources(git("diff", "--name-only", "--diff-filter=d", base))
+        return keepSources(git("diff", "--name-only", "--no-renames", base))
     }
 
     fun apiTouchedAmong(files: Collection<File>): Set<File> {
@@ -37,8 +37,8 @@ class ChangeAnalyzer(
 
     private fun changedFiles(base: String?): List<File> {
         val paths = LinkedHashSet<String>()
-        if (base != null) paths += git("diff", "--name-only", "--diff-filter=d", base)
-        paths += git("diff", "--name-only", "--diff-filter=d", "HEAD")
+        if (base != null) paths += git("diff", "--name-only", "--no-renames", base)
+        paths += git("diff", "--name-only", "--no-renames", "HEAD")
         paths += git("ls-files", "--others", "--exclude-standard")
 
         return keepSources(paths)
@@ -48,7 +48,6 @@ class ChangeAnalyzer(
         return paths
             .filter { path -> path.substringAfterLast('.', "") in sourceExtensions }
             .map { File(projectDir, it) }
-            .filter { it.isFile }
             .distinct()
     }
 
@@ -65,6 +64,7 @@ class ChangeAnalyzer(
         }.ifEmpty { git("diff", "-U0", "HEAD", "--", relative) }
 
         if (diff.isEmpty()) {
+            if (!file.isFile) return false
             return file.useLines { lines -> lines.any(::isPublicDeclaration) }
         }
 
