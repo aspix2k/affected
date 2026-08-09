@@ -10,12 +10,12 @@ class GradleTaskPathTest {
     @Test
     fun `an included build uses the composite execution coordinates`() {
         assertEquals(
-            "/repo" to ":features:generic-screen-flow-ui",
+            "/repo" to ":platform:shared-ui",
             gradleExecutionCoordinates(
-                ownerRoot = "/repo/features",
-                ownerId = ":generic-screen-flow-ui",
+                ownerRoot = "/repo/platform",
+                ownerId = ":shared-ui",
                 directoryToRunTask = "/repo",
-                identityPath = ":features:generic-screen-flow-ui",
+                identityPath = ":platform:shared-ui",
             ),
         )
     }
@@ -31,12 +31,12 @@ class GradleTaskPathTest {
     @Test
     fun `a renamed included build identity is preserved`() {
         assertEquals(
-            "/repo" to ":market-renamed:app-integration",
+            "/repo" to ":legacy-renamed:ui-shell",
             gradleExecutionCoordinates(
-                "/repo/magnit-market",
-                ":app-integration",
+                "/repo/legacy",
+                ":ui-shell",
                 "/repo",
-                ":market-renamed:app-integration",
+                ":legacy-renamed:ui-shell",
             ),
         )
     }
@@ -44,12 +44,12 @@ class GradleTaskPathTest {
     @Test
     fun `a source set model keeps its Gradle identity path`() {
         assertEquals(
-            "/repo" to ":features:generic-screen-data",
+            "/repo" to ":platform:shared-data",
             gradleExecutionCoordinates(
-                "/repo/features",
-                ":generic-screen-data",
+                "/repo/platform",
+                ":shared-data",
                 "/repo",
-                ":features:generic-screen-data",
+                ":platform:shared-data",
             ),
         )
     }
@@ -57,33 +57,33 @@ class GradleTaskPathTest {
     @Test
     fun `incomplete Gradle execution data falls back to owning coordinates`() {
         assertEquals(
-            "/repo/features" to ":generic-screen-data",
+            "/repo/platform" to ":shared-data",
             gradleExecutionCoordinates(
-                "/repo/features",
-                ":generic-screen-data",
+                "/repo/platform",
+                ":shared-data",
                 "/repo",
                 null,
             ),
         )
         assertEquals(
-            "/repo/features" to ":generic-screen-data",
+            "/repo/platform" to ":shared-data",
             gradleExecutionCoordinates(
-                "/repo/features",
-                ":generic-screen-data",
+                "/repo/platform",
+                ":shared-data",
                 null,
-                ":features:generic-screen-data",
+                ":platform:shared-data",
             ),
         )
     }
 
     @Test
     fun `a composite build identity path becomes a path inside its build root`() {
-        assertEquals(":generic-screen-data", gradleProjectPath(":features:generic-screen-data:main", "features", true))
+        assertEquals(":shared-data", gradleProjectPath(":platform:shared-data:main", "platform", true))
     }
 
     @Test
     fun `a nested Gradle path is preserved`() {
-        assertEquals(":generic-screen:data", gradleProjectPath(":generic-screen:data:test", null, true))
+        assertEquals(":ui:flow", gradleProjectPath(":ui:flow:test", null, true))
     }
 
     @Test

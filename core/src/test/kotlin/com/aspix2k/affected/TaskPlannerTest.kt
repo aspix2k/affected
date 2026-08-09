@@ -99,16 +99,16 @@ class TaskPlannerTest {
         val plan = TaskPlanner.plan(
             changed = listOf(
                 jvm(
-                    ":app-integration",
-                    root = "/repo/magnit-market",
+                    ":ui-shell",
+                    root = "/repo/store-build",
                     executionRoot = "/repo",
-                    executionId = ":magnit-market:app-integration",
+                    executionId = ":store-build:ui-shell",
                 ),
                 jvm(
-                    ":generic-screen-flow-ui",
-                    root = "/repo/features",
+                    ":shared-ui",
+                    root = "/repo/platform",
                     executionRoot = "/repo",
-                    executionId = ":features:generic-screen-flow-ui",
+                    executionId = ":platform:shared-ui",
                 ),
             ),
             consumers = emptyList(),
@@ -118,8 +118,8 @@ class TaskPlannerTest {
         assertEquals("/repo", plan.groups.single().root)
         assertEquals(
             listOf(
-                ":magnit-market:app-integration:test",
-                ":features:generic-screen-flow-ui:test",
+                ":store-build:ui-shell:test",
+                ":platform:shared-ui:test",
             ),
             plan.groups.single().tasks,
         )
@@ -143,16 +143,16 @@ class TaskPlannerTest {
         val groups = TaskPlanner.groups(
             modules = listOf(
                 jvm(
-                    ":app-integration",
-                    root = "/repo/magnit-market",
+                    ":ui-shell",
+                    root = "/repo/store-build",
                     executionRoot = "/repo",
-                    executionId = ":magnit-market:app-integration",
+                    executionId = ":store-build:ui-shell",
                 ),
                 jvm(
-                    ":generic-screen-flow-ui",
-                    root = "/repo/features",
+                    ":shared-ui",
+                    root = "/repo/platform",
                     executionRoot = "/repo",
-                    executionId = ":features:generic-screen-flow-ui",
+                    executionId = ":platform:shared-ui",
                 ),
             ),
             task = "detekt",
@@ -161,8 +161,8 @@ class TaskPlannerTest {
         assertEquals(1, groups.size)
         assertEquals(
             listOf(
-                ":magnit-market:app-integration:detekt",
-                ":features:generic-screen-flow-ui:detekt",
+                ":store-build:ui-shell:detekt",
+                ":platform:shared-ui:detekt",
             ),
             groups.single().tasks,
         )
@@ -271,8 +271,8 @@ class TaskPlannerTest {
     @Test
     fun `the same module in different builds is distinct`() {
         val plan = TaskPlanner.plan(
-            listOf(jvm(":app-integration", root = "/repo/online")),
-            listOf(jvm(":app-integration", root = "/repo/market")),
+            listOf(jvm(":ui-shell", root = "/repo/alpha")),
+            listOf(jvm(":ui-shell", root = "/repo/beta")),
         )
         assertEquals(2, plan.groups.size, "the same name in different builds must not collapse")
     }
