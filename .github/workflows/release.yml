@@ -3,12 +3,27 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_call:
+    inputs:
+      tag:
+        description: Existing release tag
+        required: true
+        type: string
+    secrets:
+      JETBRAINS_MARKETPLACE_TOKEN:
+        required: false
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: affected-release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -19,11 +34,13 @@ jobs:
       contents: write
     env:
       PUBLISH_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
@@ -33,15 +50,15 @@ jobs:
       - name: Match plugin version to tag
         run: |
           version=$(./gradlew -q printVersion)
-          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
-            echo "Tag $GITHUB_REF_NAME does not match plugin version $version" >&2
+          if [ "$RELEASE_TAG" != "v$version" ]; then
+            echo "Tag $RELEASE_TAG does not match plugin version $version" >&2
             exit 1
           fi
 
       - name: Read release notes from the changelog
         id: notes
         run: |
-          notes=$(.github/changelog-section.sh "${GITHUB_REF_NAME#v}")
+          notes=$(.github/changelog-section.sh "${RELEASE_TAG#v}")
           {
             echo 'body<<CHANGELOG_EOF'
             echo "$notes"
@@ -58,10 +75,11 @@ jobs:
           # with the plugin zip on the release page, and uploading the wrong one to the
           # marketplace fails with "Unexpected plugin archive file structure".
           # Copy, never move: publishPlugin reads the artifact from its original path.
-          cp build/distributions/affected-*.zip "affected-plugin-${GITHUB_REF_NAME#v}.zip"
+          cp build/distributions/affected-*.zip "affected-plugin-${RELEASE_TAG#v}.zip"
 
       - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: affected-plugin-*.zip
           body: ${{ steps.notes.outputs.body }}
           fail_on_unmatched_files: true
@@ -74,9 +92,9 @@ jobs:
             echo "::notice::The plugin is not on the marketplace yet. The first version has to be uploaded through the web form; later tags publish from here."
             exit 0
           fi
-          published=$(curl -sf "https://plugins.jetbrains.com/api/plugins/$id/updates" | jq -r --arg v "${GITHUB_REF_NAME#v}" 'map(select(.version == $v)) | length')
+          published=$(curl -sf "https://plugins.jetbrains.com/api/plugins/$id/updates" | jq -r --arg v "${RELEASE_TAG#v}" 'map(select(.version == $v)) | length')
           if [ "$published" != "0" ]; then
-            echo "::notice::Version ${GITHUB_REF_NAME#v} is already on the marketplace."
+            echo "::notice::Version ${RELEASE_TAG#v} is already on the marketplace."
             exit 0
           fi
           ./gradlew publishPlugin

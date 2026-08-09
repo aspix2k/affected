@@ -97,12 +97,15 @@ in `build.gradle.kts` has no entries there, and the release fails when the tagge
 version has none — the same section becomes the GitHub release notes and the
 plugin's What's New on the marketplace.
 
-Push a tag. The workflow refuses it if it does not match the version in
-`build.gradle.kts`, attaches the zip to a GitHub release with the notes from
+Merge the release changes into `main`. After the required CI job succeeds, it
+creates the annotated `v<version>` tag when that version is not tagged yet and
+calls the reusable Release workflow with that tag. The workflow refuses a
+mismatched tag, attaches the zip to a GitHub release with the notes from
 `CHANGELOG.md`, and uploads to the JetBrains Marketplace when
-`JETBRAINS_MARKETPLACE_TOKEN` is set.
+`JETBRAINS_MARKETPLACE_TOKEN` is set. An existing GitHub release makes the
+automatic preparation idempotent.
 
 ```sh
 ./gradlew patchChangelog
-git tag v1.0.0 && git push origin v1.0.0
+gh workflow run release.yml -f tag=v1.0.0 # recovery for an existing tag
 ```
