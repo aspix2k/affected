@@ -42,11 +42,11 @@ object ProjectChanges {
     private fun localChanges(project: Project, extensions: Set<String>): List<File> {
         val manager = ChangeListManager.getInstance(project)
 
-        val tracked = (manager.affectedFiles + manager.modifiedWithoutEditing).map { File(it.path) }
-        val untracked = manager.unversionedFilesPaths.map { it.ioFile }
+        val tracked = manager.affectedPaths + manager.modifiedWithoutEditing.map { File(it.path) }
+        val untracked = manager.unversionedFilesPaths.map { it.ioFile }.filter { it.isFile }
 
         return (tracked + untracked)
-            .filter { it.isFile && it.extension in extensions }
+            .filter { it.extension in extensions }
             .distinct()
     }
 }

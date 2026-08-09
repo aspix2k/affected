@@ -123,10 +123,40 @@ class ChangeAnalyzerTest {
     }
 
     @Test
-    fun `deleted files are not listed`() = repo { dir ->
-        File(dir, "lib/src/main/kotlin/Sample.kt").delete()
+    fun `a deleted public source remains affected`() = repo { dir ->
+        val deleted = File(dir, "lib/src/main/kotlin/Sample.kt")
+        deleted.delete()
 
-        assertTrue(analyze(dir).files.none { it.name == "Sample.kt" }, "a deleted file does not exist on disk")
+        val changes = analyze(dir)
+        assertTrue(deleted in changes.files, "module ownership still depends on the deleted path")
+        assertTrue(deleted in changes.apiTouched, "removing a public declaration affects consumers")
+    }
+
+    @Test
+    fun `a deleted private-only source does not affect consumers`() = repo { dir ->
+        val deleted = File(dir, "lib/src/main/kotlin/Hidden.kt")
+        deleted.writeText("package probe\n\nprivate fun hidden() = 1\n")
+        run(dir, "git", "add", deleted.relativeTo(dir).path)
+        run(dir, "git", "commit", "-qm", "add private source")
+        deleted.delete()
+
+        val changes = analyze(dir)
+        assertTrue(deleted in changes.files, "the owning module remains affected")
+        assertFalse(deleted in changes.apiTouched, "private declarations have no consumers")
+    }
+
+    @Test
+    fun `a renamed source affects its old and new owners`() = repo { dir ->
+        val old = File(dir, "lib/src/main/kotlin/Sample.kt")
+        val renamed = File(dir, "other/src/main/kotlin/Renamed.kt")
+        renamed.parentFile.mkdirs()
+        run(dir, "git", "mv", old.relativeTo(dir).path, renamed.relativeTo(dir).path)
+
+        val changes = analyze(dir)
+        assertTrue(old in changes.files, "the old module must remain affected")
+        assertTrue(renamed in changes.files, "the new module must be affected")
+        assertTrue(old in changes.apiTouched, "removing public declarations affects old consumers")
+        assertTrue(renamed in changes.apiTouched, "adding public declarations affects new consumers")
     }
 
     @Test
