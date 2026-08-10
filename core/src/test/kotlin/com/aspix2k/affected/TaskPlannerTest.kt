@@ -1,7 +1,10 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.impact.TestClassId
+import com.aspix2k.affected.impact.TestSelection
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class TaskPlannerTest {
@@ -287,5 +290,98 @@ class TaskPlannerTest {
         assertEquals(2, plan.groups.size, "each system has its own command even with a shared root")
         assertEquals(listOf(":core:test"), plan.groups.single { it.systemId == "GRADLE" }.tasks)
         assertEquals(listOf("core:test"), plan.groups.single { it.systemId == "MAVEN" }.tasks)
+    }
+
+    @Test
+    fun `identical class selections share one typed group`() {
+        val selection = TestSelection.Classes(setOf(TestClassId("example.CoreTest")))
+        val groups = TaskPlanner.typedGroups(
+            systemId = "GRADLE",
+            root = "/repo",
+            tasks = listOf(
+                PlannedTask(":core:test", TaskKind.TEST, selection),
+                PlannedTask(":api:test", TaskKind.TEST, selection),
+            ),
+        )
+
+        assertEquals(1, groups.size)
+        assertEquals(selection, groups.single().selection)
+        assertEquals(listOf(":core:test", ":api:test"), groups.single().tasks.map(PlannedTask::path))
+    }
+
+    @Test
+    fun `different test selections keep separate typed groups`() {
+        val groups = TaskPlanner.typedGroups(
+            systemId = "GRADLE",
+            root = "/repo",
+            tasks = listOf(
+                PlannedTask(":all:test", TaskKind.TEST),
+                PlannedTask(
+                    ":selected:test",
+                    TaskKind.TEST,
+                    TestSelection.Classes(setOf(TestClassId("example.SelectedTest"))),
+                ),
+                PlannedTask(":empty:test", TaskKind.TEST, TestSelection.ProvenEmpty),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                TestSelection.All,
+                TestSelection.Classes(setOf(TestClassId("example.SelectedTest"))),
+                TestSelection.ProvenEmpty,
+            ),
+            groups.map(PlannedTaskGroup::selection),
+        )
+    }
+
+    @Test
+    fun `conflicting selections for one task widen to all`() {
+        val groups = TaskPlanner.typedGroups(
+            systemId = "GRADLE",
+            root = "/repo",
+            tasks = listOf(
+                PlannedTask(
+                    ":core:test",
+                    TaskKind.TEST,
+                    TestSelection.Classes(setOf(TestClassId("example.CoreTest"))),
+                ),
+                PlannedTask(":core:test", TaskKind.TEST, TestSelection.ProvenEmpty),
+            ),
+        )
+
+        assertEquals(1, groups.size)
+        assertEquals(TestSelection.All, groups.single().selection)
+        assertEquals(listOf(":core:test"), groups.single().tasks.map(PlannedTask::path))
+    }
+
+    @Test
+    fun `typed groups render the existing full invocation`() {
+        val typed = TaskPlanner.typedGroups(
+            systemId = "GRADLE",
+            root = "/repo",
+            tasks = listOf(
+                PlannedTask(":core:test", TaskKind.TEST),
+                PlannedTask(":app:compileDebugUnitTestKotlin", TaskKind.COMPILE),
+            ),
+        )
+        val plan = TypedPlan(typed, tested = 1, compiled = 1)
+
+        assertEquals(2, plan.groups.size)
+        assertEquals(
+            TaskGroup(
+                systemId = "GRADLE",
+                root = "/repo",
+                tasks = listOf(":core:test", ":app:compileDebugUnitTestKotlin"),
+            ),
+            plan.render().groups.single(),
+        )
+    }
+
+    @Test
+    fun `test selection cannot attach to a compile task`() {
+        assertFailsWith<IllegalArgumentException> {
+            PlannedTask(":app:compileTestKotlin", TaskKind.COMPILE, TestSelection.ProvenEmpty)
+        }
     }
 }
