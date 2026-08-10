@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class AffectedCollectorAgent {
     static final String CODE_SOURCES_PROPERTY = "affected.collector.codeSources";
     private static final CollectorState STATE = new CollectorState();
+    private static volatile AffectedMavenConfig.ProjectConfig mavenConfig;
 
     private AffectedCollectorAgent() {
     }
@@ -35,6 +36,9 @@ public final class AffectedCollectorAgent {
     public static void premain(String arguments, Instrumentation instrumentation) {
         try {
             ensureWorkerId();
+            if (arguments != null && !arguments.trim().isEmpty()) {
+                configureMaven(arguments, Paths.get(System.getProperty("user.dir")), System.getProperties());
+            }
             STATE.configure(codeSources());
             instrumentation.addTransformer(new CollectorTransformer(STATE), false);
         } catch (Exception failure) {
@@ -58,8 +62,19 @@ public final class AffectedCollectorAgent {
         return STATE;
     }
 
+    static void reapplyMavenConfig(java.util.Properties properties) {
+        AffectedMavenConfig.ProjectConfig current = mavenConfig;
+        if (current != null) current.apply(properties);
+    }
+
+    static void configureMaven(String manifest, Path basedir, java.util.Properties properties) throws Exception {
+        mavenConfig = AffectedMavenConfig.read(Paths.get(manifest), basedir);
+        mavenConfig.apply(properties);
+    }
+
     static void resetForTests() {
         STATE.reset();
+        mavenConfig = null;
     }
 
     static Set<Path> codeSources() {

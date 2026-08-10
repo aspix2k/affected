@@ -66,6 +66,9 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
             && AffectedCollectorAgent.isSupported()
             && !completedClasses.isEmpty();
         try {
+            if ("maven".equals(System.getProperty("affected.collector.runner"))) {
+                current.writeExpected(supported, completedClasses);
+            }
             current.writeCompletion(supported, completedClasses);
         } catch (Exception failure) {
             AffectedCollectorAgent.markUnsupported();

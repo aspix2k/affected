@@ -14,11 +14,13 @@ Java public API change. Unrelated modules are skipped. Compatible Gradle modules
 inside one composite build share an IDE invocation and Run tab; independent
 build roots run concurrently.
 
-After one successful full Affected run, Gradle JVM and Android unit-test tasks
-reuse a local dependency map to run only Jupiter and Vintage test classes that
-observed changed production bytecode. An unchanged compatible task skips its
-test worker. Missing or incompatible maps, changed test/runtime inputs, added or
-deleted classes, resources and unsupported test engines keep the full task.
+After one successful full Affected run, compatible Gradle and Maven test tasks
+reuse a local dependency map to narrow execution to Jupiter and Vintage
+test-class candidates for changed production bytecode. An unchanged compatible
+task skips its test worker. Missing or incompatible maps, changed test/runtime
+inputs, added or deleted classes, resources and unsupported test engines keep
+the full task. Maven also keeps the full goal when a shared worker cannot prove
+one exact test-class owner for the changed bytecode.
 
 There is no Affected-specific project configuration. Gradle and Maven modules
 come from the IDE project model; the other integrations read their standard
@@ -79,8 +81,12 @@ Gradle and Maven run through their IDE integrations. Other build systems launch
 their command-line tools in the Run tool window, so the relevant tool must be
 available on `PATH`.
 
-Exact Gradle selection is task-local and stays inside the same IDE invocation
-and Run tab. Complete maps are replaced only by successful full runs and remain
+Test-class selection stays inside the original IDE invocation and Run tab.
+Gradle selection is task-local. Maven reactor modules use independent maps.
+Maven exact selection supports Maven 3.9.x, Surefire 3.x, JUnit Platform and one reusable
+fork. It narrows only an unambiguous single-class decision; cumulative
+shared-worker candidates and other Maven configurations keep the full module
+test goal. Complete maps are replaced only by successful full runs and remain
 on the local machine.
 
 The optional [MCP Server](https://plugins.jetbrains.com/plugin/26071) integration

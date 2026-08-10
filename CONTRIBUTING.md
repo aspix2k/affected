@@ -67,20 +67,21 @@ four-line XML file; nothing else in the plugin changes.
 
 `ChangeAnalyzer` and `TaskPlanner` have no IDE dependencies and are covered by
 unit tests. Keep them that way: return data and let the action format it. The
-`collector` module produces Java 8 agent and listener JARs plus a Gradle init
-script under `agent/` in the plugin distribution, outside the IntelliJ plugin
-classpath. A full Affected Gradle test run attaches them only to executed
-`Test` tasks. The agent remains passive, the JUnit listener stays beside the
-project's JUnit Platform, and Gradle independently records every executed test
-class. Only a successful run with matching complete worker output atomically
+`collector` module produces Java 8 agents, a JUnit listener, a Gradle init script
+and a Maven core extension under `agent/` in the plugin distribution, outside
+the IntelliJ plugin classpath. A full compatible Gradle or Maven run records
+every executed Jupiter or Vintage test class and the production bytecode it
+loads. Only a successful run with matching complete worker output atomically
 replaces the local dependency map; all other cases keep the full-task fallback.
-The counted and checksummed map includes the full production class catalog. On later runs, a
-serializable task-local `onlyIf` spec executes after compile dependencies,
-compares current uninstrumented class bytes, skips a proven-unchanged task or
-sets the public Gradle `TestFilter` to the affected Jupiter and Vintage class
-names. Runtime, test, classpath or resource changes and any missing, corrupt,
-added, deleted or unsupported input run the original full task. Selected and
-skipped runs never replace the full baseline.
+The counted and checksummed map includes the full production class catalog.
+
+Gradle computes selection in a serializable task-local spec after compile
+dependencies and applies the public `TestFilter`. Maven 3.9.x uses a core
+extension to pass a counted project manifest to one reusable Surefire 3.x fork;
+a JUnit Platform discovery filter computes selection after `test-compile`.
+Neither path starts a second visible build. Runtime, test, classpath or resource
+changes and any missing, corrupt, added, deleted or unsupported input run the
+original full task. Selected and skipped runs never replace the full baseline.
 
 ## Conventions
 

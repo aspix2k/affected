@@ -16,7 +16,7 @@ plugins {
 }
 
 group = "com.aspix2k"
-version = "1.8.0"
+version = "1.9.0"
 
 repositories {
     mavenCentral()
@@ -115,20 +115,43 @@ val collectorListenerArtifact = configurations.create("collectorListenerArtifact
     isCanBeConsumed = false
     isCanBeResolved = true
 }
+val mavenAgentArtifact = configurations.create("mavenAgentArtifact") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+val mavenExtensionArtifact = configurations.create("mavenExtensionArtifact") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
 dependencies.add(collectorAgentArtifact.name, project(":collector"))
 dependencies.add(
     collectorListenerArtifact.name,
     dependencies.project(path = ":collector", configuration = "listenerElements"),
 )
+dependencies.add(
+    mavenAgentArtifact.name,
+    dependencies.project(path = ":collector", configuration = "mavenAgentElements"),
+)
+dependencies.add(
+    mavenExtensionArtifact.name,
+    dependencies.project(path = ":collector", configuration = "mavenExtensionElements"),
+)
 val collectorAgentArchive = collectorAgentArtifact.elements.map { it.single().asFile }
 val collectorListenerArchive = collectorListenerArtifact.elements.map { it.single().asFile }
+val mavenAgentArchive = mavenAgentArtifact.elements.map { it.single().asFile }
+val mavenExtensionArchive = mavenExtensionArtifact.elements.map { it.single().asFile }
 val collectorInitScript = project(":collector").layout.projectDirectory.file("src/main/gradle/affected-collector.init.gradle")
 val collectorAgentPath = "$pluginDirectory/agent/affected-collector-agent.jar"
 val collectorListenerPath = "$pluginDirectory/agent/affected-collector-listener.jar"
 val collectorInitScriptPath = "$pluginDirectory/agent/affected-collector.init.gradle"
+val mavenAgentPath = "$pluginDirectory/agent/affected-maven-agent.jar"
+val mavenExtensionPath = "$pluginDirectory/agent/affected-maven-extension.jar"
 val collectorPremain = "com.aspix2k.affected.collector.AffectedCollectorAgent"
 val collectorListener = "com.aspix2k.affected.collector.AffectedTestExecutionListener"
 val collectorService = "META-INF/services/org.junit.platform.launcher.TestExecutionListener"
+val mavenFilter = "com.aspix2k.affected.collector.AffectedMavenFilter"
+val mavenFilterService = "META-INF/services/org.junit.platform.launcher.PostDiscoveryFilter"
+val mavenComponentService = "META-INF/plexus/components.xml"
 
 tasks.named<BuildPluginTask>("buildPlugin") {
     from(pluginLicense)
@@ -139,6 +162,12 @@ tasks.named<BuildPluginTask>("buildPlugin") {
         into("agent")
     }
     from(collectorInitScript) {
+        into("agent")
+    }
+    from(mavenAgentArtifact) {
+        into("agent")
+    }
+    from(mavenExtensionArtifact) {
         into("agent")
     }
 
@@ -198,6 +227,67 @@ tasks.named<BuildPluginTask>("buildPlugin") {
             val packagedScript = archive.getInputStream(packagedScripts.single()).use { it.readBytes() }
             check(packagedScript.contentEquals(collectorInitScript.asFile.readBytes())) {
                 "Packaged collector init script must match the collector module source"
+            }
+
+            val packagedMavenAgents = archive.entries().asSequence().filter { it.name == mavenAgentPath }.toList()
+            check(packagedMavenAgents.size == 1) {
+                "Plugin distribution must contain exactly one $mavenAgentPath"
+            }
+            val packagedMavenAgent = archive.getInputStream(packagedMavenAgents.single()).use { it.readBytes() }
+            check(packagedMavenAgent.contentEquals(mavenAgentArchive.get().readBytes())) {
+                "Packaged Maven agent must match the collector module JAR"
+            }
+            JarInputStream(ByteArrayInputStream(packagedMavenAgent)).use { agent ->
+                check(agent.manifest?.mainAttributes?.getValue("Premain-Class") == collectorPremain) {
+                    "Packaged Maven agent must declare $collectorPremain as Premain-Class"
+                }
+                var listener: String? = null
+                var filter: String? = null
+                var classes = 0
+                while (true) {
+                    val entry = agent.nextJarEntry ?: break
+                    val bytes = agent.readBytes()
+                    when (entry.name) {
+                        collectorService -> listener = bytes.toString(Charsets.UTF_8).trim()
+                        mavenFilterService -> filter = bytes.toString(Charsets.UTF_8).trim()
+                    }
+                    if (entry.name.endsWith(".class")) {
+                        check(bytes.size >= 8 && ((bytes[6].toInt() and 0xff) shl 8 or (bytes[7].toInt() and 0xff)) == 52) {
+                            "Maven agent classes must target Java 8: ${entry.name}"
+                        }
+                        classes++
+                    }
+                }
+                check(listener == collectorListener && filter == mavenFilter && classes > 0) {
+                    "Packaged Maven agent must contain the exact JUnit services"
+                }
+            }
+
+            val packagedMavenExtensions = archive.entries().asSequence().filter { it.name == mavenExtensionPath }.toList()
+            check(packagedMavenExtensions.size == 1) {
+                "Plugin distribution must contain exactly one $mavenExtensionPath"
+            }
+            val packagedMavenExtension = archive.getInputStream(packagedMavenExtensions.single()).use { it.readBytes() }
+            check(packagedMavenExtension.contentEquals(mavenExtensionArchive.get().readBytes())) {
+                "Packaged Maven extension must match the collector module JAR"
+            }
+            JarInputStream(ByteArrayInputStream(packagedMavenExtension)).use { extension ->
+                var components = 0
+                var classes = 0
+                while (true) {
+                    val entry = extension.nextJarEntry ?: break
+                    val bytes = extension.readBytes()
+                    if (entry.name == mavenComponentService) components++
+                    if (entry.name.endsWith(".class")) {
+                        check(bytes.size >= 8 && ((bytes[6].toInt() and 0xff) shl 8 or (bytes[7].toInt() and 0xff)) == 52) {
+                            "Maven extension classes must target Java 8: ${entry.name}"
+                        }
+                        classes++
+                    }
+                }
+                check(components == 1 && classes > 0) {
+                    "Packaged Maven extension must contain one Plexus component descriptor"
+                }
             }
         }
     }

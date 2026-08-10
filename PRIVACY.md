@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 8 August 2026
+Last updated: 11 August 2026
 
 ## The short version
 
@@ -16,10 +16,11 @@ To decide what to run, the plugin reads:
   `cargo metadata`, `go list`, `package.json`, `ProjectReference` or
   `pyproject.toml` for the other build systems;
 - the changed lines of a source file, to tell whether a public declaration was
-  touched.
+  touched;
+- compiled production and test outputs, resources and runtime classpaths for
+  compatible Gradle and Maven test-class selection.
 
-All of it stays in memory for the length of one analysis. Nothing is written
-anywhere except the settings below.
+All of it is processed locally.
 
 ## What the plugin stores
 
@@ -30,8 +31,12 @@ Four settings, in your IDE configuration directory:
 - whether the verification runs before a commit;
 - whether it runs before a push.
 
-That is the entire persisted state. There is no identifier of you, your machine,
-or your project.
+Compatible Gradle and Maven runs also keep a derived cache below the IDE system
+directory. It contains task and test-class names, local class-output paths,
+production bytecode hashes and runtime fingerprints. It contains no source code
+or class-file contents. Selected, incomplete, failed and cancelled runs do not
+replace the last complete cache. The cache is local to the project and can be
+deleted safely; the next run falls back to the full test task.
 
 ## What the plugin runs
 
