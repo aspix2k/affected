@@ -19,6 +19,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import org.jetbrains.plugins.gradle.service.project.GradleModuleDataIndex
 import org.jetbrains.plugins.gradle.settings.GradleSettings
 import org.jetbrains.plugins.gradle.util.GradleConstants
+import org.jetbrains.plugins.gradle.util.getDirectoryToRunTask
+import org.jetbrains.plugins.gradle.util.gradleIdentityPathOrNull
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
@@ -143,14 +145,14 @@ class GradleBuildSystem : SuspendingBuildSystem {
 
         val roots = ModuleRootManager.getInstance(module).contentRoots.map { it.path }
         if (roots.isEmpty()) return null
-        val gradleData = GradleModuleDataIndex.findGradleModuleData(module)
+        val gradleData = GradleModuleDataIndex.findModuleNode(module)?.data
 
         return Described(
             key = "$projectPath|$path",
             path = path,
             projectPath = projectPath,
             roots = roots,
-            directoryToRunTask = gradleData?.directoryToRunTask,
+            directoryToRunTask = gradleData?.getDirectoryToRunTask(),
             identityPath = gradleData?.gradleIdentityPathOrNull,
         )
     }
