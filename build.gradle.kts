@@ -74,7 +74,10 @@ intellijPlatform {
     }
 
     pluginVerification {
-        failureLevel = listOf(FailureLevel.INVALID_PLUGIN)
+        failureLevel = listOf(
+            FailureLevel.INVALID_PLUGIN,
+            FailureLevel.EXPERIMENTAL_API_USAGES,
+        )
         ides {
             create(IntelliJPlatformType.IntellijIdea, "2025.3")
             create(IntelliJPlatformType.IntellijIdea, "2026.2")
