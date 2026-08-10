@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-08-10
+
 ### Added
 
 - Run only the Jupiter and Vintage test classes that observed changed production bytecode in compatible Gradle JVM and Android unit-test tasks. A proven-unchanged task skips its test worker; missing, stale, unsupported or ambiguous inputs, resources and class-set changes keep the original full-task fallback in the same IDE Run tab.
