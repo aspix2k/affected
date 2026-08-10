@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Collect and atomically persist complete local test-class dependency maps after successful full Gradle JVM and Android unit-test tasks. Unsupported, incomplete, failed or cancelled collection keeps the previous complete map and the full-task fallback; exact filtering is not connected yet.
+- Run only the Jupiter and Vintage test classes that observed changed production bytecode in compatible Gradle JVM and Android unit-test tasks. A proven-unchanged task skips its test worker; missing, stale, unsupported or ambiguous inputs, resources and class-set changes keep the original full-task fallback in the same IDE Run tab.
+- Collect and atomically persist complete local test-class dependency maps and production class catalogs after successful full runs. Selected, skipped, incomplete, failed or cancelled runs keep the previous complete baseline.
 
 ## [1.7.2] - 2026-08-10
 

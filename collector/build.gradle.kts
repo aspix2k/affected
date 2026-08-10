@@ -36,6 +36,7 @@ tasks.withType<JavaCompile>().configureEach {
 tasks.jar {
     archiveFileName.set("affected-collector-agent.jar")
     include("com/aspix2k/affected/collector/AffectedCollectorAgent*.class")
+    include("com/aspix2k/affected/collector/AffectedDependencySelector*.class")
     include("com/aspix2k/affected/collector/CollectorOutput*.class")
     manifest {
         attributes("Premain-Class" to "com.aspix2k.affected.collector.AffectedCollectorAgent")

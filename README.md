@@ -14,6 +14,12 @@ Java public API change. Unrelated modules are skipped. Compatible Gradle modules
 inside one composite build share an IDE invocation and Run tab; independent
 build roots run concurrently.
 
+After one successful full Affected run, Gradle JVM and Android unit-test tasks
+reuse a local dependency map to run only Jupiter and Vintage test classes that
+observed changed production bytecode. An unchanged compatible task skips its
+test worker. Missing or incompatible maps, changed test/runtime inputs, added or
+deleted classes, resources and unsupported test engines keep the full task.
+
 There is no Affected-specific project configuration. Gradle and Maven modules
 come from the IDE project model; the other integrations read their standard
 manifests.
@@ -72,6 +78,10 @@ The same menu contains these settings:
 Gradle and Maven run through their IDE integrations. Other build systems launch
 their command-line tools in the Run tool window, so the relevant tool must be
 available on `PATH`.
+
+Exact Gradle selection is task-local and stays inside the same IDE invocation
+and Run tab. Complete maps are replaced only by successful full runs and remain
+on the local machine.
 
 The optional [MCP Server](https://plugins.jetbrains.com/plugin/26071) integration
 exposes the affected modules, changed files, verification plan and run controls

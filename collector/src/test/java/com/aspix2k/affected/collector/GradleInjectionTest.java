@@ -2,17 +2,24 @@ package com.aspix2k.affected.collector;
 
 import org.gradle.testkit.runner.BuildResult;
 import org.gradle.testkit.runner.GradleRunner;
+import org.gradle.testkit.runner.TaskOutcome;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.Assume;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -30,14 +37,46 @@ public class GradleInjectionTest {
         Path project = temporary.newFolder("project").toPath();
         writeFixture(project);
         Path firstOutput = temporary.newFolder("first-output").toPath();
-        Path secondOutput = temporary.newFolder("second-output").toPath();
+        Path unchangedOutput = temporary.newFolder("unchanged-output").toPath();
+        Path exactOutput = temporary.newFolder("exact-output").toPath();
+        Path addedOutput = temporary.newFolder("added-output").toPath();
+        Path resourceOutput = temporary.newFolder("resource-output").toPath();
         Path taggedOutput = temporary.newFolder("tagged-output").toPath();
         Path selectedOutput = temporary.newFolder("selected-output").toPath();
         Path legacyOutput = temporary.newFolder("legacy-output").toPath();
 
         BuildResult first = run(project, firstOutput);
+        assertComplete(firstOutput, 5, first.getOutput());
+        assertEquals(
+            setOf("AlphaTest", "BetaTest", "GammaTest", "DeltaTest", "VintageAlphaTest"),
+            executedTests(project)
+        );
+        promote(firstOutput, project.resolve(".affected/maps"));
+
+        clearExecuted(project);
+        BuildResult unchanged = run(project, unchangedOutput);
+        assertEquals(TaskOutcome.SKIPPED, unchanged.task(":testDebugUnitTest").getOutcome());
+        assertEquals(Collections.emptySet(), executedTests(project));
+        assertOutputEmpty(unchangedOutput);
+
         writeAlpha(project, "int result = 1; return result;");
-        BuildResult second = run(project, secondOutput);
+        clearExecuted(project);
+        BuildResult exact = run(project, exactOutput);
+        assertComplete(exactOutput, 3, false, exact.getOutput());
+        assertEquals(setOf("AlphaTest", "GammaTest", "VintageAlphaTest"), executedTests(project));
+
+        write(
+            project.resolve("src/main/java/fixture/Added.java"),
+            "package fixture; public final class Added {}\n"
+        );
+        BuildResult added = run(project, addedOutput);
+        assertComplete(addedOutput, 5, added.getOutput());
+
+        Files.delete(project.resolve("src/main/java/fixture/Added.java"));
+        write(project.resolve("src/main/resources/fixture.properties"), "value=changed\n");
+        BuildResult resource = run(project, resourceOutput);
+        assertComplete(resourceOutput, 5, resource.getOutput());
+
         BuildResult tagged = run(project, taggedOutput, "testDebugUnitTest", true, "-PincludeSlow=true");
         BuildResult selected = run(
             project,
@@ -49,28 +88,70 @@ public class GradleInjectionTest {
         );
         run(project, legacyOutput, "legacyTest", false);
 
-        assertComplete(firstOutput, 4, first.getOutput());
-        assertComplete(secondOutput, 4, second.getOutput());
-        assertComplete(taggedOutput, 5, tagged.getOutput());
+        assertComplete(taggedOutput, 6, tagged.getOutput());
         assertComplete(selectedOutput, 1, false, selected.getOutput());
-        assertEquals(manifestValue(firstOutput, "input="), manifestValue(secondOutput, "input="));
-        assertEquals(manifestValue(firstOutput, "runtime="), manifestValue(secondOutput, "runtime="));
+        assertEquals(manifestValue(firstOutput, "input="), manifestValue(exactOutput, "input="));
+        assertEquals(manifestValue(firstOutput, "runtime="), manifestValue(exactOutput, "runtime="));
         assertNotEquals(manifestValue(firstOutput, "runtime="), manifestValue(taggedOutput, "runtime="));
-        assertNotEquals(dependencyHashes(firstOutput, "fixture.Alpha"), dependencyHashes(secondOutput, "fixture.Alpha"));
+        assertNotEquals(dependencyHashes(firstOutput, "fixture.Alpha"), dependencyHashes(exactOutput, "fixture.Alpha"));
         assertTrue(selected.getOutput(), readTaskManifest(selectedOutput).endsWith("all=false\n"));
         assertFallback(legacyOutput);
-        assertTrue(second.getOutput(), second.getOutput().contains("Reusing configuration cache"));
+        assertTrue(unchanged.getOutput(), unchanged.getOutput().contains("Reusing configuration cache"));
     }
 
     @Test(timeout = 120_000L)
-    public void gradleEightProducesCompleteMaps() throws Exception {
+    public void gradleEightSelectsExactTestClasses() throws Exception {
         Path project = temporary.newFolder("gradle-eight-project").toPath();
-        Path output = temporary.newFolder("gradle-eight-output").toPath();
+        Path baselineOutput = temporary.newFolder("gradle-eight-baseline-output").toPath();
+        Path exactOutput = temporary.newFolder("gradle-eight-exact-output").toPath();
         writeFixture(project);
 
-        BuildResult result = execute(project, output, "testDebugUnitTest", false, "8.14.3");
+        BuildResult baseline = execute(project, baselineOutput, "testDebugUnitTest", false, "8.14.3");
+        assertComplete(baselineOutput, 5, baseline.getOutput());
+        promote(baselineOutput, project.resolve(".affected/maps"));
+        writeAlpha(project, "int result = 1; return result;");
+        clearExecuted(project);
 
-        assertComplete(output, 4, result.getOutput());
+        BuildResult exact = execute(project, exactOutput, "testDebugUnitTest", false, "8.14.3");
+
+        assertComplete(exactOutput, 3, false, exact.getOutput());
+        assertEquals(setOf("AlphaTest", "GammaTest", "VintageAlphaTest"), executedTests(project));
+    }
+
+    @Test(timeout = 120_000L)
+    public void symlinkedTestClassesFallBackToTheFullTask() throws Exception {
+        Path project = temporary.newFolder("symlink-project").toPath();
+        Path baselineOutput = temporary.newFolder("symlink-baseline-output").toPath();
+        Path fallbackOutput = temporary.newFolder("symlink-fallback-output").toPath();
+        writeFixture(project);
+
+        BuildResult baseline = run(project, baselineOutput);
+        assertComplete(baselineOutput, 5, baseline.getOutput());
+        promote(baselineOutput, project.resolve(".affected/maps"));
+        Path link = project.resolve("test-classes-link");
+        try {
+            Files.createSymbolicLink(link, project.resolve("build/classes/java/test"));
+        } catch (UnsupportedOperationException | java.io.IOException failure) {
+            Assume.assumeNoException(failure);
+        }
+        Path alphaTest = project.resolve("src/test/java/fixture/AlphaTest.java");
+        write(alphaTest, read(alphaTest).replace("Executions.mark(\"AlphaTest\")", "Executions.mark(\"AlphaTest\"); int changed = 1"));
+        clearExecuted(project);
+
+        BuildResult fallback = run(
+            project,
+            fallbackOutput,
+            "testDebugUnitTest",
+            true,
+            "-PsymlinkTests=true"
+        );
+
+        assertEquals(TaskOutcome.SUCCESS, fallback.task(":testDebugUnitTest").getOutcome());
+        assertEquals(
+            setOf("AlphaTest", "BetaTest", "GammaTest", "DeltaTest", "VintageAlphaTest"),
+            executedTests(project)
+        );
+        assertFallback(fallbackOutput);
     }
 
     private BuildResult run(Path project, Path output) {
@@ -105,6 +186,8 @@ public class GradleInjectionTest {
         arguments.add("-Daffected.collector.agent=" + required("affected.smoke.agent"));
         arguments.add("-Daffected.collector.listener=" + required("affected.test.listener"));
         arguments.add("-Daffected.collector.output=" + output);
+        arguments.add("-Daffected.collector.maps=" + project.resolve(".affected/maps"));
+        arguments.add("-Daffected.collector.version=" + collectorVersion());
         java.util.Collections.addAll(arguments, additionalArguments);
         GradleRunner runner = GradleRunner.create()
             .withProjectDir(project.toFile())
@@ -125,7 +208,9 @@ public class GradleInjectionTest {
             task = tasks.get(0);
         }
         assertTrue(task.getFileName().toString().matches("task-[0-9a-f]{64}"));
+        assertTrue(buildOutput, Files.isRegularFile(task.resolve("task.manifest")));
         assertTrue(read(task.resolve("task.manifest")).endsWith("all=" + allTests + "\n"));
+        assertTrue(read(task.resolve("catalog.manifest")).contains("artifact="));
         assertEquals(
             buildOutput,
             tests,
@@ -174,6 +259,112 @@ public class GradleInjectionTest {
         }
     }
 
+    private static void assertOutputEmpty(Path output) throws Exception {
+        try (Stream<Path> files = Files.list(output)) {
+            assertEquals(0, files.count());
+        }
+    }
+
+    private static Set<String> executedTests(Path project) throws Exception {
+        Path executed = project.resolve("executed");
+        if (!Files.isDirectory(executed)) return Collections.emptySet();
+        try (Stream<Path> files = Files.list(executed)) {
+            return files.map(path -> path.getFileName().toString()).collect(Collectors.toSet());
+        }
+    }
+
+    private static void clearExecuted(Path project) throws Exception {
+        Path executed = project.resolve("executed");
+        if (!Files.isDirectory(executed)) return;
+        try (Stream<Path> files = Files.list(executed)) {
+            for (Path file : files.collect(Collectors.toList())) Files.delete(file);
+        }
+    }
+
+    private static Set<String> setOf(String... values) {
+        return new HashSet<String>(Arrays.asList(values));
+    }
+
+    private static void promote(Path output, Path maps) throws Exception {
+        Path task;
+        try (Stream<Path> files = Files.list(output)) {
+            task = files.findFirst().orElseThrow(AssertionError::new);
+        }
+        Map<String, String> manifest = values(task.resolve("task.manifest"));
+        String taskKey = decode(manifest.get("task"));
+        StringBuilder payload = new StringBuilder();
+        int artifactCount = 0;
+        for (String line : read(task.resolve("catalog.manifest")).split("\n")) {
+            if (line.startsWith("artifact=")) {
+                payload.append(line).append('\n');
+                artifactCount++;
+            }
+        }
+        int recordCount = 0;
+        try (Stream<Path> workers = Files.list(task)) {
+            for (Path worker : workers.filter(Files::isDirectory).collect(Collectors.toList())) {
+                try (Stream<Path> files = Files.list(worker)) {
+                    for (Path map : files.filter(path -> path.getFileName().toString().endsWith(".map"))
+                        .collect(Collectors.toList())) {
+                        List<String> lines = Arrays.asList(read(map).split("\n"));
+                        String test = lines.stream()
+                            .filter(line -> line.startsWith("test="))
+                            .findFirst()
+                            .orElseThrow(AssertionError::new)
+                            .substring("test=".length());
+                        payload.append("record=").append(test).append('|')
+                            .append(lines.stream()
+                                .filter(line -> line.startsWith("dependency="))
+                                .map(line -> line.substring("dependency=".length()))
+                            .collect(Collectors.joining(";")))
+                            .append('\n');
+                        recordCount++;
+                    }
+                }
+            }
+        }
+        StringBuilder content = new StringBuilder("format=1\n")
+            .append("schema=3\n")
+            .append("collector=").append(encode(collectorVersion())).append('\n')
+            .append("task=").append(manifest.get("task")).append('\n')
+            .append("runtime=").append(manifest.get("runtime")).append('\n')
+            .append("input=").append(manifest.get("input")).append('\n')
+            .append("run=").append(encode("fixture-baseline")).append('\n')
+            .append("artifacts=").append(artifactCount).append('\n')
+            .append("records=").append(recordCount).append('\n')
+            .append("checksum=").append(sha256(payload.toString())).append('\n')
+            .append(payload);
+        Files.createDirectories(maps);
+        Files.write(
+            maps.resolve("map-" + sha256(taskKey) + ".map"),
+            content.toString().getBytes(StandardCharsets.UTF_8)
+        );
+    }
+
+    private static Map<String, String> values(Path manifest) throws Exception {
+        Map<String, String> values = new LinkedHashMap<String, String>();
+        for (String line : read(manifest).split("\n")) {
+            int separator = line.indexOf('=');
+            if (separator > 0) values.put(line.substring(0, separator), line.substring(separator + 1));
+        }
+        return values;
+    }
+
+    private static String decode(String value) {
+        return new String(Base64.getUrlDecoder().decode(value), StandardCharsets.UTF_8);
+    }
+
+    private static String encode(String value) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String sha256(String value) throws Exception {
+        byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+        StringBuilder result = new StringBuilder(digest.length * 2);
+        for (byte item : digest) result.append(String.format(java.util.Locale.ROOT, "%02x", item & 0xff));
+        return result.toString();
+    }
+
     private static Set<String> dependencyHashes(Path output, String className) throws Exception {
         Set<String> hashes = new HashSet<String>();
         String encodedClass = Base64.getUrlEncoder().withoutPadding()
@@ -211,6 +402,7 @@ public class GradleInjectionTest {
                 "dependencies {\n" +
                 "    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.11.0'\n" +
                 "    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.11.0'\n" +
+                "    testRuntimeOnly 'org.junit.vintage:junit-vintage-engine:5.11.0'\n" +
                 "    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.0'\n" +
                 "    testImplementation 'junit:junit:4.13.2'\n" +
                 "}\n" +
@@ -218,7 +410,9 @@ public class GradleInjectionTest {
                 "    testClassesDirs = sourceSets.test.output.classesDirs\n" +
                 "    classpath = sourceSets.test.runtimeClasspath\n" +
                 "    useJUnitPlatform { if (!project.hasProperty('includeSlow')) excludeTags 'slow' }\n" +
+                "    if (project.hasProperty('symlinkTests')) testClassesDirs = files(file('test-classes-link'))\n" +
                 "    exclude '**/LegacyTest.class'\n" +
+                "    systemProperty 'fixture.executed', file('executed').absolutePath\n" +
                 "    maxParallelForks = 2\n" +
                 "    forkEvery = 1\n" +
                 "}\n" +
@@ -226,6 +420,7 @@ public class GradleInjectionTest {
                 "    testClassesDirs = sourceSets.test.output.classesDirs\n" +
                 "    classpath = sourceSets.test.runtimeClasspath\n" +
                 "    include '**/LegacyTest.class'\n" +
+                "    systemProperty 'fixture.executed', file('executed').absolutePath\n" +
                 "}\n"
         );
         writeAlpha(project, "return 1;");
@@ -234,24 +429,35 @@ public class GradleInjectionTest {
             "package fixture; public final class Beta { public static int value() { return 2; } }\n"
         );
         write(
+            project.resolve("src/test/java/fixture/Executions.java"),
+            "package fixture; import java.nio.charset.StandardCharsets; import java.nio.file.*; " +
+                "public final class Executions { public static void mark(String name) throws Exception { " +
+                "Path root = Paths.get(System.getProperty(\"fixture.executed\")); Files.createDirectories(root); " +
+                "Files.write(root.resolve(name), name.getBytes(StandardCharsets.UTF_8)); } }\n"
+        );
+        write(
             project.resolve("src/test/java/fixture/AlphaTest.java"),
             "package fixture; import org.junit.jupiter.api.Test; import static org.junit.jupiter.api.Assertions.*; " +
-                "public final class AlphaTest { @Test void alpha() { assertEquals(1, Alpha.value()); } }\n"
+                "public final class AlphaTest { @Test void alpha() throws Exception { " +
+                "assertEquals(1, Alpha.value()); Executions.mark(\"AlphaTest\"); } }\n"
         );
         write(
             project.resolve("src/test/java/fixture/BetaTest.java"),
             "package fixture; import org.junit.jupiter.api.Test; import static org.junit.jupiter.api.Assertions.*; " +
-                "public final class BetaTest { @Test void beta() { assertEquals(2, Beta.value()); } }\n"
+                "public final class BetaTest { @Test void beta() throws Exception { " +
+                "assertEquals(2, Beta.value()); Executions.mark(\"BetaTest\"); } }\n"
         );
         write(
             project.resolve("src/test/java/fixture/GammaTest.java"),
             "package fixture; import org.junit.jupiter.api.Test; import static org.junit.jupiter.api.Assertions.*; " +
-                "public final class GammaTest { @Test void gamma() { assertEquals(1, Alpha.value()); } }\n"
+                "public final class GammaTest { @Test void gamma() throws Exception { " +
+                "assertEquals(1, Alpha.value()); Executions.mark(\"GammaTest\"); } }\n"
         );
         write(
             project.resolve("src/test/java/fixture/DeltaTest.java"),
             "package fixture; import org.junit.jupiter.api.Test; import static org.junit.jupiter.api.Assertions.*; " +
-                "public final class DeltaTest { @Test void delta() { assertEquals(2, Beta.value()); } }\n"
+                "public final class DeltaTest { @Test void delta() throws Exception { " +
+                "assertEquals(2, Beta.value()); Executions.mark(\"DeltaTest\"); } }\n"
         );
         write(
             project.resolve("src/test/java/fixture/DisabledTest.java"),
@@ -262,12 +468,20 @@ public class GradleInjectionTest {
             project.resolve("src/test/java/fixture/SlowTest.java"),
             "package fixture; import org.junit.jupiter.api.Tag; import org.junit.jupiter.api.Test; " +
                 "import static org.junit.jupiter.api.Assertions.*; " +
-                "public final class SlowTest { @Tag(\"slow\") @Test void slow() { assertEquals(1, Alpha.value()); } }\n"
+                "public final class SlowTest { @Tag(\"slow\") @Test void slow() throws Exception { " +
+                "assertEquals(1, Alpha.value()); Executions.mark(\"SlowTest\"); } }\n"
+        );
+        write(
+            project.resolve("src/test/java/fixture/VintageAlphaTest.java"),
+            "package fixture; import org.junit.Test; import static org.junit.Assert.*; " +
+                "public final class VintageAlphaTest { @Test public void vintage() throws Exception { " +
+                "assertEquals(1, Alpha.value()); Executions.mark(\"VintageAlphaTest\"); } }\n"
         );
         write(
             project.resolve("src/test/java/fixture/LegacyTest.java"),
             "package fixture; import org.junit.Test; import static org.junit.Assert.*; " +
-                "public final class LegacyTest { @Test public void legacy() { assertEquals(1, Alpha.value()); } }\n"
+                "public final class LegacyTest { @Test public void legacy() throws Exception { " +
+                "assertEquals(1, Alpha.value()); Executions.mark(\"LegacyTest\"); } }\n"
         );
     }
 
@@ -293,5 +507,23 @@ public class GradleInjectionTest {
         File file = new File(value);
         if (!file.isFile()) throw new IllegalStateException(file.toString());
         return file.getAbsolutePath();
+    }
+
+    private static String collectorVersion() {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            for (String property : Arrays.asList(
+                "affected.smoke.agent",
+                "affected.test.listener",
+                "affected.test.initScript"
+            )) {
+                digest.update(Files.readAllBytes(new File(required(property)).toPath()));
+            }
+            StringBuilder result = new StringBuilder();
+            for (byte item : digest.digest()) result.append(String.format(java.util.Locale.ROOT, "%02x", item & 0xff));
+            return result.toString();
+        } catch (Exception failure) {
+            throw new IllegalStateException(failure);
+        }
     }
 }
