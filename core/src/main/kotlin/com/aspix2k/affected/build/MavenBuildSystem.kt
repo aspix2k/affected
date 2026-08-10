@@ -5,15 +5,22 @@ import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.runners.ProgramRunner
 import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
+import com.intellij.util.execution.ParametersListUtil
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import org.jetbrains.idea.maven.execution.MavenRunConfigurationType
 import org.jetbrains.idea.maven.execution.MavenRunnerParameters
 import org.jetbrains.idea.maven.model.MavenId
 import org.jetbrains.idea.maven.project.MavenProjectsManager
 import java.io.File
+import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 
@@ -82,39 +89,51 @@ class MavenBuildSystem : SuspendingBuildSystem {
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean {
         if (project.isDisposed) return false
 
-        val parameters = parameters(root, tasks)
+        val collector = withContext(Dispatchers.IO) { collectorRun(project) }
+        val parameters = parameters(root, tasks, collector?.arguments.orEmpty())
         return suspendCancellableCoroutine { continuation ->
             val completed = AtomicBoolean(false)
 
             fun complete(passed: Boolean) {
-                if (completed.compareAndSet(false, true) && continuation.isActive) continuation.resume(passed)
+                if (!completed.compareAndSet(false, true)) return
+                CoroutineScope(Dispatchers.IO).launch {
+                    runCatching { collector?.complete(passed) }
+                    if (continuation.isActive) continuation.resume(passed)
+                }
             }
 
+            continuation.invokeOnCancellation { collector?.cancel() }
             ApplicationManager.getApplication().invokeLater {
                 if (!continuation.isActive || project.isDisposed) return@invokeLater complete(false)
-                MavenRunConfigurationType.runConfiguration(
-                    project,
-                    parameters,
-                    object : ProgramRunner.Callback {
-                        override fun processStarted(descriptor: RunContentDescriptor) {
-                            val handler = descriptor.processHandler ?: return complete(false)
-                            continuation.invokeOnCancellation {
-                                if (!handler.isProcessTerminated) handler.destroyProcess()
+                runCatching {
+                    MavenRunConfigurationType.runConfiguration(
+                        project,
+                        parameters,
+                        object : ProgramRunner.Callback {
+                            override fun processStarted(descriptor: RunContentDescriptor) {
+                                val handler = descriptor.processHandler ?: return complete(false)
+                                continuation.invokeOnCancellation {
+                                    if (!handler.isProcessTerminated) handler.destroyProcess()
+                                }
+                                handler.addProcessListener(object : ProcessListener {
+                                    override fun processTerminated(event: ProcessEvent) = complete(event.exitCode == 0)
+                                })
+                                if (handler.isProcessTerminated) complete(handler.exitCode == 0)
                             }
-                            handler.addProcessListener(object : ProcessListener {
-                                override fun processTerminated(event: ProcessEvent) = complete(event.exitCode == 0)
-                            })
-                            if (handler.isProcessTerminated) complete(handler.exitCode == 0)
-                        }
 
-                        override fun processNotStarted(error: Throwable?) = complete(false)
-                    },
-                )
+                            override fun processNotStarted(error: Throwable?) = complete(false)
+                        },
+                    )
+                }.onFailure { complete(false) }
             }
         }
     }
 
-    private fun parameters(root: String, tasks: List<String>): MavenRunnerParameters {
+    private fun parameters(
+        root: String,
+        tasks: List<String>,
+        options: List<String> = emptyList(),
+    ): MavenRunnerParameters {
         val goals = tasks.map { it.substringAfterLast(':') }.distinct()
         val projects = tasks.mapNotNull { it.substringBeforeLast(':').takeIf(String::isNotBlank) }.distinct()
         return MavenRunnerParameters(
@@ -125,7 +144,15 @@ class MavenBuildSystem : SuspendingBuildSystem {
             emptyList(),
         ).apply {
             if (projects.isNotEmpty()) projectsCmdOptionValues = projects
+            if (options.isNotEmpty()) cmdOptions = ParametersListUtil.join(options)
         }
+    }
+
+    private fun collectorRun(project: Project): MavenCollectorRun? {
+        val classPath = Path.of(PathManager.getJarPathForClass(MavenBuildSystem::class.java))
+        val artifacts = findMavenCollectorArtifacts(classPath) ?: return null
+        val cache = PathManager.getSystemDir().resolve(CACHE_DIRECTORY).resolve(project.locationHash).resolve("maven")
+        return MavenCollectorRun.create(cache, artifacts)
     }
 
     private fun rootOf(manager: MavenProjectsManager, directory: String): String =
@@ -137,5 +164,6 @@ class MavenBuildSystem : SuspendingBuildSystem {
     private companion object {
         const val TEST_GOAL = "test"
         const val COMPILE_GOAL = "test-compile"
+        const val CACHE_DIRECTORY = "affected"
     }
 }

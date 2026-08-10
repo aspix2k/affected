@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-08-11
+
+### Added
+
+- Run one affected Jupiter or Vintage test class when a complete Maven 3.9.x and Surefire 3.x dependency map proves that class unambiguously. Selection happens after normal test compilation in the original Maven invocation and Run tab; reactor modules keep independent maps and unchanged compatible modules skip test execution.
+
+### Changed
+
+- Preserve the full Maven `test` goal for ambiguous shared-worker dependencies, Maven 4, forkless or multi-fork Surefire, user-selected tests, unsupported providers, and every missing, stale, corrupt or changed runtime input. Selected, empty, failed and cancelled runs cannot replace the last complete baseline.
+
 ## [1.8.0] - 2026-08-10
 
 ### Added
@@ -143,7 +153,9 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v1.7.2...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/aspix2k/affected/compare/v1.8.0...v1.9.0
+[1.8.0]: https://github.com/aspix2k/affected/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/aspix2k/affected/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/aspix2k/affected/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/aspix2k/affected/compare/v1.6.0...v1.7.0

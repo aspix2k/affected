@@ -3,6 +3,19 @@ plugins {
 }
 
 val smoke = sourceSets.create("smoke")
+val maven = sourceSets.create("maven")
+val maven390Distribution = configurations.create("maven390Distribution") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+val mavenLatestDistribution = configurations.create("mavenLatestDistribution") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+val maven4Distribution = configurations.create("maven4Distribution") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
 
 repositories {
     mavenCentral()
@@ -11,9 +24,14 @@ repositories {
 dependencies {
     compileOnly("org.junit.platform:junit-platform-launcher:1.11.0")
 
+    add(maven.compileOnlyConfigurationName, "org.apache.maven:maven-core:3.9.16")
+    add(maven.compileOnlyConfigurationName, "org.codehaus.plexus:plexus-utils:3.5.1")
+
     testImplementation("junit:junit:4.13.2")
     testImplementation(gradleTestKit())
+    testImplementation("org.apache.maven:maven-core:3.9.16")
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.11.0")
+    testImplementation("org.junit.jupiter:junit-jupiter-engine:5.11.0")
     testImplementation("org.junit.platform:junit-platform-launcher:1.11.0")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.11.0")
     testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.11.0")
@@ -23,7 +41,17 @@ dependencies {
     add(smoke.implementationConfigurationName, "org.junit.platform:junit-platform-launcher:1.11.0")
     add(smoke.runtimeOnlyConfigurationName, "org.junit.jupiter:junit-jupiter-engine:5.11.0")
     add(smoke.runtimeOnlyConfigurationName, "org.junit.vintage:junit-vintage-engine:5.11.0")
+    add(maven390Distribution.name, "org.apache.maven:apache-maven:3.9.0:bin@zip")
+    add(mavenLatestDistribution.name, "org.apache.maven:apache-maven:3.9.16:bin@zip")
+    add(maven4Distribution.name, "org.apache.maven:apache-maven:4.0.0-rc-5:bin@zip")
 }
+
+sourceSets.test {
+    compileClasspath += maven.output
+    runtimeClasspath += maven.output
+}
+
+maven.compileClasspath += sourceSets.main.get().output
 
 java {
     toolchain.languageVersion.set(JavaLanguageVersion.of(21))
@@ -50,12 +78,45 @@ val listenerJar = tasks.register<Jar>("listenerJar") {
     include("META-INF/services/org.junit.platform.launcher.TestExecutionListener")
 }
 
+val mavenExtensionJar = tasks.register<Jar>("mavenExtensionJar") {
+    archiveFileName.set("affected-maven-extension.jar")
+    from(maven.output)
+    from(sourceSets.main.get().output) {
+        include("com/aspix2k/affected/collector/AffectedMavenConfig*.class")
+    }
+}
+
+val mavenAgentJar = tasks.register<Jar>("mavenAgentJar") {
+    archiveFileName.set("affected-maven-agent.jar")
+    from(sourceSets.main.get().output)
+    include("com/aspix2k/affected/collector/AffectedCollectorAgent*.class")
+    include("com/aspix2k/affected/collector/AffectedDependencySelector*.class")
+    include("com/aspix2k/affected/collector/AffectedMavenFilter*.class")
+    include("com/aspix2k/affected/collector/AffectedMavenConfig*.class")
+    include("com/aspix2k/affected/collector/AffectedTestExecutionListener*.class")
+    include("com/aspix2k/affected/collector/CollectorOutput*.class")
+    include("META-INF/services/org.junit.platform.launcher.PostDiscoveryFilter")
+    include("META-INF/services/org.junit.platform.launcher.TestExecutionListener")
+    manifest {
+        attributes("Premain-Class" to "com.aspix2k.affected.collector.AffectedCollectorAgent")
+    }
+}
+
+val extractMaven = tasks.register<Sync>("extractMaven") {
+    from(maven390Distribution.map(::zipTree))
+    from(mavenLatestDistribution.map(::zipTree))
+    from(maven4Distribution.map(::zipTree))
+    into(layout.buildDirectory.dir("maven"))
+}
+
 tasks.test {
     val agentJar = tasks.jar.flatMap { it.archiveFile }
     val listenerArchive = listenerJar.flatMap { it.archiveFile }
     val initScript = layout.projectDirectory.file("src/main/gradle/affected-collector.init.gradle")
-    dependsOn(tasks.jar, listenerJar, tasks.named(smoke.classesTaskName))
-    inputs.files(agentJar, listenerArchive, initScript, smoke.runtimeClasspath)
+    val mavenExtensionArchive = mavenExtensionJar.flatMap { it.archiveFile }
+    val mavenAgentArchive = mavenAgentJar.flatMap { it.archiveFile }
+    dependsOn(tasks.jar, listenerJar, mavenExtensionJar, mavenAgentJar, extractMaven, tasks.named(smoke.classesTaskName))
+    inputs.files(agentJar, listenerArchive, mavenExtensionArchive, mavenAgentArchive, initScript, smoke.runtimeClasspath)
     useJUnit()
     isScanForTestClasses = false
     include("**/*Test.class")
@@ -65,6 +126,18 @@ tasks.test {
     systemProperty("affected.smoke.testClasses", sourceSets.test.get().output.classesDirs.asPath)
     systemProperty("affected.test.initScript", initScript.asFile.absolutePath)
     systemProperty("affected.test.listener", listenerArchive.get().asFile.absolutePath)
+    systemProperty("affected.test.mavenExtension", mavenExtensionArchive.get().asFile.absolutePath)
+    systemProperty("affected.test.mavenAgent", mavenAgentArchive.get().asFile.absolutePath)
+    systemProperty(
+        "affected.test.mavenHomes",
+        listOf("3.9.0", "3.9.16").joinToString(File.pathSeparator) {
+            layout.buildDirectory.dir("maven/apache-maven-$it").get().asFile.absolutePath
+        },
+    )
+    systemProperty(
+        "affected.test.unsupportedMavenHome",
+        layout.buildDirectory.dir("maven/apache-maven-4.0.0-rc-5").get().asFile.absolutePath,
+    )
     testLogging { events("passed", "failed", "skipped") }
 }
 
@@ -73,6 +146,18 @@ val listenerElements = configurations.create("listenerElements") {
     isCanBeResolved = false
 }
 
+val mavenExtensionElements = configurations.create("mavenExtensionElements") {
+    isCanBeConsumed = true
+    isCanBeResolved = false
+}
+
+val mavenAgentElements = configurations.create("mavenAgentElements") {
+    isCanBeConsumed = true
+    isCanBeResolved = false
+}
+
 artifacts {
     add(listenerElements.name, listenerJar)
+    add(mavenExtensionElements.name, mavenExtensionJar)
+    add(mavenAgentElements.name, mavenAgentJar)
 }

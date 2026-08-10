@@ -99,6 +99,19 @@ public final class CollectorOutput {
         writeAtomically(workerDirectory.resolve("complete.manifest"), content.toString().getBytes(StandardCharsets.UTF_8));
     }
 
+    public void writeExpected(boolean supported, Set<String> testClasses) throws Exception {
+        if (supported && testClasses.isEmpty()) throw new IllegalArgumentException("expected tests");
+        List<String> sorted = new ArrayList<String>(testClasses);
+        Collections.sort(sorted);
+        StringBuilder content = new StringBuilder("format=1\n");
+        content.append("supported=").append(supported).append('\n');
+        for (String testClass : sorted) content.append("test=").append(encode(testClass)).append('\n');
+        writeAtomically(
+            workerDirectory.getParent().resolve("expected.manifest"),
+            content.toString().getBytes(StandardCharsets.UTF_8)
+        );
+    }
+
     private static void writeAtomically(Path target, byte[] bytes) throws Exception {
         Path directory = target.getParent();
         if (!Files.isDirectory(directory) || !Files.isWritable(directory)) throw new IOException(directory.toString());
