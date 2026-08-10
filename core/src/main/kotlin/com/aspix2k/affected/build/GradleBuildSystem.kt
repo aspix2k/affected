@@ -1,6 +1,7 @@
 package com.aspix2k.affected.build
 
 import com.intellij.execution.executors.DefaultRunExecutor
+import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.externalSystem.model.ProjectKeys
 import com.intellij.openapi.externalSystem.model.execution.ExternalSystemTaskExecutionSettings
@@ -15,13 +16,21 @@ import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ModuleRootManager
+import com.intellij.util.execution.ParametersListUtil
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import org.jetbrains.plugins.gradle.service.project.GradleModuleDataIndex
 import org.jetbrains.plugins.gradle.settings.GradleSettings
 import org.jetbrains.plugins.gradle.util.GradleConstants
 import org.jetbrains.plugins.gradle.util.getDirectoryToRunTask
 import org.jetbrains.plugins.gradle.util.gradleIdentityPathOrNull
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 
@@ -94,33 +103,57 @@ class GradleBuildSystem : SuspendingBuildSystem {
 
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean {
         if (project.isDisposed) return false
+        val collector = withContext(Dispatchers.IO) { collectorRun(project) }
 
         val settings = ExternalSystemTaskExecutionSettings().apply {
             externalProjectPath = root
             taskNames = tasks
             externalSystemIdString = GradleConstants.SYSTEM_ID.id
+            if (collector != null) scriptParameters = ParametersListUtil.join(collector.arguments)
         }
 
         return suspendCancellableCoroutine { continuation ->
             val completed = AtomicBoolean(false)
 
             fun complete(passed: Boolean) {
-                if (completed.compareAndSet(false, true) && continuation.isActive) continuation.resume(passed)
+                if (!completed.compareAndSet(false, true)) return
+                val scope = if (continuation.isActive) {
+                    CoroutineScope(continuation.context)
+                } else {
+                    CoroutineScope(Dispatchers.IO)
+                }
+                scope.launch(Dispatchers.IO) {
+                    runCatching { collector?.complete(passed) }
+                    if (continuation.isActive) continuation.resume(passed)
+                }
             }
 
-            ExternalSystemUtil.runTask(
-                settings,
-                DefaultRunExecutor.EXECUTOR_ID,
-                project,
-                GradleConstants.SYSTEM_ID,
-                object : TaskCallback {
-                    override fun onSuccess() = complete(true)
+            continuation.invokeOnCancellation {
+                collector?.cancel()
+            }
 
-                    override fun onFailure() = complete(false)
-                },
-                ProgressExecutionMode.IN_BACKGROUND_ASYNC,
-            )
+            runCatching {
+                ExternalSystemUtil.runTask(
+                    settings,
+                    DefaultRunExecutor.EXECUTOR_ID,
+                    project,
+                    GradleConstants.SYSTEM_ID,
+                    object : TaskCallback {
+                        override fun onSuccess() = complete(true)
+
+                        override fun onFailure() = complete(false)
+                    },
+                    ProgressExecutionMode.IN_BACKGROUND_ASYNC,
+                )
+            }.onFailure { complete(false) }
         }
+    }
+
+    private fun collectorRun(project: Project): GradleCollectorRun? {
+        val classPath = Path.of(PathManager.getJarPathForClass(GradleBuildSystem::class.java))
+        val artifacts = findGradleCollectorArtifacts(classPath) ?: return null
+        val cache = PathManager.getSystemDir().resolve(CACHE_DIRECTORY).resolve(project.locationHash).resolve("gradle")
+        return GradleCollectorRun.create(cache, artifacts)
     }
 
     private data class Described(
@@ -241,8 +274,31 @@ class GradleBuildSystem : SuspendingBuildSystem {
         val SETTINGS_FILES = listOf("settings.gradle.kts", "settings.gradle")
         val TEST_SOURCE_DIRS = listOf("src/test", "src/testDebug", "src/commonTest", "src/jvmTest")
 
+        const val CACHE_DIRECTORY = "affected"
+
         fun isSource(file: File) = file.isFile && (file.extension == "kt" || file.extension == "java")
     }
+}
+
+internal fun findGradleCollectorArtifacts(classPath: Path): GradleCollectorArtifacts? {
+    var directory = classPath.toAbsolutePath().normalize().let {
+        if (Files.isDirectory(it, LinkOption.NOFOLLOW_LINKS)) it else it.parent
+    } ?: return null
+    repeat(MAX_PLUGIN_PARENT_DEPTH) {
+        val artifacts = GradleCollectorArtifacts(
+            directory.resolve(AGENT_PATH),
+            directory.resolve(LISTENER_PATH),
+            directory.resolve(INIT_SCRIPT_PATH),
+        )
+        if (listOf(artifacts.agent, artifacts.listener, artifacts.initScript).all {
+                Files.isRegularFile(it, LinkOption.NOFOLLOW_LINKS) && Files.isReadable(it)
+            }
+        ) {
+            return artifacts
+        }
+        directory = directory.parent ?: return null
+    }
+    return null
 }
 
 internal fun gradleProjectPath(externalId: String, buildName: String?, sourceSet: Boolean): String {
@@ -263,3 +319,7 @@ internal fun gradleExecutionCoordinates(
 }
 
 private val SOURCE_SET_NAMES = setOf("main", "unitTest", "androidTest", "test")
+private const val MAX_PLUGIN_PARENT_DEPTH = 5
+private const val AGENT_PATH = "agent/affected-collector-agent.jar"
+private const val LISTENER_PATH = "agent/affected-collector-listener.jar"
+private const val INIT_SCRIPT_PATH = "agent/affected-collector.init.gradle"

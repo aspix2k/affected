@@ -122,8 +122,10 @@ dependencies.add(
 )
 val collectorAgentArchive = collectorAgentArtifact.elements.map { it.single().asFile }
 val collectorListenerArchive = collectorListenerArtifact.elements.map { it.single().asFile }
+val collectorInitScript = project(":collector").layout.projectDirectory.file("src/main/gradle/affected-collector.init.gradle")
 val collectorAgentPath = "$pluginDirectory/agent/affected-collector-agent.jar"
 val collectorListenerPath = "$pluginDirectory/agent/affected-collector-listener.jar"
+val collectorInitScriptPath = "$pluginDirectory/agent/affected-collector.init.gradle"
 val collectorPremain = "com.aspix2k.affected.collector.AffectedCollectorAgent"
 val collectorListener = "com.aspix2k.affected.collector.AffectedTestExecutionListener"
 val collectorService = "META-INF/services/org.junit.platform.launcher.TestExecutionListener"
@@ -134,6 +136,9 @@ tasks.named<BuildPluginTask>("buildPlugin") {
         into("agent")
     }
     from(collectorListenerArtifact) {
+        into("agent")
+    }
+    from(collectorInitScript) {
         into("agent")
     }
 
@@ -184,6 +189,15 @@ tasks.named<BuildPluginTask>("buildPlugin") {
                 check(services == listOf(collectorListener)) {
                     "Packaged collector listener must declare exactly one $collectorListener service"
                 }
+            }
+
+            val packagedScripts = archive.entries().asSequence().filter { it.name == collectorInitScriptPath }.toList()
+            check(packagedScripts.size == 1) {
+                "Plugin distribution must contain exactly one $collectorInitScriptPath"
+            }
+            val packagedScript = archive.getInputStream(packagedScripts.single()).use { it.readBytes() }
+            check(packagedScript.contentEquals(collectorInitScript.asFile.readBytes())) {
+                "Packaged collector init script must match the collector module source"
             }
         }
     }

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Collect and atomically persist complete local test-class dependency maps after successful full Gradle JVM and Android unit-test tasks. Unsupported, incomplete, failed or cancelled collection keeps the previous complete map and the full-task fallback; exact filtering is not connected yet.
+
 ## [1.7.2] - 2026-08-10
 
 ### Added
