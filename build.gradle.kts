@@ -1,7 +1,9 @@
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.tasks.BuildPluginTask
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel
+import java.io.ByteArrayInputStream
 import java.util.Properties
+import java.util.jar.JarInputStream
 import java.util.zip.ZipFile
 
 plugins {
@@ -105,9 +107,35 @@ tasks.test {
 
 val pluginLicense = layout.projectDirectory.file("LICENSE")
 val pluginDirectory = project.name
+val collectorAgentArtifact = configurations.create("collectorAgentArtifact") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+val collectorListenerArtifact = configurations.create("collectorListenerArtifact") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+dependencies.add(collectorAgentArtifact.name, project(":collector"))
+dependencies.add(
+    collectorListenerArtifact.name,
+    dependencies.project(path = ":collector", configuration = "listenerElements"),
+)
+val collectorAgentArchive = collectorAgentArtifact.elements.map { it.single().asFile }
+val collectorListenerArchive = collectorListenerArtifact.elements.map { it.single().asFile }
+val collectorAgentPath = "$pluginDirectory/agent/affected-collector-agent.jar"
+val collectorListenerPath = "$pluginDirectory/agent/affected-collector-listener.jar"
+val collectorPremain = "com.aspix2k.affected.collector.AffectedCollectorAgent"
+val collectorListener = "com.aspix2k.affected.collector.AffectedTestExecutionListener"
+val collectorService = "META-INF/services/org.junit.platform.launcher.TestExecutionListener"
 
 tasks.named<BuildPluginTask>("buildPlugin") {
     from(pluginLicense)
+    from(collectorAgentArtifact) {
+        into("agent")
+    }
+    from(collectorListenerArtifact) {
+        into("agent")
+    }
 
     doLast {
         val distribution = destinationDirectory.file(archiveFileName).get().asFile
@@ -118,6 +146,44 @@ tasks.named<BuildPluginTask>("buildPlugin") {
             val packagedLicense = archive.getInputStream(packagedLicenses.single()).use { it.readBytes() }
             check(packagedLicense.contentEquals(pluginLicense.asFile.readBytes())) {
                 "Packaged LICENSE must match the root LICENSE"
+            }
+
+            val packagedAgents = archive.entries().asSequence().filter { it.name == collectorAgentPath }.toList()
+            check(packagedAgents.size == 1) {
+                "Plugin distribution must contain exactly one $collectorAgentPath"
+            }
+            val packagedAgent = archive.getInputStream(packagedAgents.single()).use { it.readBytes() }
+            check(packagedAgent.contentEquals(collectorAgentArchive.get().readBytes())) {
+                "Packaged collector agent must match the collector module JAR"
+            }
+            JarInputStream(ByteArrayInputStream(packagedAgent)).use { agent ->
+                check(agent.manifest?.mainAttributes?.getValue("Premain-Class") == collectorPremain) {
+                    "Packaged collector must declare $collectorPremain as Premain-Class"
+                }
+                val listeners = generateSequence { agent.nextJarEntry }
+                    .filter { it.name == collectorService }
+                    .toList()
+                check(listeners.isEmpty()) {
+                    "Collector agent must not expose a JUnit service from the parent classloader"
+                }
+            }
+
+            val packagedListeners = archive.entries().asSequence().filter { it.name == collectorListenerPath }.toList()
+            check(packagedListeners.size == 1) {
+                "Plugin distribution must contain exactly one $collectorListenerPath"
+            }
+            val packagedListener = archive.getInputStream(packagedListeners.single()).use { it.readBytes() }
+            check(packagedListener.contentEquals(collectorListenerArchive.get().readBytes())) {
+                "Packaged collector listener must match the collector module JAR"
+            }
+            JarInputStream(ByteArrayInputStream(packagedListener)).use { listener ->
+                val services = generateSequence { listener.nextJarEntry }
+                    .filter { it.name == collectorService }
+                    .map { listener.readBytes().toString(Charsets.UTF_8).trim() }
+                    .toList()
+                check(services == listOf(collectorListener)) {
+                    "Packaged collector listener must declare exactly one $collectorListener service"
+                }
             }
         }
     }

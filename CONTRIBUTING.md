@@ -66,7 +66,11 @@ optional dependency on its IDE integration. Adding one is a single class plus a
 four-line XML file; nothing else in the plugin changes.
 
 `ChangeAnalyzer` and `TaskPlanner` have no IDE dependencies and are covered by
-unit tests. Keep them that way: return data and let the action format it.
+unit tests. Keep them that way: return data and let the action format it. The
+`collector` module produces Java 8 agent and listener JARs under `agent/` in the
+plugin distribution, outside the IntelliJ plugin classpath. They stay dormant
+until a test process explicitly loads them; the split keeps the agent in the
+parent classloader and the JUnit listener beside the project's JUnit Platform.
 
 ## Conventions
 
