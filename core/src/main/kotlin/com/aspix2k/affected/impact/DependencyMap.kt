@@ -41,6 +41,9 @@ object DependencySelector {
         request.mandatoryFallback?.let { return TestImpact.FullModule(it) }
         val baseline = request.baseline
             ?: return TestImpact.FullModule(FullModuleReason.MISSING_DEPENDENCY_MAP)
+        if (baseline.completedRunId.isBlank()) {
+            return TestImpact.FullModule(FullModuleReason.CORRUPT_DEPENDENCY_MAP)
+        }
         identityMismatch(baseline.identity, request.current.identity)?.let {
             return TestImpact.FullModule(it)
         }
@@ -88,6 +91,8 @@ data class DependencyMapCandidate(
     val identity: DependencyMapIdentity,
     val artifacts: List<ClassDependency>,
     val expectedWorkers: Set<String>,
+    val expectedTestClasses: Set<TestClassId>,
+    val collectsAllTests: Boolean,
     val workers: List<WorkerDependencyMap>,
     val completedRunId: String,
     val cancelled: Boolean,
@@ -100,14 +105,7 @@ object DependencyMapPromotion {
         previous: CompleteDependencyMap?,
         candidate: DependencyMapCandidate,
     ): CompleteDependencyMap? {
-        if (
-            candidate.cancelled ||
-            candidate.failed ||
-            candidate.identity.schemaVersion != DEPENDENCY_MAP_SCHEMA_VERSION
-        ) {
-            return previous
-        }
-        if (candidate.completedRunId.isBlank() || candidate.expectedWorkers.isEmpty()) return previous
+        if (!candidate.hasCompleteMetadata()) return previous
         val workerIds = candidate.workers.map(WorkerDependencyMap::workerId)
         if (workerIds.any(String::isBlank) || workerIds.toSet().size != workerIds.size) return previous
         if (
@@ -119,7 +117,14 @@ object DependencyMapPromotion {
 
         val artifacts = candidate.artifacts.uniqueById() ?: return previous
         val records = candidate.workers.flatMap(WorkerDependencyMap::records)
-        if (records.hasDuplicateTests() || !records.match(artifacts)) return previous
+        val testClasses = records.mapTo(LinkedHashSet(), TestDependencyRecord::testClass)
+        if (
+            records.hasDuplicateTests() ||
+            testClasses != candidate.expectedTestClasses ||
+            !records.match(artifacts)
+        ) {
+            return previous
+        }
 
         return CompleteDependencyMap(
             identity = candidate.identity,
@@ -128,6 +133,12 @@ object DependencyMapPromotion {
             completedRunId = candidate.completedRunId,
         )
     }
+}
+
+private fun DependencyMapCandidate.hasCompleteMetadata(): Boolean {
+    if (cancelled || failed) return false
+    if (!collectsAllTests || identity.schemaVersion != DEPENDENCY_MAP_SCHEMA_VERSION) return false
+    return completedRunId.isNotBlank() && expectedWorkers.isNotEmpty() && expectedTestClasses.isNotEmpty()
 }
 
 private fun identityMismatch(

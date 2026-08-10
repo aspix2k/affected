@@ -132,6 +132,20 @@ class DependencySelectorTest {
     }
 
     @Test
+    fun `a map without a completed run cannot prove an exact selection`() {
+        val baseline = complete(
+            artifacts = listOf(alpha),
+            records = listOf(record(alphaTest, alpha)),
+            completedRunId = "",
+        )
+
+        assertFull(
+            DependencySelector.select(SelectionRequest(baseline, snapshot(alpha))),
+            FullModuleReason.CORRUPT_DEPENDENCY_MAP,
+        )
+    }
+
+    @Test
     fun `mandatory fallback takes precedence over map validation`() {
         val request = SelectionRequest(
             baseline = null,
@@ -286,6 +300,38 @@ class DependencySelectorTest {
     }
 
     @Test
+    fun `a selected collection keeps the previous complete map`() {
+        val previous = complete(
+            artifacts = listOf(alpha, beta),
+            records = listOf(record(alphaTest, alpha), record(betaTest, beta)),
+        )
+        val candidate = candidate(
+            expectedWorkers = setOf("worker-1"),
+            workers = listOf(worker("worker-1", record(betaTest, beta))),
+            artifacts = listOf(alpha, beta),
+            collectsAllTests = false,
+        )
+
+        assertSame(previous, DependencyMapPromotion.promote(previous, candidate))
+    }
+
+    @Test
+    fun `a collection missing an expected test keeps the previous complete map`() {
+        val previous = complete(
+            artifacts = listOf(alpha, beta),
+            records = listOf(record(alphaTest, alpha), record(betaTest, beta)),
+        )
+        val candidate = candidate(
+            expectedWorkers = setOf("worker-1"),
+            workers = listOf(worker("worker-1", record(betaTest, beta))),
+            artifacts = listOf(alpha, beta),
+            expectedTestClasses = setOf(alphaTest, betaTest),
+        )
+
+        assertSame(previous, DependencyMapPromotion.promote(previous, candidate))
+    }
+
+    @Test
     fun `complete workers atomically replace the previous map`() {
         val previous = complete(listOf(alpha), listOf(record(alphaTest, alpha)))
         val candidate = candidate(
@@ -317,7 +363,8 @@ class DependencySelectorTest {
         artifacts: List<ClassDependency>,
         records: List<TestDependencyRecord>,
         mapIdentity: DependencyMapIdentity = identity,
-    ) = CompleteDependencyMap(mapIdentity, artifacts, records, completedRunId = "baseline-run")
+        completedRunId: String = "baseline-run",
+    ) = CompleteDependencyMap(mapIdentity, artifacts, records, completedRunId)
 
     private fun snapshot(
         vararg artifacts: ClassDependency,
@@ -329,12 +376,18 @@ class DependencySelectorTest {
         expectedWorkers: Set<String>,
         workers: List<WorkerDependencyMap>,
         artifacts: List<ClassDependency>,
+        expectedTestClasses: Set<TestClassId> = workers
+            .flatMap(WorkerDependencyMap::records)
+            .mapTo(LinkedHashSet(), TestDependencyRecord::testClass),
+        collectsAllTests: Boolean = true,
         cancelled: Boolean = false,
         failed: Boolean = false,
     ) = DependencyMapCandidate(
         identity = identity,
         artifacts = artifacts,
         expectedWorkers = expectedWorkers,
+        expectedTestClasses = expectedTestClasses,
+        collectsAllTests = collectsAllTests,
         workers = workers,
         completedRunId = "candidate-run",
         cancelled = cancelled,
