@@ -28,9 +28,11 @@ internal object CollectorMapReader {
         val entries = list(directory)
         require(entries.all {
             it.fileName.toString() == TASK_MANIFEST ||
+                it.fileName.toString() == CATALOG_MANIFEST ||
                 it.fileName.toString() == EXPECTED_MANIFEST ||
                 isWorkerDirectory(it)
         })
+        val artifacts = parseCatalog(readFile(directory.resolve(CATALOG_MANIFEST)))
         val expected = parseExpected(readFile(directory.resolve(EXPECTED_MANIFEST)))
         val parsed = entries.filter(::isWorkerDirectory).map(::parseWorker)
         val expectedWorkers = parsed.mapTo(LinkedHashSet(), ParsedWorker::id)
@@ -40,10 +42,6 @@ internal object CollectorMapReader {
         val workers = completeWorkers.map { complete ->
             WorkerDependencyMap(complete.workerId, complete.records)
         }
-        val artifacts = workers.flatMap(WorkerDependencyMap::records)
-            .flatMap(TestDependencyRecord::dependencies)
-            .distinct()
-
         DependencyMapCandidate(
             identity = DependencyMapIdentity(
                 DEPENDENCY_MAP_SCHEMA_VERSION,
@@ -88,6 +86,14 @@ internal object CollectorMapReader {
         require(tests.size == tests.toSet().size)
         if (supported) require(tests.isNotEmpty())
         return ParsedExpected(supported, tests.toSet())
+    }
+
+    private fun parseCatalog(lines: List<String>): List<ClassDependency> {
+        require(lines.size > CATALOG_HEADER_LINE_COUNT && lines[0] == FORMAT)
+        return lines.drop(CATALOG_HEADER_LINE_COUNT).map { line ->
+            require(line.startsWith("artifact="))
+            parseDependency(line.removePrefix("artifact="))
+        }
     }
 
     private fun parseWorker(directory: Path): ParsedWorker {
@@ -178,15 +184,23 @@ internal class DependencyMapStore(private val root: Path) {
         )
         require(identity.taskKey == taskKey)
         val completedRunId = value(lines[6], "run=")
+        val artifactCount = count(lines[7], "artifacts=")
+        val recordCount = count(lines[8], "records=")
+        val expectedChecksum = rawValue(lines[9], "checksum=")
+        require(expectedChecksum.matches(SHA256_PATTERN))
+        val payloadLines = lines.drop(STORE_HEADER_LINE_COUNT)
+        val payload = payloadLines.joinToString(separator = "\n", postfix = "\n")
+        require(sha256(payload) == expectedChecksum)
         val artifacts = ArrayList<ClassDependency>()
         val records = ArrayList<TestDependencyRecord>()
-        lines.drop(STORE_HEADER_LINE_COUNT).forEach { line ->
+        payloadLines.forEach { line ->
             when {
                 line.startsWith("artifact=") -> artifacts += parseDependency(line.removePrefix("artifact="))
                 line.startsWith("record=") -> records += parseRecord(line.removePrefix("record="))
                 else -> error("stored map")
             }
         }
+        require(artifacts.size == artifactCount && records.size == recordCount)
         val result = CompleteDependencyMap(identity, artifacts, records, completedRunId)
         require(validated(result) == result)
         result
@@ -212,14 +226,24 @@ internal class DependencyMapStore(private val root: Path) {
         }
     }
 
-    private fun serialize(map: CompleteDependencyMap): String = buildString {
-        append(FORMAT).append('\n')
-        append("schema=").append(map.identity.schemaVersion).append('\n')
-        append("collector=").append(encode(map.identity.collectorVersion)).append('\n')
-        append("task=").append(encode(map.identity.taskKey)).append('\n')
-        append("runtime=").append(encode(map.identity.runtimeFingerprint)).append('\n')
-        append("input=").append(encode(map.identity.inputFingerprint)).append('\n')
-        append("run=").append(encode(map.completedRunId)).append('\n')
+    private fun serialize(map: CompleteDependencyMap): String {
+        val payload = serializePayload(map)
+        return buildString {
+            append(FORMAT).append('\n')
+            append("schema=").append(map.identity.schemaVersion).append('\n')
+            append("collector=").append(encode(map.identity.collectorVersion)).append('\n')
+            append("task=").append(encode(map.identity.taskKey)).append('\n')
+            append("runtime=").append(encode(map.identity.runtimeFingerprint)).append('\n')
+            append("input=").append(encode(map.identity.inputFingerprint)).append('\n')
+            append("run=").append(encode(map.completedRunId)).append('\n')
+            append("artifacts=").append(map.artifacts.size).append('\n')
+            append("records=").append(map.records.size).append('\n')
+            append("checksum=").append(sha256(payload)).append('\n')
+            append(payload)
+        }
+    }
+
+    private fun serializePayload(map: CompleteDependencyMap): String = buildString {
         map.artifacts.sortedWith(DEPENDENCY_ORDER).forEach { dependency ->
             append("artifact=").append(serialize(dependency)).append('\n')
         }
@@ -297,6 +321,8 @@ private fun rawValue(line: String, prefix: String): String {
     return line.removePrefix(prefix).also { require(it.isNotBlank()) }
 }
 
+private fun count(line: String, prefix: String): Int = rawValue(line, prefix).toInt().also { require(it >= 0) }
+
 private fun decode(value: String): String {
     val bytes = Base64.getUrlDecoder().decode(value)
     require(Base64.getUrlEncoder().withoutPadding().encodeToString(bytes) == value)
@@ -320,6 +346,7 @@ private val SHA256_PATTERN = Regex("[0-9a-f]{64}")
 private val WORKER_DIRECTORY_PATTERN = Regex("worker-[0-9a-f]{64}")
 private const val FORMAT = "format=1"
 private const val TASK_MANIFEST = "task.manifest"
+private const val CATALOG_MANIFEST = "catalog.manifest"
 private const val EXPECTED_MANIFEST = "expected.manifest"
 private const val STARTED_MANIFEST = "started.manifest"
 private const val COMPLETE_MANIFEST = "complete.manifest"
@@ -327,8 +354,9 @@ private const val TASK_LINE_COUNT = 5
 private const val STARTED_LINE_COUNT = 2
 private const val COMPLETE_HEADER_LINE_COUNT = 3
 private const val EXPECTED_HEADER_LINE_COUNT = 2
+private const val CATALOG_HEADER_LINE_COUNT = 1
 private const val MAP_HEADER_LINE_COUNT = 2
-private const val STORE_HEADER_LINE_COUNT = 7
+private const val STORE_HEADER_LINE_COUNT = 10
 private const val DEPENDENCY_PART_COUNT = 3
 private const val STORE_WORKER = "store"
 private const val MAX_FILES = 100_000

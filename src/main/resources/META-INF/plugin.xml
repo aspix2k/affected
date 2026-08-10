@@ -11,6 +11,9 @@
         Kotlin or Java public API change. Unrelated modules are skipped.
         Compatible Gradle modules inside one composite build share an IDE run;
         independent build roots run concurrently.
+        After a successful full Gradle run, compatible JVM and Android unit-test
+        tasks run only Jupiter and Vintage test classes that observed changed
+        production bytecode. Uncertain cases keep the original full task.
         <br/><br/>
         <b>Workflow</b>
         <br/>

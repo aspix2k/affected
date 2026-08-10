@@ -36,6 +36,8 @@ internal class GradleCollectorRun private constructor(
         "-Daffected.collector.agent=${artifacts.agent}",
         "-Daffected.collector.listener=${artifacts.listener}",
         "-Daffected.collector.output=$outputRoot",
+        "-Daffected.collector.maps=${cacheRoot.resolve(MAPS_DIRECTORY)}",
+        "-Daffected.collector.version=$collectorVersion",
     )
 
     fun cancel() {

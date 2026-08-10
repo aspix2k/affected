@@ -89,6 +89,15 @@ class CollectorMapIOTest {
     }
 
     @Test
+    fun `a missing class catalog invalidates task output`() = withDirectory { root ->
+        val task = task(root)
+        Files.delete(task.resolve("catalog.manifest"))
+        worker(task, "worker-1", "AlphaTest", dependency("Alpha", "alpha-1"))
+
+        assertNull(CollectorMapReader.read(task, "collector-1", "run-7"))
+    }
+
+    @Test
     fun `complete maps round trip through the atomic store`() = withDirectory { root ->
         val store = DependencyMapStore(root.resolve("store"))
         val dependency = dependency("Alpha", "alpha-1")
@@ -111,6 +120,23 @@ class CollectorMapIOTest {
         assertNull(store.read(map.identity.taskKey))
     }
 
+    @Test
+    fun `a stored map missing one valid record is ignored`() = withDirectory { root ->
+        val storeRoot = root.resolve("store")
+        val store = DependencyMapStore(storeRoot)
+        val alpha = dependency("Alpha", "alpha-1")
+        val beta = dependency("Beta", "beta-1")
+        val map = complete(
+            listOf(alpha, beta),
+            listOf(record(testClass("AlphaTest"), alpha), record(testClass("BetaTest"), beta)),
+        )
+        store.write(map)
+        val path = storeRoot.resolve("map-${sha256(map.identity.taskKey)}.map")
+        Files.writeString(path, Files.readAllLines(path).dropLast(1).joinToString("\n", postfix = "\n"))
+
+        assertNull(store.read(map.identity.taskKey))
+    }
+
     private fun task(root: Path): Path {
         val key = "root|:app|testDebugUnitTest"
         return Files.createDirectory(root.resolve("task-${sha256(key)}")).also { directory ->
@@ -121,6 +147,11 @@ class CollectorMapIOTest {
             Files.writeString(
                 directory.resolve("expected.manifest"),
                 "format=1\nsupported=true\ntest=${encode("AlphaTest")}\ntest=${encode("BetaTest")}\n",
+            )
+            Files.writeString(
+                directory.resolve("catalog.manifest"),
+                "format=1\n${artifactLine(dependency("Alpha", "alpha-1"))}" +
+                    artifactLine(dependency("Beta", "beta-1")),
             )
         }
     }
@@ -153,6 +184,9 @@ class CollectorMapIOTest {
     private fun dependencyLine(dependency: ClassDependency): String =
         "dependency=${encode(dependency.id.className)}|${encode(dependency.id.codeSource)}|${dependency.sha256}\n"
 
+    private fun artifactLine(dependency: ClassDependency): String =
+        "artifact=${encode(dependency.id.className)}|${encode(dependency.id.codeSource)}|${dependency.sha256}\n"
+
     private fun dependency(name: String, hashSeed: String) = ClassDependency(
         DependencyId(name, "file:///classes/"),
         sha256(hashSeed),
@@ -165,7 +199,13 @@ class CollectorMapIOTest {
 
     private fun complete(artifacts: List<ClassDependency>, records: List<TestDependencyRecord>) =
         CompleteDependencyMap(
-            identity = DependencyMapIdentity(1, "collector-1", "root|:app|testDebugUnitTest", "runtime-1", "input-1"),
+            identity = DependencyMapIdentity(
+                DEPENDENCY_MAP_SCHEMA_VERSION,
+                "collector-1",
+                "root|:app|testDebugUnitTest",
+                "runtime-1",
+                "input-1",
+            ),
             artifacts = artifacts,
             records = records,
             completedRunId = "run-1",

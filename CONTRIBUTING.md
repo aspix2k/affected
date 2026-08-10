@@ -74,6 +74,13 @@ classpath. A full Affected Gradle test run attaches them only to executed
 project's JUnit Platform, and Gradle independently records every executed test
 class. Only a successful run with matching complete worker output atomically
 replaces the local dependency map; all other cases keep the full-task fallback.
+The counted and checksummed map includes the full production class catalog. On later runs, a
+serializable task-local `onlyIf` spec executes after compile dependencies,
+compares current uninstrumented class bytes, skips a proven-unchanged task or
+sets the public Gradle `TestFilter` to the affected Jupiter and Vintage class
+names. Runtime, test, classpath or resource changes and any missing, corrupt,
+added, deleted or unsupported input run the original full task. Selected and
+skipped runs never replace the full baseline.
 
 ## Conventions
 

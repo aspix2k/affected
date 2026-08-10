@@ -80,6 +80,8 @@ class GradleCollectorRunTest {
                 "-Daffected.collector.agent=${artifacts.agent.toAbsolutePath().normalize()}",
                 "-Daffected.collector.listener=${artifacts.listener.toAbsolutePath().normalize()}",
                 "-Daffected.collector.output=${run.outputRoot}",
+                "-Daffected.collector.maps=${root.resolve("cache with spaces/maps")}",
+                "-Daffected.collector.version=${artifactVersion(artifacts)}",
             ),
             run.arguments,
         )
@@ -131,6 +133,11 @@ class GradleCollectorRunTest {
             task.resolve("expected.manifest"),
             "format=1\nsupported=true\ntest=${encode(test)}\n",
         )
+        Files.writeString(
+            task.resolve("catalog.manifest"),
+            "format=1\n" +
+                "artifact=${encode("Alpha")}|${encode("file:///classes/")}|${sha256(hashSeed)}\n",
+        )
         val worker = "worker-1"
         val directory = Files.createDirectory(task.resolve("worker-${sha256(worker)}"))
         Files.writeString(directory.resolve("started.manifest"), "format=1\nworker=${encode(worker)}\n")
@@ -147,6 +154,13 @@ class GradleCollectorRunTest {
 
     private fun encode(value: String): String = Base64.getUrlEncoder().withoutPadding()
         .encodeToString(value.toByteArray(StandardCharsets.UTF_8))
+
+    private fun artifactVersion(artifacts: GradleCollectorArtifacts): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        listOf(artifacts.agent, artifacts.listener, artifacts.initScript)
+            .forEach { path -> digest.update(Files.readAllBytes(path)) }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
 
     private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray(StandardCharsets.UTF_8))
