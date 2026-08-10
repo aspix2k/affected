@@ -14,7 +14,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class AffectedTestExecutionListener implements TestExecutionListener {
-    private final Set<String> expectedClasses = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private final Set<String> completedClasses = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private final AtomicBoolean unsupported = new AtomicBoolean();
     private volatile CollectorOutput output;
@@ -23,24 +22,18 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
     @Override
     public void testPlanExecutionStarted(TestPlan testPlan) {
         plan = testPlan;
-        try {
-            output = CollectorOutput.fromSystemProperties();
-        } catch (Exception failure) {
-            AffectedCollectorAgent.markUnsupported();
-            unsupported.set(true);
-        }
-        for (TestIdentifier root : testPlan.getRoots()) {
-            inspect(testPlan, root);
-            for (TestIdentifier identifier : testPlan.getDescendants(root)) inspect(testPlan, identifier);
-        }
-        if (expectedClasses.isEmpty()) unsupported.set(true);
     }
 
     @Override
     public void dynamicTestRegistered(TestIdentifier testIdentifier) {
+    }
+
+    @Override
+    public void executionStarted(TestIdentifier testIdentifier) {
+        if (!testIdentifier.isTest()) return;
+        openOutput();
         TestPlan current = plan;
-        if (current != null) inspect(current, testIdentifier);
-        else unsupported.set(true);
+        if (current == null || stableClass(current, testIdentifier) == null) unsupported.set(true);
     }
 
     @Override
@@ -71,20 +64,12 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
         if (current == null) return;
         boolean supported = !unsupported.get()
             && AffectedCollectorAgent.isSupported()
-            && !expectedClasses.isEmpty()
-            && completedClasses.containsAll(expectedClasses);
+            && !completedClasses.isEmpty();
         try {
-            current.writeCompletion(supported, expectedClasses);
+            current.writeCompletion(supported, completedClasses);
         } catch (Exception failure) {
             AffectedCollectorAgent.markUnsupported();
         }
-    }
-
-    private void inspect(TestPlan testPlan, TestIdentifier identifier) {
-        if (!identifier.isTest()) return;
-        String testClass = stableClass(testPlan, identifier);
-        if (testClass == null) unsupported.set(true);
-        else expectedClasses.add(testClass);
     }
 
     private static String stableClass(TestPlan testPlan, TestIdentifier identifier) {
@@ -99,5 +84,15 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
             current = parent.isPresent() ? parent.get() : null;
         }
         return null;
+    }
+
+    private synchronized void openOutput() {
+        if (output != null) return;
+        try {
+            output = CollectorOutput.fromSystemProperties();
+        } catch (Exception failure) {
+            AffectedCollectorAgent.markUnsupported();
+            unsupported.set(true);
+        }
     }
 }

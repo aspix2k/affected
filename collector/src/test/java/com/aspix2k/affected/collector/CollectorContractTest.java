@@ -185,8 +185,12 @@ public class CollectorContractTest {
             assertTrue(workerDirectory.getFileName().toString().matches("worker-[0-9a-f]{64}"));
             try (Stream<Path> files = Files.list(workerDirectory)) {
                 List<Path> outputs = files.collect(Collectors.toList());
-                assertEquals(2, outputs.size());
+                assertEquals(3, outputs.size());
                 assertTrue(outputs.stream().noneMatch(path -> path.getFileName().toString().endsWith(".tmp")));
+                Path started = outputs.stream()
+                    .filter(path -> path.getFileName().toString().equals("started.manifest"))
+                    .findFirst()
+                    .orElseThrow(AssertionError::new);
                 Path map = outputs.stream()
                     .filter(path -> path.getFileName().toString().matches("test-[0-9a-f]{64}\\.map"))
                     .findFirst()
@@ -201,6 +205,7 @@ public class CollectorContractTest {
                 assertTrue(read(manifest).matches(
                     "format=1\\nworker=[A-Za-z0-9_-]+\\nsupported=true\\ntest=[A-Za-z0-9_-]+\\n"
                 ));
+                assertTrue(read(started).matches("format=1\\nworker=[A-Za-z0-9_-]+\\n"));
             }
         }
     }

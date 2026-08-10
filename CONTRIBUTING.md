@@ -67,10 +67,13 @@ four-line XML file; nothing else in the plugin changes.
 
 `ChangeAnalyzer` and `TaskPlanner` have no IDE dependencies and are covered by
 unit tests. Keep them that way: return data and let the action format it. The
-`collector` module produces Java 8 agent and listener JARs under `agent/` in the
-plugin distribution, outside the IntelliJ plugin classpath. They stay dormant
-until a test process explicitly loads them; the split keeps the agent in the
-parent classloader and the JUnit listener beside the project's JUnit Platform.
+`collector` module produces Java 8 agent and listener JARs plus a Gradle init
+script under `agent/` in the plugin distribution, outside the IntelliJ plugin
+classpath. A full Affected Gradle test run attaches them only to executed
+`Test` tasks. The agent remains passive, the JUnit listener stays beside the
+project's JUnit Platform, and Gradle independently records every executed test
+class. Only a successful run with matching complete worker output atomically
+replaces the local dependency map; all other cases keep the full-task fallback.
 
 ## Conventions
 

@@ -19,6 +19,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -33,6 +34,7 @@ public final class AffectedCollectorAgent {
 
     public static void premain(String arguments, Instrumentation instrumentation) {
         try {
+            ensureWorkerId();
             STATE.configure(codeSources());
             instrumentation.addTransformer(new CollectorTransformer(STATE), false);
         } catch (Exception failure) {
@@ -69,6 +71,13 @@ public final class AffectedCollectorAgent {
             sources.add(Paths.get(entry).toAbsolutePath().normalize());
         }
         return sources;
+    }
+
+    private static void ensureWorkerId() {
+        String worker = System.getProperty(CollectorOutput.WORKER_PROPERTY);
+        if (worker == null || worker.trim().isEmpty()) {
+            System.setProperty(CollectorOutput.WORKER_PROPERTY, UUID.randomUUID().toString());
+        }
     }
 
     static final class CollectorTransformer implements ClassFileTransformer {

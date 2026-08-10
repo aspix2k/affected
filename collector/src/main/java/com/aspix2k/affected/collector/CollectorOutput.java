@@ -15,9 +15,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-final class CollectorOutput {
-    static final String OUTPUT_PROPERTY = "affected.collector.output";
-    static final String WORKER_PROPERTY = "affected.collector.worker";
+public final class CollectorOutput {
+    public static final String OUTPUT_PROPERTY = "affected.collector.output";
+    public static final String WORKER_PROPERTY = "affected.collector.worker";
     private static final String GRADLE_WORKER_PROPERTY = "org.gradle.test.worker";
     private final String workerId;
     private final Path workerDirectory;
@@ -45,9 +45,19 @@ final class CollectorOutput {
             throw new IOException(workerDirectory.toString());
         }
         Files.deleteIfExists(workerDirectory.resolve("complete.manifest"));
+        try (java.nio.file.DirectoryStream<Path> files = Files.newDirectoryStream(workerDirectory)) {
+            for (Path file : files) {
+                String name = file.getFileName().toString();
+                if (name.matches("test-[0-9a-f]{64}\\.map")) Files.delete(file);
+            }
+        }
+        writeAtomically(
+            workerDirectory.resolve("started.manifest"),
+            ("format=1\nworker=" + encode(workerId) + "\n").getBytes(StandardCharsets.UTF_8)
+        );
     }
 
-    static CollectorOutput fromSystemProperties() throws Exception {
+    public static CollectorOutput fromSystemProperties() throws Exception {
         String output = required(System.getProperty(OUTPUT_PROPERTY), OUTPUT_PROPERTY);
         String worker = System.getProperty(WORKER_PROPERTY);
         if (worker == null || worker.trim().isEmpty()) worker = System.getProperty(GRADLE_WORKER_PROPERTY);
@@ -55,7 +65,7 @@ final class CollectorOutput {
         return new CollectorOutput(Paths.get(output).toAbsolutePath().normalize(), worker);
     }
 
-    void writeMap(String testClass, List<AffectedCollectorAgent.Dependency> dependencies) throws Exception {
+    public void writeMap(String testClass, List<AffectedCollectorAgent.Dependency> dependencies) throws Exception {
         if (testClass == null || testClass.trim().isEmpty() || dependencies.isEmpty()) {
             throw new IllegalArgumentException("test dependency map");
         }
@@ -78,7 +88,7 @@ final class CollectorOutput {
         );
     }
 
-    void writeCompletion(boolean supported, Set<String> testClasses) throws Exception {
+    public void writeCompletion(boolean supported, Set<String> testClasses) throws Exception {
         if (supported && testClasses.isEmpty()) throw new IllegalArgumentException("completed tests");
         List<String> sorted = new ArrayList<String>(testClasses);
         Collections.sort(sorted);

@@ -1,0 +1,335 @@
+import java.nio.charset.StandardCharsets
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
+import org.gradle.api.Action
+import org.gradle.api.Task
+import org.gradle.api.specs.Spec
+import org.gradle.api.tasks.testing.Test
+import org.gradle.api.tasks.testing.TestDescriptor
+import org.gradle.api.tasks.testing.TestListener
+import org.gradle.api.tasks.testing.TestResult
+import org.gradle.api.tasks.testing.junitplatform.JUnitPlatformOptions
+import org.gradle.util.GradleVersion
+
+class AffectedCollectorTaskAction implements Action<Task>, Serializable {
+    private static final String OUTPUT = "affected.collector.output"
+    private static final String CODE_SOURCES = "affected.collector.codeSources"
+    private static final Object HASH_LOCK = new Object()
+    private static final Map<Path, byte[]> FILE_HASHES = new java.util.concurrent.ConcurrentHashMap<Path, byte[]>()
+    private static String hashRun
+    private final String taskKey
+
+    AffectedCollectorTaskAction(String taskKey) {
+        this.taskKey = taskKey
+    }
+
+    @Override
+    void execute(Task rawTask) {
+        try {
+            Test task = (Test) rawTask
+            Path output = outputRoot()
+            List<Path> testClasses = task.testClassesDirs.files.collect { it.toPath().toAbsolutePath().normalize() }
+                .findAll { Files.exists(it, LinkOption.NOFOLLOW_LINKS) }
+                .sort { first, second -> first.toString() <=> second.toString() }
+            Set<Path> excludedClasses = testClasses.collectMany { [it, it.toRealPath()] }.toSet()
+            List<Path> codeSources = task.classpath.files.collect { it.toPath().toAbsolutePath().normalize() }
+                .findAll { path ->
+                    Files.isDirectory(path) && !excludedClasses.contains(path) && !excludedClasses.contains(path.toRealPath())
+                }
+                .sort { first, second -> first.toString() <=> second.toString() }
+            if (codeSources.isEmpty()) return
+
+            Path taskOutput = secureTaskOutput(output, taskKey)
+            Map<String, Object> runtime = runtimeFingerprint(task)
+            String input = inputFingerprint(task, testClasses, output)
+            writeTaskManifest(taskOutput, taskKey, runtime.fingerprint as String, input, runtime.allTests as boolean)
+
+            task.systemProperty(CODE_SOURCES, codeSources.join(File.pathSeparator))
+            task.systemProperty(OUTPUT, taskOutput.toString())
+        } catch (Exception ignored) {
+        }
+    }
+
+    static Path regularFile(String property) {
+        String value = System.getProperty(property)
+        if (value == null || value.trim().isEmpty()) throw new IllegalStateException(property)
+        Path path = new File(value).toPath().toAbsolutePath().normalize()
+        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || !Files.isReadable(path)) {
+            throw new IllegalStateException(property)
+        }
+        return path.toRealPath(LinkOption.NOFOLLOW_LINKS)
+    }
+
+    private static Path outputRoot() {
+        String value = System.getProperty(OUTPUT)
+        if (value == null || value.trim().isEmpty()) throw new IllegalStateException(OUTPUT)
+        Path requested = new File(value).toPath().toAbsolutePath().normalize()
+        Files.createDirectories(requested)
+        if (Files.isSymbolicLink(requested)) throw new IllegalStateException(OUTPUT)
+        Path resolved = requested.toRealPath(LinkOption.NOFOLLOW_LINKS)
+        if (!Files.isDirectory(resolved) || !Files.isWritable(resolved)) throw new IllegalStateException(OUTPUT)
+        return resolved
+    }
+
+    static Path secureTaskOutput(Path root, String taskKey) {
+        Path requested = root.resolve("task-" + sha256(taskKey))
+        if (Files.exists(requested, LinkOption.NOFOLLOW_LINKS)) {
+            if (Files.isSymbolicLink(requested) || !Files.isDirectory(requested, LinkOption.NOFOLLOW_LINKS)) {
+                throw new IllegalStateException(requested.toString())
+            }
+        } else {
+            Files.createDirectory(requested)
+        }
+        Path resolved = requested.toRealPath(LinkOption.NOFOLLOW_LINKS)
+        if (resolved.parent != root || !Files.isWritable(resolved)) throw new IllegalStateException(resolved.toString())
+        return resolved
+    }
+
+    private static Map<String, Object> runtimeFingerprint(Test task) {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256")
+        update(digest, GradleVersion.current().version)
+        update(digest, System.getProperty("java.version", ""))
+        update(digest, task.options.class.name)
+        update(digest, String.valueOf(task.scanForTestClasses))
+        update(digest, String.valueOf(task.maxParallelForks))
+        update(digest, String.valueOf(task.forkEvery))
+        update(digest, String.valueOf(task.minHeapSize))
+        update(digest, String.valueOf(task.maxHeapSize))
+        update(digest, String.valueOf(task.enableAssertions))
+        update(digest, String.valueOf(task.debug))
+        update(digest, String.valueOf(task.failFast))
+        task.allJvmArgs.each { update(digest, String.valueOf(it)) }
+        task.systemProperties.entrySet().sort { first, second -> first.key.toString() <=> second.key.toString() }
+            .each { entry ->
+                update(digest, entry.key.toString())
+                update(digest, String.valueOf(entry.value))
+            }
+        task.environment.entrySet().sort { first, second -> first.key.toString() <=> second.key.toString() }
+            .each { entry ->
+                update(digest, entry.key.toString())
+                update(digest, String.valueOf(entry.value))
+            }
+        update(digest, String.valueOf(task.executable))
+        update(digest, String.valueOf(task.workingDir))
+        updateValues(digest, "filter.include", task.filter.includePatterns)
+        updateValues(digest, "filter.exclude", task.filter.excludePatterns)
+        Set<String> commandLine = commandLineIncludePatterns(task)
+        updateValues(digest, "filter.commandLineInclude", commandLine)
+        updateValues(digest, "files.include", task.includes)
+        updateValues(digest, "files.exclude", task.excludes)
+        if (!(task.options instanceof JUnitPlatformOptions)) throw new IllegalStateException(task.options.class.name)
+        JUnitPlatformOptions options = (JUnitPlatformOptions) task.options
+        updateValues(digest, "junitPlatform.includeEngines", options.includeEngines)
+        updateValues(digest, "junitPlatform.excludeEngines", options.excludeEngines)
+        updateValues(digest, "junitPlatform.includeTags", options.includeTags)
+        updateValues(digest, "junitPlatform.excludeTags", options.excludeTags)
+        return [fingerprint: hex(digest.digest()), allTests: commandLine.isEmpty()]
+    }
+
+    private static Set<String> commandLineIncludePatterns(Test task) {
+        Object value = task.filter.commandLineIncludePatterns
+        if (!(value instanceof Collection)) throw new IllegalStateException("command-line test filters")
+        return value.collect { String.valueOf(it) }.toSet()
+    }
+
+    private static void updateValues(MessageDigest digest, String name, Collection<?> values) {
+        update(digest, name)
+        values.collect { String.valueOf(it) }.sort().each { update(digest, it) }
+    }
+
+    private static String inputFingerprint(Test task, List<Path> testClasses, Path output) {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256")
+        testClasses.toList().sort { first, second -> first.toString() <=> second.toString() }.each { root ->
+            if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(root)) return
+            Files.walk(root).withCloseable { paths ->
+                paths.filter { Files.isRegularFile(it, LinkOption.NOFOLLOW_LINKS) }
+                    .sorted()
+                    .forEach { path ->
+                        if (Files.isSymbolicLink(path)) throw new IllegalStateException(path.toString())
+                        update(digest, root.relativize(path).toString().replace(File.separatorChar, '/' as char))
+                        update(digest, path)
+                    }
+            }
+        }
+        task.classpath.files.collect { it.toPath().toAbsolutePath().normalize() }
+            .findAll { Files.isRegularFile(it, LinkOption.NOFOLLOW_LINKS) }
+            .sort { first, second -> first.toString() <=> second.toString() }
+            .each { path ->
+                if (Files.isSymbolicLink(path)) throw new IllegalStateException(path.toString())
+                update(digest, path.fileName.toString())
+                update(digest, fileHash(path, output))
+            }
+        return hex(digest.digest())
+    }
+
+    private static void update(MessageDigest digest, Path path) {
+        path.toFile().withInputStream { input ->
+            byte[] buffer = new byte[65536]
+            int read
+            while ((read = input.read(buffer)) >= 0) {
+                if (read > 0) digest.update(buffer, 0, read)
+            }
+        }
+    }
+
+    private static byte[] fileHash(Path path, Path output) {
+        synchronized (HASH_LOCK) {
+            String run = output.toString()
+            if (hashRun != run) {
+                FILE_HASHES.clear()
+                hashRun = run
+            }
+            byte[] cached = FILE_HASHES.get(path)
+            if (cached != null) return cached
+        }
+        MessageDigest digest = MessageDigest.getInstance("SHA-256")
+        update(digest, path)
+        byte[] value = digest.digest()
+        synchronized (HASH_LOCK) {
+            byte[] previous = FILE_HASHES.putIfAbsent(path, value)
+            return previous == null ? value : previous
+        }
+    }
+
+    private static void update(MessageDigest digest, byte[] value) {
+        digest.update((byte) (value.length >>> 24))
+        digest.update((byte) (value.length >>> 16))
+        digest.update((byte) (value.length >>> 8))
+        digest.update((byte) value.length)
+        digest.update(value)
+    }
+
+    private static void update(MessageDigest digest, String value) {
+        byte[] bytes = value.getBytes(StandardCharsets.UTF_8)
+        digest.update((byte) (bytes.length >>> 24))
+        digest.update((byte) (bytes.length >>> 16))
+        digest.update((byte) (bytes.length >>> 8))
+        digest.update((byte) bytes.length)
+        digest.update(bytes)
+    }
+
+    private static void writeTaskManifest(Path directory, String task, String runtime, String input, boolean allTests) {
+        String content = "format=1\n" +
+            "task=" + encode(task) + "\n" +
+            "runtime=" + encode(runtime) + "\n" +
+            "input=" + encode(input) + "\n" +
+            "all=" + allTests + "\n"
+        writeAtomically(directory.resolve("task.manifest"), content)
+    }
+
+    static void writeExpectedManifest(Path directory, boolean supported, Set<String> tests) {
+        StringBuilder content = new StringBuilder("format=1\n")
+        content.append("supported=").append(supported).append('\n')
+        tests.toList().sort().each { content.append("test=").append(encode(it)).append('\n') }
+        writeAtomically(directory.resolve("expected.manifest"), content.toString())
+    }
+
+    private static void writeAtomically(Path target, String content) {
+        Path directory = target.parent
+        Path temporary = Files.createTempFile(directory, "task.manifest.", ".tmp")
+        try {
+            Files.write(temporary, content.getBytes(StandardCharsets.UTF_8))
+            try {
+                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            } catch (AtomicMoveNotSupportedException failure) {
+                throw new IllegalStateException("atomic move unavailable", failure)
+            }
+        } finally {
+            Files.deleteIfExists(temporary)
+        }
+    }
+
+    static String encode(String value) {
+        return Base64.urlEncoder.withoutPadding().encodeToString(value.getBytes(StandardCharsets.UTF_8))
+    }
+
+    private static String sha256(String value) {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256")
+        update(digest, value)
+        return hex(digest.digest())
+    }
+
+    private static String hex(byte[] bytes) {
+        StringBuilder result = new StringBuilder(bytes.length * 2)
+        for (byte value : bytes) result.append(String.format(Locale.ROOT, "%02x", value & 0xff))
+        return result.toString()
+    }
+}
+
+class AffectedExpectedTests implements TestListener, Serializable {
+    private final String taskKey
+    private final Set<String> tests = Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<String, Boolean>())
+    private final java.util.concurrent.atomic.AtomicBoolean supported = new java.util.concurrent.atomic.AtomicBoolean(true)
+
+    AffectedExpectedTests(String taskKey) {
+        this.taskKey = taskKey
+    }
+
+    @Override
+    void beforeSuite(TestDescriptor suite) {
+    }
+
+    @Override
+    void afterSuite(TestDescriptor suite, TestResult result) {
+        if (suite.parent != null) return
+        try {
+            String output = System.getProperty("affected.collector.output")
+            if (output == null || output.trim().isEmpty()) return
+            Path root = new File(output).toPath().toAbsolutePath().normalize().toRealPath(LinkOption.NOFOLLOW_LINKS)
+            Path directory = AffectedCollectorTaskAction.secureTaskOutput(root, taskKey)
+            boolean complete = supported.get() && !tests.isEmpty()
+            AffectedCollectorTaskAction.writeExpectedManifest(directory, complete, tests)
+        } catch (Exception ignored) {
+        }
+    }
+
+    @Override
+    void beforeTest(TestDescriptor descriptor) {
+    }
+
+    @Override
+    void afterTest(TestDescriptor descriptor, TestResult result) {
+        if (result.resultType == TestResult.ResultType.SKIPPED) return
+        String className = descriptor.className
+        if (className == null || className.trim().isEmpty()) supported.set(false)
+        else tests.add(className)
+    }
+}
+
+class AffectedCollectorUpToDateSpec implements Spec<Task>, Serializable {
+    @Override
+    boolean isSatisfiedBy(Task task) {
+        return false
+    }
+}
+
+class AffectedCollectorCacheSpec implements Spec<Task>, Serializable {
+    @Override
+    boolean isSatisfiedBy(Task task) {
+        return false
+    }
+}
+
+gradle.projectsEvaluated {
+    gradle.allprojects { project ->
+        try {
+            Path agent = AffectedCollectorTaskAction.regularFile("affected.collector.agent")
+            Path listener = AffectedCollectorTaskAction.regularFile("affected.collector.listener")
+            project.tasks.withType(Test).configureEach { task ->
+                String taskKey = project.rootDir.toPath().toRealPath().toUri().toString() + "|" + task.path
+                AffectedExpectedTests expectedTests = new AffectedExpectedTests(taskKey)
+                task.classpath = task.classpath.plus(project.files(listener.toFile()))
+                task.jvmArgs("-javaagent:" + agent)
+                task.addTestListener(expectedTests)
+                task.outputs.upToDateWhen(new AffectedCollectorUpToDateSpec())
+                task.outputs.cacheIf(new AffectedCollectorCacheSpec())
+                task.doFirst(new AffectedCollectorTaskAction(taskKey))
+            }
+        } catch (Exception ignored) {
+        }
+    }
+}
