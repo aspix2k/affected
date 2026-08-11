@@ -2,6 +2,10 @@ plugins {
     java
 }
 
+val testJavaVersion = providers.gradleProperty("affected.test.javaVersion").orElse("21")
+val runGradleEightTests = providers.gradleProperty("affected.test.gradle8").orElse("true")
+val symlinkMode = providers.gradleProperty("affected.test.symlinkMode").orElse("optional")
+val conformance = providers.gradleProperty("affected.conformance").map(String::toBoolean).orElse(false)
 val smoke = sourceSets.create("smoke")
 val smokeProduction = sourceSets.create("smokeProduction")
 val maven = sourceSets.create("maven")
@@ -60,7 +64,7 @@ sourceSets.test {
 maven.compileClasspath += sourceSets.main.get().output
 
 java {
-    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    toolchain.languageVersion.set(JavaLanguageVersion.of(testJavaVersion.get().toInt()))
 }
 
 tasks.withType<JavaCompile>().configureEach {
@@ -162,6 +166,14 @@ tasks.test {
     systemProperty("affected.test.listener", listenerArchive.get().asFile.absolutePath)
     systemProperty("affected.test.mavenExtension", mavenExtensionArchive.get().asFile.absolutePath)
     systemProperty("affected.test.mavenAgent", mavenAgentArchive.get().asFile.absolutePath)
+    systemProperty("affected.test.gradle8", runGradleEightTests.get())
+    systemProperty("affected.test.symlinkMode", symlinkMode.get())
+    if (conformance.get()) {
+        val report = layout.buildDirectory.file("reports/exact-impact-conformance/selector.properties")
+        systemProperty("affected.test.conformanceReport", report.get().asFile.absolutePath)
+        outputs.file(report)
+        outputs.upToDateWhen { false }
+    }
     systemProperty(
         "affected.test.mavenHomes",
         listOf("3.9.0", "3.9.16").joinToString(File.pathSeparator) {
@@ -172,7 +184,10 @@ tasks.test {
         "affected.test.unsupportedMavenHome",
         layout.buildDirectory.dir("maven/apache-maven-4.0.0-rc-5").get().asFile.absolutePath,
     )
-    testLogging { events("passed", "failed", "skipped") }
+    testLogging {
+        events("passed", "failed", "skipped")
+        showStandardStreams = conformance.get()
+    }
 }
 
 val listenerElements = configurations.create("listenerElements") {

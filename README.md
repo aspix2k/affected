@@ -1,6 +1,7 @@
 # Affected
 
 [![CI](https://github.com/aspix2k/affected/actions/workflows/ci.yml/badge.svg)](https://github.com/aspix2k/affected/actions/workflows/ci.yml)
+[![Exact-impact conformance](https://github.com/aspix2k/affected/actions/workflows/conformance.yml/badge.svg)](https://github.com/aspix2k/affected/actions/workflows/conformance.yml)
 [![Marketplace](https://img.shields.io/jetbrains/plugin/v/33425?label=marketplace)](https://plugins.jetbrains.com/plugin/33425-affected)
 [![Downloads](https://img.shields.io/jetbrains/plugin/d/33425?label=downloads)](https://plugins.jetbrains.com/plugin/33425-affected)
 [![Since](https://img.shields.io/badge/IDE-2025.3%2B-blue)](https://plugins.jetbrains.com/plugin/33425-affected/versions)
@@ -116,6 +117,12 @@ to AI agents.
 - A JetBrains IDE based on IntelliJ Platform 2025.3 or newer.
 - The IDE integration for Gradle or Maven when using those project types.
 - The relevant command-line tools for the other project types.
+
+The repository's exact-impact conformance matrix runs the same public Gradle
+and Maven fixtures on Linux, macOS and Windows. It covers Gradle 8.14.3 and
+9.6.1, Maven 3.9.0 and 3.9.16, and compatible JDK 17–26 pairings. Correctness
+gates exact selections, complete baseline promotion and full fallbacks; selector
+and map-read overhead is recorded separately without a timing threshold.
 
 ## Interface languages
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Verify the exact Gradle and Maven test-selection contract on Linux, macOS and Windows across compatible JDK 17–26 and build-tool version pairings.
+
 ## [1.11.0] - 2026-08-11
 
 ### Added
