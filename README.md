@@ -85,6 +85,16 @@ stale graph, unresolved planned module, ambiguous CMake build tree or bounded
 discovery overflow fails visibly or widens to the build root; it never silently
 drops part of the plan.
 
+Cargo, Go, npm, pnpm, Python and Composer batch compatible modules into one
+process per task kind; Ruby uses one RSpec process and a CMake test plan uses one
+build plus one CTest process. Yarn and .NET keep one process per selected
+workspace or project, but all processes remain sequential inside the shared Run
+session. General manifest discovery is capped at depth 7 and 16,384 directories;
+fingerprints cover at most 4,096 files, 8 MiB per file and 64 MiB total. Node
+workspace and CMake build-tree searches have lower 4,096- and 512-directory
+caps. Crossing a cap disables selective reuse instead of allowing a partial
+graph.
+
 Test-class selection stays inside the original IDE invocation and Run tab.
 Gradle selection is task-local. Maven reactor modules use independent maps.
 Maven exact selection supports Maven 3.9.x, Surefire 3.x, Failsafe 3.x and
