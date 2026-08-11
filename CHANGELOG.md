@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-08-11
+
+### Added
+
+- Attribute production bytecode dependencies independently to each Jupiter and Vintage test class in Gradle and Maven workers, including parallel classes, reflection, service loading and transitive static calls.
+- Select every mapped Maven test-class candidate without depending on discovery or execution order.
+
+### Changed
+
+- Invalidate older dependency maps with schema 4 and rebuild them on the first full run after updating.
+- Keep the full test task when production access cannot be attributed safely, and avoid runtime probes on static and private hot paths.
+
 ## [1.9.1] - 2026-08-11
 
 ### Fixed
@@ -159,7 +171,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v1.9.1...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/aspix2k/affected/compare/v1.9.1...v1.10.0
 [1.9.1]: https://github.com/aspix2k/affected/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/aspix2k/affected/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/aspix2k/affected/compare/v1.7.2...v1.8.0

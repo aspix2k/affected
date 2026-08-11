@@ -1,6 +1,6 @@
 package com.aspix2k.affected.impact
 
-const val DEPENDENCY_MAP_SCHEMA_VERSION = 3
+const val DEPENDENCY_MAP_SCHEMA_VERSION = 4
 
 @JvmInline
 value class TestClassId(val value: String) {

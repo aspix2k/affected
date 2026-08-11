@@ -114,7 +114,7 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
             version,
             basedir.toUri() + "|test",
             runtime(project, plugin, configurations, runtimeProperties),
-            allTests(configurations, properties),
+            allTests(properties),
             codeSources,
             testClasses,
             join(classpath)
@@ -130,18 +130,7 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
         return true;
     }
 
-    private static boolean allTests(List<Xpp3Dom> configurations, Properties properties) {
-        String[] configurationNames = {
-            "test", "groups", "excludedGroups", "includes", "excludes",
-            "includesFile", "excludesFile", "suiteXmlFiles", "dependenciesToScan",
-            "includeJUnit5Engines", "excludeJUnit5Engines"
-        };
-        for (Xpp3Dom configuration : configurations) {
-            for (String name : configurationNames) {
-                Xpp3Dom child = configuration.getChild(name);
-                if (child != null && (child.getChildCount() > 0 || hasText(child.getValue()))) return false;
-            }
-        }
+    private static boolean allTests(Properties properties) {
         String[] propertyNames = {
             "test", "groups", "excludedGroups", "surefire.includes", "surefire.excludes",
             "surefire.includesFile", "surefire.excludesFile", "surefire.suiteXmlFiles", "dependenciesToScan",

@@ -30,10 +30,14 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
 
     @Override
     public void executionStarted(TestIdentifier testIdentifier) {
-        if (!testIdentifier.isTest()) return;
-        openOutput();
         TestPlan current = plan;
-        if (current == null || stableClass(current, testIdentifier) == null) unsupported.set(true);
+        String testClass = current == null ? null : stableClass(current, testIdentifier);
+        if (testClass != null) {
+            AffectedCollectorAgent.beginExecution(testIdentifier.getUniqueId(), testClass);
+        } else if (testIdentifier.isTest()) {
+            unsupported.set(true);
+        }
+        if (testIdentifier.isTest()) openOutput();
     }
 
     @Override
@@ -41,16 +45,17 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
         TestIdentifier testIdentifier,
         org.junit.platform.engine.TestExecutionResult testExecutionResult
     ) {
+        TestPlan current = plan;
+        String stableClass = current == null ? null : stableClass(current, testIdentifier);
+        if (stableClass != null) AffectedCollectorAgent.endExecution(testIdentifier.getUniqueId());
         Optional<TestSource> source = testIdentifier.getSource();
         if (!source.isPresent() || !(source.get() instanceof ClassSource)) return;
         String testClass = ((ClassSource) source.get()).getClassName();
+        if (output == null) return;
         if (!completedClasses.add(testClass)) return;
         try {
-            java.util.List<AffectedCollectorAgent.Dependency> dependencies = AffectedCollectorAgent.dependencies();
-            if (dependencies.isEmpty() || output == null) {
-                unsupported.set(true);
-                return;
-            }
+            java.util.List<AffectedCollectorAgent.Dependency> dependencies =
+                AffectedCollectorAgent.dependencies(testClass);
             output.writeMap(testClass, dependencies);
         } catch (Exception failure) {
             AffectedCollectorAgent.markUnsupported();

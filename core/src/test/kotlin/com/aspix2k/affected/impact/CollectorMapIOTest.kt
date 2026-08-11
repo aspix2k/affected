@@ -30,6 +30,18 @@ class CollectorMapIOTest {
     }
 
     @Test
+    fun `a test without production dependencies remains in the complete map`() = withDirectory { root ->
+        val task = task(root)
+        worker(task, "worker-1", "AlphaTest")
+        worker(task, "worker-2", "BetaTest", dependency("Beta", "beta-1"))
+
+        val candidate = assertNotNull(CollectorMapReader.read(task, "collector-1", "run-empty"))
+        val promoted = assertNotNull(DependencyMapPromotion.promote(null, candidate))
+
+        assertEquals(emptySet(), promoted.records.single { it.testClass == testClass("AlphaTest") }.dependencies)
+    }
+
+    @Test
     fun `a started worker without completion keeps the previous map`() = withDirectory { root ->
         val task = task(root)
         worker(task, "worker-1", "AlphaTest", dependency("Alpha", "alpha-1"))
@@ -165,7 +177,7 @@ class CollectorMapIOTest {
         task: Path,
         worker: String,
         test: String,
-        dependency: ClassDependency,
+        vararg dependencies: ClassDependency,
         supported: Boolean = true,
     ) {
         val directory = started(task, worker)
@@ -175,7 +187,7 @@ class CollectorMapIOTest {
         )
         Files.writeString(
             directory.resolve("test-${sha256(test)}.map"),
-            "format=1\ntest=${encode(test)}\n${dependencyLine(dependency)}",
+            "format=1\ntest=${encode(test)}\n${dependencies.joinToString("") { dependencyLine(it) }}",
         )
     }
 

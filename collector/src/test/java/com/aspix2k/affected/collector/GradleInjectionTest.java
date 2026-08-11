@@ -119,6 +119,37 @@ public class GradleInjectionTest {
     }
 
     @Test(timeout = 120_000L)
+    public void parallelClassesInOneWorkerKeepIndependentDependencies() throws Exception {
+        Path project = temporary.newFolder("parallel-project").toPath();
+        Path baselineOutput = temporary.newFolder("parallel-baseline-output").toPath();
+        Path exactOutput = temporary.newFolder("parallel-exact-output").toPath();
+        writeFixture(project);
+
+        BuildResult baseline = run(
+            project,
+            baselineOutput,
+            "testDebugUnitTest",
+            true,
+            "-PattributionParallel=true"
+        );
+        assertComplete(baselineOutput, 5, baseline.getOutput());
+        promote(baselineOutput, project.resolve(".affected/maps"));
+        writeBeta(project, "int result = 2; return result;");
+        clearExecuted(project);
+
+        BuildResult exact = run(
+            project,
+            exactOutput,
+            "testDebugUnitTest",
+            true,
+            "-PattributionParallel=true"
+        );
+
+        assertComplete(exactOutput, 2, false, exact.getOutput());
+        assertEquals(setOf("BetaTest", "DeltaTest"), executedTests(project));
+    }
+
+    @Test(timeout = 120_000L)
     public void symlinkedTestClassesFallBackToTheFullTask() throws Exception {
         Path project = temporary.newFolder("symlink-project").toPath();
         Path baselineOutput = temporary.newFolder("symlink-baseline-output").toPath();
@@ -324,7 +355,7 @@ public class GradleInjectionTest {
             }
         }
         StringBuilder content = new StringBuilder("format=1\n")
-            .append("schema=3\n")
+            .append("schema=4\n")
             .append("collector=").append(encode(collectorVersion())).append('\n')
             .append("task=").append(manifest.get("task")).append('\n')
             .append("runtime=").append(manifest.get("runtime")).append('\n')
@@ -415,6 +446,15 @@ public class GradleInjectionTest {
                 "    systemProperty 'fixture.executed', file('executed').absolutePath\n" +
                 "    maxParallelForks = 2\n" +
                 "    forkEvery = 1\n" +
+                "    if (project.hasProperty('attributionParallel')) {\n" +
+                "        maxParallelForks = 1\n" +
+                "        forkEvery = 0\n" +
+                "        systemProperty 'junit.jupiter.execution.parallel.enabled', 'true'\n" +
+                "        systemProperty 'junit.jupiter.execution.parallel.mode.default', 'concurrent'\n" +
+                "        systemProperty 'junit.jupiter.execution.parallel.mode.classes.default', 'concurrent'\n" +
+                "        systemProperty 'junit.jupiter.execution.parallel.config.strategy', 'fixed'\n" +
+                "        systemProperty 'junit.jupiter.execution.parallel.config.fixed.parallelism', '4'\n" +
+                "    }\n" +
                 "}\n" +
                 "tasks.register('legacyTest', Test) {\n" +
                 "    testClassesDirs = sourceSets.test.output.classesDirs\n" +
@@ -489,6 +529,13 @@ public class GradleInjectionTest {
         write(
             project.resolve("src/main/java/fixture/Alpha.java"),
             "package fixture; public final class Alpha { public static int value() { " + body + " } }\n"
+        );
+    }
+
+    private static void writeBeta(Path project, String body) throws Exception {
+        write(
+            project.resolve("src/main/java/fixture/Beta.java"),
+            "package fixture; public final class Beta { public static int value() { " + body + " } }\n"
         );
     }
 

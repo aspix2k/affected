@@ -163,15 +163,16 @@ public class AffectedDependencySelectorTest {
             payload.append("record=").append(encode("fixture.BetaTest")).append('|')
                 .append(serialized(artifacts[1])).append('\n');
         }
+        payload.append("record=").append(encode("fixture.NoDependenciesTest")).append('|').append('\n');
         StringBuilder content = new StringBuilder("format=1\n")
-            .append("schema=3\n")
+            .append("schema=4\n")
             .append("collector=").append(encode("collector")).append('\n')
             .append("task=").append(encode(task)).append('\n')
             .append("runtime=").append(encode("runtime")).append('\n')
             .append("input=").append(encode("input")).append('\n')
             .append("run=").append(encode("run")).append('\n')
             .append("artifacts=").append(artifacts.length).append('\n')
-            .append("records=").append(artifacts.length > 1 ? 2 : 1).append('\n')
+            .append("records=").append(artifacts.length > 1 ? 3 : 2).append('\n')
             .append("checksum=").append(sha256(payload.toString())).append('\n')
             .append(payload);
         Files.write(

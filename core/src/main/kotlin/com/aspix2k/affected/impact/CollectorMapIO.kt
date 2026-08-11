@@ -132,7 +132,7 @@ internal object CollectorMapReader {
 
     private fun parseMap(path: Path, expectedTest: String): TestDependencyRecord {
         val lines = readFile(path)
-        require(lines.size > MAP_HEADER_LINE_COUNT && lines[0] == FORMAT)
+        require(lines.size >= MAP_HEADER_LINE_COUNT && lines[0] == FORMAT)
         require(value(lines[1], "test=") == expectedTest)
         val dependencies = lines.drop(MAP_HEADER_LINE_COUNT).map { line ->
             require(line.startsWith("dependency="))
@@ -256,9 +256,10 @@ internal class DependencyMapStore(private val root: Path) {
 
     private fun parseRecord(value: String): TestDependencyRecord {
         val separator = value.indexOf('|')
-        require(separator > 0 && separator < value.lastIndex)
+        require(separator > 0)
         val test = TestClassId(decode(value.substring(0, separator)))
-        val dependencies = value.substring(separator + 1).split(';').map(::parseDependency)
+        val payload = value.substring(separator + 1)
+        val dependencies = if (payload.isEmpty()) emptyList() else payload.split(';').map(::parseDependency)
         require(dependencies.size == dependencies.toSet().size)
         return TestDependencyRecord(test, dependencies.toSet())
     }
