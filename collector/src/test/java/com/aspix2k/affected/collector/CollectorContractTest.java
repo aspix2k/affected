@@ -19,6 +19,10 @@ import org.junit.platform.launcher.Launcher;
 import org.junit.platform.launcher.core.LauncherConfig;
 import org.junit.platform.launcher.core.LauncherDiscoveryRequestBuilder;
 import org.junit.platform.launcher.core.LauncherFactory;
+import org.jetbrains.org.objectweb.asm.ClassReader;
+import org.jetbrains.org.objectweb.asm.ClassVisitor;
+import org.jetbrains.org.objectweb.asm.MethodVisitor;
+import org.jetbrains.org.objectweb.asm.Opcodes;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -26,8 +30,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
+import java.util.Base64;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -36,6 +44,7 @@ import java.util.stream.Stream;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -57,6 +66,7 @@ public class CollectorContractTest {
         AffectedCollectorAgent.resetForTests();
         StableJupiterFixture.executions.set(0);
         StableVintageFixture.executions.set(0);
+        ParallelFixtures.barrier = new CyclicBarrier(2);
     }
 
     @After
@@ -68,7 +78,7 @@ public class CollectorContractTest {
     }
 
     @Test
-    public void transformerFingerprintsOriginalBytesAndNeverTransformsThem() throws Exception {
+    public void transformerFingerprintsOriginalBytesAndAddsAttributionHooks() throws Exception {
         AffectedCollectorAgent.CollectorState state = new AffectedCollectorAgent.CollectorState();
         Path codeSource = codeSource(ObservedFixture.class);
         state.configure(Collections.singleton(codeSource));
@@ -82,13 +92,30 @@ public class CollectorContractTest {
             classBytes
         );
 
-        assertNull(transformed);
-        assertEquals(1, state.snapshot().size());
-        AffectedCollectorAgent.Dependency dependency = state.snapshot().get(0);
+        assertNotNull(transformed);
+        String transformedConstants = new String(transformed, StandardCharsets.ISO_8859_1);
+        assertTrue(transformedConstants.contains("$affectedExecutionId"));
+        assertTrue(transformedConstants.contains("executionId"));
+        state.beginExecution("execution", "fixture.ExampleTest");
+        state.hit(ObservedFixture.class);
+        state.endExecution("execution");
+        assertEquals(1, state.snapshot("fixture.ExampleTest").size());
+        AffectedCollectorAgent.Dependency dependency = state.snapshot("fixture.ExampleTest").get(0);
         assertEquals(ObservedFixture.class.getName(), dependency.getClassName());
         assertEquals(codeSource.toRealPath().toUri().toString(), dependency.getCodeSource());
         assertEquals(sha256(classBytes), dependency.getSha256());
         assertArrayEquals(classBytes, classBytes(ObservedFixture.class));
+
+        byte[] java26 = classBytes.clone();
+        java26[6] = 0;
+        java26[7] = 70;
+        assertNotNull(new AffectedCollectorAgent.CollectorTransformer(state).transform(
+            ObservedFixture.class.getClassLoader(),
+            ObservedFixture.class.getName().replace('.', '/'),
+            null,
+            ObservedFixture.class.getProtectionDomain(),
+            java26
+        ));
     }
 
     @Test
@@ -105,8 +132,38 @@ public class CollectorContractTest {
         );
 
         assertNull(transformed);
-        assertTrue(state.snapshot().isEmpty());
+        assertTrue(state.snapshot("fixture.ExampleTest").isEmpty());
         assertTrue(state.isSupported());
+    }
+
+    @Test
+    public void transformerOnlyInstrumentsProductionAndTestOutputs() throws Exception {
+        Path production = temporary.newFolder("production").toPath();
+        Path productionClass = production.resolve(ObservedFixture.class.getName().replace('.', '/') + ".class");
+        Files.createDirectories(productionClass.getParent());
+        Files.write(productionClass, classBytes(ObservedFixture.class));
+        AffectedCollectorAgent.CollectorState state = new AffectedCollectorAgent.CollectorState();
+        state.configure(Collections.singleton(production));
+
+        byte[] ignored = new AffectedCollectorAgent.CollectorTransformer(state).transform(
+            CollectorContractTest.class.getClassLoader(),
+            CollectorContractTest.class.getName().replace('.', '/'),
+            null,
+            CollectorContractTest.class.getProtectionDomain(),
+            classBytes(CollectorContractTest.class)
+        );
+
+        state.configure(Collections.singleton(production), Collections.singleton(codeSource(CollectorContractTest.class)));
+        byte[] instrumented = new AffectedCollectorAgent.CollectorTransformer(state).transform(
+            CollectorContractTest.class.getClassLoader(),
+            CollectorContractTest.class.getName().replace('.', '/'),
+            null,
+            CollectorContractTest.class.getProtectionDomain(),
+            classBytes(CollectorContractTest.class)
+        );
+
+        assertNull(ignored);
+        assertNotNull(instrumented);
     }
 
     @Test
@@ -134,8 +191,11 @@ public class CollectorContractTest {
                 classBytes(ObservedFixture.class)
             );
 
+            state.beginExecution("execution", "fixture.ExampleTest");
+            state.hit(ObservedFixture.class);
+            state.endExecution("execution");
             assertTrue(state.isSupported());
-            assertEquals(1, state.snapshot().size());
+            assertEquals(1, state.snapshot("fixture.ExampleTest").size());
         } finally {
             Files.deleteIfExists(alias);
         }
@@ -156,7 +216,206 @@ public class CollectorContractTest {
 
         assertNull(transformed);
         assertFalse(state.isSupported());
-        assertTrue(state.snapshot().isEmpty());
+        assertTrue(state.snapshot("fixture.ExampleTest").isEmpty());
+    }
+
+    @Test
+    public void unsupportedStateStopsInstrumentationAndAttribution() throws Exception {
+        AffectedCollectorAgent.CollectorState state = configuredState(ObservedFixture.class);
+        state.fail(new IllegalStateException("unsupported"));
+
+        state.hit(ObservedFixture.class);
+        byte[] transformed = new AffectedCollectorAgent.CollectorTransformer(state).transform(
+            ObservedFixture.class.getClassLoader(),
+            ObservedFixture.class.getName().replace('.', '/'),
+            null,
+            ObservedFixture.class.getProtectionDomain(),
+            classBytes(ObservedFixture.class)
+        );
+
+        assertNull(transformed);
+        assertTrue(state.snapshot("fixture.ExampleTest").isEmpty());
+    }
+
+    @Test
+    public void unattributedNonProductionReflectionDoesNotFailTheCollector() throws Exception {
+        AffectedCollectorAgent.CollectorState state = configuredState(ObservedFixture.class);
+
+        state.hit(String.class);
+
+        assertTrue(state.isSupported());
+        assertTrue(state.snapshot("fixture.ExampleTest").isEmpty());
+    }
+
+    @Test
+    public void productionAccessBeforeTheFirstTestFailsClosed() throws Exception {
+        AffectedCollectorAgent.CollectorState state = configuredState(ObservedFixture.class);
+
+        assertEquals(Long.MIN_VALUE, state.executionId());
+
+        assertFalse(state.isSupported());
+    }
+
+    @Test
+    public void staticCallGraphAddsTransitiveProductionDependencies() throws Exception {
+        Path production = temporary.newFolder("static-production").toPath();
+        writeClass(production, ObservedFixture.class);
+        writeClass(production, SecondObservedFixture.class);
+        AffectedCollectorAgent.CollectorState state = new AffectedCollectorAgent.CollectorState();
+        state.configure(Collections.singleton(production), Collections.singleton(codeSource(CollectorContractTest.class)));
+        String testClass = CollectorContractTest.class.getName();
+        state.staticReference(testClass.replace('.', '/'), ObservedFixture.class.getName().replace('.', '/'));
+        state.staticReference(
+            ObservedFixture.class.getName().replace('.', '/'),
+            SecondObservedFixture.class.getName().replace('.', '/')
+        );
+
+        List<AffectedCollectorAgent.Dependency> dependencies = state.snapshot(testClass);
+
+        assertEquals(2, dependencies.size());
+        assertEquals(ObservedFixture.class.getName(), dependencies.get(0).getClassName());
+        assertEquals(SecondObservedFixture.class.getName(), dependencies.get(1).getClassName());
+    }
+
+    @Test
+    public void dynamicallyObservedProductionClassesRootTheirStaticDependencies() throws Exception {
+        AffectedCollectorAgent.CollectorState state = new AffectedCollectorAgent.CollectorState();
+        state.configure(Collections.singleton(codeSource(DynamicProductionFixture.class)));
+        state.staticReference(
+            DynamicProductionFixture.class.getName().replace('.', '/'),
+            SecondObservedFixture.class.getName().replace('.', '/')
+        );
+        state.beginExecution("execution", "fixture.ExampleTest");
+        state.hit(DynamicProductionFixture.class);
+        state.endExecution("execution");
+
+        List<AffectedCollectorAgent.Dependency> dependencies = state.snapshot("fixture.ExampleTest");
+
+        assertEquals(2, dependencies.size());
+        assertEquals(DynamicProductionFixture.class.getName(), dependencies.get(0).getClassName());
+        assertEquals(SecondObservedFixture.class.getName(), dependencies.get(1).getClassName());
+    }
+
+    @Test
+    public void transformedArrayMergesRemainVerifierSafe() throws Exception {
+        AffectedCollectorAgent.CollectorState state = new AffectedCollectorAgent.CollectorState();
+        state.configure(Collections.singleton(codeSource(ArrayMergeFixture.class)));
+        byte[] transformed = new AffectedCollectorAgent.CollectorTransformer(state).transform(
+            ArrayMergeFixture.class.getClassLoader(),
+            ArrayMergeFixture.class.getName().replace('.', '/'),
+            null,
+            ArrayMergeFixture.class.getProtectionDomain(),
+            classBytes(ArrayMergeFixture.class)
+        );
+
+        assertNotNull(transformed);
+        Class<?> type = new ByteArrayLoader(ArrayMergeFixture.class.getClassLoader()).define(
+            ArrayMergeFixture.class.getName(),
+            transformed
+        );
+        assertNull(type.getMethod("first", boolean.class).invoke(null, true));
+        assertNull(type.getMethod("first", boolean.class).invoke(null, false));
+    }
+
+    @Test
+    public void staticAndPrivateHotPathsDoNotReceiveRuntimeEntryProbes() throws Exception {
+        AffectedCollectorAgent.CollectorState state = new AffectedCollectorAgent.CollectorState();
+        state.configure(Collections.singleton(codeSource(HotLoopFixture.class)));
+
+        byte[] transformed = new AffectedCollectorAgent.CollectorTransformer(state).transform(
+            HotLoopFixture.class.getClassLoader(),
+            HotLoopFixture.class.getName().replace('.', '/'),
+            null,
+            HotLoopFixture.class.getProtectionDomain(),
+            classBytes(HotLoopFixture.class)
+        );
+
+        assertNotNull(transformed);
+        AtomicInteger runtimeEntryProbes = new AtomicInteger();
+        new ClassReader(transformed).accept(new ClassVisitor(Opcodes.ASM9) {
+            @Override
+            public MethodVisitor visitMethod(
+                int access,
+                String name,
+                String descriptor,
+                String signature,
+                String[] exceptions
+            ) {
+                if (!name.equals("run") && !name.equals("value")) return null;
+                return new MethodVisitor(Opcodes.ASM9) {
+                    @Override
+                    public void visitMethodInsn(
+                        int opcode,
+                        String owner,
+                        String name,
+                        String descriptor,
+                        boolean isInterface
+                    ) {
+                        if (owner.equals(AffectedCollectorAgent.class.getName().replace('.', '/'))
+                            && name.equals("hitProduction")) {
+                            runtimeEntryProbes.incrementAndGet();
+                        }
+                    }
+                };
+            }
+        }, 0);
+        assertEquals(0, runtimeEntryProbes.get());
+    }
+
+    @Test
+    public void classCatalogResolvesAProductionClassBeforeTransformerObservation() throws Exception {
+        AffectedCollectorAgent.CollectorState state = new AffectedCollectorAgent.CollectorState();
+        state.configure(Collections.singleton(codeSource(ObservedFixture.class)));
+        state.beginExecution("execution", "fixture.ExampleTest");
+
+        state.hit(ObservedFixture.class);
+        state.endExecution("execution");
+
+        assertEquals(1, state.snapshot("fixture.ExampleTest").size());
+        assertTrue(state.isSupported());
+    }
+
+    @Test
+    public void singleActiveClassStillFailsClosedForAsynchronousAccess() throws Exception {
+        AffectedCollectorAgent.CollectorState state = configuredState(ObservedFixture.class);
+        state.beginExecution("execution", "fixture.ExampleTest");
+        Thread asynchronous = new Thread(() -> {
+            try {
+                state.hit(ObservedFixture.class);
+            } catch (Throwable failure) {
+                state.fail(failure);
+            }
+        });
+
+        asynchronous.start();
+        asynchronous.join(5_000L);
+        state.endExecution("execution");
+
+        assertFalse(asynchronous.isAlive());
+        assertFalse(state.isSupported());
+        assertTrue(state.snapshot("fixture.ExampleTest").isEmpty());
+    }
+
+    @Test
+    public void concurrentAsynchronousAccessFailsClosed() throws Exception {
+        AffectedCollectorAgent.CollectorState state = configuredState(ObservedFixture.class);
+        state.beginExecution("first", "fixture.FirstTest");
+        state.beginExecution("second", "fixture.SecondTest");
+        Thread asynchronous = new Thread(() -> {
+            try {
+                state.hit(ObservedFixture.class);
+            } catch (Throwable failure) {
+                state.fail(failure);
+            }
+        });
+
+        asynchronous.start();
+        asynchronous.join(5_000L);
+        state.endExecution("second");
+        state.endExecution("first");
+
+        assertFalse(asynchronous.isAlive());
+        assertFalse(state.isSupported());
     }
 
     @Test
@@ -274,6 +533,39 @@ public class CollectorContractTest {
     }
 
     @Test
+    public void parallelJupiterClassesKeepIndependentDependencies() throws Exception {
+        Path outputRoot = prepareListener(ObservedFixture.class, SecondObservedFixture.class);
+        Launcher launcher = LauncherFactory.create(
+            LauncherConfig.builder().enableTestExecutionListenerAutoRegistration(false).build()
+        );
+        launcher.registerTestExecutionListeners(new AffectedTestExecutionListener());
+
+        launcher.execute(
+            LauncherDiscoveryRequestBuilder.request()
+                .configurationParameter("junit.jupiter.execution.parallel.enabled", "true")
+                .configurationParameter("junit.jupiter.execution.parallel.mode.default", "concurrent")
+                .configurationParameter("junit.jupiter.execution.parallel.mode.classes.default", "concurrent")
+                .configurationParameter("junit.jupiter.execution.parallel.config.strategy", "fixed")
+                .configurationParameter("junit.jupiter.execution.parallel.config.fixed.parallelism", "2")
+                .selectors(
+                    selectClass(ParallelFixtures.FirstFixture.class),
+                    selectClass(ParallelFixtures.SecondFixture.class)
+                )
+                .build()
+        );
+
+        Map<String, String> maps = mapsByTest(onlyWorkerDirectory(outputRoot));
+        String first = maps.get(ParallelFixtures.FirstFixture.class.getName());
+        String second = maps.get(ParallelFixtures.SecondFixture.class.getName());
+        assertNotNull(first);
+        assertNotNull(second);
+        assertTrue(first.contains("dependency=" + encode(ObservedFixture.class.getName()) + "|"));
+        assertFalse(first.contains("dependency=" + encode(SecondObservedFixture.class.getName()) + "|"));
+        assertTrue(second.contains("dependency=" + encode(SecondObservedFixture.class.getName()) + "|"));
+        assertFalse(second.contains("dependency=" + encode(ObservedFixture.class.getName()) + "|"));
+    }
+
+    @Test
     public void listenerMarksSourcelessTestsUnsupported() throws Exception {
         Path outputRoot = prepareListener();
         Launcher launcher = LauncherFactory.create(
@@ -293,7 +585,7 @@ public class CollectorContractTest {
 
     @Test
     public void missingOutputNeverFailsTheUserTestRun() throws Exception {
-        configureAgentState();
+        configureAgentState(ObservedFixture.class);
         System.clearProperty(CollectorOutput.OUTPUT_PROPERTY);
         System.setProperty(CollectorOutput.WORKER_PROPERTY, "worker-1");
         Launcher launcher = LauncherFactory.create(
@@ -316,7 +608,10 @@ public class CollectorContractTest {
         Process process = new ProcessBuilder(
             java,
             "-javaagent:" + requiredProperty("affected.smoke.agent"),
+            "-Daffected.collector.debug=true",
             "-D" + AffectedCollectorAgent.CODE_SOURCES_PROPERTY + "=" + requiredProperty("affected.smoke.codeSources"),
+            "-D" + AffectedCollectorAgent.TEST_CODE_SOURCES_PROPERTY + "=" +
+                requiredProperty("affected.smoke.instrumentationSources"),
             "-D" + CollectorOutput.OUTPUT_PROPERTY + "=" + outputRoot,
             "-D" + CollectorOutput.WORKER_PROPERTY + "=forked-worker",
             "-Daffected.smoke.childClasspath=" + requiredProperty("affected.smoke.childClasspath"),
@@ -331,30 +626,69 @@ public class CollectorContractTest {
         assertTrue(log, finished);
         assertEquals(log, 0, process.exitValue());
         Path workerDirectory = onlyWorkerDirectory(outputRoot);
-        assertTrue(read(workerDirectory.resolve("complete.manifest")).contains("supported=true"));
+        String completion = read(workerDirectory.resolve("complete.manifest"));
+        assertTrue(log + "\n" + completion, completion.contains("supported=true"));
         try (Stream<Path> files = Files.list(workerDirectory)) {
-            assertEquals(2, files.filter(path -> path.getFileName().toString().endsWith(".map")).count());
+            assertEquals(4, files.filter(path -> path.getFileName().toString().endsWith(".map")).count());
         }
     }
 
     private Path prepareListener() throws Exception {
+        return prepareListener(ObservedFixture.class);
+    }
+
+    private Path prepareListener(Class<?>... observedTypes) throws Exception {
         Path outputRoot = temporary.getRoot().toPath().resolve("listener");
         System.setProperty(CollectorOutput.OUTPUT_PROPERTY, outputRoot.toString());
         System.setProperty(CollectorOutput.WORKER_PROPERTY, "worker-1");
-        configureAgentState();
+        configureAgentState(observedTypes);
         return outputRoot;
     }
 
-    private void configureAgentState() throws Exception {
+    private void configureAgentState(Class<?>... observedTypes) throws Exception {
         AffectedCollectorAgent.CollectorState state = AffectedCollectorAgent.state();
         state.configure(Collections.singleton(codeSource(ObservedFixture.class)));
-        new AffectedCollectorAgent.CollectorTransformer(state).transform(
-            ObservedFixture.class.getClassLoader(),
-            ObservedFixture.class.getName().replace('.', '/'),
-            null,
-            ObservedFixture.class.getProtectionDomain(),
-            classBytes(ObservedFixture.class)
-        );
+        for (Class<?> observedType : observedTypes) {
+            new AffectedCollectorAgent.CollectorTransformer(state).transform(
+                observedType.getClassLoader(),
+                observedType.getName().replace('.', '/'),
+                null,
+                observedType.getProtectionDomain(),
+                classBytes(observedType)
+            );
+        }
+    }
+
+    private static AffectedCollectorAgent.CollectorState configuredState(Class<?>... observedTypes) throws Exception {
+        AffectedCollectorAgent.CollectorState state = new AffectedCollectorAgent.CollectorState();
+        state.configure(Collections.singleton(codeSource(ObservedFixture.class)));
+        for (Class<?> observedType : observedTypes) {
+            new AffectedCollectorAgent.CollectorTransformer(state).transform(
+                observedType.getClassLoader(),
+                observedType.getName().replace('.', '/'),
+                null,
+                observedType.getProtectionDomain(),
+                classBytes(observedType)
+            );
+        }
+        return state;
+    }
+
+    private static Map<String, String> mapsByTest(Path workerDirectory) throws Exception {
+        Map<String, String> result = new HashMap<String, String>();
+        try (Stream<Path> files = Files.list(workerDirectory)) {
+            for (Path map : files.filter(path -> path.getFileName().toString().endsWith(".map"))
+                .collect(Collectors.toList())) {
+                String content = read(map);
+                String encodedTest = Stream.of(content.split("\n"))
+                    .filter(line -> line.startsWith("test="))
+                    .findFirst()
+                    .orElseThrow(AssertionError::new)
+                    .substring("test=".length());
+                result.put(new String(Base64.getUrlDecoder().decode(encodedTest), StandardCharsets.UTF_8), content);
+            }
+        }
+        return result;
     }
 
     private static AffectedCollectorAgent.Dependency dependency() throws Exception {
@@ -386,6 +720,12 @@ public class CollectorContractTest {
         }
     }
 
+    private static void writeClass(Path root, Class<?> type) throws Exception {
+        Path target = root.resolve(type.getName().replace('.', '/') + ".class");
+        Files.createDirectories(target.getParent());
+        Files.write(target, classBytes(type));
+    }
+
     private static byte[] readAllBytes(InputStream input) throws Exception {
         byte[] buffer = new byte[4096];
         int read;
@@ -405,6 +745,10 @@ public class CollectorContractTest {
         return result.toString();
     }
 
+    private static String encode(String value) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(StandardCharsets.UTF_8));
+    }
+
     private static void restore(String property, String value) {
         if (value == null) System.clearProperty(property);
         else System.setProperty(property, value);
@@ -419,11 +763,47 @@ public class CollectorContractTest {
     public static final class ObservedFixture {
     }
 
+    public static final class SecondObservedFixture {
+    }
+
+    public static final class HotLoopFixture {
+        public static int run(int iterations) {
+            int result = 0;
+            for (int index = 0; index < iterations; index++) result += value(index);
+            return result;
+        }
+
+        private static int value(int input) {
+            return input & 1;
+        }
+    }
+
+    public static final class DynamicProductionFixture {
+    }
+
+    public static final class ArrayMergeFixture {
+        public static Object first(boolean strings) {
+            Object[][] values = strings ? new String[1][1] : new Integer[1][1];
+            return values[0][0];
+        }
+    }
+
+    private static final class ByteArrayLoader extends ClassLoader {
+        private ByteArrayLoader(ClassLoader parent) {
+            super(parent);
+        }
+
+        private Class<?> define(String name, byte[] bytes) {
+            return defineClass(name, bytes, 0, bytes.length);
+        }
+    }
+
     public static final class StableJupiterFixture {
         private static final AtomicInteger executions = new AtomicInteger();
 
         @org.junit.jupiter.api.Test
         void passes() {
+            AffectedCollectorAgent.hit(ObservedFixture.class);
             executions.incrementAndGet();
         }
     }
@@ -433,7 +813,28 @@ public class CollectorContractTest {
 
         @org.junit.Test
         public void passes() {
+            AffectedCollectorAgent.hit(ObservedFixture.class);
             executions.incrementAndGet();
+        }
+    }
+
+    public static final class ParallelFixtures {
+        private static volatile CyclicBarrier barrier = new CyclicBarrier(2);
+
+        public static final class FirstFixture {
+            @org.junit.jupiter.api.Test
+            void passes() throws Exception {
+                barrier.await(5, TimeUnit.SECONDS);
+                AffectedCollectorAgent.hit(ObservedFixture.class);
+            }
+        }
+
+        public static final class SecondFixture {
+            @org.junit.jupiter.api.Test
+            void passes() throws Exception {
+                barrier.await(5, TimeUnit.SECONDS);
+                AffectedCollectorAgent.hit(SecondObservedFixture.class);
+            }
         }
     }
 

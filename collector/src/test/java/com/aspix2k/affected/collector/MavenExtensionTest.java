@@ -128,6 +128,32 @@ public class MavenExtensionTest {
     }
 
     @Test
+    public void configuredExcludesRemainAFullRuntimeFingerprint() throws Exception {
+        Path root = temporary.newFolder("configured-excludes-project").toPath();
+        Path agent = Files.write(root.resolve("agent.jar"), new byte[] {1});
+        Path output = Files.createDirectory(root.resolve("output"));
+        Path maps = Files.createDirectory(root.resolve("maps"));
+        MavenProject project = project(root);
+        Xpp3Dom configuration = (Xpp3Dom) project.getPlugin("org.apache.maven.plugins:maven-surefire-plugin")
+            .getConfiguration();
+        Xpp3Dom excludes = new Xpp3Dom("excludes");
+        Xpp3Dom exclude = new Xpp3Dom("exclude");
+        exclude.setValue("**/*PerformanceTest.java");
+        excludes.addChild(exclude);
+        configuration.addChild(excludes);
+
+        AffectedMavenLifecycleParticipant.Preparation preparation =
+            AffectedMavenLifecycleParticipant.prepare(
+                Collections.singletonList(project),
+                properties(agent, output, maps)
+            );
+
+        AffectedMavenConfig.ProjectConfig config = AffectedMavenConfig.read(preparation.getManifest(), root);
+        assertTrue(config.isAllTests());
+        assertTrue(config.getRuntime().matches("[0-9a-f]{64}"));
+    }
+
+    @Test
     public void effectiveProjectPropertyChangesRuntimeIdentity() throws Exception {
         Path root = temporary.newFolder("project-property-runtime").toPath();
         Path agent = Files.write(root.resolve("agent.jar"), new byte[] {1});

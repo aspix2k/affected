@@ -16,7 +16,7 @@ plugins {
 }
 
 group = "com.aspix2k"
-version = "1.9.1"
+version = "1.10.0"
 
 repositories {
     mavenCentral()
@@ -110,6 +110,7 @@ val pluginDirectory = project.name
 val collectorAgentArtifact = configurations.create("collectorAgentArtifact") {
     isCanBeConsumed = false
     isCanBeResolved = true
+    isTransitive = false
 }
 val collectorListenerArtifact = configurations.create("collectorListenerArtifact") {
     isCanBeConsumed = false
@@ -152,6 +153,7 @@ val collectorService = "META-INF/services/org.junit.platform.launcher.TestExecut
 val mavenFilter = "com.aspix2k.affected.collector.AffectedMavenFilter"
 val mavenFilterService = "META-INF/services/org.junit.platform.launcher.PostDiscoveryFilter"
 val mavenComponentService = "META-INF/plexus/components.xml"
+val asmLicense = "META-INF/LICENSE-ASM.txt"
 
 tasks.named<BuildPluginTask>("buildPlugin") {
     from(pluginLicense)
@@ -194,11 +196,9 @@ tasks.named<BuildPluginTask>("buildPlugin") {
                 check(agent.manifest?.mainAttributes?.getValue("Premain-Class") == collectorPremain) {
                     "Packaged collector must declare $collectorPremain as Premain-Class"
                 }
-                val listeners = generateSequence { agent.nextJarEntry }
-                    .filter { it.name == collectorService }
-                    .toList()
-                check(listeners.isEmpty()) {
-                    "Collector agent must not expose a JUnit service from the parent classloader"
+                val entries = generateSequence { agent.nextJarEntry }.map { it.name }.toList()
+                check(entries.none { it == collectorService } && entries.count { it == asmLicense } == 1) {
+                    "Collector agent must contain one ASM license and no JUnit service"
                 }
             }
 
@@ -244,22 +244,24 @@ tasks.named<BuildPluginTask>("buildPlugin") {
                 var listener: String? = null
                 var filter: String? = null
                 var classes = 0
+                var asmLicenses = 0
                 while (true) {
                     val entry = agent.nextJarEntry ?: break
                     val bytes = agent.readBytes()
                     when (entry.name) {
                         collectorService -> listener = bytes.toString(Charsets.UTF_8).trim()
                         mavenFilterService -> filter = bytes.toString(Charsets.UTF_8).trim()
+                        asmLicense -> asmLicenses++
                     }
                     if (entry.name.endsWith(".class")) {
-                        check(bytes.size >= 8 && ((bytes[6].toInt() and 0xff) shl 8 or (bytes[7].toInt() and 0xff)) == 52) {
+                        check(bytes.size >= 8 && ((bytes[6].toInt() and 0xff) shl 8 or (bytes[7].toInt() and 0xff)) <= 52) {
                             "Maven agent classes must target Java 8: ${entry.name}"
                         }
                         classes++
                     }
                 }
-                check(listener == collectorListener && filter == mavenFilter && classes > 0) {
-                    "Packaged Maven agent must contain the exact JUnit services"
+                check(listener == collectorListener && filter == mavenFilter && asmLicenses == 1 && classes > 0) {
+                    "Packaged Maven agent must contain the exact JUnit services and one ASM license"
                 }
             }
 

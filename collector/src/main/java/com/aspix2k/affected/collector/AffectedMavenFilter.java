@@ -435,9 +435,6 @@ public final class AffectedMavenFilter implements PostDiscoveryFilter {
 
         private static Selection from(AffectedDependencySelector.Decision decision) {
             Set<String> testClasses = new TreeSet<String>(decision.getTestClasses());
-            if (decision.getKind() == AffectedDependencySelector.Kind.CLASSES && testClasses.size() != 1) {
-                return all();
-            }
             return new Selection(decision.getKind(), testClasses);
         }
 

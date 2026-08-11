@@ -19,8 +19,10 @@ reuse a local dependency map to narrow execution to Jupiter and Vintage
 test-class candidates for changed production bytecode. An unchanged compatible
 task skips its test worker. Missing or incompatible maps, changed test/runtime
 inputs, added or deleted classes, resources and unsupported test engines keep
-the full task. Maven also keeps the full goal when a shared worker cannot prove
-one exact test-class owner for the changed bytecode.
+the full task. Runtime and bytecode references are attributed independently for
+each test class, including parallel execution in one worker. Unattributed or
+asynchronous production access keeps the full task instead of risking a skipped
+test.
 
 There is no Affected-specific project configuration. Gradle and Maven modules
 come from the IDE project model; the other integrations read their standard
@@ -84,10 +86,11 @@ available on `PATH`.
 Test-class selection stays inside the original IDE invocation and Run tab.
 Gradle selection is task-local. Maven reactor modules use independent maps.
 Maven exact selection supports Maven 3.9.x, Surefire 3.x, JUnit Platform and one reusable
-fork. It narrows only an unambiguous single-class decision; cumulative
-shared-worker candidates and other Maven configurations keep the full module
-test goal. Complete maps are replaced only by successful full runs and remain
-on the local machine.
+fork. It can select multiple mapped test classes without depending on their
+execution order. Other Maven configurations keep the full module test goal.
+Complete maps are replaced only by successful full runs and remain on the local
+machine. A collector schema change invalidates older maps and causes one full
+run to rebuild them safely.
 
 The optional [MCP Server](https://plugins.jetbrains.com/plugin/26071) integration
 exposes the affected modules, changed files, verification plan and run controls

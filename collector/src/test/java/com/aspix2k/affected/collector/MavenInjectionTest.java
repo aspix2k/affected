@@ -49,17 +49,24 @@ public class MavenInjectionTest {
     }
 
     @Test(timeout = 180_000L)
-    public void changedProductionClassRunsOnlyItsDependentTestClass() throws Exception {
-        for (Path mavenHome : mavenHomes()) exactScenario(mavenHome);
+    public void firstMiddleAndLastProductionClassesRunOnlyTheirDependentTests() throws Exception {
+        for (Path mavenHome : mavenHomes()) {
+            exactScenario(mavenHome, "Alpha", "AlphaTest", 1);
+            exactScenario(mavenHome, "Omega", "VintageOmegaTest", 3);
+            exactScenario(mavenHome, "Beta", "ZetaBetaTest", 2);
+        }
     }
 
     @Test(timeout = 180_000L)
-    public void ambiguousSharedWorkerDependenciesKeepTheFullTestGoal() throws Exception {
-        Path project = temporary.newFolder("ambiguous project").toPath();
-        Path fullOutput = temporary.newFolder("ambiguous full output").toPath();
-        Path fallbackOutput = temporary.newFolder("ambiguous fallback output").toPath();
-        Path maps = temporary.newFolder("ambiguous maps").toPath();
+    public void sharedProductionClassRunsAllAndOnlyItsDependentTests() throws Exception {
+        Path project = temporary.newFolder("shared project").toPath();
+        Path fullOutput = temporary.newFolder("shared full output").toPath();
+        Path exactOutput = temporary.newFolder("shared exact output").toPath();
+        Path maps = temporary.newFolder("shared maps").toPath();
         writeFixture(project);
+        write(project.resolve("src/test/java/fixture/SharedAlphaTest.java"),
+            "package fixture; public class SharedAlphaTest { @org.junit.jupiter.api.Test void test() throws Exception { " +
+                "org.junit.jupiter.api.Assertions.assertEquals(1, Alpha.value()); Marks.add(\"SharedAlphaTest\"); } }\n");
         Path mavenHome = mavenHomes().get(mavenHomes().size() - 1);
         Result full = run(project, fullOutput, maps, mavenHome);
         assertEquals(full.log, 0, full.exitCode);
@@ -70,11 +77,11 @@ public class MavenInjectionTest {
             "package fixture; public final class Alpha { public static int value() { int result = 1; return result; } }\n"
         );
 
-        Result fallback = run(project, fallbackOutput, maps, mavenHome);
+        Result exact = run(project, exactOutput, maps, mavenHome);
 
-        assertEquals(fallback.log, 0, fallback.exitCode);
-        assertEquals(setOf("AlphaTest", "VintageOmegaTest", "ZetaBetaTest"), executedTests(project));
-        assertTrue(read(onlyDirectory(fallbackOutput, fallback.log).resolve("task.manifest")).contains("all=true"));
+        assertEquals(exact.log, 0, exact.exitCode);
+        assertEquals(setOf("AlphaTest", "SharedAlphaTest"), executedTests(project));
+        assertTrue(read(onlyDirectory(exactOutput, exact.log).resolve("task.manifest")).contains("all=false"));
     }
 
     @Test(timeout = 180_000L)
@@ -132,12 +139,12 @@ public class MavenInjectionTest {
         assertEquals(exact.log, 2, directories(exactOutput).size());
     }
 
-    private void exactScenario(Path mavenHome) throws Exception {
+    private void exactScenario(Path mavenHome, String productionClass, String dependentTest, int value) throws Exception {
         String version = mavenHome.getFileName().toString();
-        Path project = temporary.newFolder("exact project " + version).toPath();
-        Path fullOutput = temporary.newFolder("full output " + version).toPath();
-        Path exactOutput = temporary.newFolder("exact output " + version).toPath();
-        Path maps = temporary.newFolder("exact maps " + version).toPath();
+        Path project = temporary.newFolder("exact project " + version + " " + productionClass).toPath();
+        Path fullOutput = temporary.newFolder("full output " + version + " " + productionClass).toPath();
+        Path exactOutput = temporary.newFolder("exact output " + version + " " + productionClass).toPath();
+        Path maps = temporary.newFolder("exact maps " + version + " " + productionClass).toPath();
         writeFixture(project);
         Result full = run(project, fullOutput, maps, mavenHome);
         assertEquals(full.log, 0, full.exitCode);
@@ -145,8 +152,9 @@ public class MavenInjectionTest {
         promote(fullOutput, maps);
         clearExecuted(project);
         write(
-            project.resolve("src/main/java/fixture/Omega.java"),
-            "package fixture; public final class Omega { public static int value() { int result = 3; return result; } }\n"
+            project.resolve("src/main/java/fixture/" + productionClass + ".java"),
+            "package fixture; public final class " + productionClass + " { public static int value() { " +
+                "int result = " + value + "; return result; } }\n"
         );
 
         Result exact = run(project, exactOutput, maps, mavenHome);
@@ -156,7 +164,7 @@ public class MavenInjectionTest {
         String manifest = read(task.resolve("task.manifest"));
         assertEquals(
             exact.log + "\nfull:\n" + fullManifest + "\nexact:\n" + manifest,
-            Collections.singleton("VintageOmegaTest"),
+            Collections.singleton(dependentTest),
             executedTests(project)
         );
         assertTrue(manifest, manifest.contains("all=false"));
@@ -310,7 +318,7 @@ public class MavenInjectionTest {
             }
         }
         String content = new StringBuilder("format=1\n")
-            .append("schema=3\n")
+            .append("schema=4\n")
             .append("collector=").append(encode("fixture-version")).append('\n')
             .append("task=").append(manifest.get("task")).append('\n')
             .append("runtime=").append(manifest.get("runtime")).append('\n')

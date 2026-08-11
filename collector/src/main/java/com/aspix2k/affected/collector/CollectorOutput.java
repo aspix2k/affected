@@ -66,7 +66,7 @@ public final class CollectorOutput {
     }
 
     public void writeMap(String testClass, List<AffectedCollectorAgent.Dependency> dependencies) throws Exception {
-        if (testClass == null || testClass.trim().isEmpty() || dependencies.isEmpty()) {
+        if (testClass == null || testClass.trim().isEmpty() || dependencies == null) {
             throw new IllegalArgumentException("test dependency map");
         }
         List<AffectedCollectorAgent.Dependency> sorted = new ArrayList<AffectedCollectorAgent.Dependency>(dependencies);

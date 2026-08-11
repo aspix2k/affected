@@ -165,7 +165,7 @@ private fun List<TestDependencyRecord>.hasDuplicateTests(): Boolean =
 
 private fun List<TestDependencyRecord>.match(artifacts: Map<DependencyId, ClassDependency>): Boolean =
     isNotEmpty() && all { record ->
-        record.dependencies.isNotEmpty() && record.dependencies.all { dependency ->
+        record.dependencies.all { dependency ->
             artifacts[dependency.id] == dependency
         }
     }

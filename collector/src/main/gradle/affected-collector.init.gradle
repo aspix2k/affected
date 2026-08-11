@@ -24,6 +24,7 @@ import org.gradle.util.GradleVersion
 class AffectedCollectorSelectionSpec implements Spec<Task>, Serializable {
     private static final String OUTPUT = "affected.collector.output"
     private static final String CODE_SOURCES = "affected.collector.codeSources"
+    private static final String TEST_CODE_SOURCES = "affected.collector.testClasses"
     private static final String MAPS = "affected.collector.maps"
     private static final String VERSION = "affected.collector.version"
     private static final int MAX_CLASSES = 100_000
@@ -73,6 +74,7 @@ class AffectedCollectorSelectionSpec implements Spec<Task>, Serializable {
             writeCatalogManifest(taskOutput, catalog)
             writeTaskManifest(taskOutput, taskKey, runtime.fingerprint as String, input, allTests)
             task.systemProperty(CODE_SOURCES, codeSources.join(File.pathSeparator))
+            task.systemProperty(TEST_CODE_SOURCES, testClasses.join(File.pathSeparator))
             task.systemProperty(OUTPUT, taskOutput.toString())
             if (decision.kind == AffectedDependencySelector.Kind.CLASSES) {
                 task.filter.setIncludePatterns(decision.testClasses as String[])

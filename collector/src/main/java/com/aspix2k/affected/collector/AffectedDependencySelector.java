@@ -85,7 +85,7 @@ public final class AffectedDependencySelector {
         }
         Path map = resolvedRoot.resolve("map-" + sha256(taskKey) + ".map");
         List<String> lines = readLines(map);
-        if (lines.size() < 11 || !FORMAT.equals(lines.get(0)) || !"schema=3".equals(lines.get(1))) {
+        if (lines.size() < 11 || !FORMAT.equals(lines.get(0)) || !"schema=4".equals(lines.get(1))) {
             throw new IllegalStateException("map header");
         }
         if (!collectorVersion.equals(value(lines.get(2), "collector="))
@@ -129,7 +129,6 @@ public final class AffectedDependencySelector {
                     throw new IllegalStateException("record dependency");
                 }
             }
-            if (dependencies.isEmpty()) throw new IllegalStateException("empty record");
             records.put(rawRecord.getKey(), dependencies);
         }
         return new Baseline(catalog, records);
@@ -137,9 +136,13 @@ public final class AffectedDependencySelector {
 
     private static void parseRecord(String value, Map<String, Set<Artifact>> records) throws Exception {
         int separator = value.indexOf('|');
-        if (separator <= 0 || separator == value.length() - 1) throw new IllegalStateException("record");
+        if (separator <= 0) throw new IllegalStateException("record");
         String testClass = decode(value.substring(0, separator));
         if (records.containsKey(testClass)) throw new IllegalStateException("duplicate test");
+        if (separator == value.length() - 1) {
+            records.put(testClass, Collections.<Artifact>emptySet());
+            return;
+        }
         String[] values = value.substring(separator + 1).split(";", -1);
         Set<Artifact> dependencies = new LinkedHashSet<Artifact>();
         for (String dependency : values) {

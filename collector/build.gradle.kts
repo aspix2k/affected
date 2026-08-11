@@ -3,6 +3,7 @@ plugins {
 }
 
 val smoke = sourceSets.create("smoke")
+val smokeProduction = sourceSets.create("smokeProduction")
 val maven = sourceSets.create("maven")
 val maven390Distribution = configurations.create("maven390Distribution") {
     isCanBeConsumed = false
@@ -19,9 +20,11 @@ val maven4Distribution = configurations.create("maven4Distribution") {
 
 repositories {
     mavenCentral()
+    maven("https://cache-redirector.jetbrains.com/intellij-dependencies")
 }
 
 dependencies {
+    implementation("org.jetbrains.intellij.deps:asm-all:9.6.1")
     compileOnly("org.junit.platform:junit-platform-launcher:1.11.0")
 
     add(maven.compileOnlyConfigurationName, "org.apache.maven:maven-core:3.9.16")
@@ -46,6 +49,9 @@ dependencies {
     add(maven4Distribution.name, "org.apache.maven:apache-maven:4.0.0-rc-5:bin@zip")
 }
 
+smoke.compileClasspath += smokeProduction.output
+smoke.runtimeClasspath += smokeProduction.output
+
 sourceSets.test {
     compileClasspath += maven.output
     runtimeClasspath += maven.output
@@ -64,8 +70,13 @@ tasks.withType<JavaCompile>().configureEach {
 tasks.jar {
     archiveFileName.set("affected-collector-agent.jar")
     include("com/aspix2k/affected/collector/AffectedCollectorAgent*.class")
+    include("com/aspix2k/affected/collector/AffectedClassInstrumenter*.class")
     include("com/aspix2k/affected/collector/AffectedDependencySelector*.class")
     include("com/aspix2k/affected/collector/CollectorOutput*.class")
+    include("META-INF/LICENSE-ASM.txt")
+    from(configurations.runtimeClasspath.map { classpath -> classpath.map(::zipTree) }) {
+        include("org/jetbrains/org/objectweb/asm/**")
+    }
     manifest {
         attributes("Premain-Class" to "com.aspix2k.affected.collector.AffectedCollectorAgent")
     }
@@ -90,6 +101,7 @@ val mavenAgentJar = tasks.register<Jar>("mavenAgentJar") {
     archiveFileName.set("affected-maven-agent.jar")
     from(sourceSets.main.get().output)
     include("com/aspix2k/affected/collector/AffectedCollectorAgent*.class")
+    include("com/aspix2k/affected/collector/AffectedClassInstrumenter*.class")
     include("com/aspix2k/affected/collector/AffectedDependencySelector*.class")
     include("com/aspix2k/affected/collector/AffectedMavenFilter*.class")
     include("com/aspix2k/affected/collector/AffectedMavenConfig*.class")
@@ -97,6 +109,10 @@ val mavenAgentJar = tasks.register<Jar>("mavenAgentJar") {
     include("com/aspix2k/affected/collector/CollectorOutput*.class")
     include("META-INF/services/org.junit.platform.launcher.PostDiscoveryFilter")
     include("META-INF/services/org.junit.platform.launcher.TestExecutionListener")
+    include("META-INF/LICENSE-ASM.txt")
+    from(configurations.runtimeClasspath.map { classpath -> classpath.map(::zipTree) }) {
+        include("org/jetbrains/org/objectweb/asm/**")
+    }
     manifest {
         attributes("Premain-Class" to "com.aspix2k.affected.collector.AffectedCollectorAgent")
     }
@@ -115,14 +131,31 @@ tasks.test {
     val initScript = layout.projectDirectory.file("src/main/gradle/affected-collector.init.gradle")
     val mavenExtensionArchive = mavenExtensionJar.flatMap { it.archiveFile }
     val mavenAgentArchive = mavenAgentJar.flatMap { it.archiveFile }
-    dependsOn(tasks.jar, listenerJar, mavenExtensionJar, mavenAgentJar, extractMaven, tasks.named(smoke.classesTaskName))
-    inputs.files(agentJar, listenerArchive, mavenExtensionArchive, mavenAgentArchive, initScript, smoke.runtimeClasspath)
+    dependsOn(
+        tasks.jar,
+        listenerJar,
+        mavenExtensionJar,
+        mavenAgentJar,
+        extractMaven,
+        tasks.named(smoke.classesTaskName),
+        tasks.named(smokeProduction.classesTaskName),
+    )
+    inputs.files(
+        agentJar,
+        listenerArchive,
+        mavenExtensionArchive,
+        mavenAgentArchive,
+        initScript,
+        smoke.runtimeClasspath,
+        smokeProduction.output,
+    )
     useJUnit()
     isScanForTestClasses = false
     include("**/*Test.class")
     systemProperty("affected.smoke.agent", agentJar.get().asFile.absolutePath)
     systemProperty("affected.smoke.childClasspath", files(smoke.runtimeClasspath, listenerArchive).asPath)
-    systemProperty("affected.smoke.codeSources", smoke.output.classesDirs.asPath)
+    systemProperty("affected.smoke.codeSources", smokeProduction.output.classesDirs.asPath)
+    systemProperty("affected.smoke.instrumentationSources", smoke.output.classesDirs.asPath)
     systemProperty("affected.smoke.testClasses", sourceSets.test.get().output.classesDirs.asPath)
     systemProperty("affected.test.initScript", initScript.asFile.absolutePath)
     systemProperty("affected.test.listener", listenerArchive.get().asFile.absolutePath)
