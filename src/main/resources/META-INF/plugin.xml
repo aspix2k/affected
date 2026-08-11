@@ -4,57 +4,42 @@
     <vendor url="https://github.com/aspix2k/affected">aspix</vendor>
 
     <description><![CDATA[
-        <b>Run only what your change can affect.</b>
-        <br/><br/>
-        Affected maps changed source files to build modules and runs their tests,
-        build or configured static analysis. It can also check direct consumers
-        after a public API change. Unrelated modules are skipped. Compatible
-        modules inside one build root share one IDE Run tab;
-        independent build roots run concurrently.
-        After a successful full run, compatible Gradle JVM, Android unit-test and
-        Maven Surefire and Failsafe runs use independent local bytecode maps to
-        narrow Jupiter and Vintage test classes, including reusable and isolated
-        parallel Maven forks. Both adapters select every mapped affected class; uncertain cases
-        keep the original full task or Maven goal. One concise Run-output line
-        explains the exact, proven-empty or full-fallback decision.
-        <br/><br/>
-        <b>Workflow</b>
-        <br/>
+        <p><b>A JetBrains IDE plugin that finds affected projects and runs only their tests and build checks.</b></p>
+        <p>
+            Built for multi-module projects and monorepos across JVM, Android,
+            Rust, Go, Node.js, .NET, Python, PHP, Ruby and C/C++.
+        </p>
+        <p><b>What you get</b></p>
         <ul>
-            <li>The toolbar matrix shows the current affected scope.</li>
-            <li>Run from the toolbar, Run menu, commit dialog, push check or optional MCP toolset.</li>
-            <li>Gradle and Maven use their IDE integrations; other systems run
-                their command-line tools in the Run window.</li>
-            <li>No Affected config file: module graphs come from imported project models or standard manifests.</li>
+            <li>Run supported JVM, Android, Rust, Go, Node.js, .NET, Python, PHP,
+                Ruby and C/C++ projects from one action.</li>
+            <li>Keep all commands for one build-system root in one Run session.</li>
+            <li>Narrow compatible Gradle and Maven modules to affected JUnit test classes.</li>
+            <li>Optionally verify direct dependents after a public API change.</li>
+            <li>No account, server, telemetry or project-specific configuration file.</li>
         </ul>
-        <b>Supported project types</b>
-        <br/>
+        <p><b>Supported projects</b></p>
         <ul>
-            <li>Gradle JVM and Android projects, including linked and composite builds, and Maven projects.</li>
-            <li>Cargo workspaces or packages, Go modules, and npm, Yarn or pnpm workspaces or packages.</li>
-            <li>.NET solutions and projects.</li>
-            <li>Single- or multi-package Python, Composer and Bundler repositories.</li>
-            <li>CMake projects with executable or library targets.</li>
+            <li><b>Kotlin, Java and Android:</b> Gradle and Maven.</li>
+            <li><b>Rust and Go:</b> Cargo workspaces and packages; Go modules.</li>
+            <li><b>JavaScript and TypeScript:</b> npm, Yarn and pnpm workspaces and packages.</li>
+            <li><b>C#, F# and Visual Basic:</b> .NET solutions and projects.</li>
+            <li><b>Python:</b> pytest and mypy projects.</li>
+            <li><b>PHP:</b> Composer packages with PHPUnit or PHPStan.</li>
+            <li><b>Ruby:</b> Bundler projects with RSpec.</li>
+            <li><b>C and C++:</b> CMake projects with build targets and CTest.</li>
         </ul>
-        Recognised languages: Kotlin, Java, Rust, Go, JavaScript, TypeScript,
-        C#, F#, Visual Basic, Python, PHP, Ruby, C and C++. JSX, TSX, Vue, Svelte
-        and Razor files are recognised too.
-        <br/><br/>
-        With Git available, public API detection compares Kotlin and Java
-        declarations; other supported systems conservatively classify non-test
-        production and configuration changes. Optional consumer checking covers
-        direct consumers only. Without Git, local source changes still work and
-        are treated conservatively as possible API changes.
-        <br/><br/>
-        Requires a JetBrains IDE based on IntelliJ Platform 2025.3 or newer. The
-        relevant IDE integration or command-line build tools must be installed.
-        <br/><br/>
-        Interface languages: English, Czech, German, Spanish, French, Indonesian,
-        Italian, Japanese, Korean, Polish, Brazilian Portuguese, Russian,
-        Simplified Chinese and Turkish.
-        <br/><br/>
-        Affected has no server, account or telemetry and makes no network requests
-        of its own. Error reporting only opens a prefilled GitHub issue for review.
+        <p>
+            Works in IntelliJ IDEA, Android Studio, Rider, GoLand, CLion, PyCharm,
+            WebStorm, PhpStorm, RubyMine, RustRover and DataSpell based on IntelliJ
+            Platform 2025.3 or newer.
+        </p>
+        <p><b>Install Affected, open a supported project and choose Run affected tests.</b></p>
+        <p>
+            <a href="https://github.com/aspix2k/affected">Documentation</a> ·
+            <a href="https://github.com/aspix2k/affected/issues">Issue tracker</a> ·
+            <a href="https://github.com/aspix2k/affected/blob/main/PRIVACY.md">Privacy</a>
+        </p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>

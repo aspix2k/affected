@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.1] - 2026-08-11
+
+### Changed
+
+- Rewrite the GitHub and Marketplace pages around the plugin's purpose, supported IDEs, languages and build systems.
+- Make the README CI badge report pull-request verification instead of a cancelled legacy `main` run.
+
 ## [1.14.0] - 2026-08-11
 
 ### Added
