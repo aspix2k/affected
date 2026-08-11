@@ -1,0 +1,7 @@
+[package]
+name = "affected-beta"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+affected-alpha = { path = "../alpha" }

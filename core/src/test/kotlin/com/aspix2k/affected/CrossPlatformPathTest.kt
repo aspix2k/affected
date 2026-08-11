@@ -38,7 +38,7 @@ class CrossPlatformPathTest {
             }
         """.trimIndent()
 
-        val module = CargoMetadata.parse(json, "C:/ws").single()
+        val module = CargoMetadata.parse(json, "C:\\ws").single()
 
         assertFalse('\\' in module.key, "the key must be identical on every OS: ${module.key}")
     }

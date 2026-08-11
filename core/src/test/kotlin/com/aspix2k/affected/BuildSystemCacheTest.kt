@@ -24,6 +24,30 @@ class BuildSystemCacheTest {
         assertEquals(setOf("second-root", "second-child"), system.modules(project(second)).map { it.id }.toSet())
     }
 
+    @Test
+    fun `a child manifest change invalidates the cache even with the same timestamp`() {
+        val root = projectRoot("first")
+        val child = File(root, "child/pyproject.toml")
+        val timestamp = child.lastModified()
+        val system = PythonBuildSystem()
+        assertEquals(setOf("first-root", "first-child"), system.modules(project(root)).map { it.id }.toSet())
+        child.writeText("[project]\nname = \"other-child\"\n")
+        assertTrue(child.setLastModified(timestamp))
+
+        assertEquals(setOf("first-root", "other-child"), system.modules(project(root)).map { it.id }.toSet())
+    }
+
+    @Test
+    fun `a new test directory invalidates cached module capabilities`() {
+        val root = projectRoot("layout")
+        val system = PythonBuildSystem()
+        assertTrue(system.modules(project(root)).none { it.hasTests })
+
+        File(root, "child/tests").mkdirs()
+
+        assertTrue(system.modules(project(root)).single { it.id == "layout-child" }.hasTests)
+    }
+
     private fun projectRoot(prefix: String): File = createTempDirectory("cache-$prefix").toFile().apply {
         File(this, "pyproject.toml").writeText("[project]\nname = \"$prefix-root\"\n")
         File(this, "child").mkdirs()

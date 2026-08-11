@@ -99,6 +99,8 @@ class ComposerPackagesTest {
         val modules = ComposerPackages.parse(root)
 
         assertEquals("analyse", modules.single { it.id == "acme/a" }.compileTask)
+        assertEquals("analyse", modules.single { it.id == "acme/a" }.testTask)
+        assertTrue(modules.single { it.id == "acme/a" }.hasTests)
     }
 
     @Test
@@ -124,9 +126,22 @@ class ComposerPackagesTest {
     }
 
     @Test
-    fun `a single package is not a monorepo`() {
+    fun `a single package remains runnable`() {
         val root = monorepo()
         packageAt(root, ".", "acme/single")
+
+        val module = ComposerPackages.parse(root).single()
+
+        assertEquals("acme/single", module.id)
+        assertEquals(".", module.executionId)
+    }
+
+    @Test
+    fun `a malformed package manifest invalidates the graph`() {
+        val root = monorepo()
+        packageAt(root, ".", "acme/root")
+        File(root, "packages/broken").mkdirs()
+        File(root, "packages/broken/composer.json").writeText("{")
 
         assertEquals(emptyList(), ComposerPackages.parse(root))
     }

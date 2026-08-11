@@ -31,22 +31,23 @@ object ProjectChanges {
     private fun changedFiles(project: Project): Pair<List<File>, ChangeAnalyzer?> {
         val projectDir = project.basePath?.let(::File) ?: return emptyList<File>() to null
         val extensions = BuildSystems.sourceExtensions(project)
-        val local = localChanges(project, extensions)
-        val analyzer = ChangeAnalyzer(projectDir, AffectedSettings.getInstance().baseBranch, extensions)
+        val names = BuildSystems.sourceFileNames(project)
+        val local = localChanges(project, extensions, names)
+        val analyzer = ChangeAnalyzer(projectDir, AffectedSettings.getInstance().baseBranch, extensions, names)
 
         if (!analyzer.isUsable()) return local to null
 
         return (local + analyzer.againstBase()).distinct() to analyzer
     }
 
-    private fun localChanges(project: Project, extensions: Set<String>): List<File> {
+    private fun localChanges(project: Project, extensions: Set<String>, names: Set<String>): List<File> {
         val manager = ChangeListManager.getInstance(project)
 
         val tracked = manager.affectedPaths + manager.modifiedWithoutEditing.map { File(it.path) }
         val untracked = manager.unversionedFilesPaths.map { it.ioFile }.filter { it.isFile }
 
         return (tracked + untracked)
-            .filter { it.extension in extensions }
+            .filter { it.extension.lowercase() in extensions || it.name in names }
             .distinct()
     }
 }

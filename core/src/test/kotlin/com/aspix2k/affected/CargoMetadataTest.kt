@@ -4,7 +4,6 @@ import com.aspix2k.affected.build.CargoMetadata
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class CargoMetadataTest {
@@ -37,12 +36,12 @@ class CargoMetadataTest {
           "packages": [
             {
               "name": "core-lib",
-              "manifest_path": "${root.path}/crates/core/Cargo.toml",
+              "manifest_path": "${root.invariantSeparatorsPath}/crates/core/Cargo.toml",
               "dependencies": []
             },
             {
               "name": "app",
-              "manifest_path": "${root.path}/crates/app/Cargo.toml",
+              "manifest_path": "${root.invariantSeparatorsPath}/crates/app/Cargo.toml",
               "dependencies": [
                 { "name": "core-lib" },
                 { "name": "serde" }
@@ -68,20 +67,20 @@ class CargoMetadataTest {
         val app = CargoMetadata.parse(metadata(root), root.path).single { it.id == "app" }
 
         assertEquals(
-            setOf("${root.path}|core-lib"),
+            setOf("${root.invariantSeparatorsPath}|core-lib"),
             app.dependencies,
             "serde comes from the registry, not the workspace, and cannot be a consumer",
         )
     }
 
     @Test
-    fun `a package with unit tests in its sources is testable`() {
+    fun `every package stays runnable because cargo test also builds it`() {
         val root = workspace()
 
         val modules = CargoMetadata.parse(metadata(root), root.path)
 
         assertTrue(modules.single { it.id == "core-lib" }.hasTests)
-        assertFalse(modules.single { it.id == "app" }.hasTests)
+        assertTrue(modules.single { it.id == "app" }.hasTests)
     }
 
     @Test

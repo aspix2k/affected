@@ -26,5 +26,9 @@ kotlin { jvmToolchain(21) }
 
 tasks.test {
     useJUnit()
+    systemProperty(
+        "affected.cliConformance",
+        providers.gradleProperty("affected.cliConformance").orElse("false").get(),
+    )
     testLogging { events("passed", "failed", "skipped") }
 }

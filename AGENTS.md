@@ -20,6 +20,19 @@ Android and JVM modules have different task names. `test` does not accept
 Paths must survive Windows. Compare and store paths through
 `invariantSeparatorsPath`, never by gluing separators yourself.
 
+CLI adapters get one IDE Run tab per build-system root. Never loop over
+`CommandRunner`; compose raw-argument `CliCommand`s and let
+`SequentialProcessHandler` run them fail-fast inside one session.
+
+A detected CLI project must not become an empty or partial plan because a tool,
+parser, cache input or planned module is missing. Widen to the runnable root
+module, keep discovery bounded, and cache only a content fingerprint that covers
+the complete discovered graph.
+
+Every CLI adapter change must keep its command contract test and the matching
+native project under `conformance/cli-fixtures` green. Parser-only or mocked
+proof is not sufficient for a release.
+
 The plugin id is permanent. Changing it breaks updates for every existing user.
 
 Kotlin nests block comments. A glob like `packages/*` inside a KDoc opens an

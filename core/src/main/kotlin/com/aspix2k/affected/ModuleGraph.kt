@@ -7,7 +7,7 @@ import com.aspix2k.affected.build.SuspendingBuildSystem
 import com.intellij.openapi.project.Project
 import java.io.File
 
-class ModuleGraph private constructor(private val nodes: List<Node>) {
+class ModuleGraph internal constructor(private val nodes: List<Node>) {
 
     data class Node(val module: BuildModule, val system: BuildSystem) {
 
@@ -31,27 +31,35 @@ class ModuleGraph private constructor(private val nodes: List<Node>) {
         )
     }
 
-    private val byContentRoot: Map<String, Node> by lazy {
-        val index = HashMap<String, Node>()
+    private val byContentRoot: Map<String, List<Node>> by lazy {
+        val index = HashMap<String, MutableList<Node>>()
         for (node in nodes) {
             for (root in node.module.contentRoots) {
-                val existing = index[root]
-                if (existing == null || node.module.id.length > existing.module.id.length) {
-                    index[root] = node
-                }
+                index.getOrPut(root) { mutableListOf() } += node
             }
         }
         index
     }
 
-    fun nodeFor(file: File): Node? {
+    fun nodesFor(file: File): List<Node> {
+        directBuildOwners(file)?.let { return it }
+
         var directory = file.parentFile
         while (directory != null) {
-            byContentRoot[directory.invariantSeparatorsPath]?.let { return it }
+            byContentRoot[directory.invariantSeparatorsPath]?.let(::contentOwners)?.let { return it }
             directory = directory.parentFile
         }
-        return null
+
+        val path = file.toPath().toAbsolutePath().normalize()
+        val owners = nodes.filter { node ->
+            runCatching { path.startsWith(File(node.module.root).toPath().toAbsolutePath().normalize()) }
+                .getOrDefault(false)
+        }
+        val deepest = owners.maxOfOrNull { File(it.module.root).toPath().nameCount } ?: return emptyList()
+        return owners.filter { File(it.module.root).toPath().nameCount == deepest }.distinct()
     }
+
+    fun nodeFor(file: File): Node? = nodesFor(file).firstOrNull()
 
     fun directDependents(targets: Set<Node>): List<Node> {
         val targetKeys = targets.map { it.module.key }.toSet()
@@ -62,6 +70,23 @@ class ModuleGraph private constructor(private val nodes: List<Node>) {
     }
 
     fun all(): List<Node> = nodes
+
+    private fun directBuildOwners(file: File): List<Node>? {
+        val parent = file.parentFile?.toPath()?.toAbsolutePath()?.normalize() ?: return null
+        val owners = nodes.filter { node ->
+            runCatching { File(node.module.root).toPath().toAbsolutePath().normalize() == parent }
+                .getOrDefault(false)
+        }
+        return owners.distinct().takeIf { it.isNotEmpty() }
+    }
+
+    private fun contentOwners(candidates: List<Node>): List<Node> {
+        val (singleOwner, multiOwner) = candidates.distinct().partition { it.system.id in SINGLE_OWNER_SYSTEMS }
+        return multiOwner + singleOwner
+            .groupBy { it.system.id to it.module.root }
+            .values
+            .map { owners -> owners.maxBy { it.module.id.length } }
+    }
 
     companion object {
         suspend fun create(project: Project): ModuleGraph {
@@ -77,3 +102,5 @@ class ModuleGraph private constructor(private val nodes: List<Node>) {
         }
     }
 }
+
+private val SINGLE_OWNER_SYSTEMS = setOf("GRADLE", "MAVEN")

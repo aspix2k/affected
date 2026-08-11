@@ -6,7 +6,6 @@ import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class DotnetProjectsTest {
@@ -74,7 +73,8 @@ class DotnetProjectsTest {
         val modules = DotnetProjects.parse(root)
 
         assertTrue(modules.single { it.id == "Lib.Tests" }.hasTests)
-        assertFalse(modules.single { it.id == "Lib" }.hasTests)
+        assertEquals("test", modules.single { it.id == "Lib.Tests" }.testTask)
+        assertEquals("build", modules.single { it.id == "Lib" }.testTask)
     }
 
     @Test
@@ -94,6 +94,28 @@ class DotnetProjectsTest {
         project(root, "src/Vb/Vb.vbproj", "")
 
         assertEquals(setOf("Fs", "Vb"), DotnetProjects.parse(root).map { it.id }.toSet())
+    }
+
+    @Test
+    fun `execution identity is the project file path`() {
+        val root = solution()
+        project(root, "src/Library With Spaces/Library.csproj", "")
+
+        val module = DotnetProjects.parse(root).single()
+
+        assertEquals("src/Library With Spaces/Library.csproj", module.executionId)
+    }
+
+    @Test
+    fun `duplicate project names keep distinct graph identities`() {
+        val root = solution()
+        project(root, "src/First/Shared.csproj", "")
+        project(root, "src/Second/Shared.csproj", "")
+
+        val modules = DotnetProjects.parse(root)
+
+        assertEquals(setOf("src/First/Shared", "src/Second/Shared"), modules.map { it.id }.toSet())
+        assertEquals(2, modules.map { it.key }.toSet().size)
     }
 
     @Test

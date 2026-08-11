@@ -16,4 +16,10 @@ object BuildSystems {
 
     fun sourceExtensions(project: Project): Set<String> =
         of(project).flatMapTo(HashSet()) { it.sourceExtensions }.ifEmpty { ChangeAnalyzer.DEFAULT_EXTENSIONS }
+
+    fun sourceFileNames(): Set<String> =
+        point.extensionList.filterIsInstance<NamedSourceBuildSystem>().flatMapTo(HashSet()) { it.sourceFileNames }
+
+    fun sourceFileNames(project: Project): Set<String> =
+        of(project).filterIsInstance<NamedSourceBuildSystem>().flatMapTo(HashSet()) { it.sourceFileNames }
 }

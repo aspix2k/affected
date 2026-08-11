@@ -23,8 +23,17 @@ object Verification {
         if (changes.files.isEmpty()) return@withContext Plan(emptyList(), 0, 0)
 
         val graph = ModuleGraph.create(project)
-        val changed = changes.files.mapNotNull { graph.nodeFor(it) }.distinct()
-        val apiNodes = changes.apiTouched.mapNotNull { graph.nodeFor(it) }.toSet()
+        val owners = changes.files.associateWith(graph::nodesFor)
+        val changed = owners.values.flatten().distinct()
+        val apiNodes = owners.flatMapTo(HashSet()) { (file, nodes) ->
+            nodes.filter { node ->
+                affectsConsumers(
+                    systemId = node.system.id,
+                    path = file.invariantSeparatorsPath,
+                    signatureTouched = file in changes.apiTouched,
+                )
+            }
+        }
         val consumers = when {
             !AffectedSettings.getInstance().checkConsumers -> emptyList()
             apiNodes.isEmpty() -> emptyList()
@@ -61,3 +70,8 @@ object Verification {
         }
     }
 }
+
+internal fun affectsConsumers(systemId: String, path: String, signatureTouched: Boolean): Boolean =
+    signatureTouched || systemId !in JVM_BUILD_SYSTEMS && !ChangeAnalyzer.isTestSource(systemId, path)
+
+private val JVM_BUILD_SYSTEMS = setOf("GRADLE", "MAVEN")

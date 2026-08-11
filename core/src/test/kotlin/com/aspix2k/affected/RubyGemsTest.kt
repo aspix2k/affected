@@ -102,11 +102,14 @@ class RubyGemsTest {
     }
 
     @Test
-    fun `a single gem is not a monorepo`() {
+    fun `a single gem remains runnable`() {
         val root = monorepo()
         gem(root, ".", "acme-single")
 
-        assertEquals(emptyList(), RubyGems.parse(root))
+        val module = RubyGems.parse(root).single()
+
+        assertEquals("acme-single", module.id)
+        assertEquals(".", module.executionId)
     }
 
     @Test

@@ -1,0 +1,10 @@
+{
+  "name": "@affected/beta",
+  "private": true,
+  "dependencies": {
+    "@affected/alpha": "*"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}

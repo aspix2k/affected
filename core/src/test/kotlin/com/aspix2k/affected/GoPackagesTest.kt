@@ -55,12 +55,12 @@ class GoPackagesTest {
     }
 
     @Test
-    fun `external tests also make a package testable`() {
+    fun `every package stays runnable because go test also builds it`() {
         val modules = GoPackages.parse(stream, "/ws/app")
 
         assertTrue(modules.single { it.id == "example.com/app" }.hasTests)
         assertTrue(modules.single { it.id == "example.com/app/cmd" }.hasTests, "XTestGoFiles are tests too")
-        assertFalse(modules.single { it.id.endsWith("/store") }.hasTests)
+        assertTrue(modules.single { it.id.endsWith("/store") }.hasTests)
     }
 
     @Test
@@ -78,7 +78,7 @@ class GoPackagesTest {
 
         val modules = GoPackages.parse(truncated, "/ws/app")
 
-        assertTrue(modules.size <= 3, "a truncated stream returns parsed data without throwing")
+        assertEquals(emptyList(), modules, "a partial graph must widen through the build-system fallback")
     }
 
     @Test

@@ -1,0 +1,5 @@
+{
+  "name": "affected-node-fixture",
+  "private": true,
+  "workspaces": ["packages/*"]
+}

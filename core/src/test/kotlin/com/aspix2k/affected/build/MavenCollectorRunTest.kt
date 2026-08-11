@@ -1,6 +1,7 @@
 package com.aspix2k.affected.build
 
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.security.MessageDigest
 import kotlin.io.path.createTempDirectory
@@ -16,13 +17,17 @@ class MavenCollectorRunTest {
         val artifacts = artifacts(Files.createDirectory(root.resolve("artifacts with spaces")))
         val cache = root.resolve("cache with spaces")
         val run = assertNotNull(MavenCollectorRun.create(cache, artifacts))
+        val canonicalArtifacts = MavenCollectorArtifacts(
+            artifacts.agent.toRealPath(LinkOption.NOFOLLOW_LINKS),
+            artifacts.extension.toRealPath(LinkOption.NOFOLLOW_LINKS),
+        )
 
         assertEquals(
             listOf(
-                "-Dmaven.ext.class.path=${artifacts.extension.toAbsolutePath().normalize()}",
-                "-Daffected.collector.mavenAgent=${artifacts.agent.toAbsolutePath().normalize()}",
+                "-Dmaven.ext.class.path=${canonicalArtifacts.extension}",
+                "-Daffected.collector.mavenAgent=${canonicalArtifacts.agent}",
                 "-Daffected.collector.output=${run.outputRoot}",
-                "-Daffected.collector.maps=${cache.resolve("maps")}",
+                "-Daffected.collector.maps=${cache.toRealPath(LinkOption.NOFOLLOW_LINKS).resolve("maps")}",
                 "-Daffected.collector.version=${artifactVersion(artifacts)}",
             ),
             run.arguments,

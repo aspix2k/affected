@@ -1,10 +1,14 @@
 package com.aspix2k.affected
 
 import com.aspix2k.affected.build.ManifestSearch
+import org.junit.Assume.assumeTrue
 import java.io.File
+import java.nio.file.Files
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ManifestSearchTest {
@@ -40,16 +44,16 @@ class ManifestSearchTest {
             breadth = 2,
             depth = 2,
             marker = "composer.json",
-            noise = listOf("vendor", "node_modules", "build"),
+            noise = listOf("vendor", "node_modules", "build", "fixtures"),
         )
 
         val found = ManifestSearch.find(root, "composer.json")
 
         val fromExcluded = found.filter { file ->
             generateSequence(file.parentFile) { it.parentFile }
-                .any { it.name in setOf("vendor", "node_modules", "build") }
+                .any { it.name in setOf("vendor", "node_modules", "build", "fixtures") }
         }
-        assertTrue(fromExcluded.isEmpty(), "vendor and node_modules must not be scanned: $fromExcluded")
+        assertTrue(fromExcluded.isEmpty(), "generated and fixture directories must not be scanned: $fromExcluded")
     }
 
     @Test
@@ -81,12 +85,70 @@ class ManifestSearchTest {
     }
 
     @Test
-    fun `the result limit is respected`() {
+    fun `reaching the result limit fails closed`() {
         val root = createTempDirectory("limit").toFile()
         repeat(20) { File(root, "$it.gemspec").writeText("") }
 
         val found = ManifestSearch.findByExtension(root, "gemspec", limit = 5)
 
-        assertEquals(5, found.size)
+        assertEquals(emptyList(), found)
+    }
+
+    @Test
+    fun `fingerprint follows manifest content instead of timestamps`() {
+        val root = createTempDirectory("fingerprint").toFile()
+        val manifest = File(root, "package.json").apply { writeText("{\"name\":\"first\"}") }
+        val timestamp = manifest.lastModified()
+        val first = ManifestSearch.fingerprint(root, listOf(manifest))
+        manifest.writeText("{\"name\":\"other\"}")
+        assertTrue(manifest.setLastModified(timestamp))
+
+        val second = ManifestSearch.fingerprint(root, listOf(manifest))
+
+        assertNotEquals(first, second)
+    }
+
+    @Test
+    fun `symlinked manifests are neither scanned nor cached`() {
+        val root = createTempDirectory("manifest-root").toFile()
+        val outside = createTempDirectory("manifest-outside").resolve("package.json")
+        Files.writeString(outside, "{}")
+        val link = root.toPath().resolve("package.json")
+        assumeTrue(runCatching { Files.createSymbolicLink(link, outside) }.isSuccess)
+
+        assertEquals(emptyList(), ManifestSearch.find(root, "package.json"))
+        assertNull(ManifestSearch.fingerprint(root, listOf(link.toFile())))
+    }
+
+    @Test
+    fun `a symlinked package directory invalidates discovery`() {
+        val root = createTempDirectory("manifest-link-root").toFile()
+        val outside = createTempDirectory("manifest-link-outside").toFile()
+        File(outside, "pyproject.toml").writeText("[project]\nname = 'linked'\n")
+        val link = File(root, "linked-package").toPath()
+        assumeTrue(runCatching { Files.createSymbolicLink(link, outside.toPath()) }.isSuccess)
+
+        assertEquals(emptyList(), ManifestSearch.find(root, "pyproject.toml"))
+        assertNull(ManifestSearch.anyFile(root) { it.name.startsWith("test_") })
+    }
+
+    @Test
+    fun `layout fingerprints change when a test directory appears`() {
+        val root = createTempDirectory("layout-fingerprint").toFile()
+        val before = ManifestSearch.layoutFingerprint(root) { it.name == "tests" }
+
+        File(root, "package/tests").mkdirs()
+        val after = ManifestSearch.layoutFingerprint(root) { it.name == "tests" }
+
+        assertNotEquals(before, after)
+    }
+
+    @Test
+    fun `oversized manifests are not parsed`() {
+        val root = createTempDirectory("manifest-size").toFile()
+        val manifest = File(root, "package.json")
+        manifest.writeBytes(ByteArray(8 * 1024 * 1024 + 1))
+
+        assertNull(ManifestSearch.readText(manifest))
     }
 }

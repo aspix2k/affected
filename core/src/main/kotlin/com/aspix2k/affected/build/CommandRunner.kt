@@ -3,7 +3,6 @@ package com.aspix2k.affected.build
 import com.intellij.execution.RunContentExecutor
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.CapturingProcessHandler
-import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.process.ProcessTerminatedListener
@@ -20,13 +19,30 @@ import kotlin.coroutines.resume
 object CommandRunner {
 
     fun run(project: Project, workingDirectory: String, command: List<String>, title: String) {
+        runBatch(project, workingDirectory, listOf(CliCommand(title, command)), title)
+    }
+
+    suspend fun runAndWait(
+        project: Project,
+        workingDirectory: String,
+        command: List<String>,
+        title: String,
+    ): Boolean = runBatchAndWait(project, workingDirectory, listOf(CliCommand(title, command)), title)
+
+    internal fun runBatch(
+        project: Project,
+        workingDirectory: String,
+        commands: List<CliCommand>,
+        title: String,
+        unresolvedMessage: String? = null,
+    ) {
         if (project.isDisposed) return
 
-        val commandLine = GeneralCommandLine(command)
-            .withWorkDirectory(File(workingDirectory))
-            .withCharset(Charsets.UTF_8)
-
-        val handler = OSProcessHandler(commandLine)
+        val handler = SequentialProcessHandler(
+            File(workingDirectory),
+            commands,
+            unresolvedMessage ?: DEFAULT_UNRESOLVED_MESSAGE,
+        )
         ProcessTerminatedListener.attach(handler)
 
         ApplicationManager.getApplication().invokeLater {
@@ -42,14 +58,20 @@ object CommandRunner {
         }
     }
 
-    suspend fun runAndWait(project: Project, workingDirectory: String, command: List<String>, title: String): Boolean {
+    internal suspend fun runBatchAndWait(
+        project: Project,
+        workingDirectory: String,
+        commands: List<CliCommand>,
+        title: String,
+        unresolvedMessage: String? = null,
+    ): Boolean {
         if (project.isDisposed) return false
 
-        val commandLine = GeneralCommandLine(command)
-            .withWorkDirectory(File(workingDirectory))
-            .withCharset(Charsets.UTF_8)
-
-        val handler = OSProcessHandler(commandLine)
+        val handler = SequentialProcessHandler(
+            File(workingDirectory),
+            commands,
+            unresolvedMessage ?: DEFAULT_UNRESOLVED_MESSAGE,
+        )
         ProcessTerminatedListener.attach(handler)
         val completed = AtomicBoolean(false)
 

@@ -1,0 +1,6 @@
+{
+  "name": "affected/fixture-root",
+  "require-dev": {
+    "phpunit/phpunit": "12.5.33"
+  }
+}

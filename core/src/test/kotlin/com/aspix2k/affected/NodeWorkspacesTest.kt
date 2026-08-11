@@ -3,6 +3,7 @@ package com.aspix2k.affected
 import com.aspix2k.affected.build.NodeWorkspaces
 import org.junit.Assume.assumeTrue
 import java.io.File
+import java.nio.file.Files
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -61,6 +62,19 @@ class NodeWorkspacesTest {
     }
 
     @Test
+    fun `nested and excluded workspace globs are applied`() {
+        val root = workspace(
+            """{ "name": "root", "workspaces": ["packages/**", "!packages/private/**"] }""",
+        )
+        addPackage(root, "packages/groups/core", "@app/core")
+        addPackage(root, "packages/private/internal", "@app/internal")
+
+        val modules = NodeWorkspaces.parse(root)
+
+        assertEquals(listOf("@app/core"), modules.map { it.id })
+    }
+
+    @Test
     fun `only workspace packages are dependencies`() {
         val root = workspace("""{ "name": "root", "workspaces": ["packages/*"] }""")
         addPackage(root, "packages/core", "@app/core")
@@ -84,6 +98,8 @@ class NodeWorkspacesTest {
         val modules = NodeWorkspaces.parse(root)
 
         assertEquals("typecheck", modules.single { it.id == "@app/typed" }.compileTask)
+        assertEquals("typecheck", modules.single { it.id == "@app/typed" }.testTask)
+        assertTrue(modules.single { it.id == "@app/typed" }.hasTests)
         assertNull(
             modules.single { it.id == "@app/plain" }.compileTask,
             "plain JavaScript has nothing to compile",
@@ -114,10 +130,47 @@ class NodeWorkspacesTest {
     }
 
     @Test
-    fun `a project without workspaces yields no modules`() {
-        val root = workspace("""{ "name": "single-package" }""")
+    fun `a malformed workspace manifest invalidates the graph`() {
+        val root = workspace("""{ "name": "root", "workspaces": ["packages/*"] }""")
+        addPackage(root, "packages/core", "@app/core")
+        File(root, "packages/broken").mkdirs()
+        File(root, "packages/broken/package.json").writeText("{")
 
         assertEquals(emptyList(), NodeWorkspaces.parse(root))
+    }
+
+    @Test
+    fun `a partially readable pnpm package list invalidates the graph`() {
+        val root = workspace(
+            """{ "name": "root" }""",
+            pnpm = "packages:\n  - 'packages/*'\n  malformed: true\n",
+        )
+        addPackage(root, "packages/core", "@app/core")
+
+        assertEquals(emptyList(), NodeWorkspaces.parse(root))
+    }
+
+    @Test
+    fun `a symlinked workspace directory invalidates the graph`() {
+        val root = workspace("""{ "name": "root", "workspaces": ["packages/*"] }""")
+        addPackage(root, "packages/core", "@app/core")
+        val outside = createTempDirectory("node-workspace-outside").toFile()
+        File(outside, "package.json").writeText("""{ "name": "@app/outside" }""")
+        val link = File(root, "packages/linked").toPath()
+        assumeTrue(runCatching { Files.createSymbolicLink(link, outside.toPath()) }.isSuccess)
+
+        assertEquals(emptyList(), NodeWorkspaces.parse(root))
+    }
+
+    @Test
+    fun `a project without workspaces yields a root module`() {
+        val root = workspace("""{ "name": "single-package", "scripts": { "test": "node --test" } }""")
+
+        val module = NodeWorkspaces.parse(root).single()
+
+        assertEquals("single-package", module.id)
+        assertEquals(".", module.executionId)
+        assertTrue(module.hasTests)
     }
 
     @Test

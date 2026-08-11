@@ -1,6 +1,8 @@
 package com.aspix2k.affected.build
 
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.LinkOption
 
 object PythonProjects {
 
@@ -10,24 +12,27 @@ object PythonProjects {
     fun parse(root: File): List<BuildModule> {
         val rootPath = root.invariantSeparatorsPath
         val manifests = findManifests(root)
-        if (manifests.size < 2) return emptyList()
+        if (manifests.isEmpty()) return emptyList()
 
-        val described = manifests.mapNotNull { describe(it) }
+        val described = manifests.map { describe(it) ?: return emptyList() }
         val names = described.map { it.name }.toSet()
+        if (names.size != described.size) return emptyList()
 
         return described.map { entry ->
             val dependencies = entry.dependencies
                 .filter { it in names }
                 .mapTo(HashSet()) { "$rootPath|$it" }
+            val runnable = entry.hasTests || entry.typed
 
             BuildModule(
                 id = entry.name,
                 root = rootPath,
                 contentRoots = listOf(entry.directory),
-                testTask = TEST,
+                testTask = if (entry.hasTests) TEST else TYPECHECK,
                 compileTask = TYPECHECK.takeIf { entry.typed },
-                hasTests = entry.hasTests,
+                hasTests = runnable,
                 dependencies = dependencies - "$rootPath|${entry.name}",
+                executionId = if (entry.directory == rootPath) "." else entry.name,
             )
         }
     }
@@ -42,7 +47,7 @@ object PythonProjects {
 
     private fun describe(manifest: File): Described? {
         val directory = manifest.parentFile ?: return null
-        val lines = manifest.readLines()
+        val lines = ManifestSearch.readText(manifest)?.lineSequence()?.toList() ?: return null
 
         val name = valueOf(lines, "name") ?: return null
 
@@ -50,7 +55,7 @@ object PythonProjects {
             name = name,
             directory = directory.invariantSeparatorsPath,
             dependencies = dependenciesOf(lines),
-            hasTests = hasTests(directory),
+            hasTests = hasTests(directory) ?: return null,
             typed = lines.any { it.trim().startsWith("[tool.mypy") } || File(directory, "mypy.ini").isFile,
         )
     }
@@ -89,11 +94,13 @@ object PythonProjects {
         .map { entry -> entry.takeWhile { it.isLetterOrDigit() || it == '-' || it == '_' || it == '.' } }
         .filter { it.isNotEmpty() }
 
-    private fun hasTests(directory: File): Boolean {
-        if (TEST_DIRS.any { File(directory, it).isDirectory }) return true
-        return directory.walkTopDown()
-            .onEnter { it.name != ".venv" && it.name != "node_modules" }
-            .any { it.isFile && it.name.startsWith("test_") && it.extension == "py" }
+    private fun hasTests(directory: File): Boolean? {
+        for (name in TEST_DIRS) {
+            val candidate = File(directory, name).toPath()
+            if (Files.isSymbolicLink(candidate)) return null
+            if (Files.isDirectory(candidate, LinkOption.NOFOLLOW_LINKS)) return true
+        }
+        return ManifestSearch.anyFile(directory) { it.name.startsWith("test_") && it.extension == "py" }
     }
 
     private fun findManifests(root: File): List<File> = ManifestSearch.find(root, "pyproject.toml")

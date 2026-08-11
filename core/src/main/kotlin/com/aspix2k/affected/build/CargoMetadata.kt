@@ -1,54 +1,53 @@
 package com.aspix2k.affected.build
 
 import com.google.gson.JsonParser
-import java.io.File
 
 object CargoMetadata {
 
     private fun String.normalizeSeparators(): String = replace('\\', '/')
 
     fun parse(json: String, root: String): List<BuildModule> {
+        val normalizedRoot = root.normalizeSeparators()
         val packages = runCatching {
             JsonParser.parseString(json).asJsonObject.getAsJsonArray("packages")
         }.getOrNull() ?: return emptyList()
 
-        val names = packages.mapNotNull { it.asJsonObject.get("name")?.asString }.toSet()
-
-        return packages.mapNotNull { element ->
+        val described = packages.map { element ->
+            if (!element.isJsonObject) return emptyList()
             val json = element.asJsonObject
-            val name = json.get("name")?.asString ?: return@mapNotNull null
-            val manifest = json.get("manifest_path")?.asString?.normalizeSeparators() ?: return@mapNotNull null
-            val directory = manifest.substringBeforeLast('/', "").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            val name = json.get("name")?.takeIf { it.isJsonPrimitive }?.asString ?: return emptyList()
+            val manifest = json.get("manifest_path")?.takeIf { it.isJsonPrimitive }?.asString
+                ?.normalizeSeparators() ?: return emptyList()
+            val directory = manifest.substringBeforeLast('/', "").takeIf { it.isNotEmpty() } ?: return emptyList()
+            Triple(name, directory, json)
+        }
+        val names = described.mapTo(HashSet()) { it.first }
+        if (names.size != described.size) return emptyList()
 
-            val dependencies = json.getAsJsonArray("dependencies")
-                ?.mapNotNull { it.asJsonObject.get("name")?.asString }
-                ?.filter { it in names }
-                ?.mapTo(HashSet()) { "$root|$it" }
-                .orEmpty()
+        return described.map { (name, directory, json) ->
+            val dependencyElements = json.get("dependencies")?.takeIf { it.isJsonArray }?.asJsonArray
+                ?: return emptyList()
+            val dependencies = dependencyElements.map { dependency ->
+                dependency.takeIf { it.isJsonObject }
+                    ?.asJsonObject
+                    ?.get("name")
+                    ?.takeIf { it.isJsonPrimitive }
+                    ?.asString
+                    ?: return emptyList()
+            }
+                .filter { it in names }
+                .mapTo(HashSet()) { "$normalizedRoot|$it" }
 
             BuildModule(
                 id = name,
-                root = root,
+                root = normalizedRoot,
                 contentRoots = listOf(directory),
                 testTask = TEST,
                 compileTask = COMPILE,
-                hasTests = hasTests(File(directory)),
-                dependencies = dependencies - "$root|$name",
+                hasTests = true,
+                dependencies = dependencies - "$normalizedRoot|$name",
             )
         }
-    }
-
-    private fun hasTests(directory: File): Boolean {
-        if (File(directory, "tests").isDirectory) return true
-        val sources = File(directory, "src")
-        if (!sources.isDirectory) return false
-        return sources.walkTopDown()
-            .filter { it.isFile && it.extension == "rs" }
-            .any { file ->
-                file.useLines { lines ->
-                    lines.any { it.contains("#[test]") || it.contains("#[cfg(test)]") }
-                }
-            }
     }
 
     const val TEST = "test"

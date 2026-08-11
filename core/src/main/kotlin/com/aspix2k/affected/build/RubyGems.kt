@@ -12,10 +12,11 @@ object RubyGems {
     fun parse(root: File): List<BuildModule> {
         val rootPath = root.invariantSeparatorsPath
         val specs = findGemspecs(root)
-        if (specs.size < 2) return emptyList()
+        if (specs.isEmpty()) return emptyList()
 
-        val described = specs.mapNotNull { describe(it) }
+        val described = specs.map { describe(it) ?: return emptyList() }
         val names = described.map { it.name }.toSet()
+        if (names.size != described.size) return emptyList()
 
         return described.map { entry ->
             val dependencies = entry.dependencies
@@ -30,6 +31,7 @@ object RubyGems {
                 compileTask = null,
                 hasTests = entry.hasTests,
                 dependencies = dependencies - "$rootPath|${entry.name}",
+                executionId = if (entry.directory == rootPath) "." else entry.name,
             )
         }
     }
@@ -42,7 +44,7 @@ object RubyGems {
     )
 
     private fun describe(gemspec: File): Described? {
-        val text = gemspec.readText()
+        val text = ManifestSearch.readText(gemspec) ?: return null
         val directory = gemspec.parentFile ?: return null
 
         val name = NAME.find(text)?.groupValues?.get(1)

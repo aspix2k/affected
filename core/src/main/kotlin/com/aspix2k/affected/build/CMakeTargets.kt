@@ -28,14 +28,14 @@ object CMakeTargets {
 
         val declared = LinkedHashMap<String, String>()
         val links = HashMap<String, MutableSet<String>>()
-        val tested = HashSet<String>()
+        var projectHasTests = false
 
         lists.forEach { file ->
-            val text = file.readText()
+            val text = ManifestSearch.readText(file) ?: return emptyList()
             val directory = file.parentFile?.invariantSeparatorsPath ?: return@forEach
 
             TARGET.findAll(text).forEach { declared.putIfAbsent(it.groupValues[1], directory) }
-            TESTS.findAll(text).forEach { tested += it.groupValues[1] }
+            if (TESTS.containsMatchIn(text)) projectHasTests = true
             LINKS.findAll(text).forEach { match ->
                 val target = match.groupValues[1]
                 val referenced = match.groupValues[2]
@@ -46,8 +46,6 @@ object CMakeTargets {
             }
         }
 
-        if (declared.size < 2) return emptyList()
-
         return declared.map { (name, directory) ->
             val dependencies = links[name].orEmpty()
                 .filter { it in declared.keys }
@@ -57,9 +55,9 @@ object CMakeTargets {
                 id = name,
                 root = rootPath,
                 contentRoots = listOf(directory),
-                testTask = TEST,
+                testTask = if (projectHasTests) TEST else BUILD,
                 compileTask = BUILD,
-                hasTests = name in tested,
+                hasTests = true,
                 dependencies = dependencies - "$rootPath|$name",
             )
         }

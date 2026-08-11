@@ -6,74 +6,128 @@ import java.util.concurrent.atomic.AtomicReference
 
 class NodeBuildSystem : SuspendingBuildSystem {
 
-    private data class Snapshot(val root: String, val stamp: Long, val modules: List<BuildModule>)
+    private data class Snapshot(val root: String, val stamp: String, val modules: List<BuildModule>)
 
     private val cache = AtomicReference<Snapshot?>(null)
 
     override val id: String = "NODE"
 
-    override val sourceExtensions: Set<String> = setOf("ts", "tsx", "js", "jsx", "mjs", "cjs", "json", "vue", "svelte")
+    override val sourceExtensions: Set<String> =
+        setOf("ts", "tsx", "js", "jsx", "mjs", "cjs", "json", "vue", "svelte", "yaml", "yml", "lock")
 
     override fun isPresent(project: Project): Boolean = rootOf(project) != null
 
     override fun modules(project: Project): List<BuildModule> {
         val root = rootOf(project) ?: return emptyList()
-        val stamp = manifests(root).sumOf { it.lastModified() }
+        val packageManifests = NodeWorkspaces.manifestFiles(root)
+        val stamp = packageManifests?.let { manifests ->
+            combineFingerprints(
+                ManifestSearch.fingerprint(root, manifestInputs(root, manifests)),
+                combineFingerprints(
+                    manifests.map { manifest ->
+                        ManifestSearch.layoutFingerprint(manifest.parentFile, maxDepth = 0) {
+                            it.name in NODE_TEST_MARKERS
+                        }
+                    },
+                ),
+            )
+        }
 
         val rootPath = root.invariantSeparatorsPath
-        cache.get()?.takeIf { it.root == rootPath && it.stamp == stamp }?.let { return it.modules }
+        if (stamp != null) cache.get()?.takeIf { it.root == rootPath && it.stamp == stamp }?.let { return it.modules }
 
-        val modules = NodeWorkspaces.parse(root)
-        cache.set(Snapshot(rootPath, stamp, modules))
-        return modules
+        val discovered = runCatching { NodeWorkspaces.parse(root) }.getOrNull()
+        val discovery = failClosedModules(root, NodeWorkspaces.TEST, null, discovered)
+        if (stamp != null && discovery.complete) cache.set(Snapshot(rootPath, stamp, discovery.modules))
+        return discovery.modules
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {
-        commands(root, tasks).forEach { (title, command) -> CommandRunner.run(project, root, command, title) }
+        CommandRunner.runBatch(project, root, nodeCommands(root, tasks), "Affected Node")
     }
 
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
-        commands(root, tasks).all { (title, command) -> CommandRunner.runAndWait(project, root, command, title) }
+        CommandRunner.runBatchAndWait(project, root, nodeCommands(root, tasks), "Affected Node")
 
-    private fun commands(root: String, tasks: List<String>): List<Pair<String, List<String>>> {
-        val manager = managerOf(File(root))
-
-        return tasks.groupBy({ it.substringAfterLast(':') }, { it.substringBeforeLast(':') })
-            .flatMap { (task, packages) ->
-                when (task) {
-                    NodeWorkspaces.TEST -> packages.map { name ->
-                        "$manager test $name" to testCommand(manager, name)
-                    }
-                    else -> packages.map { name ->
-                        "typecheck $name" to typeCheckCommand(manager, name)
-                    }
-                }
-            }
-    }
-
-    private fun testCommand(manager: String, name: String): List<String> = when (manager) {
-        "pnpm" -> listOf("pnpm", "--filter", name, "test")
-        "yarn" -> listOf("yarn", "workspace", name, "test")
-        else -> listOf("npm", "test", "--workspace", name)
-    }
-
-    private fun typeCheckCommand(manager: String, name: String): List<String> = when (manager) {
-        "pnpm" -> listOf("pnpm", "--filter", name, "exec", "tsc", "--noEmit")
-        "yarn" -> listOf("yarn", "workspace", name, "exec", "tsc", "--noEmit")
-        else -> listOf("npm", "exec", "--workspace", name, "--", "tsc", "--noEmit")
-    }
-
-    private fun managerOf(root: File): String = when {
-        File(root, "pnpm-lock.yaml").isFile || File(root, "pnpm-workspace.yaml").isFile -> "pnpm"
-        File(root, "yarn.lock").isFile -> "yarn"
-        else -> "npm"
-    }
-
-    private fun manifests(root: File): List<File> = listOfNotNull(
-        File(root, "package.json").takeIf { it.isFile },
-        File(root, "pnpm-workspace.yaml").takeIf { it.isFile },
-    )
+    private fun manifestInputs(root: File, manifests: List<File>): List<File> =
+        manifests + manifests.mapNotNull { manifest ->
+            File(manifest.parentFile, "tsconfig.json").takeIf(File::isFile)
+        } + listOf("pnpm-workspace.yaml", "pnpm-lock.yaml", "yarn.lock", "package-lock.json")
+            .map { File(root, it) }
+            .filter(File::isFile)
 
     private fun rootOf(project: Project): File? =
-        project.basePath?.let(::File)?.takeIf { File(it, "package.json").isFile }
+        project.basePath?.let(::File)?.takeIf { File(it, "package.json").isRegularFileNoFollow() }
+}
+
+private val NODE_TEST_MARKERS = setOf("__tests__", "test", "tests", "spec")
+
+internal fun nodeCommands(root: String, tasks: List<String>): List<CliCommand> {
+    val manager = nodeManager(File(root))
+    return tasks.groupBy({ it.substringAfterLast(':') }, { it.substringBeforeLast(':') })
+        .flatMap { (task, packages) ->
+            nodeCommands(manager, task, packages.distinct())
+        }
+}
+
+private fun nodeCommands(manager: String, task: String, packages: List<String>): List<CliCommand> {
+    val root = packages.filter { it == "." }
+    val workspaces = packages.filterNot { it == "." }
+    val commands = ArrayList<CliCommand>()
+    root.forEach { name -> commands += nodeCommand(manager, task, listOf(name)) }
+    if (manager == "yarn") {
+        workspaces.forEach { name -> commands += nodeCommand(manager, task, listOf(name)) }
+    } else if (workspaces.isNotEmpty()) {
+        commands += nodeCommand(manager, task, workspaces)
+    }
+    return commands
+}
+
+private fun nodeCommand(manager: String, task: String, packages: List<String>): CliCommand =
+    if (task == NodeWorkspaces.TEST) {
+        CliCommand("$manager test ${packages.joinToString()}", nodeTestCommand(manager, packages))
+    } else {
+        CliCommand("typecheck ${packages.joinToString()}", nodeTypeCheckCommand(manager, packages))
+    }
+
+private fun nodeManager(root: File): String = when {
+    File(root, "pnpm-lock.yaml").isFile || File(root, "pnpm-workspace.yaml").isFile -> "pnpm"
+    File(root, "yarn.lock").isFile -> "yarn"
+    else -> "npm"
+}
+
+private fun nodeTestCommand(manager: String, packages: List<String>): List<String> = when (manager) {
+    "pnpm" -> if (packages == listOf(".")) {
+        listOf("pnpm", "test")
+    } else {
+        listOf("pnpm") + packages.flatMap { listOf("--filter", it) } + "test"
+    }
+    "yarn" -> if (packages == listOf(".")) {
+        listOf("yarn", "test")
+    } else {
+        listOf("yarn", "workspace", packages.single(), "test")
+    }
+    else -> if (packages == listOf(".")) {
+        listOf("npm", "test")
+    } else {
+        listOf("npm", "test") + packages.flatMap { listOf("--workspace", it) }
+    }
+}
+
+private fun nodeTypeCheckCommand(manager: String, packages: List<String>): List<String> = when (manager) {
+    "pnpm" -> if (packages == listOf(".")) {
+        listOf("pnpm", "exec", "tsc", "--noEmit")
+    } else {
+        listOf("pnpm") + packages.flatMap { listOf("--filter", it) } + listOf("exec", "tsc", "--noEmit")
+    }
+    "yarn" -> if (packages == listOf(".")) {
+        listOf("yarn", "exec", "tsc", "--noEmit")
+    } else {
+        listOf("yarn", "workspace", packages.single(), "exec", "tsc", "--noEmit")
+    }
+    else -> if (packages == listOf(".")) {
+        listOf("npm", "exec", "--", "tsc", "--noEmit")
+    } else {
+        listOf("npm", "exec") + packages.flatMap { listOf("--workspace", it) } + listOf("--", "tsc", "--noEmit")
+    }
 }

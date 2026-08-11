@@ -6,55 +6,67 @@ import java.util.concurrent.atomic.AtomicReference
 
 class PythonBuildSystem : SuspendingBuildSystem {
 
-    private data class Snapshot(val root: String, val stamp: Long, val modules: List<BuildModule>)
+    private data class Snapshot(val root: String, val stamp: String, val modules: List<BuildModule>)
 
     private val cache = AtomicReference<Snapshot?>(null)
 
     override val id: String = "PYTHON"
 
-    override val sourceExtensions: Set<String> = setOf("py", "pyi", "toml", "cfg")
+    override val sourceExtensions: Set<String> = setOf("py", "pyi", "toml", "cfg", "ini", "lock")
 
     override fun isPresent(project: Project): Boolean = rootOf(project) != null
 
     override fun modules(project: Project): List<BuildModule> {
         val root = rootOf(project) ?: return emptyList()
-        val stamp = File(root, "pyproject.toml").lastModified()
+        val stamp = combineFingerprints(
+            ManifestSearch.fingerprint(
+                root,
+                listOf("pyproject.toml", "mypy.ini", "setup.cfg", "uv.lock", "poetry.lock")
+                    .flatMap { ManifestSearch.find(root, it) },
+            ),
+            ManifestSearch.layoutFingerprint(root) {
+                it.name in PYTHON_TEST_DIRECTORIES || it.name.startsWith("test_") && it.extension == "py"
+            },
+        )
 
         val rootPath = root.invariantSeparatorsPath
-        cache.get()?.takeIf { it.root == rootPath && it.stamp == stamp }?.let { return it.modules }
+        if (stamp != null) cache.get()?.takeIf { it.root == rootPath && it.stamp == stamp }?.let { return it.modules }
 
-        val modules = PythonProjects.parse(root)
-        cache.set(Snapshot(rootPath, stamp, modules))
-        return modules
+        val discovered = runCatching { PythonProjects.parse(root) }.getOrNull()
+        val discovery = failClosedModules(root, PythonProjects.TEST, null, discovered)
+        if (stamp != null && discovery.complete) cache.set(Snapshot(rootPath, stamp, discovery.modules))
+        return discovery.modules
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {
-        commands(project, root, tasks).forEach { (title, command) ->
-            CommandRunner.run(project, root, command, title)
-        }
+        CommandRunner.runBatch(project, root, commands(project, root, tasks), "Affected Python")
     }
 
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
-        commands(project, root, tasks).all { (title, command) ->
-            CommandRunner.runAndWait(project, root, command, title)
-        }
+        CommandRunner.runBatchAndWait(project, root, commands(project, root, tasks), "Affected Python")
 
-    private fun commands(project: Project, root: String, tasks: List<String>): List<Pair<String, List<String>>> {
-        val byName = modules(project).associateBy { it.id }
-
-        return tasks.mapNotNull { task ->
-            val name = task.substringBeforeLast(':')
-            val directory = byName[name]?.contentRoots?.singleOrNull() ?: return@mapNotNull null
-            val relative = directory.removePrefix("$root/").ifEmpty { "." }
-
-            if (task.substringAfterLast(':') == PythonProjects.TYPECHECK) {
-                "mypy $name" to listOf("python", "-m", "mypy", relative)
-            } else {
-                "pytest $name" to listOf("python", "-m", "pytest", relative)
-            }
-        }
+    private fun commands(project: Project, root: String, tasks: List<String>): List<CliCommand> {
+        return pythonCommands(root, tasks, modules(project))
     }
 
     private fun rootOf(project: Project): File? =
-        project.basePath?.let(::File)?.takeIf { File(it, "pyproject.toml").isFile }
+        project.basePath?.let(::File)?.takeIf { File(it, "pyproject.toml").isRegularFileNoFollow() }
+}
+
+private val PYTHON_TEST_DIRECTORIES = setOf("test", "tests")
+
+internal fun pythonCommands(root: String, tasks: List<String>, modules: List<BuildModule>): List<CliCommand> {
+    val byName = modules.associateBy { it.executionId }
+    val resolved = tasks.map { task ->
+        val name = task.substringBeforeLast(':')
+        val directory = byName[name]?.contentRoots?.singleOrNull() ?: return emptyList()
+        task.substringAfterLast(':') to directory.removePrefix("$root/").ifEmpty { "." }
+    }
+    return resolved.groupBy({ it.first }, { it.second }).map { (task, paths) ->
+        if (task == PythonProjects.TYPECHECK) {
+            CliCommand("mypy", listOf("python", "-m", "mypy") + paths.distinct())
+        } else {
+            CliCommand("pytest", listOf("python", "-m", "pytest") + paths.distinct())
+        }
+    }
 }
