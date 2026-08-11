@@ -1,0 +1,63 @@
+name: Script and workflow quality
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: ShellCheck and actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned analyzers
+        env:
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+          ACTIONLINT_VERSION: 1.7.12
+          SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+          SHELLCHECK_VERSION: 0.11.0
+        run: |
+          set -euo pipefail
+
+          tools=$RUNNER_TEMP/affected-quality
+          bin=$tools/bin
+          mkdir -p "$bin"
+
+          shellcheck_archive=$tools/shellcheck.tar.xz
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
+            --output "$shellcheck_archive" \
+            "https://github.com/koalaman/shellcheck/releases/download/v$SHELLCHECK_VERSION/shellcheck-v$SHELLCHECK_VERSION.linux.x86_64.tar.xz"
+          printf '%s  %s\n' "$SHELLCHECK_SHA256" "$shellcheck_archive" | sha256sum --check --strict
+          tar --extract --xz --file "$shellcheck_archive" --directory "$tools"
+          install -m 0755 "$tools/shellcheck-v$SHELLCHECK_VERSION/shellcheck" "$bin/shellcheck"
+
+          actionlint_archive=$tools/actionlint.tar.gz
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
+            --output "$actionlint_archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v$ACTIONLINT_VERSION/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          printf '%s  %s\n' "$ACTIONLINT_SHA256" "$actionlint_archive" | sha256sum --check --strict
+          tar --extract --gzip --file "$actionlint_archive" --directory "$tools"
+          install -m 0755 "$tools/actionlint" "$bin/actionlint"
+
+          test -x "$bin/shellcheck"
+          test -x "$bin/actionlint"
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Require zero ShellCheck findings
+        run: /usr/bin/time --verbose scripts/quality.sh shell
+
+      - name: Require zero actionlint findings
+        run: /usr/bin/time --verbose scripts/quality.sh workflows
