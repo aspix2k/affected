@@ -20,6 +20,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.Comparator;
@@ -36,6 +37,7 @@ import java.util.stream.Stream;
 public final class AffectedMavenFilter implements PostDiscoveryFilter {
     private static final int MAX_CLASSES = 100_000;
     private static final int MAX_FILES = 200_000;
+    private static final int MAX_MOVE_ATTEMPTS = 6;
     private static final int BUFFER_SIZE = 64 * 1024;
     private final Properties properties;
     private volatile Selection selection;
@@ -360,15 +362,47 @@ public final class AffectedMavenFilter implements PostDiscoveryFilter {
     private static void writeAtomically(Path target, String content) throws Exception {
         Path directory = target.getParent();
         Path temporary = Files.createTempFile(directory, target.getFileName().toString() + ".", ".tmp");
+        byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
         try {
-            Files.write(temporary, content.getBytes(StandardCharsets.UTF_8));
-            try {
-                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            } catch (AtomicMoveNotSupportedException failure) {
-                throw new IOException("atomic move unavailable", failure);
-            }
+            Files.write(temporary, bytes);
+            moveAtomically(temporary, target, bytes);
         } finally {
             Files.deleteIfExists(temporary);
+        }
+    }
+
+    private static void moveAtomically(Path temporary, Path target, byte[] content) throws Exception {
+        IOException lastFailure = null;
+        for (int attempt = 0; attempt < MAX_MOVE_ATTEMPTS; attempt++) {
+            try {
+                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                return;
+            } catch (AtomicMoveNotSupportedException failure) {
+                throw new IOException("atomic move unavailable", failure);
+            } catch (IOException failure) {
+                lastFailure = failure;
+                if (sameContent(target, content)) return;
+                if (attempt + 1 < MAX_MOVE_ATTEMPTS) {
+                    try {
+                        Thread.sleep(10L << attempt);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("atomic move interrupted", interrupted);
+                    }
+                }
+            }
+        }
+        throw lastFailure;
+    }
+
+    private static boolean sameContent(Path target, byte[] expected) {
+        try {
+            return Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)
+                && !Files.isSymbolicLink(target)
+                && Files.size(target) == expected.length
+                && Arrays.equals(Files.readAllBytes(target), expected);
+        } catch (IOException ignored) {
+            return false;
         }
     }
 
