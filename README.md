@@ -86,11 +86,14 @@ available on `PATH`.
 
 Test-class selection stays inside the original IDE invocation and Run tab.
 Gradle selection is task-local. Maven reactor modules use independent maps.
-Maven exact selection supports Maven 3.9.x, Surefire 3.x, JUnit Platform and one reusable
-fork. Failsafe 3.x integration tests use a separate task key and map; reactors
-that bind `integration-test` run `verify` in the same IDE invocation. Both
-adapters can select multiple mapped test classes without depending on their
-execution order. Other Maven configurations keep the full module test goal.
+Maven exact selection supports Maven 3.9.x, Surefire 3.x, Failsafe 3.x and
+JUnit Platform with integer `forkCount` values from 1 through 256, whether
+`reuseForks` is `true` or `false`. Failsafe integration tests use a separate
+task key and map; reactors that bind `integration-test` run `verify` in the
+same IDE invocation. Both adapters can select multiple mapped test classes
+without depending on their execution order. Forkless, core-scaled or
+fractional fork counts and additional test executions keep the full module
+test goal.
 Direct `integration-test` runs may reuse a complete Failsafe map but cannot
 replace it because Failsafe reports test failures during `verify`.
 Complete maps are replaced only by successful full runs and remain on the local

@@ -43,8 +43,8 @@ public class MavenInjectionTest {
         Path task = onlyDirectory(output, result.log);
         assertTrue(result.log + fallback(output), Files.isRegularFile(task.resolve("task.manifest")));
         assertTrue(Files.isRegularFile(task.resolve("catalog.manifest")));
-        assertTrue(Files.isRegularFile(task.resolve("expected.manifest")));
         Path worker = onlyDirectory(task, result.log);
+        assertTrue(Files.isRegularFile(worker.resolve("expected.manifest")));
         String completion = read(worker.resolve("complete.manifest"));
         assertTrue(result.log + "\n" + completion, completion.contains("supported=true"));
     }
@@ -127,16 +127,16 @@ public class MavenInjectionTest {
 
     @Test(timeout = 180_000L)
     public void unsupportedSurefireConfigurationReportsTheFullFallback() throws Exception {
-        Path project = temporary.newFolder("forkless project").toPath();
-        Path output = temporary.newFolder("forkless output").toPath();
-        Path maps = temporary.newFolder("forkless maps").toPath();
+        Path project = temporary.newFolder("core scaled fork project").toPath();
+        Path output = temporary.newFolder("core scaled fork output").toPath();
+        Path maps = temporary.newFolder("core scaled fork maps").toPath();
         writeFixture(project);
         Path pom = project.resolve("pom.xml");
         write(
             pom,
             read(pom).replace(
                 "<useModulePath>false</useModulePath>",
-                "<useModulePath>false</useModulePath><reuseForks>false</reuseForks>"
+                "<useModulePath>false</useModulePath><forkCount>1C</forkCount>"
             )
         );
 
@@ -148,6 +148,26 @@ public class MavenInjectionTest {
         try (Stream<Path> files = Files.list(output)) {
             assertEquals(result.log, 0, files.count());
         }
+    }
+
+    @Test(timeout = 180_000L)
+    public void reusableMultiForkSurefireProducesACompleteMapAndSelectsExactTests() throws Exception {
+        multiForkSurefireScenario(true);
+    }
+
+    @Test(timeout = 180_000L)
+    public void isolatedMultiForkSurefireProducesACompleteMapAndSelectsExactTests() throws Exception {
+        multiForkSurefireScenario(false);
+    }
+
+    @Test(timeout = 180_000L)
+    public void reusableMultiForkFailsafeProducesACompleteMapAndSelectsExactTests() throws Exception {
+        multiForkFailsafeScenario(true);
+    }
+
+    @Test(timeout = 180_000L)
+    public void isolatedMultiForkFailsafeProducesACompleteMapAndSelectsExactTests() throws Exception {
+        multiForkFailsafeScenario(false);
     }
 
     @Test(timeout = 180_000L)
@@ -362,6 +382,91 @@ public class MavenInjectionTest {
             executedTests(project)
         );
         assertTrue(manifest, manifest.contains("all=false"));
+    }
+
+    private void multiForkSurefireScenario(boolean reuseForks) throws Exception {
+        String mode = reuseForks ? "reusable" : "isolated";
+        Path project = temporary.newFolder(mode + " multi fork project").toPath();
+        Path fullOutput = temporary.newFolder(mode + " multi fork full output").toPath();
+        Path exactOutput = temporary.newFolder(mode + " multi fork exact output").toPath();
+        Path maps = temporary.newFolder(mode + " multi fork maps").toPath();
+        writeFixture(project);
+        Path pom = project.resolve("pom.xml");
+        write(
+            pom,
+            read(pom).replace(
+                "<useModulePath>false</useModulePath>",
+                "<useModulePath>false</useModulePath><forkCount>2</forkCount>" +
+                    "<reuseForks>" + reuseForks + "</reuseForks>"
+            )
+        );
+        Path mavenHome = mavenHomes().get(mavenHomes().size() - 1);
+
+        Result full = run(project, fullOutput, maps, mavenHome);
+
+        assertEquals(full.log, 0, full.exitCode);
+        assertDecision(full.log + fallback(fullOutput), "fixture:app:test", "full fallback (baseline missing)");
+        assertEquals(setOf("AlphaTest", "VintageOmegaTest", "ZetaBetaTest"), executedTests(project));
+        Path task = onlyDirectory(fullOutput, full.log);
+        assertEquals(full.log + fallback(fullOutput), reuseForks ? 2 : 3, directories(task).size());
+        promote(fullOutput, maps);
+        clearExecuted(project);
+        write(
+            project.resolve("src/main/java/fixture/Beta.java"),
+            "package fixture; public final class Beta { public static int value() { int result = 2; return result; } }\n"
+        );
+
+        Result exact = run(project, exactOutput, maps, mavenHome);
+
+        assertEquals(exact.log, 0, exact.exitCode);
+        assertDecision(exact.log, "fixture:app:test", "exact (1 test class)");
+        assertEquals(Collections.singleton("ZetaBetaTest"), executedTests(project));
+    }
+
+    private void multiForkFailsafeScenario(boolean reuseForks) throws Exception {
+        String mode = reuseForks ? "reusable" : "isolated";
+        Path project = temporary.newFolder(mode + " multi fork failsafe project").toPath();
+        Path fullOutput = temporary.newFolder(mode + " multi fork failsafe full output").toPath();
+        Path exactOutput = temporary.newFolder(mode + " multi fork failsafe exact output").toPath();
+        Path maps = temporary.newFolder(mode + " multi fork failsafe maps").toPath();
+        writeFailsafeFixture(project);
+        Path pom = project.resolve("pom.xml");
+        write(
+            pom,
+            read(pom).replace(
+                "<useModulePath>false</useModulePath><runOrder>alphabetical</runOrder>",
+                "<useModulePath>false</useModulePath><runOrder>alphabetical</runOrder>" +
+                    "<forkCount>2</forkCount><reuseForks>" + reuseForks + "</reuseForks>"
+            )
+        );
+        Path mavenHome = mavenHomes().get(mavenHomes().size() - 1);
+
+        Result full = run(project, fullOutput, maps, mavenHome, "verify");
+
+        assertEquals(full.log, 0, full.exitCode);
+        assertDecision(full.log, "fixture:app:integration-test", "full fallback (baseline missing)");
+        assertEquals(
+            setOf(
+                "AlphaTest", "VintageOmegaTest", "ZetaBetaTest",
+                "AlphaIT", "VintageOmegaIT", "ZetaBetaIT"
+            ),
+            executedTests(project)
+        );
+        Path task = taskDirectory(fullOutput, "|integration-test");
+        assertEquals(full.log + fallback(fullOutput), reuseForks ? 2 : 3, directories(task).size());
+        promote(fullOutput, maps);
+        clearExecuted(project);
+        write(
+            project.resolve("src/main/java/fixture/IntegrationBeta.java"),
+            "package fixture; public final class IntegrationBeta { public static int value() { " +
+                "int result = 20; return result; } }\n"
+        );
+
+        Result exact = run(project, exactOutput, maps, mavenHome, "verify");
+
+        assertEquals(exact.log, 0, exact.exitCode);
+        assertDecision(exact.log, "fixture:app:integration-test", "exact (1 test class)");
+        assertEquals(Collections.singleton("ZetaBetaIT"), executedTests(project));
     }
 
     private Result run(Path project, Path output, Path maps, Path mavenHome) throws Exception {

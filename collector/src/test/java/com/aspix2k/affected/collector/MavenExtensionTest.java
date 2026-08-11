@@ -59,6 +59,7 @@ public class MavenExtensionTest {
         assertTrue(Files.isSameFile(output, Paths.get(config.getOutput())));
         assertTrue(Files.isSameFile(maps, Paths.get(config.getMaps())));
         assertTrue(config.isAllTests());
+        assertTrue(config.isReuseForks());
         assertTrue(config.getRuntime().matches("[0-9a-f]{64}"));
         assertTrue(config.getCodeSources().contains(root.resolve("target/classes").toString()));
         assertTrue(config.getTestClasses().contains(root.resolve("target/test-classes").toString()));
@@ -87,6 +88,100 @@ public class MavenExtensionTest {
         assertNull(preparation.getManifest());
         assertNull(preparation.getDebugArgument());
         assertEquals(Collections.singletonList("fixture:app:test"), preparation.getFallbacks());
+    }
+
+    @Test
+    public void preparesReusableAndIsolatedMultiForkSurefire() throws Exception {
+        for (boolean reuseForks : Arrays.asList(true, false)) {
+            Path root = temporary.newFolder("multi-fork-" + reuseForks).toPath();
+            Path agent = Files.write(root.resolve("agent.jar"), new byte[] {1});
+            Path output = Files.createDirectory(root.resolve("output"));
+            Path maps = Files.createDirectory(root.resolve("maps"));
+            MavenProject project = project(root);
+            Xpp3Dom configuration = (Xpp3Dom) project.getPlugin("org.apache.maven.plugins:maven-surefire-plugin")
+                .getConfiguration();
+            child(configuration, "forkCount", "2");
+            child(configuration, "reuseForks", Boolean.toString(reuseForks));
+
+            AffectedMavenLifecycleParticipant.Preparation preparation =
+                AffectedMavenLifecycleParticipant.prepare(
+                    Collections.singletonList(project),
+                    properties(agent, output, maps)
+                );
+
+            assertEquals(AffectedMavenLifecycleParticipant.Kind.INJECTED, preparation.getKind());
+            assertEquals(
+                reuseForks,
+                AffectedMavenConfig.read(preparation.getManifest(), root).isReuseForks()
+            );
+        }
+    }
+
+    @Test
+    public void unsupportedForkCountsKeepTheOriginalFullGoal() throws Exception {
+        for (String forkCount : Arrays.asList("0", "1C", "257")) {
+            Path root = temporary.newFolder("unsupported-forks-" + forkCount.replace('C', 'c')).toPath();
+            Path agent = Files.write(root.resolve("agent.jar"), new byte[] {1});
+            Path output = Files.createDirectory(root.resolve("output"));
+            Path maps = Files.createDirectory(root.resolve("maps"));
+            MavenProject project = project(root);
+            Xpp3Dom configuration = (Xpp3Dom) project.getPlugin("org.apache.maven.plugins:maven-surefire-plugin")
+                .getConfiguration();
+            child(configuration, "forkCount", forkCount);
+
+            AffectedMavenLifecycleParticipant.Preparation preparation =
+                AffectedMavenLifecycleParticipant.prepare(
+                    Collections.singletonList(project),
+                    properties(agent, output, maps)
+                );
+
+            assertEquals(AffectedMavenLifecycleParticipant.Kind.UNCHANGED, preparation.getKind());
+            assertEquals(Collections.singletonList("fixture:app:test"), preparation.getFallbacks());
+        }
+    }
+
+    @Test
+    public void customSurefireExecutionKeepsTheOriginalFullGoal() throws Exception {
+        Path root = temporary.newFolder("custom-surefire-execution").toPath();
+        Path agent = Files.write(root.resolve("agent.jar"), new byte[] {1});
+        Path output = Files.createDirectory(root.resolve("output"));
+        Path maps = Files.createDirectory(root.resolve("maps"));
+        MavenProject project = project(root);
+        PluginExecution execution = new PluginExecution();
+        execution.setId("second-test");
+        execution.setGoals(Collections.singletonList("test"));
+        project.getPlugin("org.apache.maven.plugins:maven-surefire-plugin").addExecution(execution);
+
+        AffectedMavenLifecycleParticipant.Preparation preparation =
+            AffectedMavenLifecycleParticipant.prepare(
+                Collections.singletonList(project),
+                properties(agent, output, maps)
+            );
+
+        assertEquals(AffectedMavenLifecycleParticipant.Kind.UNCHANGED, preparation.getKind());
+        assertEquals(Collections.singletonList("fixture:app:test"), preparation.getFallbacks());
+    }
+
+    @Test
+    public void defaultSurefireExecutionRemainsSupported() throws Exception {
+        Path root = temporary.newFolder("default-surefire-execution").toPath();
+        Path agent = Files.write(root.resolve("agent.jar"), new byte[] {1});
+        Path output = Files.createDirectory(root.resolve("output"));
+        Path maps = Files.createDirectory(root.resolve("maps"));
+        MavenProject project = project(root);
+        PluginExecution execution = new PluginExecution();
+        execution.setId("default-test");
+        execution.setGoals(Collections.singletonList("test"));
+        project.getPlugin("org.apache.maven.plugins:maven-surefire-plugin").addExecution(execution);
+
+        AffectedMavenLifecycleParticipant.Preparation preparation =
+            AffectedMavenLifecycleParticipant.prepare(
+                Collections.singletonList(project),
+                properties(agent, output, maps)
+            );
+
+        assertEquals(AffectedMavenLifecycleParticipant.Kind.INJECTED, preparation.getKind());
+        assertEquals(Collections.emptyList(), preparation.getFallbacks());
     }
 
     @Test
@@ -221,6 +316,34 @@ public class MavenExtensionTest {
     }
 
     @Test
+    public void inconsistentFailsafeForkTopologyKeepsTheOriginalFullGoal() throws Exception {
+        Path root = temporary.newFolder("inconsistent-failsafe-forks").toPath();
+        Path agent = Files.write(root.resolve("agent.jar"), new byte[] {1});
+        Path output = Files.createDirectory(root.resolve("output"));
+        Path maps = Files.createDirectory(root.resolve("maps"));
+        MavenProject project = project(root);
+        addFailsafe(project);
+        Plugin failsafe = project.getPlugin("org.apache.maven.plugins:maven-failsafe-plugin");
+        child((Xpp3Dom) failsafe.getConfiguration(), "forkCount", "2");
+        Xpp3Dom execution = new Xpp3Dom("configuration");
+        child(execution, "forkCount", "3");
+        failsafe.getExecutions().get(0).setConfiguration(execution);
+
+        AffectedMavenLifecycleParticipant.Preparation preparation =
+            AffectedMavenLifecycleParticipant.prepare(
+                Collections.singletonList(project),
+                properties(agent, output, maps)
+            );
+
+        assertEquals(AffectedMavenLifecycleParticipant.Kind.INJECTED, preparation.getKind());
+        assertEquals(1, preparation.getProjects().size());
+        assertEquals(
+            Collections.singletonList("fixture:app:integration-test"),
+            preparation.getFallbacks()
+        );
+    }
+
+    @Test
     public void effectiveProjectPropertyChangesRuntimeIdentity() throws Exception {
         Path root = temporary.newFolder("project-property-runtime").toPath();
         Path agent = Files.write(root.resolve("agent.jar"), new byte[] {1});
@@ -311,6 +434,12 @@ public class MavenExtensionTest {
         execution.setGoals(Arrays.asList("integration-test", "verify"));
         plugin.addExecution(execution);
         project.getBuild().addPlugin(plugin);
+    }
+
+    private static void child(Xpp3Dom configuration, String name, String value) {
+        Xpp3Dom child = new Xpp3Dom(name);
+        child.setValue(value);
+        configuration.addChild(child);
     }
 
     private static Properties properties(Path agent, Path output, Path maps) {

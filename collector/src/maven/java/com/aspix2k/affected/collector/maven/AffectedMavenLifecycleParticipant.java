@@ -29,6 +29,7 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
     private static final String OUTPUT = "affected.collector.output";
     private static final String MAPS = "affected.collector.maps";
     private static final String VERSION = "affected.collector.version";
+    private static final String WORKER = "affected.collector.worker";
     private List<AffectedMavenConfig.ProjectConfig> diagnostics = Collections.emptyList();
 
     @Override
@@ -55,6 +56,7 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
                 ).describe());
             }
             if (preparation.kind == Kind.INJECTED) {
+                session.getUserProperties().setProperty(WORKER, "${surefire.forkNumber}");
                 for (Map.Entry<String, String> argument : preparation.debugArguments.entrySet()) {
                     session.getUserProperties().setProperty(argument.getKey(), argument.getValue());
                 }
@@ -132,7 +134,10 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
             String agentArgument = quote("-javaagent:" + agent + "=" + realManifest);
             String debug = trim(existingDebug);
             manifests.put(adapter.debugProperty, realManifest);
-            debugArguments.put(adapter.debugProperty, debug.isEmpty() ? agentArgument : debug + " " + agentArgument);
+            debugArguments.put(
+                adapter.debugProperty,
+                debug.isEmpty() ? agentArgument : debug + " " + agentArgument
+            );
             records.addAll(adapterRecords);
         }
         if (records.isEmpty()) return Preparation.unchanged(fallbacks);
@@ -163,7 +168,8 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
             return null;
         }
         List<Xpp3Dom> configurations = configurations(plugin);
-        if (!singleReusableFork(configurations, properties)) return null;
+        ForkTopology topology = forkTopology(plugin, properties);
+        if (topology == null) return null;
         Path basedir = project.getBasedir().toPath().toRealPath();
         String codeSources = buildPath(project.getBuild().getOutputDirectory());
         String testClasses = buildPath(project.getBuild().getTestOutputDirectory());
@@ -181,19 +187,40 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
             runtime(project, plugin, configurations, runtimeProperties, adapter),
             allTests(properties, adapter),
             baselineEligible,
+            topology.reuseForks,
             codeSources,
             testClasses,
             join(classpath)
         );
     }
 
-    private static boolean singleReusableFork(List<Xpp3Dom> configurations, Properties properties) {
-        for (Xpp3Dom configuration : configurations) {
-            String forkCount = effective(configuration, properties, "forkCount", "1");
-            String reuseForks = effective(configuration, properties, "reuseForks", "true");
-            if (!("1".equals(forkCount) && "true".equalsIgnoreCase(reuseForks))) return false;
+    private static ForkTopology forkTopology(Plugin plugin, Properties properties) {
+        Xpp3Dom configuration = dom(plugin.getConfiguration());
+        String forkCount = effective(configuration, properties, "forkCount", "1");
+        String reuseForks = effective(configuration, properties, "reuseForks", "true");
+        if (!supportedForkCount(forkCount)
+            || !("true".equalsIgnoreCase(reuseForks) || "false".equalsIgnoreCase(reuseForks))) {
+            return null;
         }
-        return true;
+        for (PluginExecution execution : plugin.getExecutions()) {
+            Xpp3Dom executionConfiguration = dom(execution.getConfiguration());
+            if (!forkCount.equals(effective(executionConfiguration, properties, "forkCount", forkCount))
+                || !reuseForks.equalsIgnoreCase(
+                    effective(executionConfiguration, properties, "reuseForks", reuseForks)
+                )) {
+                return null;
+            }
+        }
+        return new ForkTopology(Boolean.parseBoolean(reuseForks));
+    }
+
+    private static boolean supportedForkCount(String value) {
+        if (!value.matches("[1-9][0-9]{0,2}")) return false;
+        return Integer.parseInt(value) <= 256;
+    }
+
+    private static Xpp3Dom dom(Object value) {
+        return value instanceof Xpp3Dom ? (Xpp3Dom) value : new Xpp3Dom("configuration");
     }
 
     private static boolean allTests(Properties properties, Adapter adapter) {
@@ -429,6 +456,14 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
         UNCHANGED
     }
 
+    private static final class ForkTopology {
+        private final boolean reuseForks;
+
+        private ForkTopology(boolean reuseForks) {
+            this.reuseForks = reuseForks;
+        }
+    }
+
     private enum Adapter {
         SUREFIRE(
             "org.apache.maven.plugins:maven-surefire-plugin",
@@ -474,11 +509,15 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
         }
 
         private boolean supports(Plugin plugin) {
-            if (this == SUREFIRE) return true;
             int executions = 0;
+            boolean defaultSurefireExecution = false;
             for (PluginExecution execution : plugin.getExecutions()) {
-                if (execution.getGoals().contains(task)) executions++;
+                if (execution.getGoals().contains(task)) {
+                    executions++;
+                    defaultSurefireExecution = "default-test".equals(execution.getId());
+                }
             }
+            if (this == SUREFIRE) return executions == 0 || executions == 1 && defaultSurefireExecution;
             return executions == 1;
         }
 

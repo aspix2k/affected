@@ -39,7 +39,7 @@ public final class AffectedMavenConfig {
             payload.append(project.line());
             previous = project.basedir;
         }
-        String content = "format=2\n" +
+        String content = "format=3\n" +
             "projects=" + sorted.size() + "\n" +
             "checksum=" + sha256(payload.toString().getBytes(StandardCharsets.UTF_8)) + "\n" +
             payload;
@@ -56,7 +56,7 @@ public final class AffectedMavenConfig {
         String content = new String(Files.readAllBytes(manifest), StandardCharsets.UTF_8);
         String[] lines = content.split("\n", -1);
         if (lines.length < 5 || !lines[lines.length - 1].isEmpty()) throw new IllegalStateException("manifest format");
-        if (!"format=2".equals(lines[0])) throw new IllegalStateException("manifest format");
+        if (!"format=3".equals(lines[0])) throw new IllegalStateException("manifest format");
         int count = positiveInt(value(lines[1], "projects="));
         if (count > MAX_PROJECTS || lines.length != count + 4) throw new IllegalStateException("manifest count");
         String checksum = hash(value(lines[2], "checksum="));
@@ -183,6 +183,7 @@ public final class AffectedMavenConfig {
         private final String runtime;
         private final boolean allTests;
         private final boolean baselineEligible;
+        private final boolean reuseForks;
         private final String codeSources;
         private final String testClasses;
         private final String classpath;
@@ -197,6 +198,7 @@ public final class AffectedMavenConfig {
             String runtime,
             boolean allTests,
             boolean baselineEligible,
+            boolean reuseForks,
             String codeSources,
             String testClasses,
             String classpath
@@ -210,6 +212,7 @@ public final class AffectedMavenConfig {
             this.runtime = required(runtime);
             this.allTests = allTests;
             this.baselineEligible = baselineEligible;
+            this.reuseForks = reuseForks;
             this.codeSources = required(codeSources);
             this.testClasses = required(testClasses);
             this.classpath = required(classpath);
@@ -225,6 +228,7 @@ public final class AffectedMavenConfig {
             properties.setProperty("affected.collector.runtime", runtime);
             properties.setProperty("affected.collector.all", Boolean.toString(allTests));
             properties.setProperty("affected.collector.baselineEligible", Boolean.toString(baselineEligible));
+            properties.setProperty("affected.collector.reuseForks", Boolean.toString(reuseForks));
             properties.setProperty("affected.collector.codeSources", codeSources);
             properties.setProperty("affected.collector.testClasses", testClasses);
             properties.setProperty("affected.collector.classpath", classpath);
@@ -262,6 +266,10 @@ public final class AffectedMavenConfig {
             return baselineEligible;
         }
 
+        public boolean isReuseForks() {
+            return reuseForks;
+        }
+
         public String getCodeSources() {
             return codeSources;
         }
@@ -284,6 +292,7 @@ public final class AffectedMavenConfig {
                 encode(runtime) + '|' +
                 allTests + '|' +
                 baselineEligible + '|' +
+                reuseForks + '|' +
                 encode(codeSources) + '|' +
                 encode(testClasses) + '|' +
                 encode(classpath) + '\n';
@@ -291,9 +300,10 @@ public final class AffectedMavenConfig {
 
         private static ProjectConfig parse(String line) {
             String[] parts = value(line, "project=").split("\\|", -1);
-            if (parts.length != 12
+            if (parts.length != 13
                 || !("true".equals(parts[7]) || "false".equals(parts[7]))
-                || !("true".equals(parts[8]) || "false".equals(parts[8]))) {
+                || !("true".equals(parts[8]) || "false".equals(parts[8]))
+                || !("true".equals(parts[9]) || "false".equals(parts[9]))) {
                 throw new IllegalStateException("project record");
             }
             ProjectConfig project = new ProjectConfig(
@@ -306,9 +316,10 @@ public final class AffectedMavenConfig {
                 decode(parts[6]),
                 Boolean.parseBoolean(parts[7]),
                 Boolean.parseBoolean(parts[8]),
-                decode(parts[9]),
+                Boolean.parseBoolean(parts[9]),
                 decode(parts[10]),
-                decode(parts[11])
+                decode(parts[11]),
+                decode(parts[12])
             );
             if (!project.line().equals(line + '\n')) throw new IllegalStateException("project record");
             return project;
