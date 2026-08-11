@@ -477,10 +477,10 @@ public class GradleInjectionTest {
                 "}\n" +
                 "repositories { mavenCentral() }\n" +
                 "dependencies {\n" +
-                "    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.11.0'\n" +
-                "    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.11.0'\n" +
-                "    testRuntimeOnly 'org.junit.vintage:junit-vintage-engine:5.11.0'\n" +
-                "    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.0'\n" +
+                "    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.14.4'\n" +
+                "    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.14.4'\n" +
+                "    testRuntimeOnly 'org.junit.vintage:junit-vintage-engine:5.14.4'\n" +
+                "    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.14.4'\n" +
                 "    testImplementation 'junit:junit:4.13.2'\n" +
                 "}\n" +
                 "tasks.register('testDebugUnitTest', Test) {\n" +

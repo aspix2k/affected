@@ -6,6 +6,10 @@ val testJavaVersion = providers.gradleProperty("affected.test.javaVersion").orEl
 val runGradleEightTests = providers.gradleProperty("affected.test.gradle8").orElse("true")
 val symlinkMode = providers.gradleProperty("affected.test.symlinkMode").orElse("optional")
 val conformance = providers.gradleProperty("affected.conformance").map(String::toBoolean).orElse(false)
+val junitVersion = "5.14.4"
+val junitPlatformVersion = "1.14.4"
+val mavenLatestVersion = "3.9.16"
+val maven4Version = "4.0.0-rc-6"
 val smoke = sourceSets.create("smoke")
 val smokeProduction = sourceSets.create("smokeProduction")
 val maven = sourceSets.create("maven")
@@ -28,29 +32,29 @@ repositories {
 }
 
 dependencies {
-    implementation("org.jetbrains.intellij.deps:asm-all:9.6.1")
-    compileOnly("org.junit.platform:junit-platform-launcher:1.11.0")
+    implementation("org.jetbrains.intellij.deps:asm-all:9.10.1")
+    compileOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
 
-    add(maven.compileOnlyConfigurationName, "org.apache.maven:maven-core:3.9.16")
-    add(maven.compileOnlyConfigurationName, "org.codehaus.plexus:plexus-utils:3.5.1")
+    add(maven.compileOnlyConfigurationName, "org.apache.maven:maven-core:$mavenLatestVersion")
+    add(maven.compileOnlyConfigurationName, "org.codehaus.plexus:plexus-xml:4.1.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation(gradleTestKit())
-    testImplementation("org.apache.maven:maven-core:3.9.16")
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.11.0")
-    testImplementation("org.junit.jupiter:junit-jupiter-engine:5.11.0")
-    testImplementation("org.junit.platform:junit-platform-launcher:1.11.0")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.11.0")
-    testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.11.0")
+    testImplementation("org.apache.maven:maven-core:$mavenLatestVersion")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:$junitVersion")
+    testImplementation("org.junit.jupiter:junit-jupiter-engine:$junitVersion")
+    testImplementation("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitVersion")
+    testRuntimeOnly("org.junit.vintage:junit-vintage-engine:$junitVersion")
 
     add(smoke.implementationConfigurationName, "junit:junit:4.13.2")
-    add(smoke.implementationConfigurationName, "org.junit.jupiter:junit-jupiter-api:5.11.0")
-    add(smoke.implementationConfigurationName, "org.junit.platform:junit-platform-launcher:1.11.0")
-    add(smoke.runtimeOnlyConfigurationName, "org.junit.jupiter:junit-jupiter-engine:5.11.0")
-    add(smoke.runtimeOnlyConfigurationName, "org.junit.vintage:junit-vintage-engine:5.11.0")
+    add(smoke.implementationConfigurationName, "org.junit.jupiter:junit-jupiter-api:$junitVersion")
+    add(smoke.implementationConfigurationName, "org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
+    add(smoke.runtimeOnlyConfigurationName, "org.junit.jupiter:junit-jupiter-engine:$junitVersion")
+    add(smoke.runtimeOnlyConfigurationName, "org.junit.vintage:junit-vintage-engine:$junitVersion")
     add(maven390Distribution.name, "org.apache.maven:apache-maven:3.9.0:bin@zip")
-    add(mavenLatestDistribution.name, "org.apache.maven:apache-maven:3.9.16:bin@zip")
-    add(maven4Distribution.name, "org.apache.maven:apache-maven:4.0.0-rc-5:bin@zip")
+    add(mavenLatestDistribution.name, "org.apache.maven:apache-maven:$mavenLatestVersion:bin@zip")
+    add(maven4Distribution.name, "org.apache.maven:apache-maven:$maven4Version:bin@zip")
 }
 
 smoke.compileClasspath += smokeProduction.output
@@ -176,13 +180,13 @@ tasks.test {
     }
     systemProperty(
         "affected.test.mavenHomes",
-        listOf("3.9.0", "3.9.16").joinToString(File.pathSeparator) {
+        listOf("3.9.0", mavenLatestVersion).joinToString(File.pathSeparator) {
             layout.buildDirectory.dir("maven/apache-maven-$it").get().asFile.absolutePath
         },
     )
     systemProperty(
         "affected.test.unsupportedMavenHome",
-        layout.buildDirectory.dir("maven/apache-maven-4.0.0-rc-5").get().asFile.absolutePath,
+        layout.buildDirectory.dir("maven/apache-maven-$maven4Version").get().asFile.absolutePath,
     )
     testLogging {
         events("passed", "failed", "skipped")
