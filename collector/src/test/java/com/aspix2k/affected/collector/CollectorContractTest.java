@@ -29,11 +29,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.TimeUnit;
@@ -56,12 +59,16 @@ public class CollectorContractTest {
     private String previousOutput;
     private String previousWorker;
     private String previousCodeSources;
+    private String previousRunner;
+    private String previousReuseForks;
 
     @Before
     public void setUp() {
         previousOutput = System.getProperty(CollectorOutput.OUTPUT_PROPERTY);
         previousWorker = System.getProperty(CollectorOutput.WORKER_PROPERTY);
         previousCodeSources = System.getProperty(AffectedCollectorAgent.CODE_SOURCES_PROPERTY);
+        previousRunner = System.getProperty("affected.collector.runner");
+        previousReuseForks = System.getProperty("affected.collector.reuseForks");
         AffectedCollectorAgent.resetForTests();
         StableJupiterFixture.executions.set(0);
         StableVintageFixture.executions.set(0);
@@ -73,6 +80,8 @@ public class CollectorContractTest {
         restore(CollectorOutput.OUTPUT_PROPERTY, previousOutput);
         restore(CollectorOutput.WORKER_PROPERTY, previousWorker);
         restore(AffectedCollectorAgent.CODE_SOURCES_PROPERTY, previousCodeSources);
+        restore("affected.collector.runner", previousRunner);
+        restore("affected.collector.reuseForks", previousReuseForks);
         AffectedCollectorAgent.resetForTests();
     }
 
@@ -465,6 +474,27 @@ public class CollectorContractTest {
     }
 
     @Test
+    public void isolatedMavenForksUseDeterministicTestClassWorkers() throws Exception {
+        Path outputRoot = temporary.getRoot().toPath().resolve("isolated-maven-output");
+        System.setProperty(CollectorOutput.OUTPUT_PROPERTY, outputRoot.toString());
+        System.setProperty(CollectorOutput.WORKER_PROPERTY, "reused-fork-slot");
+        System.setProperty("affected.collector.runner", "maven");
+        System.setProperty("affected.collector.reuseForks", "false");
+
+        CollectorOutput.fromSystemProperties(Collections.singleton("fixture.AlphaTest"));
+        CollectorOutput.fromSystemProperties(Collections.singleton("fixture.BetaTest"));
+        CollectorOutput.fromSystemProperties(Collections.singleton("fixture.AlphaTest"));
+        System.setProperty(CollectorOutput.WORKER_PROPERTY, "second-fork-slot");
+        CollectorOutput.fromSystemProperties(Collections.singleton("fixture.AlphaTest"));
+
+        try (Stream<Path> files = Files.list(outputRoot)) {
+            assertEquals(3, files.count());
+        }
+        assertRejectedExpectedClasses(Collections.<String>emptySet());
+        assertRejectedExpectedClasses(new HashSet<String>(Arrays.asList("fixture.AlphaTest", "fixture.BetaTest")));
+    }
+
+    @Test
     public void startingTheSameWorkerInvalidatesAStaleCompletionMarker() throws Exception {
         Path outputRoot = temporary.getRoot().toPath().resolve("partial");
         System.setProperty(CollectorOutput.OUTPUT_PROPERTY, outputRoot.toString());
@@ -559,6 +589,8 @@ public class CollectorContractTest {
     @Test
     public void listenerMarksSourcelessTestsUnsupported() throws Exception {
         Path outputRoot = prepareListener();
+        System.setProperty("affected.collector.runner", "maven");
+        System.setProperty("affected.collector.reuseForks", "false");
         Launcher launcher = LauncherFactory.create(
             LauncherConfig.builder()
                 .enableTestEngineAutoRegistration(false)
@@ -571,6 +603,7 @@ public class CollectorContractTest {
         launcher.execute(LauncherDiscoveryRequestBuilder.request().build());
 
         Path workerDirectory = onlyWorkerDirectory(outputRoot);
+        assertTrue(read(workerDirectory.resolve("expected.manifest")).contains("supported=false"));
         assertTrue(read(workerDirectory.resolve("complete.manifest")).contains("supported=false"));
     }
 
@@ -696,6 +729,15 @@ public class CollectorContractTest {
             List<Path> directories = files.collect(Collectors.toList());
             assertEquals(1, directories.size());
             return directories.get(0);
+        }
+    }
+
+    private static void assertRejectedExpectedClasses(Set<String> testClasses) throws Exception {
+        try {
+            CollectorOutput.fromSystemProperties(testClasses);
+            fail("isolated Maven fork requires exactly one test class");
+        } catch (IllegalStateException expected) {
+            assertEquals("affected.collector.expectedTests", expected.getMessage());
         }
     }
 

@@ -18,6 +18,8 @@ import java.util.Set;
 public final class CollectorOutput {
     public static final String OUTPUT_PROPERTY = "affected.collector.output";
     public static final String WORKER_PROPERTY = "affected.collector.worker";
+    private static final String RUNNER_PROPERTY = "affected.collector.runner";
+    private static final String REUSE_FORKS_PROPERTY = "affected.collector.reuseForks";
     private static final String GRADLE_WORKER_PROPERTY = "org.gradle.test.worker";
     private final String workerId;
     private final Path workerDirectory;
@@ -58,9 +60,31 @@ public final class CollectorOutput {
     }
 
     public static CollectorOutput fromSystemProperties() throws Exception {
+        return fromSystemProperties(Collections.<String>emptySet());
+    }
+
+    public static CollectorOutput fromSystemProperties(Set<String> expectedTestClasses) throws Exception {
+        return fromSystemProperties(expectedTestClasses, null);
+    }
+
+    static CollectorOutput fromSystemProperties(
+        Set<String> expectedTestClasses,
+        String unsupportedWorker
+    ) throws Exception {
         String output = required(System.getProperty(OUTPUT_PROPERTY), OUTPUT_PROPERTY);
-        String worker = System.getProperty(WORKER_PROPERTY);
-        if (worker == null || worker.trim().isEmpty()) worker = System.getProperty(GRADLE_WORKER_PROPERTY);
+        String worker;
+        if ("maven".equals(System.getProperty(RUNNER_PROPERTY))
+            && "false".equals(System.getProperty(REUSE_FORKS_PROPERTY))) {
+            String fork = required(System.getProperty(WORKER_PROPERTY), WORKER_PROPERTY);
+            worker = expectedTestClasses != null && expectedTestClasses.size() == 1
+                ? "fork:" + fork + "|class:" + expectedTestClasses.iterator().next()
+                : "fork:" + fork + "|unsupported:" + sha256(
+                    required(unsupportedWorker, "affected.collector.expectedTests")
+                );
+        } else {
+            worker = System.getProperty(WORKER_PROPERTY);
+            if (worker == null || worker.trim().isEmpty()) worker = System.getProperty(GRADLE_WORKER_PROPERTY);
+        }
         worker = required(worker, WORKER_PROPERTY);
         return new CollectorOutput(Paths.get(output).toAbsolutePath().normalize(), worker);
     }
@@ -107,7 +131,7 @@ public final class CollectorOutput {
         content.append("supported=").append(supported).append('\n');
         for (String testClass : sorted) content.append("test=").append(encode(testClass)).append('\n');
         writeAtomically(
-            workerDirectory.getParent().resolve("expected.manifest"),
+            workerDirectory.resolve("expected.manifest"),
             content.toString().getBytes(StandardCharsets.UTF_8)
         );
     }

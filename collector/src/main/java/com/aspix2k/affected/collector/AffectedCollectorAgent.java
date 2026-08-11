@@ -27,7 +27,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -47,7 +46,6 @@ public final class AffectedCollectorAgent {
 
     public static void premain(String arguments, Instrumentation instrumentation) {
         try {
-            ensureWorkerId();
             if (arguments != null && !arguments.trim().isEmpty()) {
                 configureMaven(arguments, Paths.get(System.getProperty("user.dir")), System.getProperties());
             }
@@ -180,13 +178,6 @@ public final class AffectedCollectorAgent {
             sources.add(Paths.get(entry).toAbsolutePath().normalize());
         }
         return sources;
-    }
-
-    private static void ensureWorkerId() {
-        String worker = System.getProperty(CollectorOutput.WORKER_PROPERTY);
-        if (worker == null || worker.trim().isEmpty()) {
-            System.setProperty(CollectorOutput.WORKER_PROPERTY, UUID.randomUUID().toString());
-        }
     }
 
     static final class CollectorTransformer implements ClassFileTransformer {

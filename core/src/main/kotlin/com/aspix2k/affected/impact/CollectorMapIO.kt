@@ -33,11 +33,25 @@ internal object CollectorMapReader {
                 isWorkerDirectory(it)
         })
         val artifacts = parseCatalog(readFile(directory.resolve(CATALOG_MANIFEST)))
-        val expected = parseExpected(readFile(directory.resolve(EXPECTED_MANIFEST)))
         val parsed = entries.filter(::isWorkerDirectory).map(::parseWorker)
         val expectedWorkers = parsed.mapTo(LinkedHashSet(), ParsedWorker::id)
         require(expectedWorkers.size == parsed.size)
         val completeWorkers = parsed.mapNotNull(ParsedWorker::complete)
+        val rootExpectedPath = directory.resolve(EXPECTED_MANIFEST)
+        val rootExpected = if (Files.exists(rootExpectedPath, LinkOption.NOFOLLOW_LINKS)) {
+            parseExpected(readFile(rootExpectedPath))
+        } else {
+            null
+        }
+        val workerExpected = parsed.mapNotNull(ParsedWorker::expected)
+        require(
+            rootExpected != null && workerExpected.isEmpty() ||
+                rootExpected == null && workerExpected.size == parsed.size,
+        )
+        val expected = rootExpected ?: ParsedExpected(
+            supported = workerExpected.all(ParsedExpected::supported),
+            tests = workerExpected.flatMapTo(LinkedHashSet(), ParsedExpected::tests),
+        )
         val expectedTests = expected.tests.mapTo(LinkedHashSet(), ::TestClassId)
         val workers = completeWorkers.map { complete ->
             WorkerDependencyMap(complete.workerId, complete.records)
@@ -102,12 +116,22 @@ internal object CollectorMapReader {
         require(started.size == STARTED_LINE_COUNT && started[0] == FORMAT)
         val workerId = value(started[1], "worker=")
         require(secure.fileName.toString() == "worker-${sha256(workerId)}")
+        val expectedPath = secure.resolve(EXPECTED_MANIFEST)
+        val expected = if (Files.exists(expectedPath, LinkOption.NOFOLLOW_LINKS)) {
+            parseExpected(readFile(expectedPath))
+        } else {
+            null
+        }
         val completePath = secure.resolve(COMPLETE_MANIFEST)
-        if (!Files.exists(completePath, LinkOption.NOFOLLOW_LINKS)) return ParsedWorker(workerId, null)
-        return ParsedWorker(workerId, parseCompleteWorker(secure, workerId))
+        if (!Files.exists(completePath, LinkOption.NOFOLLOW_LINKS)) return ParsedWorker(workerId, expected, null)
+        return ParsedWorker(workerId, expected, parseCompleteWorker(secure, workerId, expected != null))
     }
 
-    private fun parseCompleteWorker(directory: Path, workerId: String): ParsedCompleteWorker {
+    private fun parseCompleteWorker(
+        directory: Path,
+        workerId: String,
+        hasExpectedManifest: Boolean,
+    ): ParsedCompleteWorker {
         val manifest = readFile(directory.resolve(COMPLETE_MANIFEST))
         require(manifest.size >= COMPLETE_HEADER_LINE_COUNT)
         require(manifest[0] == FORMAT)
@@ -125,6 +149,7 @@ internal object CollectorMapReader {
         val expectedFiles = tests.mapTo(HashSet()) { "test-${sha256(it)}.map" }
         expectedFiles += STARTED_MANIFEST
         expectedFiles += COMPLETE_MANIFEST
+        if (hasExpectedManifest) expectedFiles += EXPECTED_MANIFEST
         require(entries.mapTo(HashSet()) { it.fileName.toString() } == expectedFiles)
         val records = tests.map { test -> parseMap(directory.resolve("test-${sha256(test)}.map"), test) }
         return ParsedCompleteWorker(workerId, supported, tests.toSet(), records)
@@ -152,7 +177,11 @@ internal object CollectorMapReader {
         val collectsAllTests: Boolean,
     )
 
-    private data class ParsedWorker(val id: String, val complete: ParsedCompleteWorker?)
+    private data class ParsedWorker(
+        val id: String,
+        val expected: ParsedExpected?,
+        val complete: ParsedCompleteWorker?,
+    )
 
     private data class ParsedExpected(val supported: Boolean, val tests: Set<String>)
 

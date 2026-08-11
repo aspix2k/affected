@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -306,7 +307,14 @@ public final class AffectedMavenFilter implements PostDiscoveryFilter {
                 throw new IllegalStateException(requested.toString());
             }
         } else {
-            Files.createDirectory(requested);
+            try {
+                Files.createDirectory(requested);
+            } catch (FileAlreadyExistsException ignored) {
+                if (Files.isSymbolicLink(requested)
+                    || !Files.isDirectory(requested, LinkOption.NOFOLLOW_LINKS)) {
+                    throw new IllegalStateException(requested.toString());
+                }
+            }
         }
         Path real = requested.toRealPath(LinkOption.NOFOLLOW_LINKS);
         if (!root.equals(real.getParent()) || !Files.isWritable(real)) throw new IllegalStateException(real.toString());

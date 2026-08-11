@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-08-11
+
+### Added
+
+- Select exact affected Jupiter and Vintage classes in Maven 3.9.x Surefire and Failsafe runs with integer `forkCount` values from 1 through 256, for both reusable and one-class-per-process forks, without adding another Maven invocation or IDE Run tab.
+
+### Changed
+
+- Promote a multi-fork Maven baseline only when the worker-scoped expected test sets exactly match the complete, uniquely owned union. Missing, crashed, unsupported or duplicate workers, forkless and core-scaled fork counts, and additional test executions keep the original full goal.
+
 ## [1.12.0] - 2026-08-11
 
 ### Added
@@ -194,7 +204,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v1.12.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v1.13.0...HEAD
+[1.13.0]: https://github.com/aspix2k/affected/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/aspix2k/affected/compare/v1.11.1...v1.12.0
 [1.11.1]: https://github.com/aspix2k/affected/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/aspix2k/affected/compare/v1.10.0...v1.11.0

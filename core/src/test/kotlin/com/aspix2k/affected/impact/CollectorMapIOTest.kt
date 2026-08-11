@@ -30,6 +30,92 @@ class CollectorMapIOTest {
     }
 
     @Test
+    fun `worker scoped expectations promote the complete Maven union`() = withDirectory { root ->
+        val task = task(root)
+        Files.delete(task.resolve("expected.manifest"))
+        worker(task, "fork-1", "AlphaTest", dependency("Alpha", "alpha-1"), expected = "AlphaTest")
+        worker(task, "fork-2", "BetaTest", dependency("Beta", "beta-1"), expected = "BetaTest")
+
+        val candidate = assertNotNull(CollectorMapReader.read(task, "collector-1", "maven-run"))
+        val promoted = assertNotNull(DependencyMapPromotion.promote(null, candidate))
+
+        assertEquals(setOf("fork-1", "fork-2"), candidate.expectedWorkers)
+        assertEquals(setOf(testClass("AlphaTest"), testClass("BetaTest")), candidate.expectedTestClasses)
+        assertEquals(2, promoted.records.size)
+    }
+
+    @Test
+    fun `a Maven worker without its expected set invalidates the candidate`() = withDirectory { root ->
+        val task = task(root)
+        Files.delete(task.resolve("expected.manifest"))
+        worker(task, "fork-1", "AlphaTest", dependency("Alpha", "alpha-1"), expected = "AlphaTest")
+        worker(task, "fork-2", "BetaTest", dependency("Beta", "beta-1"))
+
+        assertNull(CollectorMapReader.read(task, "collector-1", "missing-expected"))
+    }
+
+    @Test
+    fun `mixed root and worker expectations invalidate the candidate`() = withDirectory { root ->
+        val task = task(root)
+        worker(task, "fork-1", "AlphaTest", dependency("Alpha", "alpha-1"), expected = "AlphaTest")
+        worker(task, "fork-2", "BetaTest", dependency("Beta", "beta-1"))
+
+        assertNull(CollectorMapReader.read(task, "collector-1", "mixed-expected"))
+    }
+
+    @Test
+    fun `an incomplete Maven worker keeps the previous map`() = withDirectory { root ->
+        val task = task(root)
+        Files.delete(task.resolve("expected.manifest"))
+        worker(task, "fork-1", "AlphaTest", dependency("Alpha", "alpha-1"), expected = "AlphaTest")
+        val partial = started(task, "fork-2")
+        Files.writeString(
+            partial.resolve("expected.manifest"),
+            "format=1\nsupported=true\ntest=${encode("BetaTest")}\n",
+        )
+        val previous = complete(
+            artifacts = listOf(dependency("Previous", "previous-1")),
+            records = listOf(record(testClass("PreviousTest"), dependency("Previous", "previous-1"))),
+        )
+
+        val candidate = assertNotNull(CollectorMapReader.read(task, "collector-1", "partial-maven"))
+
+        assertSame(previous, DependencyMapPromotion.promote(previous, candidate))
+    }
+
+    @Test
+    fun `duplicate Maven test ownership keeps the previous map`() = withDirectory { root ->
+        val task = task(root)
+        Files.delete(task.resolve("expected.manifest"))
+        worker(task, "fork-1", "AlphaTest", dependency("Alpha", "alpha-1"), expected = "AlphaTest")
+        worker(task, "fork-2", "AlphaTest", dependency("Alpha", "alpha-1"), expected = "AlphaTest")
+        val previous = complete(
+            artifacts = listOf(dependency("Previous", "previous-1")),
+            records = listOf(record(testClass("PreviousTest"), dependency("Previous", "previous-1"))),
+        )
+
+        val candidate = assertNotNull(CollectorMapReader.read(task, "collector-1", "duplicate-maven"))
+
+        assertSame(previous, DependencyMapPromotion.promote(previous, candidate))
+    }
+
+    @Test
+    fun `a Maven expected class missing from completed workers keeps the previous map`() = withDirectory { root ->
+        val task = task(root)
+        Files.delete(task.resolve("expected.manifest"))
+        worker(task, "fork-1", "AlphaTest", dependency("Alpha", "alpha-1"), expected = "AlphaTest")
+        worker(task, "fork-2", "BetaTest", dependency("Beta", "beta-1"), expected = "MissingTest")
+        val previous = complete(
+            artifacts = listOf(dependency("Previous", "previous-1")),
+            records = listOf(record(testClass("PreviousTest"), dependency("Previous", "previous-1"))),
+        )
+
+        val candidate = assertNotNull(CollectorMapReader.read(task, "collector-1", "missing-worker"))
+
+        assertSame(previous, DependencyMapPromotion.promote(previous, candidate))
+    }
+
+    @Test
     fun `a test without production dependencies remains in the complete map`() = withDirectory { root ->
         val task = task(root)
         worker(task, "worker-1", "AlphaTest")
@@ -179,8 +265,15 @@ class CollectorMapIOTest {
         test: String,
         vararg dependencies: ClassDependency,
         supported: Boolean = true,
+        expected: String? = null,
     ) {
         val directory = started(task, worker)
+        if (expected != null) {
+            Files.writeString(
+                directory.resolve("expected.manifest"),
+                "format=1\nsupported=$supported\ntest=${encode(expected)}\n",
+            )
+        }
         Files.writeString(
             directory.resolve("complete.manifest"),
             "format=1\nworker=${encode(worker)}\nsupported=$supported\ntest=${encode(test)}\n",
