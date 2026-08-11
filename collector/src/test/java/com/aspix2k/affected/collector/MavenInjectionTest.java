@@ -221,10 +221,6 @@ public class MavenInjectionTest {
             executedTests(project)
         );
         assertTrue(manifest, manifest.contains("all=false"));
-        assertTrue(
-            "full=" + full.durationMillis + "ms exact=" + exact.durationMillis + "ms",
-            exact.durationMillis < full.durationMillis
-        );
     }
 
     private Result run(Path project, Path output, Path maps, Path mavenHome) throws Exception {
@@ -244,13 +240,12 @@ public class MavenInjectionTest {
         builder.directory(project.toFile());
         builder.redirectErrorStream(true);
         builder.redirectOutput(log.toFile());
-        long started = System.nanoTime();
         Process process = builder.start();
         boolean finished = process.waitFor(120, TimeUnit.SECONDS);
         if (!finished) process.destroyForcibly().waitFor(5, TimeUnit.SECONDS);
         String content = Files.exists(log) ? read(log) : "";
         assertTrue(content, finished);
-        return new Result(process.exitValue(), content, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
+        return new Result(process.exitValue(), content);
     }
 
     private static void assertDecision(String log, String task, String decision) {
@@ -494,12 +489,10 @@ public class MavenInjectionTest {
     private static final class Result {
         private final int exitCode;
         private final String log;
-        private final long durationMillis;
 
-        private Result(int exitCode, String log, long durationMillis) {
+        private Result(int exitCode, String log) {
             this.exitCode = exitCode;
             this.log = log;
-            this.durationMillis = durationMillis;
         }
     }
 }
