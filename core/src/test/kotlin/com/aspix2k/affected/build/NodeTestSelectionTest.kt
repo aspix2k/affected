@@ -286,6 +286,17 @@ class NodeTestSelectionTest {
     }
 
     @Test
+    fun `an unknown hidden source directory keeps the full package command`() {
+        val exact = exactJestWorkspace()
+        File(exact.root, "packages/alpha/.runtime/loader.js").apply {
+            parentFile.mkdirs()
+            writeText("export const load = name => import(name)")
+        }
+
+        assertFull(exact.fixture, exact.changed)
+    }
+
+    @Test
     fun `a source symlink keeps the full package command`() {
         val exact = exactJestWorkspace()
         val outside = createTempDirectory("node-exact-outside").resolve("linked.js")

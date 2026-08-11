@@ -99,7 +99,7 @@ private fun relatedSelection(
 private fun unsafeNodePath(directory: Path, changed: Path): Boolean =
     directory.relativize(changed).any { segment ->
         val name = segment.toString()
-        name in NODE_SCAN_SKIPPED || name.startsWith('.')
+        name in NODE_SCAN_IGNORED || name in NODE_GENERATED_DIRECTORIES || name.startsWith('.')
     }
 
 private val Path.extension: String
@@ -208,7 +208,7 @@ private fun safeNodeChild(
 ): Boolean {
     if (child in nestedModules) return true
     val name = child.fileName.toString()
-    if (Files.isSymbolicLink(child)) return name in NODE_SCAN_SKIPPED
+    if (Files.isSymbolicLink(child)) return name in NODE_SCAN_IGNORED
     return when {
         Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS) -> enqueueNodeDirectory(child, depth, queue)
         Files.isRegularFile(child, LinkOption.NOFOLLOW_LINKS) -> safeNodeSource(child, budget)
@@ -222,7 +222,8 @@ private fun enqueueNodeDirectory(
     queue: ArrayDeque<Pair<Path, Int>>,
 ): Boolean {
     val name = directory.fileName.toString()
-    if (name in NODE_SCAN_SKIPPED || name.startsWith('.')) return true
+    if (name in NODE_SCAN_IGNORED) return true
+    if (name.startsWith('.')) return false
     if (depth >= MAX_NODE_DEPTH || queue.size >= MAX_NODE_DIRECTORIES) return false
     queue += directory to depth + 1
     return true
@@ -295,16 +296,13 @@ private val NODE_CONFIG_FILES = setOf(
 )
 private val UNSAFE_PACKAGE_FIELDS = setOf("jest", "vitest", "babel", "overrides", "resolutions", "pnpm")
 private val TRANSFORM_DEPENDENCIES = setOf("babel-jest", "ts-jest", "@swc/jest")
-private val NODE_SCAN_SKIPPED = setOf(
+private val NODE_SCAN_IGNORED = setOf(
     "node_modules",
-    "build",
-    "out",
-    "dist",
     "coverage",
-    "target",
     ".git",
     ".cache",
 )
+private val NODE_GENERATED_DIRECTORIES = setOf("build", "out", "dist", "target")
 private const val MAX_NODE_DEPTH = 7
 private const val MAX_NODE_DIRECTORIES = 4096
 private const val MAX_NODE_SOURCE_FILES = 4096
