@@ -8,6 +8,7 @@ import com.intellij.openapi.externalSystem.model.execution.ExternalSystemTaskExe
 import com.intellij.openapi.externalSystem.model.project.ModuleData
 import com.intellij.openapi.externalSystem.model.task.TaskData
 import com.intellij.openapi.externalSystem.service.execution.ProgressExecutionMode
+import com.intellij.openapi.externalSystem.service.project.ExternalSystemModuleDataIndex
 import com.intellij.openapi.externalSystem.task.TaskCallback
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil
 import com.intellij.openapi.externalSystem.util.ExternalSystemUtil
@@ -22,11 +23,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import org.jetbrains.plugins.gradle.service.project.GradleModuleDataIndex
 import org.jetbrains.plugins.gradle.settings.GradleSettings
 import org.jetbrains.plugins.gradle.util.GradleConstants
-import org.jetbrains.plugins.gradle.util.getDirectoryToRunTask
-import org.jetbrains.plugins.gradle.util.gradleIdentityPathOrNull
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -178,15 +176,17 @@ class GradleBuildSystem : SuspendingBuildSystem {
 
         val roots = ModuleRootManager.getInstance(module).contentRoots.map { it.path }
         if (roots.isEmpty()) return null
-        val gradleData = GradleModuleDataIndex.findModuleNode(module)?.data
+        val (directoryToRunTask, identityPath) = gradleExecutionMetadata(
+            ExternalSystemModuleDataIndex.findModuleNode(module)?.data,
+        )
 
         return Described(
             key = "$projectPath|$path",
             path = path,
             projectPath = projectPath,
             roots = roots,
-            directoryToRunTask = gradleData?.getDirectoryToRunTask(),
-            identityPath = gradleData?.gradleIdentityPathOrNull,
+            directoryToRunTask = directoryToRunTask,
+            identityPath = identityPath,
         )
     }
 
@@ -308,6 +308,13 @@ internal fun gradleProjectPath(externalId: String, buildName: String?, sourceSet
     return parts.joinToString(":", prefix = if (parts.isEmpty()) "" else ":")
 }
 
+internal fun gradleExecutionMetadata(moduleData: ModuleData?): Pair<String?, String?> {
+    if (moduleData == null) return null to null
+    val directory = moduleData.getProperty(DIRECTORY_TO_RUN_TASK_PROPERTY)
+        ?: moduleData.linkedExternalProjectPath
+    return directory to moduleData.getProperty(GRADLE_IDENTITY_PATH_PROPERTY)
+}
+
 internal fun gradleExecutionCoordinates(
     ownerRoot: String,
     ownerId: String,
@@ -319,6 +326,8 @@ internal fun gradleExecutionCoordinates(
 }
 
 private val SOURCE_SET_NAMES = setOf("main", "unitTest", "androidTest", "test")
+private const val DIRECTORY_TO_RUN_TASK_PROPERTY = "directoryToRunTask"
+private const val GRADLE_IDENTITY_PATH_PROPERTY = "gradleIdentityPath"
 private const val MAX_PLUGIN_PARENT_DEPTH = 5
 private const val AGENT_PATH = "agent/affected-collector-agent.jar"
 private const val LISTENER_PATH = "agent/affected-collector-listener.jar"

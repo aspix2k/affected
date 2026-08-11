@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-08-11
+
+### Fixed
+
+- Keep Gradle source-set modules in one composite IDE invocation instead of falling back to a separate Run process for each included build.
+
 ## [1.9.0] - 2026-08-11
 
 ### Added
@@ -153,7 +159,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v1.9.1...HEAD
+[1.9.1]: https://github.com/aspix2k/affected/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/aspix2k/affected/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/aspix2k/affected/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/aspix2k/affected/compare/v1.7.1...v1.7.2
