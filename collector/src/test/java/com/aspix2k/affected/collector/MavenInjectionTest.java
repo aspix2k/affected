@@ -191,6 +191,147 @@ public class MavenInjectionTest {
         assertEquals(exact.log, 2, directories(exactOutput).size());
     }
 
+    @Test(timeout = 180_000L)
+    public void failsafeIntegrationTestAndVerifyUseAnIndependentExactMap() throws Exception {
+        Path project = temporary.newFolder("failsafe project").toPath();
+        Path fullOutput = temporary.newFolder("failsafe full output").toPath();
+        Path exactOutput = temporary.newFolder("failsafe exact output").toPath();
+        Path jupiterOutput = temporary.newFolder("failsafe jupiter output").toPath();
+        Path maps = temporary.newFolder("failsafe maps").toPath();
+        writeFailsafeFixture(project);
+        Path mavenHome = mavenHomes().get(mavenHomes().size() - 1);
+
+        Result full = run(project, fullOutput, maps, mavenHome, "verify");
+
+        assertEquals(full.log, 0, full.exitCode);
+        assertDecision(full.log, "fixture:app:test", "full fallback (baseline missing)");
+        assertDecision(full.log, "fixture:app:integration-test", "full fallback (baseline missing)");
+        assertEquals(
+            setOf(
+                "AlphaTest", "VintageOmegaTest", "ZetaBetaTest",
+                "AlphaIT", "VintageOmegaIT", "ZetaBetaIT"
+            ),
+            executedTests(project)
+        );
+        assertEquals(full.log, 2, directories(fullOutput).size());
+        promote(fullOutput, maps);
+        clearExecuted(project);
+        write(
+            project.resolve("src/main/java/fixture/IntegrationOmega.java"),
+            "package fixture; public final class IntegrationOmega { public static int value() { " +
+                "int result = 30; return result; } }\n"
+        );
+
+        Result exact = run(project, exactOutput, maps, mavenHome, "integration-test");
+
+        assertEquals(exact.log, 0, exact.exitCode);
+        assertDecision(exact.log, "fixture:app:test", "proven-empty");
+        assertDecision(exact.log, "fixture:app:integration-test", "exact (1 test class)");
+        assertEquals(Collections.singleton("VintageOmegaIT"), executedTests(project));
+        assertEquals(exact.log, 2, directories(exactOutput).size());
+        assertTrue(exact.log, Files.isRegularFile(project.resolve("target/failsafe-reports/failsafe-summary.xml")));
+
+        clearExecuted(project);
+        write(project.resolve("src/main/java/fixture/IntegrationOmega.java"),
+            "package fixture; public final class IntegrationOmega { public static int value() { return 30; } }\n");
+        write(
+            project.resolve("src/main/java/fixture/IntegrationAlpha.java"),
+            "package fixture; public final class IntegrationAlpha { public static int value() { " +
+                "int result = 10; return result; } }\n"
+        );
+
+        Result jupiter = run(project, jupiterOutput, maps, mavenHome, "verify");
+
+        assertEquals(jupiter.log, 0, jupiter.exitCode);
+        assertDecision(jupiter.log, "fixture:app:test", "proven-empty");
+        assertDecision(jupiter.log, "fixture:app:integration-test", "exact (1 test class)");
+        assertEquals(Collections.singleton("AlphaIT"), executedTests(project));
+    }
+
+    @Test(timeout = 180_000L)
+    public void failedDirectFailsafeIntegrationTestCannotProduceACompleteBaseline() throws Exception {
+        Path project = temporary.newFolder("failing direct failsafe project").toPath();
+        Path output = temporary.newFolder("failing direct failsafe output").toPath();
+        Path maps = temporary.newFolder("failing direct failsafe maps").toPath();
+        writeFailsafeFixture(project);
+        write(project.resolve("src/test/java/fixture/AlphaIT.java"),
+            "package fixture; public class AlphaIT { @org.junit.jupiter.api.Test void test() { " +
+                "org.junit.jupiter.api.Assertions.assertEquals(11, IntegrationAlpha.value()); } }\n");
+
+        Result result = run(
+            project,
+            output,
+            maps,
+            mavenHomes().get(mavenHomes().size() - 1),
+            "integration-test"
+        );
+
+        assertEquals(result.log, 0, result.exitCode);
+        assertDecision(result.log, "fixture:app:integration-test", "full fallback (baseline missing)");
+        String manifest = read(taskDirectory(output, "|integration-test").resolve("task.manifest"));
+        assertTrue(manifest, manifest.contains("all=false"));
+    }
+
+    @Test(timeout = 180_000L)
+    public void failsafeRunsOnTheLowestSupportedMavenRuntime() throws Exception {
+        Path project = temporary.newFolder("failsafe lowest maven project").toPath();
+        Path output = temporary.newFolder("failsafe lowest maven output").toPath();
+        Path maps = temporary.newFolder("failsafe lowest maven maps").toPath();
+        writeFailsafeFixture(project);
+
+        Result result = run(project, output, maps, mavenHomes().get(0), "verify");
+
+        assertEquals(result.log, 0, result.exitCode);
+        assertDecision(result.log, "fixture:app:test", "full fallback (baseline missing)");
+        assertDecision(result.log, "fixture:app:integration-test", "full fallback (baseline missing)");
+        assertEquals(result.log, 2, directories(output).size());
+    }
+
+    @Test(timeout = 180_000L)
+    public void failsafeReactorModulesKeepSurefireAndFailsafeMapsIsolated() throws Exception {
+        Path project = temporary.newFolder("failsafe reactor").toPath();
+        Path first = project.resolve("first");
+        Path second = project.resolve("second");
+        Path fullOutput = temporary.newFolder("failsafe reactor full output").toPath();
+        Path exactOutput = temporary.newFolder("failsafe reactor exact output").toPath();
+        Path maps = temporary.newFolder("failsafe reactor maps").toPath();
+        write(
+            project.resolve("pom.xml"),
+            "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">\n" +
+                "  <modelVersion>4.0.0</modelVersion><groupId>fixture</groupId>" +
+                "<artifactId>reactor</artifactId><version>1</version><packaging>pom</packaging>\n" +
+                "  <modules><module>first</module><module>second</module></modules>\n" +
+                "</project>\n"
+        );
+        writeFailsafeModuleFixture(first, "first");
+        writeFailsafeModuleFixture(second, "second");
+        Path mavenHome = mavenHomes().get(mavenHomes().size() - 1);
+
+        Result full = run(project, fullOutput, maps, mavenHome, "verify");
+
+        assertEquals(full.log, 0, full.exitCode);
+        assertEquals(full.log, 4, directories(fullOutput).size());
+        promote(fullOutput, maps);
+        clearExecuted(first);
+        clearExecuted(second);
+        write(
+            first.resolve("src/main/java/fixture/IntegrationOmega.java"),
+            "package fixture; public final class IntegrationOmega { public static int value() { " +
+                "int result = 30; return result; } }\n"
+        );
+
+        Result exact = run(project, exactOutput, maps, mavenHome, "verify");
+
+        assertEquals(exact.log, 0, exact.exitCode);
+        assertDecision(exact.log, "fixture:first:test", "proven-empty");
+        assertDecision(exact.log, "fixture:first:integration-test", "exact (1 test class)");
+        assertDecision(exact.log, "fixture:second:test", "proven-empty");
+        assertDecision(exact.log, "fixture:second:integration-test", "proven-empty");
+        assertEquals(Collections.singleton("VintageOmegaIT"), executedTests(first));
+        assertEquals(Collections.emptySet(), executedTests(second));
+        assertEquals(exact.log, 4, directories(exactOutput).size());
+    }
+
     private void exactScenario(Path mavenHome, String productionClass, String dependentTest, int value) throws Exception {
         String version = mavenHome.getFileName().toString();
         Path project = temporary.newFolder("exact project " + version + " " + productionClass).toPath();
@@ -224,6 +365,10 @@ public class MavenInjectionTest {
     }
 
     private Result run(Path project, Path output, Path maps, Path mavenHome) throws Exception {
+        return run(project, output, maps, mavenHome, "test");
+    }
+
+    private Result run(Path project, Path output, Path maps, Path mavenHome, String goal) throws Exception {
         Path log = Files.createTempFile(temporary.getRoot().toPath(), "maven-", ".log");
         Path executable = mavenHome.resolve("bin").resolve(isWindows() ? "mvn.cmd" : "mvn");
         ProcessBuilder builder = new ProcessBuilder(
@@ -235,7 +380,7 @@ public class MavenInjectionTest {
             "-Daffected.collector.output=" + output,
             "-Daffected.collector.maps=" + maps,
             "-Daffected.collector.version=fixture-version",
-            "test"
+            goal
         );
         builder.directory(project.toFile());
         builder.redirectErrorStream(true);
@@ -313,8 +458,61 @@ public class MavenInjectionTest {
                 "Marks.add(\"VintageOmegaTest\"); } }\n");
     }
 
+    private static void writeFailsafeFixture(Path project) throws Exception {
+        writeFixture(project);
+        Path pom = project.resolve("pom.xml");
+        write(
+            pom,
+            read(pom).replace(
+                "    </plugin>\n  </plugins></build>",
+                "    </plugin>\n" +
+                    "    <plugin><groupId>org.apache.maven.plugins</groupId>" +
+                    "<artifactId>maven-failsafe-plugin</artifactId><version>3.5.4</version>\n" +
+                    "      <executions><execution><goals><goal>integration-test</goal>" +
+                    "<goal>verify</goal></goals></execution></executions>\n" +
+                    "      <configuration><useModulePath>false</useModulePath><runOrder>alphabetical</runOrder>" +
+                    "<argLine>-Dfixture.argLine=preserved</argLine><systemPropertyVariables>" +
+                    "<fixture.executed>${project.basedir}/executed</fixture.executed>" +
+                    "</systemPropertyVariables></configuration>\n" +
+                    "    </plugin>\n  </plugins></build>"
+            )
+        );
+        write(project.resolve("src/main/java/fixture/IntegrationAlpha.java"),
+            "package fixture; public final class IntegrationAlpha { public static int value() { return 10; } }\n");
+        write(project.resolve("src/main/java/fixture/IntegrationBeta.java"),
+            "package fixture; public final class IntegrationBeta { public static int value() { return 20; } }\n");
+        write(project.resolve("src/main/java/fixture/IntegrationOmega.java"),
+            "package fixture; public final class IntegrationOmega { public static int value() { return 30; } }\n");
+        write(project.resolve("src/test/java/fixture/AlphaIT.java"),
+            "package fixture; public class AlphaIT { @org.junit.jupiter.api.Test void test() throws Exception { " +
+                "org.junit.jupiter.api.Assertions.assertEquals(\"preserved\", System.getProperty(\"fixture.argLine\")); " +
+                "org.junit.jupiter.api.Assertions.assertEquals(10, IntegrationAlpha.value()); Marks.add(\"AlphaIT\"); } }\n");
+        write(project.resolve("src/test/java/fixture/ZetaBetaIT.java"),
+            "package fixture; public class ZetaBetaIT { @org.junit.jupiter.api.Test void test() throws Exception { " +
+                "org.junit.jupiter.api.Assertions.assertEquals(\"preserved\", System.getProperty(\"fixture.argLine\")); " +
+                "org.junit.jupiter.api.Assertions.assertEquals(20, IntegrationBeta.value()); Marks.add(\"ZetaBetaIT\"); } }\n");
+        write(project.resolve("src/test/java/fixture/VintageOmegaIT.java"),
+            "package fixture; public class VintageOmegaIT { @org.junit.Test public void test() throws Exception { " +
+                "org.junit.Assert.assertEquals(\"preserved\", System.getProperty(\"fixture.argLine\")); " +
+                "org.junit.Assert.assertEquals(30, IntegrationOmega.value()); Marks.add(\"VintageOmegaIT\"); } }\n");
+    }
+
     private static void writeModuleFixture(Path project, String artifactId) throws Exception {
         writeFixture(project);
+        String standalone = read(project.resolve("pom.xml"));
+        write(
+            project.resolve("pom.xml"),
+            standalone.replace(
+                "  <groupId>fixture</groupId><artifactId>app</artifactId><version>1</version>\n",
+                "  <parent><groupId>fixture</groupId><artifactId>reactor</artifactId>" +
+                    "<version>1</version><relativePath>..</relativePath></parent>\n" +
+                    "  <artifactId>" + artifactId + "</artifactId>\n"
+            )
+        );
+    }
+
+    private static void writeFailsafeModuleFixture(Path project, String artifactId) throws Exception {
+        writeFailsafeFixture(project);
         String standalone = read(project.resolve("pom.xml"));
         write(
             project.resolve("pom.xml"),
@@ -349,6 +547,7 @@ public class MavenInjectionTest {
 
     private static void promoteTask(Path task, Path maps) throws Exception {
         Map<String, String> manifest = values(task.resolve("task.manifest"));
+        assertEquals(read(task.resolve("task.manifest")), "true", manifest.get("all"));
         String taskKey = decode(manifest.get("task"));
         StringBuilder payload = new StringBuilder();
         int artifactCount = 0;
@@ -427,6 +626,14 @@ public class MavenInjectionTest {
         List<Path> values = directories(root);
         assertEquals(message, 1, values.size());
         return values.get(0);
+    }
+
+    private static Path taskDirectory(Path root, String taskSuffix) throws Exception {
+        for (Path directory : directories(root)) {
+            String task = decode(values(directory.resolve("task.manifest")).get("task"));
+            if (task.endsWith(taskSuffix)) return directory;
+        }
+        throw new AssertionError(taskSuffix);
     }
 
     private static List<Path> directories(Path root) throws Exception {

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-08-11
+
+### Added
+
+- Select affected Jupiter and Vintage integration-test classes in Maven 3.9.x reactors that bind Failsafe 3.x. Surefire and Failsafe keep independent maps while `verify` remains one Maven invocation and one IDE Run tab; direct `integration-test` runs cannot promote a baseline before Failsafe reports failures.
+
 ## [1.11.1] - 2026-08-11
 
 ### Changed
@@ -188,7 +194,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v1.11.1...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v1.12.0...HEAD
+[1.12.0]: https://github.com/aspix2k/affected/compare/v1.11.1...v1.12.0
 [1.11.1]: https://github.com/aspix2k/affected/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/aspix2k/affected/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/aspix2k/affected/compare/v1.9.1...v1.10.0

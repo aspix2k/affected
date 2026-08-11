@@ -4,6 +4,7 @@ import com.aspix2k.affected.collector.maven.AffectedMavenLifecycleParticipant;
 import org.apache.maven.model.Build;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Plugin;
+import org.apache.maven.model.PluginExecution;
 import org.apache.maven.project.MavenProject;
 import org.codehaus.plexus.util.xml.Xpp3Dom;
 import org.junit.Rule;
@@ -13,6 +14,7 @@ import org.junit.rules.TemporaryFolder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Properties;
 
@@ -157,6 +159,68 @@ public class MavenExtensionTest {
     }
 
     @Test
+    public void preparesIndependentSurefireAndFailsafeManifests() throws Exception {
+        Path root = temporary.newFolder("failsafe-project").toPath();
+        Path agent = Files.write(root.resolve("agent.jar"), new byte[] {1});
+        Path output = Files.createDirectory(root.resolve("output"));
+        Path maps = Files.createDirectory(root.resolve("maps"));
+        MavenProject project = project(root);
+        addFailsafe(project);
+        Properties properties = properties(agent, output, maps);
+        properties.setProperty("it.test", "AlphaIT");
+
+        AffectedMavenLifecycleParticipant.Preparation preparation =
+            AffectedMavenLifecycleParticipant.prepare(Collections.singletonList(project), properties);
+
+        assertEquals(AffectedMavenLifecycleParticipant.Kind.INJECTED, preparation.getKind());
+        assertEquals(2, preparation.getProjects().size());
+        assertEquals(2, preparation.getManifests().size());
+        assertEquals(2, preparation.getDebugArguments().size());
+        AffectedMavenConfig.ProjectConfig surefire = AffectedMavenConfig.read(
+            preparation.getManifests().get("maven.surefire.debug"),
+            root
+        );
+        AffectedMavenConfig.ProjectConfig failsafe = AffectedMavenConfig.read(
+            preparation.getManifests().get("maven.failsafe.debug"),
+            root
+        );
+        assertEquals(root.toRealPath().toUri() + "|test", surefire.getTask());
+        assertEquals(root.toRealPath().toUri() + "|integration-test", failsafe.getTask());
+        assertTrue(surefire.isAllTests());
+        assertTrue(!failsafe.isAllTests());
+        assertTrue(!surefire.getRuntime().equals(failsafe.getRuntime()));
+    }
+
+    @Test
+    public void multipleFailsafeExecutionsKeepTheOriginalFullGoal() throws Exception {
+        Path root = temporary.newFolder("multiple-failsafe-executions").toPath();
+        Path agent = Files.write(root.resolve("agent.jar"), new byte[] {1});
+        Path output = Files.createDirectory(root.resolve("output"));
+        Path maps = Files.createDirectory(root.resolve("maps"));
+        MavenProject project = project(root);
+        addFailsafe(project);
+        Plugin failsafe = project.getPlugin("org.apache.maven.plugins:maven-failsafe-plugin");
+        PluginExecution second = new PluginExecution();
+        second.setId("second");
+        second.setGoals(Arrays.asList("integration-test", "verify"));
+        failsafe.addExecution(second);
+
+        AffectedMavenLifecycleParticipant.Preparation preparation =
+            AffectedMavenLifecycleParticipant.prepare(
+                Collections.singletonList(project),
+                properties(agent, output, maps)
+            );
+
+        assertEquals(AffectedMavenLifecycleParticipant.Kind.INJECTED, preparation.getKind());
+        assertEquals(1, preparation.getProjects().size());
+        assertEquals(1, preparation.getManifests().size());
+        assertEquals(
+            Collections.singletonList("fixture:app:integration-test"),
+            preparation.getFallbacks()
+        );
+    }
+
+    @Test
     public void effectiveProjectPropertyChangesRuntimeIdentity() throws Exception {
         Path root = temporary.newFolder("project-property-runtime").toPath();
         Path agent = Files.write(root.resolve("agent.jar"), new byte[] {1});
@@ -190,6 +254,22 @@ public class MavenExtensionTest {
         assertTrue(!AffectedMavenLifecycleParticipant.supportedRuntime(null));
     }
 
+    @Test
+    public void failsafeBaselineRequiresAFailureReportingLifecyclePhase() {
+        assertTrue(!AffectedMavenLifecycleParticipant.failsafeBaselineEligible(
+            Collections.singletonList("integration-test")
+        ));
+        assertTrue(AffectedMavenLifecycleParticipant.failsafeBaselineEligible(
+            Collections.singletonList("verify")
+        ));
+        assertTrue(AffectedMavenLifecycleParticipant.failsafeBaselineEligible(
+            Collections.singletonList("install")
+        ));
+        assertTrue(AffectedMavenLifecycleParticipant.failsafeBaselineEligible(
+            Collections.singletonList("deploy")
+        ));
+    }
+
     private static MavenProject project(Path root) {
         Model model = new Model();
         model.setModelVersion("4.0.0");
@@ -214,6 +294,23 @@ public class MavenExtensionTest {
         MavenProject project = new MavenProject(model);
         project.setFile(root.resolve("pom.xml").toFile());
         return project;
+    }
+
+    private static void addFailsafe(MavenProject project) {
+        Plugin plugin = new Plugin();
+        plugin.setGroupId("org.apache.maven.plugins");
+        plugin.setArtifactId("maven-failsafe-plugin");
+        plugin.setVersion("3.5.4");
+        Xpp3Dom configuration = new Xpp3Dom("configuration");
+        Xpp3Dom argLine = new Xpp3Dom("argLine");
+        argLine.setValue("@{argLine}");
+        configuration.addChild(argLine);
+        plugin.setConfiguration(configuration);
+        PluginExecution execution = new PluginExecution();
+        execution.setId("default");
+        execution.setGoals(Arrays.asList("integration-test", "verify"));
+        plugin.addExecution(execution);
+        project.getBuild().addPlugin(plugin);
     }
 
     private static Properties properties(Path agent, Path output, Path maps) {

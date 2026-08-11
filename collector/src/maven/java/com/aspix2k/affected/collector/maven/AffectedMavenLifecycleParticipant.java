@@ -19,17 +19,16 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
 public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecycleParticipant {
-    private static final String SUREFIRE_KEY = "org.apache.maven.plugins:maven-surefire-plugin";
     private static final String MAVEN_AGENT = "affected.collector.mavenAgent";
     private static final String OUTPUT = "affected.collector.output";
     private static final String MAPS = "affected.collector.maps";
     private static final String VERSION = "affected.collector.version";
-    private static final String DEBUG = "maven.surefire.debug";
     private List<AffectedMavenConfig.ProjectConfig> diagnostics = Collections.emptyList();
 
     @Override
@@ -43,7 +42,12 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
         properties.putAll(session.getSystemProperties());
         properties.putAll(session.getUserProperties());
         try {
-            Preparation preparation = prepare(session.getProjects(), properties, session.getUserProperties());
+            Preparation preparation = prepare(
+                session.getProjects(),
+                properties,
+                session.getUserProperties(),
+                failsafeBaselineEligible(session.getGoals())
+            );
             diagnostics = preparation.projects;
             for (String display : preparation.fallbacks) {
                 report(display, AffectedDependencySelector.Decision.full(
@@ -51,7 +55,9 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
                 ).describe());
             }
             if (preparation.kind == Kind.INJECTED) {
-                session.getUserProperties().setProperty(DEBUG, preparation.debugArgument);
+                for (Map.Entry<String, String> argument : preparation.debugArguments.entrySet()) {
+                    session.getUserProperties().setProperty(argument.getKey(), argument.getValue());
+                }
             }
         } catch (Exception ignored) {
             diagnostics = Collections.emptyList();
@@ -71,47 +77,69 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
         return version != null && version.startsWith("3.9.");
     }
 
+    public static boolean failsafeBaselineEligible(List<String> goals) {
+        if (goals == null) return false;
+        for (String goal : goals) {
+            if ("verify".equals(goal) || "install".equals(goal) || "deploy".equals(goal)) return true;
+        }
+        return false;
+    }
+
     public static Preparation prepare(List<MavenProject> projects, Properties properties) throws Exception {
-        return prepare(projects, properties, properties);
+        return prepare(projects, properties, properties, true);
     }
 
     private static Preparation prepare(
         List<MavenProject> projects,
         Properties properties,
-        Properties runtimeProperties
+        Properties runtimeProperties,
+        boolean failsafeBaselineEligible
     ) throws Exception {
-        String existingDebug = properties.getProperty(DEBUG);
-        if ("true".equalsIgnoreCase(trim(existingDebug))) {
-            return Preparation.unchanged(displays(projects));
-        }
         Path agent = regularFile(properties, MAVEN_AGENT);
         Path output = directory(properties, OUTPUT);
         Path maps = directory(properties, MAPS);
         String version = required(properties, VERSION);
         List<AffectedMavenConfig.ProjectConfig> records = new ArrayList<AffectedMavenConfig.ProjectConfig>();
         List<String> fallbacks = new ArrayList<String>();
-        for (MavenProject project : projects) {
-            if ("pom".equals(project.getPackaging())) continue;
-            AffectedMavenConfig.ProjectConfig record = project(
-                project,
-                properties,
-                runtimeProperties,
-                output,
-                maps,
-                version
-            );
-            if (record == null) fallbacks.add(display(project));
-            else records.add(record);
+        Map<String, Path> manifests = new LinkedHashMap<String, Path>();
+        Map<String, String> debugArguments = new LinkedHashMap<String, String>();
+        for (Adapter adapter : Adapter.values()) {
+            String existingDebug = properties.getProperty(adapter.debugProperty);
+            List<AffectedMavenConfig.ProjectConfig> adapterRecords = new ArrayList<AffectedMavenConfig.ProjectConfig>();
+            for (MavenProject project : projects) {
+                if ("pom".equals(project.getPackaging()) || !adapter.applies(project)) continue;
+                if ("true".equalsIgnoreCase(trim(existingDebug))) {
+                    fallbacks.add(display(project, adapter.task));
+                    continue;
+                }
+                AffectedMavenConfig.ProjectConfig record = project(
+                    project,
+                    adapter,
+                    properties,
+                    runtimeProperties,
+                    output,
+                    maps,
+                    version,
+                    adapter != Adapter.FAILSAFE || failsafeBaselineEligible
+                );
+                if (record == null) fallbacks.add(display(project, adapter.task));
+                else adapterRecords.add(record);
+            }
+            if (adapterRecords.isEmpty()) continue;
+            Path manifest = output.resolve("maven-" + adapter.task + "-projects.manifest");
+            AffectedMavenConfig.write(manifest, adapterRecords);
+            Path realManifest = manifest.toRealPath(LinkOption.NOFOLLOW_LINKS);
+            String agentArgument = quote("-javaagent:" + agent + "=" + realManifest);
+            String debug = trim(existingDebug);
+            manifests.put(adapter.debugProperty, realManifest);
+            debugArguments.put(adapter.debugProperty, debug.isEmpty() ? agentArgument : debug + " " + agentArgument);
+            records.addAll(adapterRecords);
         }
         if (records.isEmpty()) return Preparation.unchanged(fallbacks);
-        Path manifest = output.resolve("maven-projects.manifest");
-        AffectedMavenConfig.write(manifest, records);
-        String agentArgument = quote("-javaagent:" + agent + "=" + manifest.toRealPath(LinkOption.NOFOLLOW_LINKS));
-        String debug = trim(existingDebug);
         return new Preparation(
             Kind.INJECTED,
-            manifest.toRealPath(LinkOption.NOFOLLOW_LINKS),
-            debug.isEmpty() ? agentArgument : debug + " " + agentArgument,
+            manifests,
+            debugArguments,
             records,
             fallbacks
         );
@@ -119,14 +147,21 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
 
     private static AffectedMavenConfig.ProjectConfig project(
         MavenProject project,
+        Adapter adapter,
         Properties properties,
         Properties runtimeProperties,
         Path output,
         Path maps,
-        String version
+        String version,
+        boolean baselineEligible
     ) throws Exception {
-        Plugin plugin = project.getPlugin(SUREFIRE_KEY);
-        if (plugin == null || plugin.getVersion() == null || !plugin.getVersion().startsWith("3.")) return null;
+        Plugin plugin = project.getPlugin(adapter.pluginKey);
+        if (plugin == null
+            || plugin.getVersion() == null
+            || !plugin.getVersion().startsWith("3.")
+            || !adapter.supports(plugin)) {
+            return null;
+        }
         List<Xpp3Dom> configurations = configurations(plugin);
         if (!singleReusableFork(configurations, properties)) return null;
         Path basedir = project.getBasedir().toPath().toRealPath();
@@ -141,10 +176,11 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
             output.toString(),
             maps.toString(),
             version,
-            basedir.toUri() + "|test",
-            display(project),
-            runtime(project, plugin, configurations, runtimeProperties),
-            allTests(properties),
+            basedir.toUri() + "|" + adapter.task,
+            display(project, adapter.task),
+            runtime(project, plugin, configurations, runtimeProperties, adapter),
+            allTests(properties, adapter),
+            baselineEligible,
             codeSources,
             testClasses,
             join(classpath)
@@ -160,13 +196,8 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
         return true;
     }
 
-    private static boolean allTests(Properties properties) {
-        String[] propertyNames = {
-            "test", "groups", "excludedGroups", "surefire.includes", "surefire.excludes",
-            "surefire.includesFile", "surefire.excludesFile", "surefire.suiteXmlFiles", "dependenciesToScan",
-            "surefire.includeJUnit5Engines", "surefire.excludeJUnit5Engines"
-        };
-        for (String name : propertyNames) {
+    private static boolean allTests(Properties properties, Adapter adapter) {
+        for (String name : adapter.selectionProperties) {
             if (hasText(properties.getProperty(name))) return false;
         }
         return true;
@@ -176,12 +207,15 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
         MavenProject project,
         Plugin plugin,
         List<Xpp3Dom> configurations,
-        Properties properties
+        Properties properties,
+        Adapter adapter
     ) throws Exception {
         List<String> configurationValues = new ArrayList<String>();
         for (Xpp3Dom configuration : configurations) configurationValues.add(configuration.toString());
         Collections.sort(configurationValues);
-        StringBuilder configurationValue = new StringBuilder(plugin.getVersion()).append('\n');
+        StringBuilder configurationValue = new StringBuilder(adapter.task).append('\n')
+            .append(plugin.getVersion()).append('\n')
+            .append("debug=").append(trim(properties.getProperty(adapter.debugProperty))).append('\n');
         for (String value : configurationValues) configurationValue.append(value).append('\n');
         StringBuilder propertyValue = new StringBuilder();
         appendProperties(propertyValue, "project", project.getProperties(), false);
@@ -200,7 +234,7 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
             String name = String.valueOf(entry.getKey());
             if (!excludeCollector
                 || (!name.startsWith("affected.collector.")
-                    && !DEBUG.equals(name)
+                    && !Adapter.isDebugProperty(name)
                     && !"maven.ext.class.path".equals(name))) {
                 propertyNames.add(name);
             }
@@ -251,16 +285,20 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
 
     private static List<String> displays(List<MavenProject> projects) {
         List<String> result = new ArrayList<String>();
-        for (MavenProject project : projects) {
-            if (!"pom".equals(project.getPackaging())) result.add(display(project));
+        for (Adapter adapter : Adapter.values()) {
+            for (MavenProject project : projects) {
+                if (!"pom".equals(project.getPackaging()) && adapter.applies(project)) {
+                    result.add(display(project, adapter.task));
+                }
+            }
         }
         return result;
     }
 
-    private static String display(MavenProject project) {
+    private static String display(MavenProject project, String task) {
         String group = project.getGroupId();
         String artifact = project.getArtifactId();
-        return group == null || artifact == null ? "maven:test" : group + ":" + artifact + ":test";
+        return group == null || artifact == null ? "maven:" + task : group + ":" + artifact + ":" + task;
     }
 
     private static void reportProjects(
@@ -391,23 +429,84 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
         UNCHANGED
     }
 
+    private enum Adapter {
+        SUREFIRE(
+            "org.apache.maven.plugins:maven-surefire-plugin",
+            "maven.surefire.debug",
+            "test",
+            new String[] {
+                "test", "groups", "excludedGroups", "surefire.includes", "surefire.excludes",
+                "surefire.includesFile", "surefire.excludesFile", "surefire.suiteXmlFiles", "dependenciesToScan",
+                "surefire.includeJUnit5Engines", "surefire.excludeJUnit5Engines"
+            }
+        ),
+        FAILSAFE(
+            "org.apache.maven.plugins:maven-failsafe-plugin",
+            "maven.failsafe.debug",
+            "integration-test",
+            new String[] {
+                "it.test", "test", "groups", "excludedGroups", "failsafe.includes", "failsafe.excludes",
+                "failsafe.includesFile", "failsafe.excludesFile", "failsafe.suiteXmlFiles", "dependenciesToScan",
+                "failsafe.includeJUnit5Engines", "failsafe.excludeJUnit5Engines"
+            }
+        );
+
+        private final String pluginKey;
+        private final String debugProperty;
+        private final String task;
+        private final String[] selectionProperties;
+
+        Adapter(String pluginKey, String debugProperty, String task, String[] selectionProperties) {
+            this.pluginKey = pluginKey;
+            this.debugProperty = debugProperty;
+            this.task = task;
+            this.selectionProperties = selectionProperties;
+        }
+
+        private boolean applies(MavenProject project) {
+            if (this == SUREFIRE) return true;
+            Plugin plugin = project.getPlugin(pluginKey);
+            if (plugin == null) return false;
+            for (PluginExecution execution : plugin.getExecutions()) {
+                if (execution.getGoals().contains(task)) return true;
+            }
+            return false;
+        }
+
+        private boolean supports(Plugin plugin) {
+            if (this == SUREFIRE) return true;
+            int executions = 0;
+            for (PluginExecution execution : plugin.getExecutions()) {
+                if (execution.getGoals().contains(task)) executions++;
+            }
+            return executions == 1;
+        }
+
+        private static boolean isDebugProperty(String name) {
+            for (Adapter adapter : values()) {
+                if (adapter.debugProperty.equals(name)) return true;
+            }
+            return false;
+        }
+    }
+
     public static final class Preparation {
         private final Kind kind;
-        private final Path manifest;
-        private final String debugArgument;
+        private final Map<String, Path> manifests;
+        private final Map<String, String> debugArguments;
         private final List<AffectedMavenConfig.ProjectConfig> projects;
         private final List<String> fallbacks;
 
         private Preparation(
             Kind kind,
-            Path manifest,
-            String debugArgument,
+            Map<String, Path> manifests,
+            Map<String, String> debugArguments,
             List<AffectedMavenConfig.ProjectConfig> projects,
             List<String> fallbacks
         ) {
             this.kind = kind;
-            this.manifest = manifest;
-            this.debugArgument = debugArgument;
+            this.manifests = Collections.unmodifiableMap(new LinkedHashMap<String, Path>(manifests));
+            this.debugArguments = Collections.unmodifiableMap(new LinkedHashMap<String, String>(debugArguments));
             this.projects = Collections.unmodifiableList(
                 new ArrayList<AffectedMavenConfig.ProjectConfig>(projects)
             );
@@ -417,8 +516,8 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
         private static Preparation unchanged(List<String> fallbacks) {
             return new Preparation(
                 Kind.UNCHANGED,
-                null,
-                null,
+                Collections.<String, Path>emptyMap(),
+                Collections.<String, String>emptyMap(),
                 Collections.<AffectedMavenConfig.ProjectConfig>emptyList(),
                 fallbacks
             );
@@ -429,11 +528,19 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
         }
 
         public Path getManifest() {
-            return manifest;
+            return manifests.get(Adapter.SUREFIRE.debugProperty);
         }
 
         public String getDebugArgument() {
-            return debugArgument;
+            return debugArguments.get(Adapter.SUREFIRE.debugProperty);
+        }
+
+        public Map<String, Path> getManifests() {
+            return manifests;
+        }
+
+        public Map<String, String> getDebugArguments() {
+            return debugArguments;
         }
 
         public List<AffectedMavenConfig.ProjectConfig> getProjects() {

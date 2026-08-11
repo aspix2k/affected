@@ -12,8 +12,9 @@
         Compatible Gradle modules inside one composite build share an IDE run;
         independent build roots run concurrently.
         After a successful full run, compatible Gradle JVM, Android unit-test and
-        Maven modules use local bytecode maps to narrow Jupiter and Vintage test
-        classes. Both adapters select every mapped affected class; uncertain cases
+        Maven Surefire and Failsafe runs use independent local bytecode maps to
+        narrow Jupiter and Vintage test classes. Both adapters select every
+        mapped affected class; uncertain cases
         keep the original full task or Maven goal. One concise Run-output line
         explains the exact, proven-empty or full-fallback decision.
         <br/><br/>
