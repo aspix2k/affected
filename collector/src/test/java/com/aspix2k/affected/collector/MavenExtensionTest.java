@@ -46,6 +46,8 @@ public class MavenExtensionTest {
         assertTrue(Files.isRegularFile(preparation.getManifest()));
         assertTrue(preparation.getDebugArgument().startsWith("\"-javaagent:"));
         assertTrue(preparation.getDebugArgument().endsWith("\""));
+        assertEquals(1, preparation.getProjects().size());
+        assertEquals(Collections.emptyList(), preparation.getFallbacks());
         AffectedMavenConfig.ProjectConfig config = AffectedMavenConfig.read(
             preparation.getManifest(),
             root
@@ -82,6 +84,7 @@ public class MavenExtensionTest {
         assertEquals(AffectedMavenLifecycleParticipant.Kind.UNCHANGED, preparation.getKind());
         assertNull(preparation.getManifest());
         assertNull(preparation.getDebugArgument());
+        assertEquals(Collections.singletonList("fixture:app:test"), preparation.getFallbacks());
     }
 
     @Test

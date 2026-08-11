@@ -44,17 +44,23 @@ public class GradleInjectionTest {
         Path taggedOutput = temporary.newFolder("tagged-output").toPath();
         Path selectedOutput = temporary.newFolder("selected-output").toPath();
         Path legacyOutput = temporary.newFolder("legacy-output").toPath();
+        Path staleOutput = temporary.newFolder("stale-output").toPath();
+        Path corruptOutput = temporary.newFolder("corrupt-output").toPath();
 
         BuildResult first = run(project, firstOutput);
+        assertDecision(first, ":testDebugUnitTest", "full fallback (baseline missing)");
         assertComplete(firstOutput, 5, first.getOutput());
         assertEquals(
             setOf("AlphaTest", "BetaTest", "GammaTest", "DeltaTest", "VintageAlphaTest"),
             executedTests(project)
         );
         promote(firstOutput, project.resolve(".affected/maps"));
+        Path baselineMap = onlyFile(project.resolve(".affected/maps"));
+        String baseline = read(baselineMap);
 
         clearExecuted(project);
         BuildResult unchanged = run(project, unchangedOutput);
+        assertDecision(unchanged, ":testDebugUnitTest", "proven-empty");
         assertEquals(TaskOutcome.SKIPPED, unchanged.task(":testDebugUnitTest").getOutcome());
         assertEquals(Collections.emptySet(), executedTests(project));
         assertOutputEmpty(unchangedOutput);
@@ -62,6 +68,7 @@ public class GradleInjectionTest {
         writeAlpha(project, "int result = 1; return result;");
         clearExecuted(project);
         BuildResult exact = run(project, exactOutput);
+        assertDecision(exact, ":testDebugUnitTest", "exact (3 test classes)");
         assertComplete(exactOutput, 3, false, exact.getOutput());
         assertEquals(setOf("AlphaTest", "GammaTest", "VintageAlphaTest"), executedTests(project));
 
@@ -70,6 +77,7 @@ public class GradleInjectionTest {
             "package fixture; public final class Added {}\n"
         );
         BuildResult added = run(project, addedOutput);
+        assertDecision(added, ":testDebugUnitTest", "full fallback (class set changed)");
         assertComplete(addedOutput, 5, added.getOutput());
 
         Files.delete(project.resolve("src/main/java/fixture/Added.java"));
@@ -86,8 +94,21 @@ public class GradleInjectionTest {
             "--tests",
             "fixture.AlphaTest"
         );
-        run(project, legacyOutput, "legacyTest", false);
+        BuildResult legacy = run(project, legacyOutput, "legacyTest", false);
+        Files.write(
+            baselineMap,
+            baseline.replace("schema=4", "schema=3").getBytes(StandardCharsets.UTF_8)
+        );
+        BuildResult stale = run(project, staleOutput);
+        Files.write(baselineMap, "format=1\nschema=4\n".getBytes(StandardCharsets.UTF_8));
+        BuildResult corrupt = run(project, corruptOutput);
+        Files.write(baselineMap, baseline.getBytes(StandardCharsets.UTF_8));
 
+        assertDecision(tagged, ":testDebugUnitTest", "full fallback (runtime changed)");
+        assertDecision(selected, ":testDebugUnitTest", "full fallback (existing test filter)");
+        assertDecision(legacy, ":legacyTest", "full fallback (unsupported framework)");
+        assertDecision(stale, ":testDebugUnitTest", "full fallback (baseline stale)");
+        assertDecision(corrupt, ":testDebugUnitTest", "full fallback (baseline corrupt)");
         assertComplete(taggedOutput, 6, tagged.getOutput());
         assertComplete(selectedOutput, 1, false, selected.getOutput());
         assertEquals(manifestValue(firstOutput, "input="), manifestValue(exactOutput, "input="));
@@ -177,12 +198,29 @@ public class GradleInjectionTest {
             "-PsymlinkTests=true"
         );
 
+        assertDecision(fallback, ":testDebugUnitTest", "full fallback (collector error)");
         assertEquals(TaskOutcome.SUCCESS, fallback.task(":testDebugUnitTest").getOutcome());
         assertEquals(
             setOf("AlphaTest", "BetaTest", "GammaTest", "DeltaTest", "VintageAlphaTest"),
             executedTests(project)
         );
         assertFallback(fallbackOutput);
+    }
+
+    private static void assertDecision(BuildResult result, String task, String decision) {
+        String expected = "[Affected] " + task + " — " + decision;
+        assertTrue(result.getOutput(), result.getOutput().contains(expected));
+        assertEquals(result.getOutput(), 1, occurrences(result.getOutput(), expected));
+    }
+
+    private static int occurrences(String value, String needle) {
+        int count = 0;
+        int offset = 0;
+        while ((offset = value.indexOf(needle, offset)) >= 0) {
+            count++;
+            offset += needle.length();
+        }
+        return count;
     }
 
     private BuildResult run(Path project, Path output) {
@@ -293,6 +331,14 @@ public class GradleInjectionTest {
     private static void assertOutputEmpty(Path output) throws Exception {
         try (Stream<Path> files = Files.list(output)) {
             assertEquals(0, files.count());
+        }
+    }
+
+    private static Path onlyFile(Path directory) throws Exception {
+        try (Stream<Path> files = Files.list(directory)) {
+            List<Path> result = files.collect(Collectors.toList());
+            assertEquals(1, result.size());
+            return result.get(0);
         }
     }
 

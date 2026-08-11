@@ -35,6 +35,7 @@ public class AffectedDependencySelectorTest {
 
         assertEquals(AffectedDependencySelector.Kind.CLASSES, decision.getKind());
         assertEquals(Collections.singletonList("fixture.AlphaTest"), decision.getTestClasses());
+        assertEquals("exact (1 test class)", decision.describe());
     }
 
     @Test
@@ -55,6 +56,7 @@ public class AffectedDependencySelectorTest {
 
         assertEquals(AffectedDependencySelector.Kind.EMPTY, decision.getKind());
         assertEquals(Collections.emptyList(), decision.getTestClasses());
+        assertEquals("proven-empty", decision.describe());
     }
 
     @Test
@@ -73,6 +75,7 @@ public class AffectedDependencySelectorTest {
         );
 
         assertEquals(AffectedDependencySelector.Kind.ALL, decision.getKind());
+        assertEquals(AffectedDependencySelector.Reason.CLASS_SET_CHANGED, decision.getReason());
     }
 
     @Test
@@ -92,6 +95,7 @@ public class AffectedDependencySelectorTest {
         );
 
         assertEquals(AffectedDependencySelector.Kind.ALL, decision.getKind());
+        assertEquals(AffectedDependencySelector.Reason.CLASS_SET_CHANGED, decision.getReason());
     }
 
     @Test
@@ -100,30 +104,28 @@ public class AffectedDependencySelectorTest {
         AffectedDependencySelector.Artifact alpha = artifact("Alpha", "alpha-1");
         artifactMap(maps, "task", alpha);
 
-        assertEquals(
-            AffectedDependencySelector.Kind.ALL,
-            AffectedDependencySelector.select(
-                maps,
-                "other-collector",
-                "task",
-                "runtime",
-                "input",
-                Collections.singletonList(alpha)
-            ).getKind()
+        AffectedDependencySelector.Decision stale = AffectedDependencySelector.select(
+            maps,
+            "other-collector",
+            "task",
+            "runtime",
+            "input",
+            Collections.singletonList(alpha)
         );
+        assertEquals(AffectedDependencySelector.Kind.ALL, stale.getKind());
+        assertEquals(AffectedDependencySelector.Reason.BASELINE_STALE, stale.getReason());
 
         Files.write(maps.resolve("map-" + sha256("task") + ".map"), "format=1\n".getBytes(StandardCharsets.UTF_8));
-        assertEquals(
-            AffectedDependencySelector.Kind.ALL,
-            AffectedDependencySelector.select(
-                maps,
-                "collector",
-                "task",
-                "runtime",
-                "input",
-                Collections.singletonList(alpha)
-            ).getKind()
+        AffectedDependencySelector.Decision corrupt = AffectedDependencySelector.select(
+            maps,
+            "collector",
+            "task",
+            "runtime",
+            "input",
+            Collections.singletonList(alpha)
         );
+        assertEquals(AffectedDependencySelector.Kind.ALL, corrupt.getKind());
+        assertEquals(AffectedDependencySelector.Reason.BASELINE_CORRUPT, corrupt.getReason());
     }
 
     @Test
@@ -146,6 +148,52 @@ public class AffectedDependencySelectorTest {
         );
 
         assertEquals(AffectedDependencySelector.Kind.ALL, decision.getKind());
+        assertEquals(AffectedDependencySelector.Reason.BASELINE_CORRUPT, decision.getReason());
+    }
+
+    @Test
+    public void missingBaselineHasAStableReason() throws Exception {
+        Path maps = temporary.newFolder("missing-maps").toPath();
+
+        AffectedDependencySelector.Decision decision = AffectedDependencySelector.select(
+            maps,
+            "collector",
+            "task",
+            "runtime",
+            "input",
+            Collections.singletonList(artifact("Alpha", "alpha-1"))
+        );
+
+        assertEquals(AffectedDependencySelector.Kind.ALL, decision.getKind());
+        assertEquals(AffectedDependencySelector.Reason.BASELINE_MISSING, decision.getReason());
+        assertEquals("full fallback (baseline missing)", decision.describe());
+    }
+
+    @Test
+    public void runtimeAndInputChangesHaveDistinctReasons() throws Exception {
+        Path maps = temporary.newFolder("identity-maps").toPath();
+        AffectedDependencySelector.Artifact alpha = artifact("Alpha", "alpha-1");
+        artifactMap(maps, "task", alpha);
+
+        AffectedDependencySelector.Decision runtime = AffectedDependencySelector.select(
+            maps,
+            "collector",
+            "task",
+            "changed-runtime",
+            "input",
+            Collections.singletonList(alpha)
+        );
+        AffectedDependencySelector.Decision input = AffectedDependencySelector.select(
+            maps,
+            "collector",
+            "task",
+            "runtime",
+            "changed-input",
+            Collections.singletonList(alpha)
+        );
+
+        assertEquals(AffectedDependencySelector.Reason.RUNTIME_CHANGED, runtime.getReason());
+        assertEquals(AffectedDependencySelector.Reason.INPUT_CHANGED, input.getReason());
     }
 
     private static void artifactMap(

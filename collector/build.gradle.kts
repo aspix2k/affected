@@ -94,6 +94,7 @@ val mavenExtensionJar = tasks.register<Jar>("mavenExtensionJar") {
     from(maven.output)
     from(sourceSets.main.get().output) {
         include("com/aspix2k/affected/collector/AffectedMavenConfig*.class")
+        include("com/aspix2k/affected/collector/AffectedDependencySelector*.class")
     }
 }
 

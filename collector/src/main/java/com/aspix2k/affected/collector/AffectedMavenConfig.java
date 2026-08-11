@@ -179,6 +179,7 @@ public final class AffectedMavenConfig {
         private final String maps;
         private final String version;
         private final String task;
+        private final String display;
         private final String runtime;
         private final boolean allTests;
         private final String codeSources;
@@ -191,6 +192,7 @@ public final class AffectedMavenConfig {
             String maps,
             String version,
             String task,
+            String display,
             String runtime,
             boolean allTests,
             String codeSources,
@@ -202,6 +204,7 @@ public final class AffectedMavenConfig {
             this.maps = required(maps);
             this.version = required(version);
             this.task = required(task);
+            this.display = required(display);
             this.runtime = required(runtime);
             this.allTests = allTests;
             this.codeSources = required(codeSources);
@@ -215,6 +218,7 @@ public final class AffectedMavenConfig {
             properties.setProperty("affected.collector.maps", maps);
             properties.setProperty("affected.collector.version", version);
             properties.setProperty("affected.collector.task", task);
+            properties.setProperty("affected.collector.display", display);
             properties.setProperty("affected.collector.runtime", runtime);
             properties.setProperty("affected.collector.all", Boolean.toString(allTests));
             properties.setProperty("affected.collector.codeSources", codeSources);
@@ -236,6 +240,10 @@ public final class AffectedMavenConfig {
 
         public String getTask() {
             return task;
+        }
+
+        public String getDisplay() {
+            return display;
         }
 
         public String getRuntime() {
@@ -264,6 +272,7 @@ public final class AffectedMavenConfig {
                 encode(maps) + '|' +
                 encode(version) + '|' +
                 encode(task) + '|' +
+                encode(display) + '|' +
                 encode(runtime) + '|' +
                 allTests + '|' +
                 encode(codeSources) + '|' +
@@ -273,7 +282,7 @@ public final class AffectedMavenConfig {
 
         private static ProjectConfig parse(String line) {
             String[] parts = value(line, "project=").split("\\|", -1);
-            if (parts.length != 10 || !("true".equals(parts[6]) || "false".equals(parts[6]))) {
+            if (parts.length != 11 || !("true".equals(parts[7]) || "false".equals(parts[7]))) {
                 throw new IllegalStateException("project record");
             }
             ProjectConfig project = new ProjectConfig(
@@ -283,10 +292,11 @@ public final class AffectedMavenConfig {
                 decode(parts[3]),
                 decode(parts[4]),
                 decode(parts[5]),
-                Boolean.parseBoolean(parts[6]),
-                decode(parts[7]),
+                decode(parts[6]),
+                Boolean.parseBoolean(parts[7]),
                 decode(parts[8]),
-                decode(parts[9])
+                decode(parts[9]),
+                decode(parts[10])
             );
             if (!project.line().equals(line + '\n')) throw new IllegalStateException("project record");
             return project;

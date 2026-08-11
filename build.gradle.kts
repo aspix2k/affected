@@ -16,7 +16,7 @@ plugins {
 }
 
 group = "com.aspix2k"
-version = "1.10.0"
+version = "1.11.0"
 
 repositories {
     mavenCentral()

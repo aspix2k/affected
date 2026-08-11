@@ -147,6 +147,7 @@ public class AffectedMavenFilterTest {
         properties.setProperty("affected.collector.maps", maps.toString());
         properties.setProperty("affected.collector.version", "collector-version");
         properties.setProperty("affected.collector.task", root.toUri() + "|test");
+        properties.setProperty("affected.collector.display", "fixture:app:test");
         properties.setProperty("affected.collector.runtime", "runtime-seed");
         properties.setProperty("affected.collector.all", "true");
         properties.setProperty("affected.collector.codeSources", root.resolve("classes").toString());

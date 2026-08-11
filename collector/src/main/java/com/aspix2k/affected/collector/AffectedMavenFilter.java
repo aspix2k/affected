@@ -72,7 +72,9 @@ public final class AffectedMavenFilter implements PostDiscoveryFilter {
     private Selection decide() {
         try {
             AffectedCollectorAgent.reapplyMavenConfig(properties);
-            if (!"maven".equals(required(properties, "affected.collector.runner"))) return Selection.all();
+            if (!"maven".equals(required(properties, "affected.collector.runner"))) {
+                return Selection.full(AffectedDependencySelector.Reason.COLLECTOR_ERROR);
+            }
             Snapshot snapshot = snapshot(properties);
             boolean allTests = "true".equals(required(properties, "affected.collector.all"));
             AffectedDependencySelector.Decision decision = allTests
@@ -84,8 +86,10 @@ public final class AffectedMavenFilter implements PostDiscoveryFilter {
                     snapshot.inputFingerprint,
                     snapshot.artifacts
                 )
-                : null;
-            Selection selected = decision == null ? Selection.all() : Selection.from(decision);
+                : AffectedDependencySelector.Decision.full(
+                    AffectedDependencySelector.Reason.EXISTING_TEST_FILTER
+                );
+            Selection selected = Selection.from(decision);
             Path output = taskOutput(
                 directory(properties, "affected.collector.output", true),
                 required(properties, "affected.collector.task")
@@ -98,11 +102,25 @@ public final class AffectedMavenFilter implements PostDiscoveryFilter {
                 snapshot.inputFingerprint,
                 allTests && selected.kind == AffectedDependencySelector.Kind.ALL
             );
+            writeDecision(output, selected.description);
             properties.setProperty("affected.collector.output", output.toString());
             return selected;
         } catch (Exception failure) {
             writeFallback(failure);
-            return Selection.all();
+            Selection fallback = Selection.full(AffectedDependencySelector.Reason.COLLECTOR_ERROR);
+            writeFallbackDecision(fallback);
+            return fallback;
+        }
+    }
+
+    private void writeFallbackDecision(Selection fallback) {
+        try {
+            Path output = taskOutput(
+                directory(properties, "affected.collector.output", true),
+                required(properties, "affected.collector.task")
+            );
+            writeDecision(output, fallback.description);
+        } catch (Exception ignored) {
         }
     }
 
@@ -309,6 +327,13 @@ public final class AffectedMavenFilter implements PostDiscoveryFilter {
         writeAtomically(directory.resolve("task.manifest"), content);
     }
 
+    private static void writeDecision(Path directory, String decision) throws Exception {
+        writeAtomically(
+            directory.resolve("decision.manifest"),
+            "format=1\ndecision=" + encode(decision) + "\n"
+        );
+    }
+
     private static void writeCatalog(
         Path directory,
         List<AffectedDependencySelector.Artifact> artifacts
@@ -427,19 +452,21 @@ public final class AffectedMavenFilter implements PostDiscoveryFilter {
     private static final class Selection {
         private final AffectedDependencySelector.Kind kind;
         private final Set<String> testClasses;
+        private final String description;
 
-        private Selection(AffectedDependencySelector.Kind kind, Set<String> testClasses) {
+        private Selection(AffectedDependencySelector.Kind kind, Set<String> testClasses, String description) {
             this.kind = kind;
             this.testClasses = testClasses;
+            this.description = description;
         }
 
         private static Selection from(AffectedDependencySelector.Decision decision) {
             Set<String> testClasses = new TreeSet<String>(decision.getTestClasses());
-            return new Selection(decision.getKind(), testClasses);
+            return new Selection(decision.getKind(), testClasses, decision.describe());
         }
 
-        private static Selection all() {
-            return new Selection(AffectedDependencySelector.Kind.ALL, Collections.<String>emptySet());
+        private static Selection full(AffectedDependencySelector.Reason reason) {
+            return from(AffectedDependencySelector.Decision.full(reason));
         }
     }
 }

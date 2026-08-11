@@ -92,6 +92,21 @@ Complete maps are replaced only by successful full runs and remain on the local
 machine. A collector schema change invalidates older maps and causes one full
 run to rebuild them safely.
 
+Each supported Gradle test task or Maven reactor module prints one decision in
+the original Run output:
+
+```text
+[Affected] :app:testDebugUnitTest — full fallback (baseline missing)
+[Affected] :app:testDebugUnitTest — exact (3 test classes)
+[Affected] :core:test — proven-empty
+[Affected] :legacy:test — full fallback (unsupported framework)
+```
+
+The Run tree still shows the original module-level build tasks because exact
+class filters are applied inside those tasks after compilation. The decision
+line reports what actually happened. Full-fallback reasons never include
+absolute paths, bytecode hashes or unbounded class lists.
+
 The optional [MCP Server](https://plugins.jetbrains.com/plugin/26071) integration
 exposes the affected modules, changed files, verification plan and run controls
 to AI agents.
