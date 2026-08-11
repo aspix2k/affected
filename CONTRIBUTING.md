@@ -23,6 +23,8 @@ environment variable.
 ./gradlew buildPlugin   # zip in build/distributions
 ./gradlew verifyPlugin  # JetBrains plugin verifier
 ./gradlew pitest        # mutation testing, slow
+scripts/quality.sh shell
+scripts/quality.sh workflows
 ```
 
 Pull-request CI runs everything except `pitest`; `pitest` runs weekly. A push
@@ -41,6 +43,15 @@ the next build.
 
 `detekt` runs with `autoCorrect`, so formatting fixes itself and only real
 findings remain. There is no baseline file: the count is zero and stays zero.
+
+ShellCheck 0.11.0 and actionlint 1.7.12 must also report zero findings. For the
+release workflow only, the gate first proves the exact `queue: max` structure
+and then suppresses the diagnostic that actionlint does not yet recognize. No
+other workflow finding is accepted. CI verifies both analyzer archives before
+execution and records their elapsed time and peak memory in the job log.
+
+The zero-finding macOS arm64 baseline measured ShellCheck at 0.11 seconds and
+35.4 MB maximum RSS, and actionlint at 0.07 seconds and 31.3 MB maximum RSS.
 
 ## How it works
 
