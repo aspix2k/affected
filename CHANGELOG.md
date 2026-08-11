@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Preserve one fail-fast Node Run session while exact workspaces execute their own runner-native related command.
 - Keep the full pytest package plan for custom configuration, conftest or third-party plugins, dynamic or external dependencies, resources, non-modification changes, ambiguous ownership and bounded-scan failures.
 - Test the native Python fixture with Python 3.14, pytest 9.1.1 and zero-finding Ruff 0.16.2 checks.
+- Build with Gradle 9.7 and verify native adapters against current stable GitHub Actions, language runtimes and test frameworks.
 
 ### Fixed
 

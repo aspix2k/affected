@@ -522,13 +522,13 @@ public class MavenInjectionTest {
                 "  <groupId>fixture</groupId><artifactId>app</artifactId><version>1</version>\n" +
                 "  <properties><maven.compiler.release>8</maven.compiler.release></properties>\n" +
                 "  <dependencies>\n" +
-                "    <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><version>5.11.0</version><scope>test</scope></dependency>\n" +
-                "    <dependency><groupId>org.junit.vintage</groupId><artifactId>junit-vintage-engine</artifactId><version>5.11.0</version><scope>test</scope></dependency>\n" +
+                "    <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><version>5.14.4</version><scope>test</scope></dependency>\n" +
+                "    <dependency><groupId>org.junit.vintage</groupId><artifactId>junit-vintage-engine</artifactId><version>5.14.4</version><scope>test</scope></dependency>\n" +
                 "    <dependency><groupId>junit</groupId><artifactId>junit</artifactId><version>4.13.2</version><scope>test</scope></dependency>\n" +
                 "  </dependencies>\n" +
                 "  <build><plugins>\n" +
-                "    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.13.0</version></plugin>\n" +
-                "    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>3.5.4</version>\n" +
+                "    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.15.0</version></plugin>\n" +
+                "    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>3.5.6</version>\n" +
                 "      <configuration><useModulePath>false</useModulePath><runOrder>alphabetical</runOrder>" +
                 "<argLine>-Dfixture.argLine=preserved</argLine><systemPropertyVariables>" +
                 "<fixture.executed>${project.basedir}/executed</fixture.executed>" +
@@ -572,7 +572,7 @@ public class MavenInjectionTest {
                 "    </plugin>\n  </plugins></build>",
                 "    </plugin>\n" +
                     "    <plugin><groupId>org.apache.maven.plugins</groupId>" +
-                    "<artifactId>maven-failsafe-plugin</artifactId><version>3.5.4</version>\n" +
+                    "<artifactId>maven-failsafe-plugin</artifactId><version>3.5.6</version>\n" +
                     "      <executions><execution><goals><goal>integration-test</goal>" +
                     "<goal>verify</goal></goals></execution></executions>\n" +
                     "      <configuration><useModulePath>false</useModulePath><runOrder>alphabetical</runOrder>" +

@@ -28,6 +28,11 @@ environment variable.
 Pull-request CI runs everything except `pitest`; `pitest` runs weekly. A push
 to `main` only promotes the already verified pull-request artifact.
 
+The default wrapper, GitHub Actions and native conformance fixtures track the
+latest stable releases. Older versions belong only in an explicit compatibility
+case such as Gradle 8, Maven 3.9.0 or JDK 17; a regular build pin must be updated
+or carry a tested compatibility reason in its issue and changelog entry.
+
 Every IDE the build or the verifier touches is unpacked into
 `~/.gradle/caches/<gradle>/transforms`, three to five gigabytes each, and old
 ones are never removed. After changing the pinned IDE version a few times that

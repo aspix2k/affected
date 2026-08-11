@@ -373,7 +373,7 @@ public class MavenExtensionTest {
         assertTrue(AffectedMavenLifecycleParticipant.supportedRuntime("3.9.0"));
         assertTrue(AffectedMavenLifecycleParticipant.supportedRuntime("3.9.16"));
         assertTrue(!AffectedMavenLifecycleParticipant.supportedRuntime("3.8.9"));
-        assertTrue(!AffectedMavenLifecycleParticipant.supportedRuntime("4.0.0-rc-5"));
+        assertTrue(!AffectedMavenLifecycleParticipant.supportedRuntime("4.0.0-rc-6"));
         assertTrue(!AffectedMavenLifecycleParticipant.supportedRuntime(null));
     }
 
@@ -406,7 +406,7 @@ public class MavenExtensionTest {
         Plugin plugin = new Plugin();
         plugin.setGroupId("org.apache.maven.plugins");
         plugin.setArtifactId("maven-surefire-plugin");
-        plugin.setVersion("3.5.4");
+        plugin.setVersion("3.5.6");
         Xpp3Dom configuration = new Xpp3Dom("configuration");
         Xpp3Dom argLine = new Xpp3Dom("argLine");
         argLine.setValue("@{argLine}");
@@ -423,7 +423,7 @@ public class MavenExtensionTest {
         Plugin plugin = new Plugin();
         plugin.setGroupId("org.apache.maven.plugins");
         plugin.setArtifactId("maven-failsafe-plugin");
-        plugin.setVersion("3.5.4");
+        plugin.setVersion("3.5.6");
         Xpp3Dom configuration = new Xpp3Dom("configuration");
         Xpp3Dom argLine = new Xpp3Dom("argLine");
         argLine.setValue("@{argLine}");

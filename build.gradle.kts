@@ -124,7 +124,7 @@ val mavenExtensionArtifact = configurations.create("mavenExtensionArtifact") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
-dependencies.add(collectorAgentArtifact.name, project(":collector"))
+dependencies.add(collectorAgentArtifact.name, dependencies.project(path = ":collector"))
 dependencies.add(
     collectorListenerArtifact.name,
     dependencies.project(path = ":collector", configuration = "listenerElements"),
