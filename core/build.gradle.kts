@@ -27,6 +27,10 @@ kotlin { jvmToolchain(21) }
 tasks.test {
     useJUnit()
     systemProperty(
+        "affected.test.pytestAdapter",
+        layout.projectDirectory.file("src/main/python/affected_pytest.py").asFile.absolutePath,
+    )
+    systemProperty(
         "affected.cliConformance",
         providers.gradleProperty("affected.cliConformance").orElse("false").get(),
     )

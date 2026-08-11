@@ -14,7 +14,12 @@ object PythonProjects {
         val manifests = findManifests(root)
         if (manifests.isEmpty()) return emptyList()
 
-        val described = manifests.map { describe(it) ?: return emptyList() }
+        val manifestRoots = manifests.mapNotNull { it.parentFile?.toPath()?.toAbsolutePath()?.normalize() }.toSet()
+        val described = manifests.map { manifest ->
+            val directory = manifest.parentFile?.toPath()?.toAbsolutePath()?.normalize() ?: return emptyList()
+            val nestedRoots = manifestRoots.filterTo(HashSet()) { it != directory && it.startsWith(directory) }
+            describe(manifest, nestedRoots) ?: return emptyList()
+        }
         val names = described.map { it.name }.toSet()
         if (names.size != described.size) return emptyList()
 
@@ -45,7 +50,7 @@ object PythonProjects {
         val typed: Boolean,
     )
 
-    private fun describe(manifest: File): Described? {
+    private fun describe(manifest: File, nestedRoots: Set<java.nio.file.Path>): Described? {
         val directory = manifest.parentFile ?: return null
         val lines = ManifestSearch.readText(manifest)?.lineSequence()?.toList() ?: return null
 
@@ -55,7 +60,7 @@ object PythonProjects {
             name = name,
             directory = directory.invariantSeparatorsPath,
             dependencies = dependenciesOf(lines),
-            hasTests = hasTests(directory) ?: return null,
+            hasTests = hasTests(directory, nestedRoots) ?: return null,
             typed = lines.any { it.trim().startsWith("[tool.mypy") } || File(directory, "mypy.ini").isFile,
         )
     }
@@ -94,13 +99,15 @@ object PythonProjects {
         .map { entry -> entry.takeWhile { it.isLetterOrDigit() || it == '-' || it == '_' || it == '.' } }
         .filter { it.isNotEmpty() }
 
-    private fun hasTests(directory: File): Boolean? {
+    private fun hasTests(directory: File, nestedRoots: Set<java.nio.file.Path>): Boolean? {
         for (name in TEST_DIRS) {
             val candidate = File(directory, name).toPath()
             if (Files.isSymbolicLink(candidate)) return null
             if (Files.isDirectory(candidate, LinkOption.NOFOLLOW_LINKS)) return true
         }
-        return ManifestSearch.anyFile(directory) { it.name.startsWith("test_") && it.extension == "py" }
+        return ManifestSearch.anyFile(directory, nestedRoots) {
+            it.name.startsWith("test_") && it.extension == "py"
+        }
     }
 
     private fun findManifests(root: File): List<File> = ManifestSearch.find(root, "pyproject.toml")

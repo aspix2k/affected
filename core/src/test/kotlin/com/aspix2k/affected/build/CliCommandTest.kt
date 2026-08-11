@@ -1,10 +1,15 @@
 package com.aspix2k.affected.build
 
+import com.google.gson.JsonParser
 import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.Path
+import java.util.Base64
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class CliCommandTest {
 
@@ -64,6 +69,72 @@ class CliCommandTest {
             listOf("python", "-m", "pytest", "packages/a", "packages/b"),
             commands.single().arguments,
         )
+    }
+
+    @Test
+    fun `pytest exact context contains only bounded relative paths`() {
+        val root = createTempDirectory("pytest-context").toFile()
+        val first = File(root, "packages/a").apply { mkdirs() }
+        val second = File(root, "packages/b").apply { mkdirs() }
+        val changed = File(first, "alpha.py").apply { writeText("value = 1\n") }
+        val adapter = Path.of(requireNotNull(System.getProperty("affected.test.pytestAdapter")))
+        val modules = modules(root.path, "pkg-a", "packages/a", "pkg-b", "packages/b")
+
+        val command = pythonCommands(
+            root.path,
+            listOf("pkg-a:test", "pkg-b:test"),
+            modules,
+            BuildChanges(listOf(changed.path), setOf(changed.path), comparedToBase = true),
+            adapter,
+        ).single()
+
+        assertEquals(listOf("python", adapter.toString()), command.arguments.take(2))
+        assertEquals(listOf("--", "packages/a", "packages/b"), command.arguments.takeLast(3))
+        val payload = Base64.getUrlDecoder().decode(command.arguments[2]).toString(StandardCharsets.UTF_8)
+        val context = JsonParser.parseString(payload).asJsonObject
+        assertEquals(listOf("packages/a", "packages/b"), context["roots"].asJsonArray.map { it.asString })
+        assertEquals(listOf("packages/a", "packages/b"), context["packages"].asJsonArray.map { it.asString })
+        assertEquals(listOf("packages/a/alpha.py"), context["changes"].asJsonArray.map { it.asString })
+        assertFalse(payload.contains(root.path))
+        assertTrue(second.isDirectory)
+    }
+
+    @Test
+    fun `pytest keeps the native full command without an exact comparison`() {
+        val root = createTempDirectory("pytest-full").toFile()
+        val directory = File(root, "packages/a").apply { mkdirs() }
+        val changed = File(directory, "alpha.py").apply { writeText("value = 1\n") }
+        val adapter = Path.of(requireNotNull(System.getProperty("affected.test.pytestAdapter")))
+        val modules = modules(root.path, "pkg-a", "packages/a")
+
+        val command = pythonCommands(
+            root.path,
+            listOf("pkg-a:test"),
+            modules,
+            BuildChanges(listOf(changed.path), setOf(changed.path), comparedToBase = false),
+            adapter,
+        ).single()
+
+        assertEquals(listOf("python", "-m", "pytest", "packages/a"), command.arguments)
+    }
+
+    @Test
+    fun `pytest keeps the native full command when any change is ineligible`() {
+        val root = createTempDirectory("pytest-ineligible").toFile()
+        val directory = File(root, "packages/a").apply { mkdirs() }
+        val changed = File(directory, "alpha.py").apply { writeText("value = 1\n") }
+        val adapter = Path.of(requireNotNull(System.getProperty("affected.test.pytestAdapter")))
+        val modules = modules(root.path, "pkg-a", "packages/a")
+
+        val command = pythonCommands(
+            root.path,
+            listOf("pkg-a:test"),
+            modules,
+            BuildChanges(listOf(changed.path), emptySet(), comparedToBase = true),
+            adapter,
+        ).single()
+
+        assertEquals(listOf("python", "-m", "pytest", "packages/a"), command.arguments)
     }
 
     @Test

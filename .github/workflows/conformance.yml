@@ -141,7 +141,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@06832c7b30a0129d7fb559bcc6e43d26f6374244 # v4.3.1
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: "3.13"
+          python-version: "3.14"
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "22"
@@ -166,7 +166,12 @@ jobs:
           coverage: none
 
       - name: Install Python fixture runner
-        run: python -m pip install pytest==8.4.1
+        run: python -m pip install pytest==9.1.1 ruff==0.16.2
+
+      - name: Check Python adapter
+        run: |
+          python -m ruff check core/src/main/python/affected_pytest.py
+          python -m ruff format --check core/src/main/python/affected_pytest.py
 
       - name: Run native CLI fixtures
         run: >-

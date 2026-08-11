@@ -84,6 +84,14 @@ generated files, symlinks and scan-limit failures keep the original package test
 script. Every exact and full package command remains in the same
 `SequentialProcessHandler` for its Node root.
 
+Supported pytest 8–9 projects run through the packaged Python adapter. Pytest
+first completes normal collection in the original process; the adapter then
+builds a bounded current AST import graph and deselects unrelated test files.
+Parametrized nodes stay grouped by file. Third-party plugins, conftest, pytest
+configuration, dynamic or external imports, file loading, resources, non-modified
+changes, symlinks and scan-limit failures leave the collected package plan intact.
+No persistent Python dependency baseline is written.
+
 `ChangeAnalyzer` and `TaskPlanner` have no IDE dependencies and are covered by
 unit tests. Keep them that way: return data and let the action format it. The
 `collector` module produces Java 8 agents, a JUnit listener, a Gradle init script
