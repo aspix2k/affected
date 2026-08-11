@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-08-11
+
+### Changed
+
+- Verify the exact Gradle and Maven test-selection contract on Linux, macOS and Windows across compatible JDK 17–26 and build-tool version pairings.
+
+### Fixed
+
+- Render Gradle and Maven decision lines with an ASCII separator so their output remains intact in Windows build logs.
+
 ## [1.11.0] - 2026-08-11
 
 ### Added
@@ -178,7 +188,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v1.11.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v1.11.1...HEAD
+[1.11.1]: https://github.com/aspix2k/affected/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/aspix2k/affected/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/aspix2k/affected/compare/v1.9.1...v1.10.0
 [1.9.1]: https://github.com/aspix2k/affected/compare/v1.9.0...v1.9.1

@@ -274,7 +274,7 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
     private static void report(String display, String decision) {
         try {
             String safeDisplay = display.matches("[A-Za-z0-9_.:-]{1,200}") ? display : "maven:test";
-            if (System.out != null) System.out.println("[Affected] " + safeDisplay + " — " + decision);
+            if (System.out != null) System.out.println("[Affected] " + safeDisplay + " - " + decision);
         } catch (RuntimeException ignored) {
         }
     }

@@ -1,0 +1,87 @@
+name: Exact-impact conformance
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/conformance.yml"
+      - "collector/**"
+      - "gradle/**"
+      - "gradlew"
+      - "gradlew.bat"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exact-impact:
+    name: ${{ matrix.os }} / JDK ${{ matrix.java }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            java: "17"
+            gradle8: "true"
+            symlinks: required
+          - os: ubuntu-latest
+            java: "26"
+            gradle8: "false"
+            symlinks: required
+          - os: macos-latest
+            java: "21"
+            gradle8: "true"
+            symlinks: required
+          - os: windows-latest
+            java: "21"
+            gradle8: "true"
+            symlinks: optional
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - uses: gradle/actions/setup-gradle@06832c7b30a0129d7fb559bcc6e43d26f6374244 # v4.3.1
+
+      - name: Run exact-impact fixtures
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            gradle=./gradlew.bat
+          else
+            gradle=./gradlew
+          fi
+          "$gradle" :collector:test \
+            --tests com.aspix2k.affected.collector.AffectedDependencySelectorTest \
+            --tests com.aspix2k.affected.collector.AffectedMavenConfigTest \
+            --tests com.aspix2k.affected.collector.CollectorContractTest \
+            --tests com.aspix2k.affected.collector.GradleInjectionTest \
+            --tests com.aspix2k.affected.collector.MavenInjectionTest \
+            -Paffected.conformance=true \
+            -Paffected.test.javaVersion=${{ matrix.java }} \
+            -Paffected.test.gradle8=${{ matrix.gradle8 }} \
+            -Paffected.test.symlinkMode=${{ matrix.symlinks }} \
+            --rerun-tasks --no-daemon --no-parallel --max-workers=1
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: exact-impact-${{ matrix.os }}-jdk${{ matrix.java }}
+          path: |
+            collector/build/test-results/test
+            collector/build/reports/tests/test
+            collector/build/reports/exact-impact-conformance
+          if-no-files-found: error

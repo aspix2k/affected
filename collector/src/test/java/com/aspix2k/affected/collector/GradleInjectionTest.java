@@ -122,6 +122,10 @@ public class GradleInjectionTest {
 
     @Test(timeout = 120_000L)
     public void gradleEightSelectsExactTestClasses() throws Exception {
+        Assume.assumeTrue(
+            "Gradle 8.14 cannot run on this conformance JDK",
+            Boolean.parseBoolean(System.getProperty("affected.test.gradle8", "true"))
+        );
         Path project = temporary.newFolder("gradle-eight-project").toPath();
         Path baselineOutput = temporary.newFolder("gradle-eight-baseline-output").toPath();
         Path exactOutput = temporary.newFolder("gradle-eight-exact-output").toPath();
@@ -181,11 +185,7 @@ public class GradleInjectionTest {
         assertComplete(baselineOutput, 5, baseline.getOutput());
         promote(baselineOutput, project.resolve(".affected/maps"));
         Path link = project.resolve("test-classes-link");
-        try {
-            Files.createSymbolicLink(link, project.resolve("build/classes/java/test"));
-        } catch (UnsupportedOperationException | java.io.IOException failure) {
-            Assume.assumeNoException(failure);
-        }
+        PlatformCapabilities.createSymbolicLink(link, project.resolve("build/classes/java/test"));
         Path alphaTest = project.resolve("src/test/java/fixture/AlphaTest.java");
         write(alphaTest, read(alphaTest).replace("Executions.mark(\"AlphaTest\")", "Executions.mark(\"AlphaTest\"); int changed = 1"));
         clearExecuted(project);
@@ -208,7 +208,7 @@ public class GradleInjectionTest {
     }
 
     private static void assertDecision(BuildResult result, String task, String decision) {
-        String expected = "[Affected] " + task + " — " + decision;
+        String expected = "[Affected] " + task + " - " + decision;
         assertTrue(result.getOutput(), result.getOutput().contains(expected));
         assertEquals(result.getOutput(), 1, occurrences(result.getOutput(), expected));
     }

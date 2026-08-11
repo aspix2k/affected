@@ -196,6 +196,43 @@ public class AffectedDependencySelectorTest {
         assertEquals(AffectedDependencySelector.Reason.INPUT_CHANGED, input.getReason());
     }
 
+    @Test
+    public void recordsExactSelectionOverheadWithoutAThreshold() throws Exception {
+        String reportPath = System.getProperty("affected.test.conformanceReport");
+        Path maps = temporary.newFolder("overhead-maps").toPath();
+        artifactMap(maps, "task", artifact("Alpha", "alpha-1"), artifact("Beta", "beta-1"));
+        List<AffectedDependencySelector.Artifact> current = Arrays.asList(
+            artifact("Alpha", "alpha-2"),
+            artifact("Beta", "beta-1")
+        );
+        int iterations = 100;
+        long started = System.nanoTime();
+        for (int iteration = 0; iteration < iterations; iteration++) {
+            AffectedDependencySelector.Decision decision = AffectedDependencySelector.select(
+                maps,
+                "collector",
+                "task",
+                "runtime",
+                "input",
+                current
+            );
+            assertEquals(AffectedDependencySelector.Kind.CLASSES, decision.getKind());
+            assertEquals(Collections.singletonList("fixture.AlphaTest"), decision.getTestClasses());
+        }
+        long elapsed = System.nanoTime() - started;
+        if (reportPath == null) return;
+        Path report = java.nio.file.Paths.get(reportPath);
+        Files.createDirectories(report.getParent());
+        Files.write(
+            report,
+            ("format=1\nmeasurement=selector-map-read\niterations=" + iterations +
+                "\nselectionNanos=" + elapsed + "\n").getBytes(StandardCharsets.UTF_8)
+        );
+        System.out.println(
+            "[Affected conformance] selectorMapRead iterations=" + iterations + " nanos=" + elapsed
+        );
+    }
+
     private static void artifactMap(
         Path maps,
         String task,

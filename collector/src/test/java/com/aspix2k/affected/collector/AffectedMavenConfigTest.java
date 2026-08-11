@@ -4,11 +4,14 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.Properties;
+import java.util.regex.Pattern;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
@@ -110,6 +113,34 @@ public class AffectedMavenConfigTest {
 
         assertEquals("first-task", AffectedMavenConfig.read(manifest, first).getTask());
         assertEquals("second-task", AffectedMavenConfig.read(manifest, second).getTask());
+    }
+
+    @Test
+    public void nativePathsAndAtomicReplacementPreserveTheLatestConfiguration() throws Exception {
+        Path root = temporary.newFolder("Case Project").toPath();
+        Path output = temporary.newFolder("output with spaces").toPath();
+        Path maps = temporary.newFolder("maps with spaces").toPath();
+        Path manifest = temporary.getRoot().toPath().resolve("native-paths.manifest");
+        AffectedMavenConfig.write(manifest, Collections.singletonList(config(root, output, maps, "first-task")));
+        AffectedMavenConfig.write(manifest, Collections.singletonList(config(root, output, maps, "second-task")));
+
+        Path caseAlias = root.resolveSibling(root.getFileName().toString().toLowerCase(Locale.ROOT));
+        boolean caseSensitive = !Files.exists(caseAlias);
+        Path requestedRoot = caseSensitive ? root : caseAlias;
+        if (!caseSensitive) assertEquals(true, Files.isSameFile(root, caseAlias));
+        AffectedMavenConfig.ProjectConfig actual = AffectedMavenConfig.read(manifest, requestedRoot);
+
+        assertEquals("second-task", actual.getTask());
+        assertEquals(2, actual.getClasspath().split(Pattern.quote(File.pathSeparator), -1).length);
+        try (java.util.stream.Stream<Path> files = Files.list(manifest.getParent())) {
+            assertEquals(0, files.filter(path -> path.getFileName().toString().endsWith(".tmp")).count());
+        }
+        if (System.getProperty("affected.test.conformanceReport") != null) {
+            System.out.println(
+                "[Affected conformance] filesystemCase=" + (caseSensitive ? "sensitive" : "insensitive") +
+                    " pathSeparator=" + (int) File.pathSeparatorChar + " atomicReplacement=true"
+            );
+        }
     }
 
     private static AffectedMavenConfig.ProjectConfig config(

@@ -5,7 +5,6 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
-import org.junit.Assume;
 import org.junit.platform.engine.EngineDiscoveryRequest;
 import org.junit.platform.engine.EngineExecutionListener;
 import org.junit.platform.engine.ExecutionRequest;
@@ -169,11 +168,7 @@ public class CollectorContractTest {
     @Test
     public void propertyCodeSourceAliasesRemainAllowlisted() throws Exception {
         Path alias = temporary.getRoot().toPath().resolve("classes-alias");
-        try {
-            Files.createSymbolicLink(alias, codeSource(ObservedFixture.class).toRealPath());
-        } catch (UnsupportedOperationException | java.io.IOException failure) {
-            Assume.assumeNoException(failure);
-        }
+        PlatformCapabilities.createSymbolicLink(alias, codeSource(ObservedFixture.class).toRealPath());
         try {
             System.setProperty(AffectedCollectorAgent.CODE_SOURCES_PROPERTY, alias.toString());
             AffectedCollectorAgent.CollectorState state = new AffectedCollectorAgent.CollectorState();
@@ -493,11 +488,7 @@ public class CollectorContractTest {
         Path workerLink = outputRoot.resolve(
             "worker-" + sha256("worker-1".getBytes(StandardCharsets.UTF_8))
         );
-        try {
-            Files.createSymbolicLink(workerLink, outside);
-        } catch (UnsupportedOperationException | java.io.IOException failure) {
-            Assume.assumeNoException(failure);
-        }
+        PlatformCapabilities.createSymbolicLink(workerLink, outside);
         System.setProperty(CollectorOutput.OUTPUT_PROPERTY, outputRoot.toString());
         System.setProperty(CollectorOutput.WORKER_PROPERTY, "worker-1");
 
