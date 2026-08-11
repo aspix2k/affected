@@ -112,6 +112,10 @@ class NodeTestSelectionTest {
         File(pnpm.root, "pnpm-workspace.yaml").writeText("packages:\n  - 'packages/*'\n")
         val yarn = exactJestWorkspace()
         File(yarn.root, "yarn.lock").writeText("")
+        val declaredYarn = exactJestWorkspace()
+        File(declaredYarn.root, "package.json").writeText(
+            """{ "name": "root", "private": true, "packageManager": "yarn@4.9.2", "workspaces": ["packages/*"] }""",
+        )
 
         assertEquals(
             listOf(
@@ -138,6 +142,19 @@ class NodeTestSelectionTest {
                 "src/alpha.js",
             ),
             exactCommands(yarn.root, "@app/alpha:test", yarn.changed).single().arguments,
+        )
+        assertEquals(
+            listOf(
+                "yarn",
+                "workspace",
+                "@app/alpha",
+                "exec",
+                "jest",
+                "--findRelatedTests",
+                "--passWithNoTests",
+                "src/alpha.js",
+            ),
+            exactCommands(declaredYarn.root, "@app/alpha:test", declaredYarn.changed).single().arguments,
         )
     }
 
@@ -208,6 +225,30 @@ class NodeTestSelectionTest {
         manifest.writeText(manifest.readText().replace("\n}", ",\n  \"overrides\": { \"jest\": \"31.0.0\" }\n}"))
 
         assertFull(exact.fixture, exact.changed)
+    }
+
+    @Test
+    fun `ambiguous package managers and runner declarations keep the full package command`() {
+        val managers = exactJestWorkspace()
+        File(managers.root, "yarn.lock").writeText("")
+        File(managers.root, "package-lock.json").writeText("{}")
+        val unsupported = exactJestWorkspace()
+        File(unsupported.root, "bun.lock").writeText("")
+        val dependencies = exactJestWorkspace()
+        val manifest = File(dependencies.root, "packages/alpha/package.json")
+        manifest.writeText(
+            manifest.readText().replace(
+                "\"devDependencies\": { \"jest\": \"^30.0.0\" }",
+                "\"dependencies\": { \"jest\": \"^29.0.0\" },\n  \"devDependencies\": { \"jest\": \"^30.0.0\" }",
+            ),
+        )
+
+        assertEquals(
+            listOf("yarn", "workspace", "@app/alpha", "test"),
+            exactCommands(managers.root, "@app/alpha:test", managers.changed).single().arguments,
+        )
+        assertFull(unsupported.fixture, unsupported.changed)
+        assertFull(dependencies.fixture, dependencies.changed)
     }
 
     @Test

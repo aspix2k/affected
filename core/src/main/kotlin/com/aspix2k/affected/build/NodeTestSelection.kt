@@ -25,6 +25,7 @@ internal fun nodeRelatedTestSelections(
 ): Map<String, NodeRelatedTestSelection> = runCatching {
     val rootPath = root.toPath().toAbsolutePath().normalize()
     if (Files.isSymbolicLink(rootPath) || !Files.isDirectory(rootPath, LinkOption.NOFOLLOW_LINKS)) return emptyMap()
+    if (unambiguousNodeManager(root) == null) return emptyMap()
 
     val modules = NodeWorkspaces.parse(root)
     if (modules.isEmpty()) return emptyMap()
@@ -169,10 +170,37 @@ private fun JsonObject.dependencyVersions(): Map<String, String>? {
         if (!value.isJsonObject) return null
         for ((name, version) in value.asJsonObject.entrySet()) {
             if (!version.isJsonPrimitive || !version.asJsonPrimitive.isString) return null
-            versions[name] = version.asString
+            if (versions.put(name, version.asString) != null) return null
         }
     }
     return versions
+}
+
+internal fun unambiguousNodeManager(root: File): String? {
+    val rootPath = root.toPath()
+    if (NODE_MANAGER_FILES.any { name ->
+            val path = rootPath.resolve(name)
+            Files.exists(path, LinkOption.NOFOLLOW_LINKS) &&
+                !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+        }
+    ) {
+        return null
+    }
+    if (NODE_UNSUPPORTED_MANAGER_FILES.any { Files.exists(rootPath.resolve(it), LinkOption.NOFOLLOW_LINKS) }) {
+        return null
+    }
+    val manifest = readJson(rootPath.resolve("package.json")) ?: return null
+    val packageManager = manifest.get("packageManager")?.let { value ->
+        if (!value.isJsonPrimitive || !value.asJsonPrimitive.isString) return null
+        value.asString.substringBefore('@').takeIf(SUPPORTED_NODE_MANAGERS::contains) ?: return null
+    }
+    val managers = buildSet {
+        if (NODE_PNPM_MARKERS.any { Files.exists(rootPath.resolve(it), LinkOption.NOFOLLOW_LINKS) }) add("pnpm")
+        if (Files.exists(rootPath.resolve("yarn.lock"), LinkOption.NOFOLLOW_LINKS)) add("yarn")
+        if (NODE_NPM_MARKERS.any { Files.exists(rootPath.resolve(it), LinkOption.NOFOLLOW_LINKS) }) add("npm")
+        packageManager?.let(::add)
+    }
+    return if (managers.size <= 1) managers.singleOrNull() ?: "npm" else null
 }
 
 private data class NodeScanBudget(
@@ -242,7 +270,7 @@ private fun safeNodeSource(source: Path, budget: NodeScanBudget): Boolean {
 }
 
 private val SIMPLE_VERSION = Regex("""[~^]?(\d+)\.\d+(?:\.\d+)?""")
-private val DEPENDENCY_FIELDS = listOf("dependencies", "devDependencies", "optionalDependencies")
+private val DEPENDENCY_FIELDS = listOf("dependencies", "devDependencies", "optionalDependencies", "peerDependencies")
 private val RELATED_SOURCE_EXTENSIONS = setOf("js", "jsx", "ts", "tsx", "mjs", "cjs")
 private val SCANNED_SOURCE_EXTENSIONS = RELATED_SOURCE_EXTENSIONS
 private val TRANSFORMED_SOURCE_EXTENSIONS = setOf("vue", "svelte")
@@ -303,6 +331,11 @@ private val NODE_SCAN_IGNORED = setOf(
     ".cache",
 )
 private val NODE_GENERATED_DIRECTORIES = setOf("build", "out", "dist", "target")
+private val SUPPORTED_NODE_MANAGERS = setOf("npm", "yarn", "pnpm")
+private val NODE_PNPM_MARKERS = setOf("pnpm-lock.yaml", "pnpm-workspace.yaml")
+private val NODE_NPM_MARKERS = setOf("package-lock.json", "npm-shrinkwrap.json")
+private val NODE_UNSUPPORTED_MANAGER_FILES = setOf("bun.lock", "bun.lockb", "deno.lock")
+private val NODE_MANAGER_FILES = NODE_PNPM_MARKERS + NODE_NPM_MARKERS + NODE_UNSUPPORTED_MANAGER_FILES + "yarn.lock"
 private const val MAX_NODE_DEPTH = 7
 private const val MAX_NODE_DIRECTORIES = 4096
 private const val MAX_NODE_SOURCE_FILES = 4096

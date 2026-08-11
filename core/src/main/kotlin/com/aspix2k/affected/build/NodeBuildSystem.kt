@@ -154,7 +154,7 @@ private fun nodeRelatedTestCommand(
     )
 }
 
-private fun nodeManager(root: File): String = when {
+private fun nodeManager(root: File): String = unambiguousNodeManager(root) ?: when {
     File(root, "pnpm-lock.yaml").isFile || File(root, "pnpm-workspace.yaml").isFile -> "pnpm"
     File(root, "yarn.lock").isFile -> "yarn"
     else -> "npm"
