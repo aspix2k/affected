@@ -62,7 +62,10 @@ class CliAdapterConformanceTest {
 
     @Test
     fun `PHPUnit command runs both selected packages`() = fixture("composer") { root ->
-        execute(root, listOf("composer", "install", "--no-interaction", "--no-progress", "--prefer-dist"))
+        execute(
+            root,
+            listOf("composer", "install", "--no-interaction", "--no-progress", "--no-plugins", "--no-scripts"),
+        )
         val modules = ComposerPackages.parse(root).filter(BuildModule::hasTests)
         val output = execute(
             root,
