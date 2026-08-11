@@ -7,6 +7,7 @@ object CargoMetadata {
     private fun String.normalizeSeparators(): String = replace('\\', '/')
 
     fun parse(json: String, root: String): List<BuildModule> {
+        val normalizedRoot = root.normalizeSeparators()
         val packages = runCatching {
             JsonParser.parseString(json).asJsonObject.getAsJsonArray("packages")
         }.getOrNull() ?: return emptyList()
@@ -35,16 +36,16 @@ object CargoMetadata {
                     ?: return emptyList()
             }
                 .filter { it in names }
-                .mapTo(HashSet()) { "$root|$it" }
+                .mapTo(HashSet()) { "$normalizedRoot|$it" }
 
             BuildModule(
                 id = name,
-                root = root,
+                root = normalizedRoot,
                 contentRoots = listOf(directory),
                 testTask = TEST,
                 compileTask = COMPILE,
                 hasTests = true,
-                dependencies = dependencies - "$root|$name",
+                dependencies = dependencies - "$normalizedRoot|$name",
             )
         }
     }
