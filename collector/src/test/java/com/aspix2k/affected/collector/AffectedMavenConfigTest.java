@@ -29,6 +29,7 @@ public class AffectedMavenConfigTest {
             maps.toRealPath().toString(),
             "collector-version",
             root.toRealPath().toUri() + "|test",
+            "fixture:app:test",
             "runtime",
             true,
             root.resolve("target/classes").toString(),
@@ -43,6 +44,7 @@ public class AffectedMavenConfigTest {
 
         assertEquals("maven", properties.getProperty("affected.collector.runner"));
         assertEquals(expected.getTask(), properties.getProperty("affected.collector.task"));
+        assertEquals(expected.getDisplay(), properties.getProperty("affected.collector.display"));
         assertEquals(expected.getCodeSources(), properties.getProperty("affected.collector.codeSources"));
         assertEquals(expected.getClasspath(), properties.getProperty("affected.collector.classpath"));
     }
@@ -76,6 +78,7 @@ public class AffectedMavenConfigTest {
             maps.toString(),
             "version",
             "correct-task",
+            "fixture:app:test",
             "runtime",
             true,
             root.resolve("target/classes").toString(),
@@ -121,6 +124,7 @@ public class AffectedMavenConfigTest {
             maps.toRealPath().toString(),
             "collector-version",
             task,
+            "fixture:" + task + ":test",
             "runtime",
             true,
             root.resolve("target/classes").toString(),

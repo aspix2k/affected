@@ -53,20 +53,38 @@ class AffectedCollectorSelectionSpec implements Spec<Task>, Serializable {
                 .collect { it.toRealPath(LinkOption.NOFOLLOW_LINKS) }
                 .unique()
                 .sort { first, second -> first.toString() <=> second.toString() }
-            if (codeSources.isEmpty()) return true
+            if (codeSources.isEmpty()) {
+                report(task, AffectedDependencySelector.Decision.full(
+                    AffectedDependencySelector.Reason.NO_PRODUCTION_CLASSES
+                ))
+                return true
+            }
+            if (!(task.options instanceof JUnitPlatformOptions)) {
+                report(task, AffectedDependencySelector.Decision.full(
+                    AffectedDependencySelector.Reason.UNSUPPORTED_FRAMEWORK
+                ))
+                return true
+            }
 
             Map<String, Object> runtime = runtimeFingerprint(task)
             String input = inputFingerprint(testClasses, classpath)
             List<AffectedDependencySelector.Artifact> catalog = classCatalog(codeSources)
-            AffectedDependencySelector.Decision decision = AffectedDependencySelector.select(
-                new File(required(MAPS)).toPath(),
-                required(VERSION),
-                taskKey,
-                runtime.fingerprint as String,
-                input,
-                catalog
-            )
-            if (decision.kind == AffectedDependencySelector.Kind.EMPTY) return false
+            AffectedDependencySelector.Decision decision = runtime.allTests as boolean
+                ? AffectedDependencySelector.select(
+                    new File(required(MAPS)).toPath(),
+                    required(VERSION),
+                    taskKey,
+                    runtime.fingerprint as String,
+                    input,
+                    catalog
+                )
+                : AffectedDependencySelector.Decision.full(
+                    AffectedDependencySelector.Reason.EXISTING_TEST_FILTER
+                )
+            if (decision.kind == AffectedDependencySelector.Kind.EMPTY) {
+                report(task, decision)
+                return false
+            }
 
             Path taskOutput = secureTaskOutput(output, taskKey)
             boolean allTests = runtime.allTests as boolean
@@ -79,10 +97,23 @@ class AffectedCollectorSelectionSpec implements Spec<Task>, Serializable {
             if (decision.kind == AffectedDependencySelector.Kind.CLASSES) {
                 task.filter.setIncludePatterns(decision.testClasses as String[])
             }
+            report(task, decision)
             return true
         } catch (Exception ignored) {
             rawTask.logger.info("Affected collector fell back to the full task: {}", ignored.toString())
+            report(rawTask, AffectedDependencySelector.Decision.full(
+                AffectedDependencySelector.Reason.COLLECTOR_ERROR
+            ))
             return true
+        }
+    }
+
+    private static void report(Task task, AffectedDependencySelector.Decision decision) {
+        try {
+            String display = task.path
+            if (display == null || !display.matches("[:A-Za-z0-9_.-]{1,500}")) display = "Gradle test"
+            task.logger.lifecycle("[Affected] {} — {}", display, decision.describe())
+        } catch (Exception ignored) {
         }
     }
 

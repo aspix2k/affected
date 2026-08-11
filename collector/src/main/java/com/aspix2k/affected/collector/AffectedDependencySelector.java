@@ -41,13 +41,19 @@ public final class AffectedDependencySelector {
                 runtimeFingerprint,
                 inputFingerprint
             );
-            Map<ArtifactKey, Artifact> current = unique(currentArtifacts);
-            if (!baseline.artifacts.keySet().containsAll(current.keySet())) return Decision.all();
+            Map<ArtifactKey, Artifact> current;
+            try {
+                current = unique(currentArtifacts);
+            } catch (Exception failure) {
+                return Decision.full(Reason.CLASS_SET_CHANGED);
+            }
+            if (!baseline.artifacts.keySet().equals(current.keySet())) {
+                return Decision.full(Reason.CLASS_SET_CHANGED);
+            }
 
             Set<ArtifactKey> changed = new LinkedHashSet<ArtifactKey>();
             for (Map.Entry<ArtifactKey, Artifact> entry : baseline.artifacts.entrySet()) {
                 Artifact value = current.get(entry.getKey());
-                if (value == null) return Decision.all();
                 if (!value.sha256.equals(entry.getValue().sha256)) changed.add(entry.getKey());
             }
 
@@ -61,8 +67,10 @@ public final class AffectedDependencySelector {
                 }
             }
             return selected.isEmpty() ? Decision.empty() : Decision.classes(selected);
+        } catch (SelectionFailure failure) {
+            return Decision.full(failure.reason);
         } catch (Exception failure) {
-            return Decision.all();
+            return Decision.full(Reason.COLLECTOR_ERROR);
         }
     }
 
@@ -78,60 +86,89 @@ public final class AffectedDependencySelector {
         required(runtimeFingerprint);
         required(inputFingerprint);
         Path mapsRoot = requestedMapsRoot.toAbsolutePath().normalize();
-        if (Files.isSymbolicLink(mapsRoot)) throw new IllegalStateException(mapsRoot.toString());
+        if (!Files.exists(mapsRoot, LinkOption.NOFOLLOW_LINKS)) {
+            throw new SelectionFailure(Reason.BASELINE_MISSING);
+        }
+        if (Files.isSymbolicLink(mapsRoot)
+            || !Files.isDirectory(mapsRoot, LinkOption.NOFOLLOW_LINKS)
+            || !Files.isReadable(mapsRoot)) {
+            throw new SelectionFailure(Reason.BASELINE_UNAVAILABLE);
+        }
         Path resolvedRoot = mapsRoot.toRealPath(LinkOption.NOFOLLOW_LINKS);
-        if (!Files.isDirectory(resolvedRoot) || !Files.isReadable(resolvedRoot)) {
-            throw new IllegalStateException(resolvedRoot.toString());
-        }
         Path map = resolvedRoot.resolve("map-" + sha256(taskKey) + ".map");
-        List<String> lines = readLines(map);
-        if (lines.size() < 11 || !FORMAT.equals(lines.get(0)) || !"schema=4".equals(lines.get(1))) {
-            throw new IllegalStateException("map header");
+        if (!Files.exists(map, LinkOption.NOFOLLOW_LINKS)) {
+            throw new SelectionFailure(Reason.BASELINE_MISSING);
         }
-        if (!collectorVersion.equals(value(lines.get(2), "collector="))
-            || !taskKey.equals(value(lines.get(3), "task="))
-            || !runtimeFingerprint.equals(value(lines.get(4), "runtime="))
-            || !inputFingerprint.equals(value(lines.get(5), "input="))) {
-            throw new IllegalStateException("map identity");
+        if (Files.isSymbolicLink(map)
+            || !Files.isRegularFile(map, LinkOption.NOFOLLOW_LINKS)
+            || !Files.isReadable(map)) {
+            throw new SelectionFailure(Reason.BASELINE_UNAVAILABLE);
         }
-        required(value(lines.get(6), "run="));
-        int expectedArtifacts = count(lines.get(7), "artifacts=");
-        int expectedRecords = count(lines.get(8), "records=");
-        String expectedChecksum = rawValue(lines.get(9), "checksum=");
-        if (!expectedChecksum.matches("[0-9a-f]{64}")) throw new IllegalStateException("checksum");
-        StringBuilder payload = new StringBuilder();
-        for (int index = 10; index < lines.size(); index++) payload.append(lines.get(index)).append('\n');
-        if (!sha256(payload.toString()).equals(expectedChecksum)) throw new IllegalStateException("checksum");
-
-        List<Artifact> artifacts = new ArrayList<Artifact>();
-        Map<String, Set<Artifact>> rawRecords = new LinkedHashMap<String, Set<Artifact>>();
-        for (int index = 10; index < lines.size(); index++) {
-            String line = lines.get(index);
-            if (line.startsWith("artifact=")) {
-                artifacts.add(parseArtifact(line.substring("artifact=".length())));
-            } else if (line.startsWith("record=")) {
-                parseRecord(line.substring("record=".length()), rawRecords);
-            } else {
-                throw new IllegalStateException("map entry");
+        try {
+            List<String> lines = readLines(map);
+            if (lines.size() < 2 || !FORMAT.equals(lines.get(0))) {
+                throw new SelectionFailure(Reason.BASELINE_CORRUPT);
             }
-        }
-        if (artifacts.size() != expectedArtifacts || rawRecords.size() != expectedRecords) {
-            throw new IllegalStateException("map counts");
-        }
-        if (artifacts.isEmpty() || rawRecords.isEmpty()) throw new IllegalStateException("empty map");
-        Map<ArtifactKey, Artifact> catalog = unique(artifacts);
-        Map<String, Set<ArtifactKey>> records = new LinkedHashMap<String, Set<ArtifactKey>>();
-        for (Map.Entry<String, Set<Artifact>> rawRecord : rawRecords.entrySet()) {
-            Set<ArtifactKey> dependencies = new LinkedHashSet<ArtifactKey>();
-            for (Artifact dependency : rawRecord.getValue()) {
-                ArtifactKey key = dependency.key();
-                if (!dependency.equals(catalog.get(key)) || !dependencies.add(key)) {
-                    throw new IllegalStateException("record dependency");
+            if (!lines.get(1).matches("schema=[0-9]+")) {
+                throw new SelectionFailure(Reason.BASELINE_CORRUPT);
+            }
+            if (!"schema=4".equals(lines.get(1))) throw new SelectionFailure(Reason.BASELINE_STALE);
+            if (lines.size() < 11) throw new SelectionFailure(Reason.BASELINE_CORRUPT);
+            if (!collectorVersion.equals(value(lines.get(2), "collector="))) {
+                throw new SelectionFailure(Reason.BASELINE_STALE);
+            }
+            if (!taskKey.equals(value(lines.get(3), "task="))) {
+                throw new SelectionFailure(Reason.BASELINE_CORRUPT);
+            }
+            if (!runtimeFingerprint.equals(value(lines.get(4), "runtime="))) {
+                throw new SelectionFailure(Reason.RUNTIME_CHANGED);
+            }
+            if (!inputFingerprint.equals(value(lines.get(5), "input="))) {
+                throw new SelectionFailure(Reason.INPUT_CHANGED);
+            }
+            required(value(lines.get(6), "run="));
+            int expectedArtifacts = count(lines.get(7), "artifacts=");
+            int expectedRecords = count(lines.get(8), "records=");
+            String expectedChecksum = rawValue(lines.get(9), "checksum=");
+            if (!expectedChecksum.matches("[0-9a-f]{64}")) throw new IllegalStateException("checksum");
+            StringBuilder payload = new StringBuilder();
+            for (int index = 10; index < lines.size(); index++) payload.append(lines.get(index)).append('\n');
+            if (!sha256(payload.toString()).equals(expectedChecksum)) throw new IllegalStateException("checksum");
+
+            List<Artifact> artifacts = new ArrayList<Artifact>();
+            Map<String, Set<Artifact>> rawRecords = new LinkedHashMap<String, Set<Artifact>>();
+            for (int index = 10; index < lines.size(); index++) {
+                String line = lines.get(index);
+                if (line.startsWith("artifact=")) {
+                    artifacts.add(parseArtifact(line.substring("artifact=".length())));
+                } else if (line.startsWith("record=")) {
+                    parseRecord(line.substring("record=".length()), rawRecords);
+                } else {
+                    throw new IllegalStateException("map entry");
                 }
             }
-            records.put(rawRecord.getKey(), dependencies);
+            if (artifacts.size() != expectedArtifacts || rawRecords.size() != expectedRecords) {
+                throw new IllegalStateException("map counts");
+            }
+            if (artifacts.isEmpty() || rawRecords.isEmpty()) throw new IllegalStateException("empty map");
+            Map<ArtifactKey, Artifact> catalog = unique(artifacts);
+            Map<String, Set<ArtifactKey>> records = new LinkedHashMap<String, Set<ArtifactKey>>();
+            for (Map.Entry<String, Set<Artifact>> rawRecord : rawRecords.entrySet()) {
+                Set<ArtifactKey> dependencies = new LinkedHashSet<ArtifactKey>();
+                for (Artifact dependency : rawRecord.getValue()) {
+                    ArtifactKey key = dependency.key();
+                    if (!dependency.equals(catalog.get(key)) || !dependencies.add(key)) {
+                        throw new IllegalStateException("record dependency");
+                    }
+                }
+                records.put(rawRecord.getKey(), dependencies);
+            }
+            return new Baseline(catalog, records);
+        } catch (SelectionFailure failure) {
+            throw failure;
+        } catch (Exception failure) {
+            throw new SelectionFailure(Reason.BASELINE_CORRUPT);
         }
-        return new Baseline(catalog, records);
     }
 
     private static void parseRecord(String value, Map<String, Set<Artifact>> records) throws Exception {
@@ -237,13 +274,38 @@ public final class AffectedDependencySelector {
         EMPTY
     }
 
+    public enum Reason {
+        NONE(""),
+        BASELINE_MISSING("baseline missing"),
+        BASELINE_STALE("baseline stale"),
+        BASELINE_CORRUPT("baseline corrupt"),
+        BASELINE_UNAVAILABLE("baseline unavailable"),
+        RUNTIME_CHANGED("runtime changed"),
+        INPUT_CHANGED("input changed"),
+        CLASS_SET_CHANGED("class set changed"),
+        EXISTING_TEST_FILTER("existing test filter"),
+        UNSUPPORTED_FRAMEWORK("unsupported framework"),
+        UNSUPPORTED_RUNTIME("unsupported runtime"),
+        UNSUPPORTED_CONFIGURATION("unsupported configuration"),
+        NO_PRODUCTION_CLASSES("no production classes"),
+        COLLECTOR_ERROR("collector error");
+
+        private final String description;
+
+        Reason(String description) {
+            this.description = description;
+        }
+    }
+
     public static final class Decision {
         private final Kind kind;
         private final List<String> testClasses;
+        private final Reason reason;
 
-        private Decision(Kind kind, List<String> testClasses) {
+        private Decision(Kind kind, List<String> testClasses, Reason reason) {
             this.kind = kind;
             this.testClasses = testClasses;
+            this.reason = reason;
         }
 
         public Kind getKind() {
@@ -254,16 +316,41 @@ public final class AffectedDependencySelector {
             return testClasses;
         }
 
-        private static Decision all() {
-            return new Decision(Kind.ALL, Collections.<String>emptyList());
+        public Reason getReason() {
+            return reason;
+        }
+
+        public String describe() {
+            if (kind == Kind.EMPTY) return "proven-empty";
+            if (kind == Kind.CLASSES) {
+                return "exact (" + testClasses.size() + " test class" + (testClasses.size() == 1 ? "" : "es") + ")";
+            }
+            return "full fallback (" + reason.description + ")";
+        }
+
+        public static Decision full(Reason reason) {
+            if (reason == null || reason == Reason.NONE) throw new IllegalArgumentException("reason");
+            return new Decision(Kind.ALL, Collections.<String>emptyList(), reason);
         }
 
         private static Decision empty() {
-            return new Decision(Kind.EMPTY, Collections.<String>emptyList());
+            return new Decision(Kind.EMPTY, Collections.<String>emptyList(), Reason.NONE);
         }
 
         private static Decision classes(Set<String> classes) {
-            return new Decision(Kind.CLASSES, Collections.unmodifiableList(new ArrayList<String>(classes)));
+            return new Decision(
+                Kind.CLASSES,
+                Collections.unmodifiableList(new ArrayList<String>(classes)),
+                Reason.NONE
+            );
+        }
+    }
+
+    private static final class SelectionFailure extends Exception {
+        private final Reason reason;
+
+        private SelectionFailure(Reason reason) {
+            this.reason = reason;
         }
     }
 

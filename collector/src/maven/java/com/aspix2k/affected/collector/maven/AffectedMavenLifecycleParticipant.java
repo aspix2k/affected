@@ -1,6 +1,7 @@
 package com.aspix2k.affected.collector.maven;
 
 import com.aspix2k.affected.collector.AffectedMavenConfig;
+import com.aspix2k.affected.collector.AffectedDependencySelector;
 import org.apache.maven.AbstractMavenLifecycleParticipant;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Plugin;
@@ -16,6 +17,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -28,21 +30,41 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
     private static final String MAPS = "affected.collector.maps";
     private static final String VERSION = "affected.collector.version";
     private static final String DEBUG = "maven.surefire.debug";
+    private List<AffectedMavenConfig.ProjectConfig> diagnostics = Collections.emptyList();
 
     @Override
     public void afterProjectsRead(MavenSession session) {
         Package runtimePackage = MavenSession.class.getPackage();
-        if (runtimePackage == null || !supportedRuntime(runtimePackage.getImplementationVersion())) return;
+        if (runtimePackage == null || !supportedRuntime(runtimePackage.getImplementationVersion())) {
+            reportProjects(session.getProjects(), AffectedDependencySelector.Reason.UNSUPPORTED_RUNTIME);
+            return;
+        }
         Properties properties = new Properties();
         properties.putAll(session.getSystemProperties());
         properties.putAll(session.getUserProperties());
         try {
             Preparation preparation = prepare(session.getProjects(), properties, session.getUserProperties());
+            diagnostics = preparation.projects;
+            for (String display : preparation.fallbacks) {
+                report(display, AffectedDependencySelector.Decision.full(
+                    AffectedDependencySelector.Reason.UNSUPPORTED_CONFIGURATION
+                ).describe());
+            }
             if (preparation.kind == Kind.INJECTED) {
                 session.getUserProperties().setProperty(DEBUG, preparation.debugArgument);
             }
         } catch (Exception ignored) {
+            diagnostics = Collections.emptyList();
+            reportProjects(session.getProjects(), AffectedDependencySelector.Reason.COLLECTOR_ERROR);
         }
+    }
+
+    @Override
+    public void afterSessionEnd(MavenSession session) {
+        for (AffectedMavenConfig.ProjectConfig project : diagnostics) {
+            report(project.getDisplay(), decision(project));
+        }
+        diagnostics = Collections.emptyList();
     }
 
     public static boolean supportedRuntime(String version) {
@@ -59,13 +81,17 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
         Properties runtimeProperties
     ) throws Exception {
         String existingDebug = properties.getProperty(DEBUG);
-        if ("true".equalsIgnoreCase(trim(existingDebug))) return Preparation.unchanged();
+        if ("true".equalsIgnoreCase(trim(existingDebug))) {
+            return Preparation.unchanged(displays(projects));
+        }
         Path agent = regularFile(properties, MAVEN_AGENT);
         Path output = directory(properties, OUTPUT);
         Path maps = directory(properties, MAPS);
         String version = required(properties, VERSION);
         List<AffectedMavenConfig.ProjectConfig> records = new ArrayList<AffectedMavenConfig.ProjectConfig>();
+        List<String> fallbacks = new ArrayList<String>();
         for (MavenProject project : projects) {
+            if ("pom".equals(project.getPackaging())) continue;
             AffectedMavenConfig.ProjectConfig record = project(
                 project,
                 properties,
@@ -74,9 +100,10 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
                 maps,
                 version
             );
-            if (record != null) records.add(record);
+            if (record == null) fallbacks.add(display(project));
+            else records.add(record);
         }
-        if (records.isEmpty()) return Preparation.unchanged();
+        if (records.isEmpty()) return Preparation.unchanged(fallbacks);
         Path manifest = output.resolve("maven-projects.manifest");
         AffectedMavenConfig.write(manifest, records);
         String agentArgument = quote("-javaagent:" + agent + "=" + manifest.toRealPath(LinkOption.NOFOLLOW_LINKS));
@@ -84,7 +111,9 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
         return new Preparation(
             Kind.INJECTED,
             manifest.toRealPath(LinkOption.NOFOLLOW_LINKS),
-            debug.isEmpty() ? agentArgument : debug + " " + agentArgument
+            debug.isEmpty() ? agentArgument : debug + " " + agentArgument,
+            records,
+            fallbacks
         );
     }
 
@@ -113,6 +142,7 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
             maps.toString(),
             version,
             basedir.toUri() + "|test",
+            display(project),
             runtime(project, plugin, configurations, runtimeProperties),
             allTests(properties),
             codeSources,
@@ -219,6 +249,91 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
         return result.toString();
     }
 
+    private static List<String> displays(List<MavenProject> projects) {
+        List<String> result = new ArrayList<String>();
+        for (MavenProject project : projects) {
+            if (!"pom".equals(project.getPackaging())) result.add(display(project));
+        }
+        return result;
+    }
+
+    private static String display(MavenProject project) {
+        String group = project.getGroupId();
+        String artifact = project.getArtifactId();
+        return group == null || artifact == null ? "maven:test" : group + ":" + artifact + ":test";
+    }
+
+    private static void reportProjects(
+        List<MavenProject> projects,
+        AffectedDependencySelector.Reason reason
+    ) {
+        String decision = AffectedDependencySelector.Decision.full(reason).describe();
+        for (String display : displays(projects)) report(display, decision);
+    }
+
+    private static void report(String display, String decision) {
+        try {
+            String safeDisplay = display.matches("[A-Za-z0-9_.:-]{1,200}") ? display : "maven:test";
+            if (System.out != null) System.out.println("[Affected] " + safeDisplay + " — " + decision);
+        } catch (RuntimeException ignored) {
+        }
+    }
+
+    private static String decision(AffectedMavenConfig.ProjectConfig project) {
+        try {
+            Path output = Paths.get(project.getOutput()).toAbsolutePath().normalize();
+            if (Files.isSymbolicLink(output) || !Files.isDirectory(output, LinkOption.NOFOLLOW_LINKS)) {
+                throw new IllegalStateException("output");
+            }
+            Path root = output.toRealPath(LinkOption.NOFOLLOW_LINKS);
+            Path task = root.resolve("task-" + sha256(project.getTask()));
+            if (Files.isSymbolicLink(task) || !Files.isDirectory(task, LinkOption.NOFOLLOW_LINKS)) {
+                throw new IllegalStateException("task output");
+            }
+            Path realTask = task.toRealPath(LinkOption.NOFOLLOW_LINKS);
+            if (!root.equals(realTask.getParent())) throw new IllegalStateException("task output");
+            Path manifest = realTask.resolve("decision.manifest");
+            if (Files.isSymbolicLink(manifest)
+                || !Files.isRegularFile(manifest, LinkOption.NOFOLLOW_LINKS)
+                || !Files.isReadable(manifest)
+                || Files.size(manifest) > 1024L) {
+                throw new IllegalStateException("decision manifest");
+            }
+            String content = new String(Files.readAllBytes(manifest), StandardCharsets.UTF_8);
+            String prefix = "format=1\ndecision=";
+            if (!content.startsWith(prefix) || !content.endsWith("\n") || content.indexOf('\r') >= 0) {
+                throw new IllegalStateException("decision manifest");
+            }
+            String encoded = content.substring(prefix.length(), content.length() - 1);
+            byte[] bytes = Base64.getUrlDecoder().decode(encoded);
+            if (!Base64.getUrlEncoder().withoutPadding().encodeToString(bytes).equals(encoded)) {
+                throw new IllegalStateException("decision manifest");
+            }
+            String value = new String(bytes, StandardCharsets.UTF_8);
+            if (!validDecision(value)) throw new IllegalStateException("decision manifest");
+            return value;
+        } catch (Exception ignored) {
+            return AffectedDependencySelector.Decision.full(
+                AffectedDependencySelector.Reason.COLLECTOR_ERROR
+            ).describe();
+        }
+    }
+
+    private static boolean validDecision(String value) {
+        if ("proven-empty".equals(value)
+            || "exact (1 test class)".equals(value)
+            || value.matches("exact \\((?:[2-9]|[1-9][0-9]{1,5}) test classes\\)")) {
+            return true;
+        }
+        for (AffectedDependencySelector.Reason reason : AffectedDependencySelector.Reason.values()) {
+            if (reason != AffectedDependencySelector.Reason.NONE
+                && AffectedDependencySelector.Decision.full(reason).describe().equals(value)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static String quote(String value) {
         if (value.indexOf('"') >= 0 || value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0) {
             throw new IllegalStateException("agent argument");
@@ -280,15 +395,33 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
         private final Kind kind;
         private final Path manifest;
         private final String debugArgument;
+        private final List<AffectedMavenConfig.ProjectConfig> projects;
+        private final List<String> fallbacks;
 
-        private Preparation(Kind kind, Path manifest, String debugArgument) {
+        private Preparation(
+            Kind kind,
+            Path manifest,
+            String debugArgument,
+            List<AffectedMavenConfig.ProjectConfig> projects,
+            List<String> fallbacks
+        ) {
             this.kind = kind;
             this.manifest = manifest;
             this.debugArgument = debugArgument;
+            this.projects = Collections.unmodifiableList(
+                new ArrayList<AffectedMavenConfig.ProjectConfig>(projects)
+            );
+            this.fallbacks = Collections.unmodifiableList(new ArrayList<String>(fallbacks));
         }
 
-        private static Preparation unchanged() {
-            return new Preparation(Kind.UNCHANGED, null, null);
+        private static Preparation unchanged(List<String> fallbacks) {
+            return new Preparation(
+                Kind.UNCHANGED,
+                null,
+                null,
+                Collections.<AffectedMavenConfig.ProjectConfig>emptyList(),
+                fallbacks
+            );
         }
 
         public Kind getKind() {
@@ -301,6 +434,14 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
 
         public String getDebugArgument() {
             return debugArgument;
+        }
+
+        public List<AffectedMavenConfig.ProjectConfig> getProjects() {
+            return projects;
+        }
+
+        public List<String> getFallbacks() {
+            return fallbacks;
         }
     }
 }

@@ -38,6 +38,7 @@ public class MavenInjectionTest {
         Result result = run(project, output, maps, mavenHomes().get(mavenHomes().size() - 1));
 
         assertEquals(result.log, 0, result.exitCode);
+        assertDecision(result.log, "fixture:app:test", "full fallback (baseline missing)");
         assertEquals(setOf("AlphaTest", "VintageOmegaTest", "ZetaBetaTest"), executedTests(project));
         Path task = onlyDirectory(output, result.log);
         assertTrue(result.log + fallback(output), Files.isRegularFile(task.resolve("task.manifest")));
@@ -80,6 +81,7 @@ public class MavenInjectionTest {
         Result exact = run(project, exactOutput, maps, mavenHome);
 
         assertEquals(exact.log, 0, exact.exitCode);
+        assertDecision(exact.log, "fixture:app:test", "exact (2 test classes)");
         assertEquals(setOf("AlphaTest", "SharedAlphaTest"), executedTests(project));
         assertTrue(read(onlyDirectory(exactOutput, exact.log).resolve("task.manifest")).contains("all=false"));
     }
@@ -94,6 +96,54 @@ public class MavenInjectionTest {
         Result result = run(project, output, maps, directory("affected.test.unsupportedMavenHome"));
 
         assertEquals(result.log, 0, result.exitCode);
+        assertDecision(result.log, "fixture:app:test", "full fallback (unsupported runtime)");
+        assertEquals(setOf("AlphaTest", "VintageOmegaTest", "ZetaBetaTest"), executedTests(project));
+        try (Stream<Path> files = Files.list(output)) {
+            assertEquals(result.log, 0, files.count());
+        }
+    }
+
+    @Test(timeout = 180_000L)
+    public void decisionStaysInMavenOutputWhenSurefireRedirectsTestOutput() throws Exception {
+        Path project = temporary.newFolder("redirected output project").toPath();
+        Path output = temporary.newFolder("redirected output collector").toPath();
+        Path maps = temporary.newFolder("redirected output maps").toPath();
+        writeFixture(project);
+        Path pom = project.resolve("pom.xml");
+        write(
+            pom,
+            read(pom).replace(
+                "<useModulePath>false</useModulePath>",
+                "<useModulePath>false</useModulePath><redirectTestOutputToFile>true</redirectTestOutputToFile>"
+            )
+        );
+
+        Result result = run(project, output, maps, mavenHomes().get(mavenHomes().size() - 1));
+
+        assertEquals(result.log, 0, result.exitCode);
+        assertDecision(result.log, "fixture:app:test", "full fallback (baseline missing)");
+        assertEquals(setOf("AlphaTest", "VintageOmegaTest", "ZetaBetaTest"), executedTests(project));
+    }
+
+    @Test(timeout = 180_000L)
+    public void unsupportedSurefireConfigurationReportsTheFullFallback() throws Exception {
+        Path project = temporary.newFolder("forkless project").toPath();
+        Path output = temporary.newFolder("forkless output").toPath();
+        Path maps = temporary.newFolder("forkless maps").toPath();
+        writeFixture(project);
+        Path pom = project.resolve("pom.xml");
+        write(
+            pom,
+            read(pom).replace(
+                "<useModulePath>false</useModulePath>",
+                "<useModulePath>false</useModulePath><reuseForks>false</reuseForks>"
+            )
+        );
+
+        Result result = run(project, output, maps, mavenHomes().get(mavenHomes().size() - 1));
+
+        assertEquals(result.log, 0, result.exitCode);
+        assertDecision(result.log, "fixture:app:test", "full fallback (unsupported configuration)");
         assertEquals(setOf("AlphaTest", "VintageOmegaTest", "ZetaBetaTest"), executedTests(project));
         try (Stream<Path> files = Files.list(output)) {
             assertEquals(result.log, 0, files.count());
@@ -134,6 +184,8 @@ public class MavenInjectionTest {
         Result exact = run(project, exactOutput, maps, mavenHome);
 
         assertEquals(exact.log, 0, exact.exitCode);
+        assertDecision(exact.log, "fixture:first:test", "exact (1 test class)");
+        assertDecision(exact.log, "fixture:second:test", "proven-empty");
         assertEquals(Collections.singleton("VintageOmegaTest"), executedTests(first));
         assertEquals(Collections.emptySet(), executedTests(second));
         assertEquals(exact.log, 2, directories(exactOutput).size());
@@ -160,6 +212,7 @@ public class MavenInjectionTest {
         Result exact = run(project, exactOutput, maps, mavenHome);
 
         assertEquals(exact.log, 0, exact.exitCode);
+        assertDecision(exact.log, "fixture:app:test", "exact (1 test class)");
         Path task = onlyDirectory(exactOutput, exact.log);
         String manifest = read(task.resolve("task.manifest"));
         assertEquals(
@@ -198,6 +251,22 @@ public class MavenInjectionTest {
         String content = Files.exists(log) ? read(log) : "";
         assertTrue(content, finished);
         return new Result(process.exitValue(), content, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
+    }
+
+    private static void assertDecision(String log, String task, String decision) {
+        String expected = "[Affected] " + task + " — " + decision;
+        assertTrue(log, log.contains(expected));
+        assertEquals(log, 1, occurrences(log, expected));
+    }
+
+    private static int occurrences(String value, String needle) {
+        int count = 0;
+        int offset = 0;
+        while ((offset = value.indexOf(needle, offset)) >= 0) {
+            count++;
+            offset += needle.length();
+        }
+        return count;
     }
 
     private static void writeFixture(Path project) throws Exception {

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-08-11
+
+### Added
+
+- Print one concise `exact`, `proven-empty`, or full-fallback decision for every supported Gradle test task and Maven reactor module in the original Run output.
+- Explain full fallbacks with stable reasons for missing, stale, corrupt, unavailable, or changed evidence, existing test filters, unsupported frameworks, and collector failures.
+
 ## [1.10.0] - 2026-08-11
 
 ### Added
@@ -171,7 +178,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v1.10.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/aspix2k/affected/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/aspix2k/affected/compare/v1.9.1...v1.10.0
 [1.9.1]: https://github.com/aspix2k/affected/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/aspix2k/affected/compare/v1.8.0...v1.9.0
