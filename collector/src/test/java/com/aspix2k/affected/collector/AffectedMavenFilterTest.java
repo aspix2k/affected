@@ -150,6 +150,7 @@ public class AffectedMavenFilterTest {
         properties.setProperty("affected.collector.display", "fixture:app:test");
         properties.setProperty("affected.collector.runtime", "runtime-seed");
         properties.setProperty("affected.collector.all", "true");
+        properties.setProperty("affected.collector.baselineEligible", "true");
         properties.setProperty("affected.collector.codeSources", root.resolve("classes").toString());
         properties.setProperty("affected.collector.testClasses", root.resolve("test-classes").toString());
         properties.setProperty(

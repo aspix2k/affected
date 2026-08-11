@@ -18,6 +18,7 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.idea.maven.execution.MavenRunConfigurationType
 import org.jetbrains.idea.maven.execution.MavenRunnerParameters
 import org.jetbrains.idea.maven.model.MavenId
+import org.jetbrains.idea.maven.model.MavenPlugin
 import org.jetbrains.idea.maven.project.MavenProjectsManager
 import java.io.File
 import java.nio.file.Path
@@ -45,7 +46,7 @@ class MavenBuildSystem : SuspendingBuildSystem {
                 id = data.id,
                 root = data.root,
                 contentRoots = listOf(data.directory),
-                testTask = TEST_GOAL,
+                testTask = data.testTask,
                 compileTask = COMPILE_GOAL,
                 hasTests = File(data.directory, "src/test").isDirectory,
             )
@@ -63,18 +64,28 @@ class MavenBuildSystem : SuspendingBuildSystem {
         val root: String,
         val directory: String,
         val dependencies: Set<String>,
+        val testTask: String,
     )
 
     private fun describe(project: Project): List<Described> {
         val manager = MavenProjectsManager.getInstanceIfCreated(project) ?: return emptyList()
-        return manager.projects.map { mavenProject ->
+        val projects = manager.projects
+        val roots = projects.associateWith { mavenProject ->
+            rootOf(manager, File(mavenProject.directory).invariantSeparatorsPath)
+        }
+        val failsafeRoots = mavenFailsafeRoots(
+            projects.filter { it.packaging != "pom" }.map { roots.getValue(it) to it.plugins },
+        )
+        return projects.map { mavenProject ->
             val directory = File(mavenProject.directory).invariantSeparatorsPath
+            val root = roots.getValue(mavenProject)
             Described(
                 mavenKey = mavenProject.mavenId.key,
                 id = mavenProject.mavenId.artifactId ?: directory.substringAfterLast('/'),
-                root = rootOf(manager, directory),
+                root = root,
                 directory = directory,
                 dependencies = mavenProject.dependencies.mapTo(HashSet()) { it.mavenId.key },
+                testTask = mavenTestGoal(root in failsafeRoots),
             )
         }
     }
@@ -162,8 +173,20 @@ class MavenBuildSystem : SuspendingBuildSystem {
             ?: directory
 
     private companion object {
-        const val TEST_GOAL = "test"
         const val COMPILE_GOAL = "test-compile"
         const val CACHE_DIRECTORY = "affected"
     }
 }
+
+internal fun hasFailsafeIntegrationTests(plugins: List<MavenPlugin>): Boolean = plugins.any { plugin ->
+    (plugin.groupId.isNullOrEmpty() || plugin.groupId == "org.apache.maven.plugins") &&
+        plugin.artifactId == "maven-failsafe-plugin" &&
+        plugin.executions.any { "integration-test" in it.goals }
+}
+
+internal fun mavenTestGoal(hasFailsafeInReactor: Boolean): String =
+    if (hasFailsafeInReactor) "verify" else "test"
+
+internal fun mavenFailsafeRoots(projects: List<Pair<String, List<MavenPlugin>>>): Set<String> = projects
+    .filter { (_, plugins) -> hasFailsafeIntegrationTests(plugins) }
+    .mapTo(HashSet()) { (root, _) -> root }

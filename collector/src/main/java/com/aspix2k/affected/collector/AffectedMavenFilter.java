@@ -76,7 +76,8 @@ public final class AffectedMavenFilter implements PostDiscoveryFilter {
                 return Selection.full(AffectedDependencySelector.Reason.COLLECTOR_ERROR);
             }
             Snapshot snapshot = snapshot(properties);
-            boolean allTests = "true".equals(required(properties, "affected.collector.all"));
+            boolean allTests = requiredBoolean(properties, "affected.collector.all");
+            boolean baselineEligible = requiredBoolean(properties, "affected.collector.baselineEligible");
             AffectedDependencySelector.Decision decision = allTests
                 ? AffectedDependencySelector.select(
                     directory(properties, "affected.collector.maps", false),
@@ -100,7 +101,7 @@ public final class AffectedMavenFilter implements PostDiscoveryFilter {
                 required(properties, "affected.collector.task"),
                 snapshot.runtimeFingerprint,
                 snapshot.inputFingerprint,
-                allTests && selected.kind == AffectedDependencySelector.Kind.ALL
+                baselineEligible && allTests && selected.kind == AffectedDependencySelector.Kind.ALL
             );
             writeDecision(output, selected.description);
             properties.setProperty("affected.collector.output", output.toString());
@@ -405,6 +406,12 @@ public final class AffectedMavenFilter implements PostDiscoveryFilter {
         String value = properties.getProperty(name);
         if (value == null || value.trim().isEmpty()) throw new IllegalStateException(name);
         return value;
+    }
+
+    private static boolean requiredBoolean(Properties properties, String name) {
+        String value = required(properties, name);
+        if (!("true".equals(value) || "false".equals(value))) throw new IllegalStateException(name);
+        return Boolean.parseBoolean(value);
     }
 
     private static String encode(String value) {

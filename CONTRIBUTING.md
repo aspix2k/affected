@@ -77,11 +77,15 @@ The counted and checksummed map includes the full production class catalog.
 
 Gradle computes selection in a serializable task-local spec after compile
 dependencies and applies the public `TestFilter`. Maven 3.9.x uses a core
-extension to pass a counted project manifest to one reusable Surefire 3.x fork;
-a JUnit Platform discovery filter computes selection after `test-compile`.
-Neither path starts a second visible build. Runtime, test, classpath or resource
-changes and any missing, corrupt, added, deleted or unsupported input run the
-original full task. Selected and skipped runs never replace the full baseline.
+extension to pass separate counted project manifests to one reusable Surefire
+3.x fork and one reusable Failsafe 3.x fork. A JUnit Platform discovery filter
+computes selection after `test-compile`; Surefire and Failsafe keep distinct
+task keys, output and maps. Neither path starts a second visible build. Runtime,
+test, classpath or resource changes and any missing, corrupt, added, deleted or
+unsupported input run the original full task. Selected and skipped runs never
+replace the full baseline. A direct Failsafe `integration-test` can select from
+a baseline but only `verify`, `install` or `deploy` may replace one, because
+Failsafe defers test-failure reporting to `verify`.
 
 ## Conventions
 

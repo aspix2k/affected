@@ -35,7 +35,7 @@ manifests.
 | --- | --- | --- |
 | Gradle JVM | `test` | `compileTestKotlin` |
 | Gradle Android | `testDebugUnitTest` | `compileDebugUnitTestKotlin` |
-| Maven | `test` | `test-compile` |
+| Maven | `test`, or `verify` when the reactor binds Failsafe | `test-compile` |
 | Cargo workspace | `cargo test -p` | `cargo check --tests -p` |
 | Go module | `go test` | `go build` |
 | npm, Yarn or pnpm workspace | workspace `test` | `tsc --noEmit` when the package has `tsconfig.json` |
@@ -87,8 +87,12 @@ available on `PATH`.
 Test-class selection stays inside the original IDE invocation and Run tab.
 Gradle selection is task-local. Maven reactor modules use independent maps.
 Maven exact selection supports Maven 3.9.x, Surefire 3.x, JUnit Platform and one reusable
-fork. It can select multiple mapped test classes without depending on their
+fork. Failsafe 3.x integration tests use a separate task key and map; reactors
+that bind `integration-test` run `verify` in the same IDE invocation. Both
+adapters can select multiple mapped test classes without depending on their
 execution order. Other Maven configurations keep the full module test goal.
+Direct `integration-test` runs may reuse a complete Failsafe map but cannot
+replace it because Failsafe reports test failures during `verify`.
 Complete maps are replaced only by successful full runs and remain on the local
 machine. A collector schema change invalidates older maps and causes one full
 run to rebuild them safely.

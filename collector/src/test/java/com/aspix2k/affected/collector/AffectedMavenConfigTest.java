@@ -35,6 +35,7 @@ public class AffectedMavenConfigTest {
             "fixture:app:test",
             "runtime",
             true,
+            true,
             root.resolve("target/classes").toString(),
             root.resolve("target/test-classes").toString(),
             root.resolve("target/test-classes") + java.io.File.pathSeparator + root.resolve("target/classes")
@@ -48,6 +49,7 @@ public class AffectedMavenConfigTest {
         assertEquals("maven", properties.getProperty("affected.collector.runner"));
         assertEquals(expected.getTask(), properties.getProperty("affected.collector.task"));
         assertEquals(expected.getDisplay(), properties.getProperty("affected.collector.display"));
+        assertEquals("true", properties.getProperty("affected.collector.baselineEligible"));
         assertEquals(expected.getCodeSources(), properties.getProperty("affected.collector.codeSources"));
         assertEquals(expected.getClasspath(), properties.getProperty("affected.collector.classpath"));
     }
@@ -58,7 +60,7 @@ public class AffectedMavenConfigTest {
         Path manifest = temporary.getRoot().toPath().resolve("truncated.manifest");
         Files.write(
             manifest,
-            ("format=1\nprojects=1\nchecksum=" + repeat('0', 64) + "\nproject=x\n").getBytes("UTF-8")
+            ("format=2\nprojects=1\nchecksum=" + repeat('0', 64) + "\nproject=x\n").getBytes("UTF-8")
         );
 
         try {
@@ -83,6 +85,7 @@ public class AffectedMavenConfigTest {
             "correct-task",
             "fixture:app:test",
             "runtime",
+            true,
             true,
             root.resolve("target/classes").toString(),
             root.resolve("target/test-classes").toString(),
@@ -157,6 +160,7 @@ public class AffectedMavenConfigTest {
             task,
             "fixture:" + task + ":test",
             "runtime",
+            true,
             true,
             root.resolve("target/classes").toString(),
             root.resolve("target/test-classes").toString(),
