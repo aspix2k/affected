@@ -1,6 +1,8 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.BuildChanges
 import com.aspix2k.affected.build.BuildSystems
+import com.aspix2k.affected.build.ChangeAwareSuspendingBuildSystem
 import com.aspix2k.affected.build.SuspendingBuildSystem
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
@@ -14,9 +16,29 @@ object Verification {
 
     data class Outcome(val plan: Plan, val passed: Boolean)
 
-    suspend fun plan(project: Project): Plan {
+    class Prepared internal constructor(
+        val plan: Plan,
+        internal val changes: BuildChanges,
+    )
+
+    suspend fun prepare(project: Project): Prepared {
         val changes = ProjectChanges.collectSuspending(project)
-        return plan(project, changes)
+        return prepare(project, changes)
+    }
+
+    suspend fun prepare(project: Project, changes: ProjectChanges.Result): Prepared =
+        withContext(Dispatchers.Default) {
+            val buildChanges = BuildChanges(
+                files = changes.files.map { it.absoluteFile.normalize().invariantSeparatorsPath },
+                exactSelectionEligible = changes.exactSelectionEligible
+                    .mapTo(HashSet()) { it.absoluteFile.normalize().invariantSeparatorsPath },
+                comparedToBase = changes.comparedToBase,
+            )
+            Prepared(plan(project, changes), buildChanges)
+        }
+
+    suspend fun plan(project: Project): Plan {
+        return prepare(project).plan
     }
 
     suspend fun plan(project: Project, changes: ProjectChanges.Result): Plan = withContext(Dispatchers.Default) {
@@ -44,6 +66,14 @@ object Verification {
     }
 
     suspend fun runAndWait(project: Project, plan: Plan): Outcome {
+        return runAndWait(
+            project,
+            Prepared(plan, BuildChanges(emptyList(), emptySet(), comparedToBase = false)),
+        )
+    }
+
+    suspend fun runAndWait(project: Project, prepared: Prepared): Outcome {
+        val plan = prepared.plan
         if (plan.isEmpty) return Outcome(plan, passed = true)
 
         val state = project.service<AffectedState>()
@@ -55,6 +85,8 @@ object Verification {
                     async(Dispatchers.Default) {
                         when (val system = BuildSystems.byId(group.systemId)) {
                             null -> true
+                            is ChangeAwareSuspendingBuildSystem ->
+                                system.runAndWaitSuspending(project, group.root, group.tasks, prepared.changes)
                             is SuspendingBuildSystem ->
                                 system.runAndWaitSuspending(project, group.root, group.tasks)
                             else -> withContext(Dispatchers.IO) {

@@ -11,6 +11,7 @@ class ChangeAnalyzer(
     private val projectDir: File,
     private val baseBranch: String,
     private val sourceExtensions: Set<String> = DEFAULT_EXTENSIONS,
+    private val includeAllFiles: Boolean = false,
 ) {
 
     private var sourceFileNames: Set<String> = emptySet()
@@ -20,7 +21,8 @@ class ChangeAnalyzer(
         baseBranch: String,
         sourceExtensions: Set<String>,
         sourceFileNames: Set<String>,
-    ) : this(projectDir, baseBranch, sourceExtensions) {
+        includeAllFiles: Boolean = false,
+    ) : this(projectDir, baseBranch, sourceExtensions, includeAllFiles) {
         this.sourceFileNames = sourceFileNames
     }
 
@@ -35,6 +37,20 @@ class ChangeAnalyzer(
     }
 
     fun isUsable(): Boolean = git("rev-parse", "--git-dir").isNotEmpty()
+
+    fun hasComparisonBase(): Boolean = mergeBase() != null
+
+    fun modifiedAgainstBase(): Set<File> {
+        val base = mergeBase() ?: return emptySet()
+        val paths = git("diff", "--name-status", "--no-renames", base)
+            .mapNotNull { line ->
+                val separator = line.indexOf('\t')
+                line.substring(0, separator.takeIf { it > 0 } ?: return@mapNotNull null)
+                    .takeIf { it == "M" }
+                    ?.let { line.substring(separator + 1) }
+            }
+        return keepSources(paths).toSet()
+    }
 
     fun againstBase(): List<File> {
         val base = mergeBase() ?: return emptyList()
@@ -58,7 +74,8 @@ class ChangeAnalyzer(
     private fun keepSources(paths: Collection<String>): List<File> {
         return paths
             .filter { path ->
-                path.substringAfterLast('.', "").lowercase() in sourceExtensions ||
+                includeAllFiles ||
+                    path.substringAfterLast('.', "").lowercase() in sourceExtensions ||
                     path.substringAfterLast('/').substringAfterLast('\\') in sourceFileNames
             }
             .map { File(projectDir, it) }

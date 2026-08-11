@@ -1,5 +1,8 @@
 const assert = require("node:assert");
-const test = require("node:test");
+const { writeFileSync } = require("node:fs");
 const { value } = require("./alpha");
 
-test("alpha value", () => assert.equal(value(), 1));
+test("alpha value", () => {
+  writeFileSync("alpha-selected.marker", "ran\n");
+  assert.equal(value(), 1);
+});

@@ -33,6 +33,22 @@ Every CLI adapter change must keep its command contract test and the matching
 native project under `conformance/cli-fixtures` green. Parser-only or mocked
 proof is not sufficient for a release.
 
+Keep README behavior and support claims current in every user-visible change,
+but keep it a concise landing page. Put implementation detail in CONTRIBUTING
+or a focused document instead of expanding README.
+
+Keep Gradle, Kotlin, the IntelliJ Platform, libraries and GitHub Actions on the
+latest stable versions compatible with the supported product matrix. A version
+may stay behind only for a verified compatibility reason recorded in the
+relevant changelog or issue.
+
+Node exact selection is runner-native and static-graph only. Unknown Jest or
+Vitest versions, custom config or transforms, dynamic dependencies, resources,
+lockfiles, added, deleted or generated paths, symlinks, missing merge bases and
+scan-limit failures must keep the package test script. Exact workspace commands
+still belong to one `SequentialProcessHandler`; never create a Run session per
+test file.
+
 The plugin id is permanent. Changing it breaks updates for every existing user.
 
 Kotlin nests block comments. A glob like `packages/*` inside a KDoc opens an

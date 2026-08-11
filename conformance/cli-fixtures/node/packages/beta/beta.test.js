@@ -1,5 +1,9 @@
-const assert = require("node:assert");
-const test = require("node:test");
-const { value } = require("./beta");
+import assert from "node:assert";
+import { writeFileSync } from "node:fs";
+import { test } from "vitest";
+import { value } from "./beta.js";
 
-test("beta value", () => assert.equal(value(), 2));
+test("beta value", () => {
+  writeFileSync("beta-selected.marker", "ran\n");
+  assert.equal(value(), 2);
+});

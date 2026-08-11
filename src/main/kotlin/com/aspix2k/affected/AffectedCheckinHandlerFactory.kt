@@ -43,8 +43,8 @@ private class AffectedCheckinHandler(private val panel: CheckinProjectPanel) : C
         val outcome = ProgressManager.getInstance().runProcessWithProgressSynchronously<Verification.Outcome, Nothing>(
             {
                 runBlockingCancellable {
-                    val plan = Verification.plan(project)
-                    Verification.runAndWait(project, plan)
+                    val prepared = Verification.prepare(project)
+                    Verification.runAndWait(project, prepared)
                 }
             },
             AffectedBundle.message("progress.title"),

@@ -1,1 +1,1 @@
-exports.value = () => 2;
+export const value = () => 2;

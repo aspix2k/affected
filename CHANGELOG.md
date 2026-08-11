@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Run related test files instead of every test in an affected npm, Yarn or pnpm package when a default-config Jest 29–30 or Vitest 2–4 dependency graph can prove the selection.
+
+### Changed
+
+- Keep the full package test script for unknown Node runners and versions, custom configuration or transforms, dependency overrides, dynamic dependencies, resources, lockfiles, added, deleted or generated paths, symlinks, bounded-scan failures and changes without a merge base.
+- Preserve one fail-fast Node Run session while exact workspaces execute their own runner-native related command.
+
 ## [1.14.1] - 2026-08-11
 
 ### Changed
@@ -236,7 +245,9 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v1.13.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v1.14.1...HEAD
+[1.14.1]: https://github.com/aspix2k/affected/compare/v1.14.0...v1.14.1
+[1.14.0]: https://github.com/aspix2k/affected/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/aspix2k/affected/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/aspix2k/affected/compare/v1.11.1...v1.12.0
 [1.11.1]: https://github.com/aspix2k/affected/compare/v1.11.0...v1.11.1

@@ -125,6 +125,19 @@ class ChangeAnalyzerTest {
     }
 
     @Test
+    fun `complete change collection includes extensionless and resource files`() = repo { dir ->
+        val extensionless = File(dir, "lib/src/main/resources/NOTICE").apply {
+            parentFile.mkdirs()
+            writeText("notice")
+        }
+        val resource = File(dir, "lib/src/main/resources/schema.graphql").apply { writeText("type Query") }
+
+        val changes = ChangeAnalyzer(dir, "main", includeAllFiles = true).collect().files
+
+        assertEquals(setOf(extensionless, resource), changes.toSet())
+    }
+
+    @Test
     fun `a deleted public source remains affected`() = repo { dir ->
         val deleted = File(dir, "lib/src/main/kotlin/Sample.kt")
         deleted.delete()

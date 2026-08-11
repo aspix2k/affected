@@ -35,8 +35,8 @@ Node.js, .NET, Python, PHP, Ruby and C/C++.
   and C/C++ projects together.
 - **One Run session per build-system root.** Commands stay together and stop on the
   first failure.
-- **Smaller JUnit runs.** Gradle and Maven can narrow a module to affected test
-  classes.
+- **Smaller test runs.** Gradle and Maven can narrow a module to affected JUnit
+  classes; supported Jest and Vitest packages can narrow to related test files.
 - **Consumer checks.** Optionally verify direct dependents after a public API
   change.
 - **Local by design.** No account, server, telemetry or project-specific config file.
@@ -49,7 +49,7 @@ Node.js, .NET, Python, PHP, Ruby and C/C++.
 | Maven | Kotlin, Java | Surefire, Failsafe and consumer test compilation | JUnit class or module |
 | Cargo | Rust | `cargo test`, `cargo check --tests` | package |
 | Go modules | Go | `go test`, `go build` | package |
-| npm, Yarn and pnpm | JavaScript, TypeScript, JSX, TSX, Vue, Svelte | package test, `tsc --noEmit` | workspace package |
+| npm, Yarn and pnpm | JavaScript, TypeScript, JSX, TSX, Vue, Svelte | Jest, Vitest, package test, `tsc --noEmit` | related test file or workspace package |
 | .NET | C#, F#, Visual Basic, Razor | `dotnet test`, `dotnet build` | project |
 | Python | Python | pytest, mypy | package |
 | Composer | PHP | PHPUnit, PHPStan | package |

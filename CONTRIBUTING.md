@@ -76,6 +76,14 @@ Minimal native projects for every CLI adapter live under
 it requires the corresponding native tools and downloads only the pinned test
 runner dependencies declared by those fixtures.
 
+Supported Jest and Vitest packages receive runner-native related-file commands
+only when a real merge base, an explicit runner version and a bounded static
+package graph are available. Custom runner configuration or transforms, dynamic
+dependencies, dependency overrides, resources, lockfiles, added, deleted or
+generated files, symlinks and scan-limit failures keep the original package test
+script. Every exact and full package command remains in the same
+`SequentialProcessHandler` for its Node root.
+
 `ChangeAnalyzer` and `TaskPlanner` have no IDE dependencies and are covered by
 unit tests. Keep them that way: return data and let the action format it. The
 `collector` module produces Java 8 agents, a JUnit listener, a Gradle init script
