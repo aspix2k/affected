@@ -97,10 +97,10 @@ Each supported Gradle test task or Maven reactor module prints one decision in
 the original Run output:
 
 ```text
-[Affected] :app:testDebugUnitTest — full fallback (baseline missing)
-[Affected] :app:testDebugUnitTest — exact (3 test classes)
-[Affected] :core:test — proven-empty
-[Affected] :legacy:test — full fallback (unsupported framework)
+[Affected] :app:testDebugUnitTest - full fallback (baseline missing)
+[Affected] :app:testDebugUnitTest - exact (3 test classes)
+[Affected] :core:test - proven-empty
+[Affected] :legacy:test - full fallback (unsupported framework)
 ```
 
 The Run tree still shows the original module-level build tasks because exact

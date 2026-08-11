@@ -112,7 +112,7 @@ class AffectedCollectorSelectionSpec implements Spec<Task>, Serializable {
         try {
             String display = task.path
             if (display == null || !display.matches("[:A-Za-z0-9_.-]{1,500}")) display = "Gradle test"
-            task.logger.lifecycle("[Affected] {} — {}", display, decision.describe())
+            task.logger.lifecycle("[Affected] {} - {}", display, decision.describe())
         } catch (Exception ignored) {
         }
     }

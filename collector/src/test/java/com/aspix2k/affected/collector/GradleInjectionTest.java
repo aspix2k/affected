@@ -208,7 +208,7 @@ public class GradleInjectionTest {
     }
 
     private static void assertDecision(BuildResult result, String task, String decision) {
-        String expected = "[Affected] " + task + " — " + decision;
+        String expected = "[Affected] " + task + " - " + decision;
         assertTrue(result.getOutput(), result.getOutput().contains(expected));
         assertEquals(result.getOutput(), 1, occurrences(result.getOutput(), expected));
     }

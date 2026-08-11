@@ -249,7 +249,7 @@ public class MavenInjectionTest {
     }
 
     private static void assertDecision(String log, String task, String decision) {
-        String expected = "[Affected] " + task + " — " + decision;
+        String expected = "[Affected] " + task + " - " + decision;
         assertTrue(log, log.contains(expected));
         assertEquals(log, 1, occurrences(log, expected));
     }
