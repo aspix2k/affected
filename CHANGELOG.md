@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Widen missing, malformed, partial, stale or oversized CLI project models to a visible root-level verification instead of silently producing an empty or partial plan.
 - Pass exact .NET project files to `dotnet`, rebuild CMake before CTest, discover the configured CMake build tree instead of assuming `cmake-build-debug`, and never infer CTest ownership from matching target names.
+- Normalize Cargo workspace identities and Node workspace glob separators on Windows.
 - Classify consumer impact by the file's owning build system, so non-JVM production and configuration changes remain conservative without treating Gradle JSON resources as public API changes.
 
 ## [1.13.0] - 2026-08-11
