@@ -19,11 +19,12 @@ class AffectedPrePushHandler : PrePushHandler {
 
         return runBlockingCancellable {
             indicator.text = AffectedBundle.message("progress.title")
-            val plan = Verification.plan(project)
+            val prepared = Verification.prepare(project)
+            val plan = prepared.plan
             if (plan.isEmpty) return@runBlockingCancellable PrePushHandler.Result.OK
 
             indicator.text = AffectedBundle.message("push.handler.running", plan.tested, plan.compiled)
-            val outcome = Verification.runAndWait(project, plan)
+            val outcome = Verification.runAndWait(project, prepared)
 
             if (outcome.passed) PrePushHandler.Result.OK else PrePushHandler.Result.ABORT
         }

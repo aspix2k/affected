@@ -4,8 +4,11 @@ import org.junit.Assume.assumeTrue
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
+import kotlin.system.measureTimeMillis
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class CliAdapterConformanceTest {
@@ -31,12 +34,85 @@ class CliAdapterConformanceTest {
     }
 
     @Test
-    fun `npm command runs both selected workspaces`() = fixture("node") { root ->
+    fun `npm runs exact Jest and Vitest files and preserves full fallback`() = fixture("node") { root ->
+        execute(root, listOf("npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"))
         val modules = NodeWorkspaces.parse(root).filter(BuildModule::hasTests)
-        val output = execute(root, nodeCommands(root.path, modules.map { "${it.executionId}:test" }).single().arguments)
+        val alphaSelected = File(root, "packages/alpha/alpha-selected.marker")
+        val alphaFull = File(root, "packages/alpha/alpha-full.marker")
+        val betaSelected = File(root, "packages/beta/beta-selected.marker")
+        val betaFull = File(root, "packages/beta/beta-full.marker")
+        execute(root, nodeCommands(root.path, modules.map { "${it.executionId}:test" }).single().arguments)
 
-        assertContains(output, "alpha value")
-        assertContains(output, "beta value")
+        deleteMarkers(alphaSelected, alphaFull, betaSelected, betaFull)
+
+        val fullJestMillis = measureTimeMillis {
+            execute(root, nodeCommands(root.path, listOf("@affected/alpha:test")).single().arguments)
+        }
+        deleteMarkers(alphaSelected, alphaFull)
+
+        assertJestRelated(root, alphaSelected, alphaFull, fullJestMillis)
+        assertVitestRelated(root, betaSelected, betaFull)
+        assertNodeDynamicFallback(root, alphaSelected, alphaFull)
+    }
+
+    private fun assertJestRelated(root: File, selected: File, full: File, fullMillis: Long) {
+        val exactMillis = measureTimeMillis { executeRelated(root, "@affected/alpha", "alpha.js") }
+        assertTrue(selected.isFile)
+        assertFalse(full.exists())
+        assertTrue(exactMillis < fullMillis, "exact=$exactMillis ms, full=$fullMillis ms")
+
+        assertTrue(selected.delete())
+        executeRelated(root, "@affected/alpha", "alpha.test.js")
+        assertTrue(selected.delete())
+        assertFalse(full.exists())
+
+        executeRelated(root, "@affected/alpha", "unused.js")
+        assertFalse(selected.exists())
+        assertFalse(full.exists())
+    }
+
+    private fun assertVitestRelated(root: File, selected: File, full: File) {
+        executeRelated(root, "@affected/beta", "beta.js")
+        assertTrue(selected.isFile)
+        assertFalse(full.exists())
+
+        assertTrue(selected.delete())
+        executeRelated(root, "@affected/beta", "beta.test.js")
+        assertTrue(selected.delete())
+        assertFalse(full.exists())
+
+        executeRelated(root, "@affected/beta", "unused.js")
+        assertFalse(selected.exists())
+        assertFalse(full.exists())
+    }
+
+    private fun executeRelated(root: File, packageName: String, fileName: String) {
+        val file = File(root, "packages/${packageName.substringAfterLast('/')}/$fileName")
+        val command = nodeCommands(
+            root.path,
+            listOf("$packageName:test"),
+            BuildChanges(listOf(file.path), setOf(file.path), comparedToBase = true),
+        ).single()
+        execute(root, command.arguments)
+    }
+
+    private fun assertNodeDynamicFallback(root: File, selected: File, full: File) {
+        File(root, "packages/alpha/dynamic.js").writeText("export const load = name => import(name)\n")
+        val alpha = File(root, "packages/alpha/alpha.js")
+        val fallback = nodeCommands(
+            root.path,
+            listOf("@affected/alpha:test"),
+            BuildChanges(listOf(alpha.path), setOf(alpha.path), comparedToBase = true),
+        ).single()
+        execute(root, fallback.arguments)
+
+        assertEquals(listOf("npm", "test", "--workspace", "@affected/alpha"), fallback.arguments)
+        assertTrue(selected.isFile)
+        assertTrue(full.isFile)
+    }
+
+    private fun deleteMarkers(vararg markers: File) {
+        markers.forEach { assertTrue(it.delete()) }
     }
 
     @Test

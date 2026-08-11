@@ -49,6 +49,18 @@ class ChangeAnalyzerOperationsTest {
     }
 
     @Test
+    fun `only modifications are eligible for exact selection`() {
+        val directory = repository()
+        run(directory, "git", "checkout", "-q", "-b", "feature")
+        val modified = File(directory, "Base.kt").apply { appendText("fun changed() {}\n") }
+        File(directory, "Added.kt").writeText("fun added() {}\n")
+
+        val eligible = analyzer(directory).modifiedAgainstBase()
+
+        assertEquals(setOf(modified), eligible)
+    }
+
+    @Test
     fun `a public declaration is found among changed files`() {
         val directory = repository()
         run(directory, "git", "checkout", "-q", "-b", "feature")

@@ -100,10 +100,11 @@ class AffectedToolset : McpToolset {
         val project = coroutineContext.project
         if (project.basePath == null) return "Project has no base path."
 
-        val plan = Verification.plan(project)
+        val prepared = Verification.prepare(project)
+        val plan = prepared.plan
         if (plan.isEmpty) return "Nothing to run."
 
-        val outcome = Verification.runAndWait(project, plan)
+        val outcome = Verification.runAndWait(project, prepared)
 
         return buildString {
             val result = if (outcome.passed) "Passed" else "Failed"

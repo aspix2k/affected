@@ -42,6 +42,8 @@ internal interface NamedSourceBuildSystem {
     val sourceFileNames: Set<String>
 }
 
+internal interface AllFileChangesBuildSystem
+
 internal interface SuspendingBuildSystem : BuildSystem {
     suspend fun modulesSuspending(project: Project): List<BuildModule> =
         runInterruptible(Dispatchers.IO) { modules(project) }
@@ -50,6 +52,21 @@ internal interface SuspendingBuildSystem : BuildSystem {
 
     override fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean =
         runBlockingCancellable { runAndWaitSuspending(project, root, tasks) }
+}
+
+data class BuildChanges(
+    val files: List<String>,
+    val exactSelectionEligible: Set<String>,
+    val comparedToBase: Boolean,
+)
+
+internal interface ChangeAwareSuspendingBuildSystem : SuspendingBuildSystem {
+    suspend fun runAndWaitSuspending(
+        project: Project,
+        root: String,
+        tasks: List<String>,
+        changes: BuildChanges,
+    ): Boolean
 }
 
 internal fun rootFallbackModule(

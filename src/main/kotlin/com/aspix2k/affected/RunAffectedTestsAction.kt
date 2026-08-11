@@ -64,7 +64,8 @@ class RunAffectedTestsAction : AnAction() {
                 return@launch
             }
 
-            val plan = Verification.plan(project, changes)
+            val prepared = Verification.prepare(project, changes)
+            val plan = prepared.plan
             if (plan.isEmpty) {
                 notify(
                     project,
@@ -75,18 +76,19 @@ class RunAffectedTestsAction : AnAction() {
                 return@launch
             }
 
-            execute(project, plan)
+            execute(project, prepared)
         }
     }
 
-    private suspend fun execute(project: Project, plan: Plan) {
+    private suspend fun execute(project: Project, prepared: Verification.Prepared) {
+        val plan = prepared.plan
         notify(
             project,
             AffectedBundle.message("notification.started.title"),
             describe(plan),
             NotificationType.INFORMATION,
         )
-        Verification.runAndWait(project, plan)
+        Verification.runAndWait(project, prepared)
     }
 
     private fun describe(plan: Plan): String =

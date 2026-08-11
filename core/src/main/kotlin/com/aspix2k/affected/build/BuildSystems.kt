@@ -22,4 +22,7 @@ object BuildSystems {
 
     fun sourceFileNames(project: Project): Set<String> =
         of(project).filterIsInstance<NamedSourceBuildSystem>().flatMapTo(HashSet()) { it.sourceFileNames }
+
+    fun includesAllFileChanges(project: Project): Boolean =
+        of(project).any { it is AllFileChangesBuildSystem }
 }
