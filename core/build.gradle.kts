@@ -1,3 +1,5 @@
+import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+
 plugins {
     kotlin("jvm")
     id("org.jetbrains.intellij.platform.module")
@@ -13,6 +15,7 @@ dependencies {
         intellijIdea(providers.gradleProperty("affected.idea.version").get())
         bundledPlugin("com.intellij.gradle")
         bundledPlugin("org.jetbrains.idea.maven")
+        testFramework(TestFrameworkType.Platform)
     }
 
     testImplementation(kotlin("test"))
