@@ -36,12 +36,12 @@ class CargoMetadataTest {
           "packages": [
             {
               "name": "core-lib",
-              "manifest_path": "${root.path}/crates/core/Cargo.toml",
+              "manifest_path": "${root.invariantSeparatorsPath}/crates/core/Cargo.toml",
               "dependencies": []
             },
             {
               "name": "app",
-              "manifest_path": "${root.path}/crates/app/Cargo.toml",
+              "manifest_path": "${root.invariantSeparatorsPath}/crates/app/Cargo.toml",
               "dependencies": [
                 { "name": "core-lib" },
                 { "name": "serde" }
@@ -67,7 +67,7 @@ class CargoMetadataTest {
         val app = CargoMetadata.parse(metadata(root), root.path).single { it.id == "app" }
 
         assertEquals(
-            setOf("${root.path}|core-lib"),
+            setOf("${root.invariantSeparatorsPath}|core-lib"),
             app.dependencies,
             "serde comes from the registry, not the workspace, and cannot be a consumer",
         )

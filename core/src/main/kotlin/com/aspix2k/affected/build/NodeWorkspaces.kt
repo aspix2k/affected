@@ -181,8 +181,7 @@ private fun workspacePattern(root: File, pattern: String): WorkspacePattern? = r
     val excluded = trimmed.startsWith('!')
     val clean = trimmed.removePrefix("!").removePrefix("./").removeSuffix("/")
     if (clean.isEmpty()) return null
-    val native = clean.replace('/', File.separatorChar)
-    val matcher = root.toPath().fileSystem.getPathMatcher("glob:$native")
+    val matcher = root.toPath().fileSystem.getPathMatcher("glob:$clean")
     WorkspacePattern(excluded) { path -> matcher.matches(path) }
 }.getOrNull()
 

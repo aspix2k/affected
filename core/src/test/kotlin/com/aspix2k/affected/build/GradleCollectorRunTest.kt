@@ -3,6 +3,7 @@ package com.aspix2k.affected.build
 import com.aspix2k.affected.impact.DependencyMapStore
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.Base64
@@ -71,16 +72,22 @@ class GradleCollectorRunTest {
     @Test
     fun `collector arguments preserve individual paths`() = withDirectory { root ->
         val artifacts = artifacts(Files.createDirectory(root.resolve("artifacts with spaces")))
-        val run = assertNotNull(GradleCollectorRun.create(root.resolve("cache with spaces"), artifacts))
+        val cache = root.resolve("cache with spaces")
+        val run = assertNotNull(GradleCollectorRun.create(cache, artifacts))
+        val canonicalArtifacts = GradleCollectorArtifacts(
+            artifacts.agent.toRealPath(LinkOption.NOFOLLOW_LINKS),
+            artifacts.listener.toRealPath(LinkOption.NOFOLLOW_LINKS),
+            artifacts.initScript.toRealPath(LinkOption.NOFOLLOW_LINKS),
+        )
 
         assertEquals(
             listOf(
                 "--init-script",
-                artifacts.initScript.toAbsolutePath().normalize().toString(),
-                "-Daffected.collector.agent=${artifacts.agent.toAbsolutePath().normalize()}",
-                "-Daffected.collector.listener=${artifacts.listener.toAbsolutePath().normalize()}",
+                canonicalArtifacts.initScript.toString(),
+                "-Daffected.collector.agent=${canonicalArtifacts.agent}",
+                "-Daffected.collector.listener=${canonicalArtifacts.listener}",
                 "-Daffected.collector.output=${run.outputRoot}",
-                "-Daffected.collector.maps=${root.resolve("cache with spaces/maps")}",
+                "-Daffected.collector.maps=${cache.toRealPath(LinkOption.NOFOLLOW_LINKS).resolve("maps")}",
                 "-Daffected.collector.version=${artifactVersion(artifacts)}",
             ),
             run.arguments,
