@@ -142,11 +142,13 @@ val collectorListenerArchive = collectorListenerArtifact.elements.map { it.singl
 val mavenAgentArchive = mavenAgentArtifact.elements.map { it.single().asFile }
 val mavenExtensionArchive = mavenExtensionArtifact.elements.map { it.single().asFile }
 val collectorInitScript = project(":collector").layout.projectDirectory.file("src/main/gradle/affected-collector.init.gradle")
+val pytestAdapter = project(":core").layout.projectDirectory.file("src/main/python/affected_pytest.py")
 val collectorAgentPath = "$pluginDirectory/agent/affected-collector-agent.jar"
 val collectorListenerPath = "$pluginDirectory/agent/affected-collector-listener.jar"
 val collectorInitScriptPath = "$pluginDirectory/agent/affected-collector.init.gradle"
 val mavenAgentPath = "$pluginDirectory/agent/affected-maven-agent.jar"
 val mavenExtensionPath = "$pluginDirectory/agent/affected-maven-extension.jar"
+val pytestAdapterPath = "$pluginDirectory/agent/affected-pytest.py"
 val collectorPremain = "com.aspix2k.affected.collector.AffectedCollectorAgent"
 val collectorListener = "com.aspix2k.affected.collector.AffectedTestExecutionListener"
 val collectorService = "META-INF/services/org.junit.platform.launcher.TestExecutionListener"
@@ -165,6 +167,10 @@ tasks.named<BuildPluginTask>("buildPlugin") {
     }
     from(collectorInitScript) {
         into("agent")
+    }
+    from(pytestAdapter) {
+        into("agent")
+        rename { "affected-pytest.py" }
     }
     from(mavenAgentArtifact) {
         into("agent")
@@ -227,6 +233,17 @@ tasks.named<BuildPluginTask>("buildPlugin") {
             val packagedScript = archive.getInputStream(packagedScripts.single()).use { it.readBytes() }
             check(packagedScript.contentEquals(collectorInitScript.asFile.readBytes())) {
                 "Packaged collector init script must match the collector module source"
+            }
+
+            val packagedPytestAdapters = archive.entries().asSequence()
+                .filter { it.name == pytestAdapterPath }
+                .toList()
+            check(packagedPytestAdapters.size == 1) {
+                "Plugin distribution must contain exactly one $pytestAdapterPath"
+            }
+            val packagedPytestAdapter = archive.getInputStream(packagedPytestAdapters.single()).use { it.readBytes() }
+            check(packagedPytestAdapter.contentEquals(pytestAdapter.asFile.readBytes())) {
+                "Packaged pytest adapter must match the core module source"
             }
 
             val packagedMavenAgents = archive.entries().asSequence().filter { it.name == mavenAgentPath }.toList()

@@ -2,6 +2,7 @@ package com.aspix2k.affected.build
 
 import org.junit.Assume.assumeTrue
 import java.io.File
+import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
 import kotlin.system.measureTimeMillis
@@ -126,14 +127,91 @@ class CliAdapterConformanceTest {
     }
 
     @Test
-    fun `pytest command runs both selected packages`() = fixture("python") { root ->
+    fun `pytest runs exact files and preserves full fallback`() = fixture("python") { root ->
         val modules = PythonProjects.parse(root).filter(BuildModule::hasTests)
-        val output = execute(
+        val full = execute(
             root,
             pythonCommands(root.path, modules.map { "${it.executionId}:test" }, modules).single().arguments,
         )
+        assertContains(full, "4 passed")
 
-        assertContains(output, "2 passed")
+        val alpha = modules.single { it.contentRoots.single().endsWith("/packages/alpha") }
+        val alphaSource = File(root, "packages/alpha/alpha.py")
+        val adapter = Path.of(requireNotNull(System.getProperty("affected.test.pytestAdapter")))
+        val fullAlphaMillis = measureTimeMillis {
+            val fullAlpha = execute(
+                root,
+                pythonCommands(root.path, listOf("${alpha.executionId}:test"), modules).single().arguments,
+            )
+            assertContains(fullAlpha, "3 passed")
+        }
+        lateinit var exact: String
+        val exactMillis = measureTimeMillis { exact = executeRelatedPytest(root, modules, alpha, alphaSource, adapter) }
+        assertContains(exact, "Affected pytest: exact (1 test file)")
+        assertContains(exact, "2 passed, 1 deselected")
+        assertTrue(exactMillis < fullAlphaMillis, "exact=$exactMillis ms, full=$fullAlphaMillis ms")
+
+        val changedTest = File(root, "packages/alpha/tests/test_alpha.py")
+        val testSelection = executeRelatedPytest(root, modules, alpha, changedTest, adapter)
+        assertContains(testSelection, "Affected pytest: exact (1 test file)")
+        assertContains(testSelection, "2 passed, 1 deselected")
+
+        val dynamic = File(root, "packages/alpha/dynamic.py").apply {
+            writeText("import importlib\n\ndef load(name):\n    return importlib.import_module(name)\n")
+        }
+        val dynamicFallback = executeRelatedPytest(root, modules, alpha, alphaSource, adapter)
+        assertContains(dynamicFallback, "Affected pytest: full fallback (dynamic-dependency)")
+        assertContains(dynamicFallback, "3 passed")
+        assertTrue(dynamic.delete())
+
+        val resource = File(root, "packages/alpha/schema.json").apply { writeText("{}") }
+        val resourceFallback = executeRelatedPytest(root, modules, alpha, resource, adapter)
+        assertContains(resourceFallback, "Affected pytest: full fallback (invalid-context)")
+        assertContains(resourceFallback, "3 passed")
+        assertTrue(resource.delete())
+
+        val config = File(root, "pytest.ini").apply { writeText("[pytest]\n") }
+        val configFallback = executeRelatedPytest(root, modules, alpha, alphaSource, adapter)
+        assertContains(configFallback, "Affected pytest: full fallback (pytest-config)")
+        assertContains(configFallback, "3 passed")
+        assertTrue(config.delete())
+
+        val conftest = File(root, "packages/alpha/tests/conftest.py").apply {
+            writeText("def pytest_collection_modifyitems(items):\n    items.reverse()\n")
+        }
+        val conftestFallback = executeRelatedPytest(root, modules, alpha, alphaSource, adapter)
+        assertContains(conftestFallback, "Affected pytest: full fallback (conftest)")
+        assertContains(conftestFallback, "3 passed")
+        assertTrue(conftest.delete())
+
+        val runtimeFallback = executeRelatedPytest(
+            root,
+            modules,
+            alpha,
+            alphaSource,
+            adapter,
+            mapOf("PYTEST_ADDOPTS" to "-q"),
+        )
+        assertContains(runtimeFallback, "Affected pytest: full fallback (runtime-options)")
+        assertContains(runtimeFallback, "3 passed")
+    }
+
+    private fun executeRelatedPytest(
+        root: File,
+        modules: List<BuildModule>,
+        module: BuildModule,
+        changed: File,
+        adapter: Path,
+        environment: Map<String, String> = emptyMap(),
+    ): String {
+        val command = pythonCommands(
+            root.path,
+            listOf("${module.executionId}:test"),
+            modules,
+            BuildChanges(listOf(changed.path), setOf(changed.path), comparedToBase = true),
+            adapter,
+        ).single()
+        return execute(root, command.arguments, environment)
     }
 
     @Test
@@ -194,14 +272,19 @@ class CliAdapterConformanceTest {
         .firstOrNull(File::isDirectory)
         ?: File(System.getProperty("user.dir"), "conformance/cli-fixtures")
 
-    private fun execute(directory: File, arguments: List<String>): String {
+    private fun execute(
+        directory: File,
+        arguments: List<String>,
+        environment: Map<String, String> = emptyMap(),
+    ): String {
         val output = File.createTempFile("affected-cli-output", ".log")
         try {
-            val process = ProcessBuilder(arguments)
+            val builder = ProcessBuilder(arguments)
                 .directory(directory)
                 .redirectErrorStream(true)
                 .redirectOutput(output)
-                .start()
+            builder.environment().putAll(environment)
+            val process = builder.start()
             val completed = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             if (!completed) process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)
             val text = output.readText()

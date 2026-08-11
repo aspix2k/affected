@@ -53,14 +53,18 @@ internal object ManifestSearch {
         Files.readString(path, StandardCharsets.UTF_8)
     }.getOrNull()
 
-    fun anyFile(root: File, matches: (File) -> Boolean): Boolean? {
+    fun anyFile(
+        root: File,
+        excludedRoots: Set<java.nio.file.Path> = emptySet(),
+        matches: (File) -> Boolean,
+    ): Boolean? {
         val queue = ArrayDeque<Pair<File, Int>>()
         queue += root to 0
         var visited = 0
         while (queue.isNotEmpty()) {
             if (visited++ >= MAX_DIRECTORIES) return null
             val (directory, depth) = queue.removeFirst()
-            when (scanAny(directory, depth, matches, queue)) {
+            when (scanAny(directory, depth, excludedRoots, matches, queue)) {
                 true -> return true
                 null -> return null
                 false -> Unit
@@ -101,12 +105,14 @@ internal object ManifestSearch {
     private fun scanAny(
         directory: File,
         depth: Int,
+        excludedRoots: Set<java.nio.file.Path>,
         matches: (File) -> Boolean,
         queue: ArrayDeque<Pair<File, Int>>,
     ): Boolean? {
         val children = directory.listFiles() ?: return null
         if (children.size > MAX_DIRECTORIES) return null
         for (child in children) {
+            if (child.toPath().toAbsolutePath().normalize() in excludedRoots) continue
             if (unsafeTraversalSymlink(child, depth, MAX_DEPTH, matches)) return null
             if (Files.isRegularFile(child.toPath(), LinkOption.NOFOLLOW_LINKS) && matches(child)) return true
             if (canEnter(child, depth)) {

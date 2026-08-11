@@ -104,6 +104,18 @@ class PythonProjectsTest {
     }
 
     @Test
+    fun `a parent package does not inherit tests from nested packages`() {
+        val root = workspace()
+        packageAt(root, ".", "root-app")
+        packageAt(root, "packages/child", "child", tests = true)
+
+        val modules = PythonProjects.parse(root)
+
+        assertTrue(modules.single { it.id == "child" }.hasTests)
+        assertTrue(!modules.single { it.id == "root-app" }.hasTests)
+    }
+
+    @Test
     fun `a test file beside code also counts as tests`() {
         val root = workspace()
         packageAt(root, "libs/a", "pkg-a")

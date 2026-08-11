@@ -49,6 +49,14 @@ scan-limit failures must keep the package test script. Exact workspace commands
 still belong to one `SequentialProcessHandler`; never create a Run session per
 test file.
 
+Pytest exact selection runs after complete collection and filters only whole
+test files. It has no persistent baseline. Conftest, external plugins, pytest
+configuration, dynamic or external imports, file loading, resources, added or
+deleted paths, symlinks, ambiguous ownership and scan limits must keep the full
+collected package plan. The packaged adapter must stay byte-identical to
+`core/src/main/python/affected_pytest.py`, pass Ruff with zero findings and
+preserve one Python Run session.
+
 The plugin id is permanent. Changing it breaks updates for every existing user.
 
 Kotlin nests block comments. A glob like `packages/*` inside a KDoc opens an

@@ -35,8 +35,8 @@ Node.js, .NET, Python, PHP, Ruby and C/C++.
   and C/C++ projects together.
 - **One Run session per build-system root.** Commands stay together and stop on the
   first failure.
-- **Smaller test runs.** Gradle and Maven can narrow a module to affected JUnit
-  classes; supported Jest and Vitest packages can narrow to related test files.
+- **Smaller test runs.** Gradle and Maven can narrow to affected JUnit classes;
+  supported Jest, Vitest and pytest projects can narrow to related test files.
 - **Consumer checks.** Optionally verify direct dependents after a public API
   change.
 - **Local by design.** No account, server, telemetry or project-specific config file.
@@ -51,7 +51,7 @@ Node.js, .NET, Python, PHP, Ruby and C/C++.
 | Go modules | Go | `go test`, `go build` | package |
 | npm, Yarn and pnpm | JavaScript, TypeScript, JSX, TSX, Vue, Svelte | Jest, Vitest, package test, `tsc --noEmit` | related test file or workspace package |
 | .NET | C#, F#, Visual Basic, Razor | `dotnet test`, `dotnet build` | project |
-| Python | Python | pytest, mypy | package |
+| Python | Python | pytest, mypy | test file or package |
 | Composer | PHP | PHPUnit, PHPStan | package |
 | Bundler | Ruby | RSpec | gem |
 | CMake | C, C++ | build and CTest | target or test plan |
