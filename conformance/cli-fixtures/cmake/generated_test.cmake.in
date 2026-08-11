@@ -1,0 +1,5 @@
+add_executable(affected_generated_runner "${CMAKE_CURRENT_SOURCE_DIR}/generated_test.c")
+add_test(
+    NAME affected_generated
+    COMMAND affected_generated_runner "${CMAKE_CURRENT_BINARY_DIR}/affected-generated.marker"
+)

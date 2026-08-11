@@ -9,6 +9,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CliCommandTest {
@@ -28,6 +29,98 @@ class CliCommandTest {
             commands[1].arguments,
         )
         assertFalse(commands.flatMap { it.arguments }.contains("-R"))
+    }
+
+    @Test
+    fun `CMake exact full and empty plans stay in one ordered command batch`() {
+        val selected = Path.of("/tmp/selected-tests.txt")
+        val report = Path.of("/tmp/ctest.xml")
+
+        val exact = cmakeSelectiveCommands(
+            "build",
+            CMakeTestSelection.Exact(listOf("affected_alpha")),
+            selected = selected,
+        )
+        assertEquals(listOf("cmake", "--build", "build"), exact[0].arguments)
+        assertEquals(
+            listOf(
+                "ctest", "--test-dir", "build", "--output-on-failure",
+                "--tests-from-file", selected.toString(), "--no-tests=error",
+            ),
+            exact[1].arguments,
+        )
+        assertFalse(exact.flatMap { it.arguments }.contains("-R"))
+
+        val full = cmakeSelectiveCommands(
+            "build",
+            CMakeTestSelection.Full,
+            report = report,
+        )
+        assertEquals(listOf("cmake", "--build", "build"), full[0].arguments)
+        assertEquals(
+            listOf("ctest", "--test-dir", "build", "--output-on-failure", "--output-junit", report.toString()),
+            full[1].arguments,
+        )
+
+        val empty = cmakeSelectiveCommands("build", CMakeTestSelection.Empty)
+        assertEquals(listOf("cmake", "--build", "build"), empty.single().arguments)
+    }
+
+    @Test
+    fun `command capture aborts output beyond its byte limit`() {
+        val directory = createTempDirectory("bounded-capture")
+        val bin = File(System.getProperty("java.home"), "bin")
+        val java = listOf(File(bin, "java"), File(bin, "java.exe")).first(File::isFile)
+
+        assertNull(CommandRunner.capture(directory.toString(), listOf(java.path, "-version"), maxBytes = 1))
+    }
+
+    @Test
+    fun `command capture timeout terminates descendant processes`() {
+        val directory = createTempDirectory("bounded-capture-tree")
+        val bin = File(System.getProperty("java.home"), "bin")
+        val java = listOf(File(bin, "java"), File(bin, "java.exe")).first(File::isFile)
+        val javac = listOf(File(bin, "javac"), File(bin, "javac.exe")).first(File::isFile)
+        val source = directory.resolve("CaptureTree.java")
+        val pid = directory.resolve("child.pid")
+        source.toFile().writeText(
+            """
+            import java.nio.file.Files;
+            import java.nio.file.Path;
+
+            class CaptureTree {
+                public static void main(String[] args) throws Exception {
+                    if (args[0].equals("child")) {
+                        Thread.sleep(60_000);
+                        return;
+                    }
+                    String java = ProcessHandle.current().info().command().orElseThrow();
+                    Process child = new ProcessBuilder(
+                        java, "-cp", System.getProperty("java.class.path"), "CaptureTree", "child"
+                    ).start();
+                    Files.writeString(Path.of(args[1]), Long.toString(child.pid()));
+                    child.waitFor();
+                }
+            }
+            """.trimIndent(),
+        )
+        val compiler = ProcessBuilder(javac.path, source.toString()).directory(directory.toFile()).start()
+        assertEquals(0, compiler.waitFor())
+
+        assertNull(
+            CommandRunner.capture(
+                directory.toString(),
+                listOf(java.path, "-cp", directory.toString(), "CaptureTree", "parent", pid.toString()),
+                timeoutSeconds = 1,
+            ),
+        )
+        val childPid = pid.toFile().readText().toLong()
+        var alive = true
+        repeat(20) {
+            alive = ProcessHandle.of(childPid).map(ProcessHandle::isAlive).orElse(false)
+            if (alive) Thread.sleep(50)
+        }
+        assertFalse(alive)
     }
 
     @Test

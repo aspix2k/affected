@@ -54,7 +54,7 @@ Node.js, .NET, Python, PHP, Ruby and C/C++.
 | Python | Python | pytest, mypy | test file or package |
 | Composer | PHP | PHPUnit, PHPStan | package |
 | Bundler | Ruby | RSpec | gem |
-| CMake | C, C++ | build and CTest | target or test plan |
+| CMake | C, C++ | build and CTest | named CTest test or target |
 
 **Affected** works in IntelliJ IDEA, Android Studio, Rider, GoLand, CLion, PyCharm,
 WebStorm, PhpStorm, RubyMine, RustRover and DataSpell based on IntelliJ Platform

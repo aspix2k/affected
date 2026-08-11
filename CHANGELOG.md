@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Run related test files instead of every test in an affected npm, Yarn or pnpm package when a default-config Jest 29–30 or Vitest 2–4 dependency graph can prove the selection.
 - Run related pytest files after complete collection when a bounded current Python import graph proves the selection.
+- Run exact named CTest tests for changed C and C++ targets when CMake 4.1+ and CTest 3.29+ metadata proves the relationship.
 
 ### Changed
 
@@ -20,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test the native Python fixture with Python 3.14, pytest 9.1.1 and zero-finding Ruff 0.16.2 checks.
 - Build with Gradle 9.7 and verify native adapters against current stable GitHub Actions, language runtimes and test frameworks.
 - Reject shell and workflow analyzer findings with checksummed ShellCheck 0.11.0 and actionlint 1.7.12 gates.
+- Keep CMake configuration, generated tests, fixtures, resources, added or deleted targets and incomplete metadata on the full CTest plan.
 
 ### Fixed
 

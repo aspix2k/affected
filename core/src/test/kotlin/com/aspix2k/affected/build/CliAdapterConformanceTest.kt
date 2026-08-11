@@ -10,6 +10,8 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class CliAdapterConformanceTest {
@@ -243,15 +245,147 @@ class CliAdapterConformanceTest {
     }
 
     @Test
-    fun `CMake commands rebuild and run the complete CTest plan`() = fixture("cmake") { root ->
-        execute(root, listOf("cmake", "-S", ".", "-B", "build"))
+    fun `CMake runs exact CTest files and preserves full fallback`() = fixture("cmake") { root ->
+        val build = File(root, "build")
+        configureCMake(root)
+        assertTrue(requestCMakeCodemodel(build.toPath()))
+        assertFalse(hasCMakeCodemodelReply(build.toPath()))
+        configureCMake(root)
+        assertTrue(hasCMakeCodemodelReply(build.toPath()))
         val modules = CMakeTargets.parse(root)
-        val output = cmakeCommands(root.path, modules.map { "${it.executionId}:test" })
+        lateinit var full: String
+        val fullMillis = measureTimeMillis {
+            full = cmakeCommands(root.path, modules.map { "${it.executionId}:test" })
+                .joinToString("\n") { execute(root, it.arguments) }
+        }
+        assertContains(full, "affected_alpha")
+        assertContains(full, "affected_alpha_extended")
+        assertContains(full, "affected_beta")
+        assertContains(full, "100% tests passed")
+
+        val rootPath = root.canonicalFile.toPath()
+        val baseline = assertNotNull(cmakeSnapshot(root, build))
+        val alpha = File(root, "alpha.c").canonicalFile
+        val exact = assertIs<CMakeTestSelection.Exact>(
+            selectCMakeTests(rootPath, baseline, baseline, cmakeChanges(alpha)),
+        )
+        assertEquals(listOf("affected_alpha"), exact.tests)
+
+        val alphaMarker = File(build, "affected-alpha.marker")
+        val alphaExtendedMarker = File(build, "affected-alpha-extended.marker")
+        val betaMarker = File(build, "affected-beta.marker")
+        deleteMarkers(alphaMarker, alphaExtendedMarker, betaMarker)
+        lateinit var exactOutput: String
+        val exactMillis = measureTimeMillis {
+            exactOutput = executeCMakeSelection(root, build, exact.tests)
+        }
+        assertContains(exactOutput, "affected_alpha")
+        assertFalse(exactOutput.contains("affected_alpha_extended"), exactOutput)
+        assertTrue(alphaMarker.isFile)
+        assertFalse(alphaExtendedMarker.exists())
+        assertFalse(betaMarker.exists())
+        assertTrue(exactMillis < fullMillis, "exact=$exactMillis ms, full=$fullMillis ms")
+
+        assertCMakeFallbacks(root, build, modules, baseline, alpha)
+    }
+
+    private fun assertCMakeFallbacks(
+        root: File,
+        build: File,
+        modules: List<BuildModule>,
+        baseline: CMakeTestSnapshot,
+        alpha: File,
+    ) {
+        val rootPath = root.canonicalFile.toPath()
+        val alphaMarker = File(build, "affected-alpha.marker")
+        val alphaExtendedMarker = File(build, "affected-alpha-extended.marker")
+        val betaMarker = File(build, "affected-beta.marker")
+
+        configureCMake(root, "-DAFFECTED_FIXTURE_ENABLE_CTEST_FIXTURE=ON")
+        assertEquals(
+            CMakeTestSelection.Full,
+            selectCMakeTests(rootPath, cmakeSnapshot(root, build), baseline, cmakeChanges(alpha)),
+        )
+        deleteExistingMarkers(alphaMarker)
+        val fixtureFallback = runFullCMakePlan(root, modules)
+        assertContains(fixtureFallback, "affected_fixture_setup")
+        assertContains(fixtureFallback, "affected_fixture_cleanup")
+        assertTrue(betaMarker.isFile)
+        assertFalse(File(build, "affected-fixture.ready").exists())
+
+        configureCMake(
+            root,
+            "-DAFFECTED_FIXTURE_ENABLE_CTEST_FIXTURE=OFF",
+            "-DAFFECTED_FIXTURE_ENABLE_GENERATED_TEST=ON",
+        )
+        assertEquals(
+            CMakeTestSelection.Full,
+            selectCMakeTests(rootPath, cmakeSnapshot(root, build), baseline, cmakeChanges(alpha)),
+        )
+        deleteExistingMarkers(alphaMarker, alphaExtendedMarker, betaMarker)
+        val generatedFallback = runFullCMakePlan(root, modules)
+        assertContains(generatedFallback, "affected_generated")
+        assertTrue(alphaExtendedMarker.isFile)
+        assertTrue(File(build, "affected-generated.marker").isFile)
+
+        configureCMake(
+            root,
+            "-DAFFECTED_FIXTURE_ENABLE_GENERATED_TEST=OFF",
+            "-DAFFECTED_FIXTURE_ENABLE_RESOURCE_TEST=ON",
+        )
+        assertEquals(
+            CMakeTestSelection.Full,
+            selectCMakeTests(rootPath, cmakeSnapshot(root, build), baseline, cmakeChanges(alpha)),
+        )
+        deleteExistingMarkers(alphaMarker, alphaExtendedMarker, betaMarker)
+        val resourceFallback = runFullCMakePlan(root, modules)
+        assertContains(resourceFallback, "affected_alpha_extended")
+        assertContains(resourceFallback, "affected_beta")
+        assertTrue(alphaMarker.isFile)
+        assertTrue(alphaExtendedMarker.isFile)
+        assertTrue(betaMarker.isFile)
+    }
+
+    private fun configureCMake(root: File, vararg options: String) {
+        execute(root, listOf("cmake", "-S", ".", "-B", "build") + options)
+    }
+
+    private fun cmakeSnapshot(root: File, build: File): CMakeTestSnapshot? =
+        runCatching {
+            readCMakeTestSnapshot(
+                root.canonicalFile.toPath(),
+                build.canonicalFile.toPath(),
+            ) { execute(root, it) }
+        }.getOrNull()
+
+    private fun cmakeChanges(file: File): BuildChanges =
+        BuildChanges(listOf(file.path), setOf(file.path), comparedToBase = true)
+
+    private fun executeCMakeSelection(root: File, build: File, tests: List<String>): String {
+        val selected = File(build, "affected-tests.txt").apply {
+            writeText(tests.joinToString("\n", postfix = "\n"))
+        }
+        execute(root, listOf("cmake", "--build", "build"))
+        return execute(
+            root,
+            listOf(
+                "ctest",
+                "--test-dir",
+                "build",
+                "--output-on-failure",
+                "--tests-from-file",
+                selected.path,
+                "--no-tests=error",
+            ),
+        )
+    }
+
+    private fun runFullCMakePlan(root: File, modules: List<BuildModule>): String =
+        cmakeCommands(root.path, modules.map { "${it.executionId}:test" })
             .joinToString("\n") { execute(root, it.arguments) }
 
-        assertContains(output, "affected_alpha")
-        assertContains(output, "affected_beta")
-        assertContains(output, "100% tests passed")
+    private fun deleteExistingMarkers(vararg markers: File) {
+        markers.filter(File::exists).forEach { assertTrue(it.delete()) }
     }
 
     private fun fixture(name: String, block: (File) -> Unit) {
