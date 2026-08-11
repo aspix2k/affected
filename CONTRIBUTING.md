@@ -108,6 +108,13 @@ configuration, dynamic or external imports, file loading, resources, non-modifie
 changes, symlinks and scan-limit failures leave the collected package plan intact.
 No persistent Python dependency baseline is written.
 
+Supported CMake 4.1+ and CTest 3.29+ projects read the current File API
+codemodel and CTest JSON plan, build once and pass proven test names through
+`--tests-from-file` in the same Run session. Only a complete successful full
+plan with unchanged metadata replaces the baseline. Headers, configuration,
+generated registrations, fixtures, resources and unsupported metadata keep the
+full CTest plan.
+
 `ChangeAnalyzer` and `TaskPlanner` have no IDE dependencies and are covered by
 unit tests. Keep them that way: return data and let the action format it. The
 `collector` module produces Java 8 agents, a JUnit listener, a Gradle init script
