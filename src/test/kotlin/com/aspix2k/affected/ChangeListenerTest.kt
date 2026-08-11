@@ -15,6 +15,12 @@ class ChangeListenerTest {
     }
 
     @Test
+    fun `extensionless build manifests are relevant by name`() {
+        assertTrue(isRelevantPath("/project/Gemfile", extensions, setOf("Gemfile")))
+        assertFalse(isRelevantPath("/project/README", extensions, setOf("Gemfile")))
+    }
+
+    @Test
     fun `generated and VCS files are ignored`() {
         assertFalse(isRelevantPath("/project/build/generated/Main.kt", extensions))
         assertFalse(isRelevantPath("/project/.gradle/cache/lib.rs", extensions))

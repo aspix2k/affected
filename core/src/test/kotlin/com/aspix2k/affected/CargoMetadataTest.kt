@@ -4,7 +4,6 @@ import com.aspix2k.affected.build.CargoMetadata
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class CargoMetadataTest {
@@ -75,13 +74,13 @@ class CargoMetadataTest {
     }
 
     @Test
-    fun `a package with unit tests in its sources is testable`() {
+    fun `every package stays runnable because cargo test also builds it`() {
         val root = workspace()
 
         val modules = CargoMetadata.parse(metadata(root), root.path)
 
         assertTrue(modules.single { it.id == "core-lib" }.hasTests)
-        assertFalse(modules.single { it.id == "app" }.hasTests)
+        assertTrue(modules.single { it.id == "app" }.hasTests)
     }
 
     @Test

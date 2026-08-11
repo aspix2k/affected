@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-08-11
+
+### Added
+
+- Run single-package Node, Python, Composer and Bundler projects, and single-target CMake projects, without requiring a workspace sibling.
+- Verify changed Rust and Go packages even when they contain no explicit test files, and build or statically analyse changed .NET, CMake, TypeScript, Python and Composer modules that have no tests.
+- Exercise every existing CLI adapter against a committed native Cargo, Go, npm, .NET, pytest, PHPUnit, RSpec or CMake project in conformance CI.
+
+### Changed
+
+- Keep all Cargo, Go, Node, .NET, Python, Composer, Bundler and CMake commands for one build root in one fail-fast IDE Run session. Compatible native commands are batched where their CLI supports it.
+- Cache CLI module graphs by bounded content fingerprints of every discovered graph and lock input instead of root-manifest timestamps.
+- Run CLI-adapter contracts on Linux, macOS and Windows in the conformance workflow.
+
+### Fixed
+
+- Widen missing, malformed, partial, stale or oversized CLI project models to a visible root-level verification instead of silently producing an empty or partial plan.
+- Pass exact .NET project files to `dotnet`, rebuild CMake before CTest, discover the configured CMake build tree instead of assuming `cmake-build-debug`, and never infer CTest ownership from matching target names.
+- Classify consumer impact by the file's owning build system, so non-JVM production and configuration changes remain conservative without treating Gradle JSON resources as public API changes.
+
 ## [1.13.0] - 2026-08-11
 
 ### Added

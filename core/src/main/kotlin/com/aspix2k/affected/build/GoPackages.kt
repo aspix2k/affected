@@ -12,12 +12,14 @@ object GoPackages {
     fun parse(json: String, root: String): List<BuildModule> {
         val packages = read(json)
         val paths = packages.mapNotNull { it.string("ImportPath") }.toSet()
+        if (paths.size != packages.size) return emptyList()
 
-        return packages.mapNotNull { pkg ->
-            val importPath = pkg.string("ImportPath") ?: return@mapNotNull null
-            val directory = pkg.string("Dir")?.normalizeSeparators() ?: return@mapNotNull null
+        return packages.map { pkg ->
+            val importPath = pkg.string("ImportPath") ?: return emptyList()
+            val directory = pkg.string("Dir")?.normalizeSeparators() ?: return emptyList()
 
-            val dependencies = pkg.strings("Imports")
+            val imports = pkg.strings("Imports") ?: return emptyList()
+            val dependencies = imports
                 .filter { it in paths }
                 .mapTo(HashSet()) { "$root|$it" }
 
@@ -27,7 +29,7 @@ object GoPackages {
                 contentRoots = listOf(directory),
                 testTask = TEST,
                 compileTask = COMPILE,
-                hasTests = pkg.strings("TestGoFiles").isNotEmpty() || pkg.strings("XTestGoFiles").isNotEmpty(),
+                hasTests = true,
                 dependencies = dependencies - "$root|$importPath",
             )
         }
@@ -46,8 +48,11 @@ object GoPackages {
     private fun JsonObject.string(name: String): String? =
         get(name)?.takeIf { it.isJsonPrimitive }?.asString
 
-    private fun JsonObject.strings(name: String): List<String> =
-        getAsJsonArray(name)?.mapNotNull { it.takeIf { e -> e.isJsonPrimitive }?.asString }.orEmpty()
+    private fun JsonObject.strings(name: String): List<String>? {
+        val value = get(name) ?: return emptyList()
+        if (!value.isJsonArray) return null
+        return value.asJsonArray.map { it.takeIf { element -> element.isJsonPrimitive }?.asString ?: return null }
+    }
 
     private fun String.normalizeSeparators(): String = replace('\\', '/')
 }

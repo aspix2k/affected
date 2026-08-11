@@ -10,7 +10,8 @@ class ChangeListener : BulkFileListener {
 
     override fun after(events: List<VFileEvent>) {
         val extensions = BuildSystems.sourceExtensions()
-        if (events.none { isRelevantPath(it.path, extensions) }) return
+        val names = BuildSystems.sourceFileNames()
+        if (events.none { isRelevantPath(it.path, extensions, names) }) return
 
         for (project in ProjectManager.getInstance().openProjects) {
             if (project.isDisposed) continue
@@ -19,9 +20,9 @@ class ChangeListener : BulkFileListener {
     }
 }
 
-internal fun isRelevantPath(path: String, extensions: Set<String>): Boolean {
+internal fun isRelevantPath(path: String, extensions: Set<String>, names: Set<String> = emptySet()): Boolean {
     if (IGNORED_DIRECTORIES.any(path::contains)) return false
-    return path.substringAfterLast('.', "").lowercase() in extensions
+    return path.substringAfterLast('.', "").lowercase() in extensions || path.substringAfterLast('/') in names
 }
 
 private val IGNORED_DIRECTORIES = listOf(

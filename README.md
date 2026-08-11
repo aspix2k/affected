@@ -9,11 +9,10 @@
 
 **Run only what your change can affect.**
 
-Affected maps changed source files to build modules and runs the tests of the
-modules they belong to. It can also check direct consumers after a Kotlin or
-Java public API change. Unrelated modules are skipped. Compatible Gradle modules
-inside one composite build share an IDE invocation and Run tab; independent
-build roots run concurrently.
+Affected maps changed source files to build modules and runs their tests, build
+or configured static analysis. It can also check direct consumers after a
+public API change. Unrelated modules are skipped. Compatible modules inside one
+build root share one IDE Run tab; independent build roots run concurrently.
 
 After one successful full Affected run, compatible Gradle and Maven test tasks
 reuse a local dependency map to narrow execution to Jupiter and Vintage
@@ -36,24 +35,20 @@ manifests.
 | Gradle JVM | `test` | `compileTestKotlin` |
 | Gradle Android | `testDebugUnitTest` | `compileDebugUnitTestKotlin` |
 | Maven | `test`, or `verify` when the reactor binds Failsafe | `test-compile` |
-| Cargo workspace | `cargo test -p` | `cargo check --tests -p` |
+| Cargo workspace or package | `cargo test -p` | `cargo check --tests -p` |
 | Go module | `go test` | `go build` |
-| npm, Yarn or pnpm workspace | workspace `test` | `tsc --noEmit` when the package has `tsconfig.json` |
-| .NET solution or project | `dotnet test` | `dotnet build` |
-| Python multi-project repository | `pytest` | `mypy` when configured |
-| Composer multi-package repository | PHPUnit | PHPStan when static analysis is configured |
-| Bundler multi-gem repository | RSpec | — |
-| CMake project with multiple targets | CTest | dependent target build |
+| npm, Yarn or pnpm workspace or package | workspace `test`, or `tsc --noEmit` when only type checking is available | `tsc --noEmit` when the package has `tsconfig.json` |
+| .NET solution or project | `dotnet test`, or `dotnet build` for a non-test project | `dotnet build` |
+| Python repository | `pytest`, or `mypy` when only type checking is available | `mypy` when configured |
+| Composer repository | PHPUnit, or PHPStan when only static analysis is available | PHPStan when configured |
+| Bundler repository | RSpec | — |
+| CMake project | full build and CTest when tests are registered, otherwise target build | dependent target build |
 
 The recognised languages are Kotlin, Java, Rust, Go, JavaScript, TypeScript,
 C#, F#, Visual Basic, Python, PHP, Ruby, C and C++. JSX, TSX, Vue, Svelte and
 Razor files are recognised too. Gradle projects may use Kotlin or Groovy build
 scripts; linked and composite builds, renamed or flat modules, and Android
 source sets are supported.
-
-Python and Composer repositories need at least two package manifests, Bundler
-repositories need at least two gemspecs, and CMake projects need at least two
-`add_executable` or `add_library` targets.
 
 ## Change scope
 
@@ -62,9 +57,12 @@ also compares the current branch with the merge base of the configured base
 branch, falling back to `develop`, `main`, then `master`.
 
 With Git available, public API detection compares Kotlin and Java declarations.
-Consumer checking is optional and covers direct consumers only. Without Git,
-local source changes still work, but they are conservatively treated as possible
-API changes.
+Production and configuration changes owned by the other supported build systems
+are conservatively treated as possible API changes; their recognised test paths
+are excluded. Consumer checking is optional and covers direct consumers only.
+A root manifest or an unowned source below a build root widens to every module
+in that build. Without Git, local source changes still work and conservatively
+affect consumers.
 
 ## Using the plugin
 
@@ -81,8 +79,11 @@ The same menu contains these settings:
 - **Animate while running:** on by default.
 
 Gradle and Maven run through their IDE integrations. Other build systems launch
-their command-line tools in the Run tool window, so the relevant tool must be
-available on `PATH`.
+their command-line tools in one fail-fast Run session per build-system root, so
+the relevant tool must be available on `PATH`. A missing tool, malformed or
+stale graph, unresolved planned module, ambiguous CMake build tree or bounded
+discovery overflow fails visibly or widens to the build root; it never silently
+drops part of the plan.
 
 Test-class selection stays inside the original IDE invocation and Run tab.
 Gradle selection is task-local. Maven reactor modules use independent maps.
@@ -125,11 +126,14 @@ to AI agents.
 - The IDE integration for Gradle or Maven when using those project types.
 - The relevant command-line tools for the other project types.
 
-The repository's exact-impact conformance matrix runs the same public Gradle
-and Maven fixtures on Linux, macOS and Windows. It covers Gradle 8.14.3 and
-9.6.1, Maven 3.9.0 and 3.9.16, and compatible JDK 17–26 pairings. Correctness
-gates exact selections, complete baseline promotion and full fallbacks; selector
-and map-read overhead is recorded separately without a timing threshold.
+The repository's conformance matrix runs public Gradle and Maven fixtures,
+cross-platform CLI contracts, and committed native projects for Cargo, Go, npm,
+.NET, pytest, PHPUnit, RSpec and CMake. It covers Gradle 8.14.3 and 9.6.1,
+Maven 3.9.0 and 3.9.16, compatible JDK 17–26 pairings, and real native commands.
+Correctness gates exact selections, complete baseline promotion, executable CLI
+plans and full fallbacks. CLI discovery is bounded and content-fingerprint caches
+avoid reparsing unchanged graphs; overflow disables selective caching instead of
+weakening correctness. Measurements have no timing-based correctness threshold.
 
 ## Interface languages
 

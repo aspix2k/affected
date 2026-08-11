@@ -50,15 +50,14 @@ class PythonProjectsTest {
     }
 
     @Test
-    fun `a single package is not a monorepo`() {
+    fun `a single package remains runnable`() {
         val root = workspace()
         packageAt(root, ".", "single")
 
-        assertEquals(
-            emptyList(),
-            PythonProjects.parse(root),
-            "selective execution is pointless for a single package",
-        )
+        val module = PythonProjects.parse(root).single()
+
+        assertEquals("single", module.id)
+        assertEquals(".", module.executionId)
     }
 
     @Test
@@ -85,6 +84,8 @@ class PythonProjectsTest {
         val modules = PythonProjects.parse(root)
 
         assertEquals("typecheck", modules.single { it.id == "typed-pkg" }.compileTask)
+        assertEquals("typecheck", modules.single { it.id == "typed-pkg" }.testTask)
+        assertTrue(modules.single { it.id == "typed-pkg" }.hasTests)
         assertNull(
             modules.single { it.id == "plain-pkg" }.compileTask,
             "without mypy there is no consumer check",
@@ -123,5 +124,15 @@ class PythonProjectsTest {
         val api = PythonProjects.parse(root).single { it.id == "app-api" }
 
         assertEquals(setOf("${root.invariantSeparatorsPath}|app-core"), api.dependencies)
+    }
+
+    @Test
+    fun `a manifest without a package identity invalidates the graph`() {
+        val root = workspace()
+        packageAt(root, ".", "root")
+        File(root, "libs/broken").mkdirs()
+        File(root, "libs/broken/pyproject.toml").writeText("[tool.black]\nline-length = 100\n")
+
+        assertEquals(emptyList(), PythonProjects.parse(root))
     }
 }

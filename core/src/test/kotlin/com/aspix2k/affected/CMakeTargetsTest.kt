@@ -5,7 +5,6 @@ import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class CMakeTargetsTest {
@@ -67,7 +66,7 @@ class CMakeTargetsTest {
     }
 
     @Test
-    fun `a registered test makes a target testable`() {
+    fun `a registered test makes the project testable without inferring target ownership`() {
         val root = project()
         lists(root, "src/core", "add_library(core STATIC core.cpp)")
         lists(
@@ -81,8 +80,7 @@ class CMakeTargetsTest {
 
         val modules = CMakeTargets.parse(root)
 
-        assertTrue(modules.single { it.id == "core_tests" }.hasTests)
-        assertFalse(modules.single { it.id == "core" }.hasTests)
+        assertTrue(modules.all { it.hasTests })
     }
 
     @Test
@@ -96,11 +94,15 @@ class CMakeTargetsTest {
     }
 
     @Test
-    fun `a project with one target yields no modules`() {
+    fun `a project with one target remains runnable`() {
         val root = project()
         lists(root, ".", "add_executable(single main.cpp)")
 
-        assertEquals(emptyList(), CMakeTargets.parse(root))
+        val module = CMakeTargets.parse(root).single()
+
+        assertEquals("single", module.id)
+        assertEquals("build", module.testTask)
+        assertTrue(module.hasTests)
     }
 
     @Test

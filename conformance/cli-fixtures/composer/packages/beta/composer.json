@@ -1,0 +1,6 @@
+{
+  "name": "affected/fixture-beta",
+  "require": {
+    "affected/fixture-alpha": "*"
+  }
+}

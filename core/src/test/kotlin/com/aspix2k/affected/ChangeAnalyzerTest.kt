@@ -40,6 +40,8 @@ class ChangeAnalyzerTest {
 
     private fun analyze(dir: File) = ChangeAnalyzer(dir, "main").collect()
 
+    private fun analyze(dir: File, extensions: Set<String>) = ChangeAnalyzer(dir, "main", extensions).collect()
+
     @Test
     fun `the list is empty without changes`() = repo { dir ->
         assertTrue(analyze(dir).files.isEmpty(), "a clean tree must not have changes")
@@ -219,6 +221,74 @@ class ChangeAnalyzerTest {
         val changes = analyze(dir)
         assertTrue(changes.files.any { it.name == "build.gradle.kts" })
         assertTrue(changes.apiTouched.isEmpty(), "a build script is not the module public API")
+    }
+
+    @Test
+    fun `non JVM production changes are classified by their owning build system`() = repo { dir ->
+        val extensions = setOf("rs", "go", "ts", "cs", "py", "php", "cpp", "h")
+        extensions.forEach { extension ->
+            File(dir, "other/src/main/code/sample.$extension").apply {
+                parentFile.mkdirs()
+                writeText("changed\n")
+            }
+        }
+
+        val changes = analyze(dir, extensions)
+
+        assertTrue(changes.apiTouched.isEmpty())
+        assertTrue(changes.files.all { affectsConsumers("NODE", it.path, signatureTouched = false) })
+    }
+
+    @Test
+    fun `non JVM test files do not affect consumers`() = repo { dir ->
+        val files = listOf(
+            "rust/tests/sample.rs",
+            "go/pkg/sample_test.go",
+            "node/src/sample.test.ts",
+            "python/src/test_sample.py",
+            "ruby/spec/sample_spec.rb",
+        )
+        files.forEach { path ->
+            File(dir, path).apply {
+                parentFile.mkdirs()
+                writeText("changed\n")
+            }
+        }
+
+        val changes = analyze(dir, setOf("rs", "go", "ts", "py", "rb"))
+
+        assertEquals(files.size, changes.files.size)
+        assertTrue(changes.apiTouched.isEmpty())
+        val systems = mapOf(
+            "rust" to "CARGO",
+            "go" to "GO",
+            "node" to "NODE",
+            "python" to "PYTHON",
+            "ruby" to "RUBY",
+        )
+        assertTrue(changes.files.none { file ->
+            val system = systems.getValue(file.relativeTo(dir).invariantSeparatorsPath.substringBefore('/'))
+            affectsConsumers(system, file.path, signatureTouched = false)
+        })
+        assertTrue(
+            affectsConsumers("GO", "/repo/test/production.go", signatureTouched = false),
+            "a conventional test directory from another ecosystem must not hide Go production code",
+        )
+    }
+
+    @Test
+    fun `a Gradle JSON resource does not affect consumers`() {
+        assertFalse(affectsConsumers("GRADLE", "/repo/app/src/main/assets/sample.json", signatureTouched = false))
+    }
+
+    @Test
+    fun `an extensionless manifest can be tracked without matching every extensionless file`() = repo { dir ->
+        File(dir, "Gemfile").writeText("source 'https://rubygems.org'\n")
+        File(dir, "README").writeText("not a build input\n")
+
+        val changes = ChangeAnalyzer(dir, "main", setOf("rb"), setOf("Gemfile")).collect()
+
+        assertEquals(listOf("Gemfile"), changes.files.map { it.name })
     }
 
     @Test

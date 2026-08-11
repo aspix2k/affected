@@ -48,22 +48,33 @@ Whether a change touched public API is decided by matching added and removed
 lines against a declaration pattern. It is a text heuristic, not a compiler, and
 it deliberately errs toward running too much.
 
-`ModuleGraph` reads the module graph from the IDE project model rather than from
-build scripts, which is what makes build script language, dependency DSL and
-composite builds irrelevant. Modules are attributed to the build that owns them
-by walking up to the nearest `settings.gradle[.kts]`. Gradle execution
-coordinates come separately from the imported model, so included builds keep
-their ownership while compatible tasks can run through the composite root.
+`ModuleGraph` reads Gradle and Maven from their imported IDE project models and
+the CLI integrations from their standard manifests or metadata commands.
+Modules are attributed to the nearest content root. A changed file outside a
+known module but below a build root conservatively belongs to every module in
+the deepest matching build. Gradle execution coordinates come separately from
+the imported model, so included builds keep their ownership while compatible
+tasks can run through the composite root.
 
 `TaskPlanner` turns that into task groups, one per build system and execution
-root, so compatible Gradle modules share a command while independent roots and
-different build systems stay separate. A module already being tested is never
-also compiled.
+root. Gradle and Maven use one native IDE invocation; CLI adapters place their
+bounded native command sequence behind one fail-fast process handler, so one
+root creates one Run tab even when the native tool requires multiple commands.
+Independent roots and different build systems stay separate. A module already
+being verified is never also compiled as a consumer.
 
-A `BuildSystem` supplies module identity, task names and execution, and registers
-itself through the `com.aspix2k.affected.buildSystem` extension point behind an
-optional dependency on its IDE integration. Adding one is a single class plus a
-four-line XML file; nothing else in the plugin changes.
+A `BuildSystem` supplies source matching, module identity, task names and
+execution, and registers itself through the
+`com.aspix2k.affected.buildSystem` extension point behind an optional dependency
+on its IDE integration. CLI graph caches hash every discovered manifest and
+lock input. Missing tools, malformed or partial metadata, stale task identities,
+symlinks and discovery bounds fail closed to a visible root command.
+
+Minimal native projects for every CLI adapter live under
+`conformance/cli-fixtures`. Their gated test is
+`./gradlew :core:test --tests '*CliAdapterConformanceTest' -Paffected.cliConformance=true`;
+it requires the corresponding native tools and downloads only the pinned test
+runner dependencies declared by those fixtures.
 
 `ChangeAnalyzer` and `TaskPlanner` have no IDE dependencies and are covered by
 unit tests. Keep them that way: return data and let the action format it. The

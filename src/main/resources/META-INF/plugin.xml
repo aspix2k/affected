@@ -6,10 +6,10 @@
     <description><![CDATA[
         <b>Run only what your change can affect.</b>
         <br/><br/>
-        Affected maps changed source files to build modules and runs the tests of
-        the modules they belong to. It can also check direct consumers after a
-        Kotlin or Java public API change. Unrelated modules are skipped.
-        Compatible Gradle modules inside one composite build share an IDE run;
+        Affected maps changed source files to build modules and runs their tests,
+        build or configured static analysis. It can also check direct consumers
+        after a public API change. Unrelated modules are skipped. Compatible
+        modules inside one build root share one IDE Run tab;
         independent build roots run concurrently.
         After a successful full run, compatible Gradle JVM, Android unit-test and
         Maven Surefire and Failsafe runs use independent local bytecode maps to
@@ -31,20 +31,20 @@
         <br/>
         <ul>
             <li>Gradle JVM and Android projects, including linked and composite builds, and Maven projects.</li>
-            <li>Cargo workspaces, Go modules, and npm, Yarn or pnpm workspaces.</li>
+            <li>Cargo workspaces or packages, Go modules, and npm, Yarn or pnpm workspaces or packages.</li>
             <li>.NET solutions and projects.</li>
-            <li>Python multi-project repositories, Composer multi-package
-                repositories and Bundler multi-gem repositories.</li>
-            <li>CMake projects with multiple executable or library targets.</li>
+            <li>Single- or multi-package Python, Composer and Bundler repositories.</li>
+            <li>CMake projects with executable or library targets.</li>
         </ul>
         Recognised languages: Kotlin, Java, Rust, Go, JavaScript, TypeScript,
         C#, F#, Visual Basic, Python, PHP, Ruby, C and C++. JSX, TSX, Vue, Svelte
         and Razor files are recognised too.
         <br/><br/>
         With Git available, public API detection compares Kotlin and Java
-        declarations, and optional consumer checking covers direct consumers only.
-        Without Git, local source changes still work and are treated conservatively
-        as possible API changes.
+        declarations; other supported systems conservatively classify non-test
+        production and configuration changes. Optional consumer checking covers
+        direct consumers only. Without Git, local source changes still work and
+        are treated conservatively as possible API changes.
         <br/><br/>
         Requires a JetBrains IDE based on IntelliJ Platform 2025.3 or newer. The
         relevant IDE integration or command-line build tools must be installed.

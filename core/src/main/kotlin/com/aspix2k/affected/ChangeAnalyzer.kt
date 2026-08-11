@@ -13,6 +13,17 @@ class ChangeAnalyzer(
     private val sourceExtensions: Set<String> = DEFAULT_EXTENSIONS,
 ) {
 
+    private var sourceFileNames: Set<String> = emptySet()
+
+    internal constructor(
+        projectDir: File,
+        baseBranch: String,
+        sourceExtensions: Set<String>,
+        sourceFileNames: Set<String>,
+    ) : this(projectDir, baseBranch, sourceExtensions) {
+        this.sourceFileNames = sourceFileNames
+    }
+
     data class Changes(val files: List<File>, val apiTouched: Set<File>)
 
     fun collectPaths(): List<File> = changedFiles(mergeBase())
@@ -46,17 +57,19 @@ class ChangeAnalyzer(
 
     private fun keepSources(paths: Collection<String>): List<File> {
         return paths
-            .filter { path -> path.substringAfterLast('.', "") in sourceExtensions }
+            .filter { path ->
+                path.substringAfterLast('.', "").lowercase() in sourceExtensions ||
+                    path.substringAfterLast('/').substringAfterLast('\\') in sourceFileNames
+            }
             .map { File(projectDir, it) }
             .distinct()
     }
 
     private fun apiTouched(file: File, base: String?): Boolean {
-        val relative = file.relativeTo(projectDir).invariantSeparatorsPath
-        if (TEST_SOURCE_MARKERS.any { relative == it || relative.startsWith("$it/") || relative.contains("/$it/") }) {
-            return false
-        }
-        if (!relative.endsWith(".kt") && !relative.endsWith(".java")) return false
+        val relative = runCatching { file.relativeTo(projectDir).invariantSeparatorsPath }.getOrElse { return true }
+        if (isTestSource(relative)) return false
+        val extension = relative.substringAfterLast('.', "")
+        if (extension != "kt" && extension != "java") return false
 
         val diff = when {
             base != null -> git("diff", "-U0", base, "--", relative)
@@ -132,7 +145,14 @@ class ChangeAnalyzer(
     companion object {
         val DEFAULT_EXTENSIONS = setOf("kt", "kts", "java", "xml", "json", "pro")
 
-        private val TEST_SOURCE_MARKERS = listOf("src/test", "src/androidTest", "src/androidUnitTest")
+        internal fun isTestSource(path: String): Boolean = isTestSource("GRADLE", path)
+
+        internal fun isTestSource(systemId: String, path: String): Boolean {
+            val normalised = path.replace('\\', '/')
+            val segments = normalised.split('/')
+            val name = segments.lastOrNull().orEmpty().lowercase()
+            return TEST_SOURCE_MATCHERS[systemId]?.invoke(segments, name) ?: false
+        }
         private val GIT_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(90).toInt()
         private val FALLBACK_BRANCHES = listOf("develop", "main", "master")
 
@@ -160,3 +180,32 @@ class ChangeAnalyzer(
         private val PARAMETER = Regex("""^\s*(?:@\w+\s*)*[A-Za-z_]\w*\s*:\s*[\w<>\[\]?., ]+,?\s*$""")
     }
 }
+
+private typealias TestSourceMatcher = (List<String>, String) -> Boolean
+
+private val TEST_SOURCE_MATCHERS: Map<String, TestSourceMatcher> = mapOf(
+    "GRADLE" to { segments, _ -> isJvmTestSource(segments) },
+    "MAVEN" to { segments, _ -> isJvmTestSource(segments) },
+    "CARGO" to { segments, _ -> segments.any { it == "tests" || it == "benches" } },
+    "GO" to { _, name -> name.endsWith("_test.go") },
+    "NODE" to { segments, name ->
+        segments.any { it in NODE_TEST_DIRECTORIES } || name.contains(".test.") || name.contains(".spec.")
+    },
+    "PYTHON" to { segments, name ->
+        segments.any { it == "test" || it == "tests" } ||
+            name.startsWith("test_") || name.endsWith("_test.py")
+    },
+    "COMPOSER" to { segments, _ ->
+        segments.any { it.equals("tests", ignoreCase = true) || it == "test" }
+    },
+    "RUBY" to { segments, name ->
+        segments.any { it == "test" || it == "spec" } ||
+            name.endsWith("_spec.rb") || name.endsWith("_test.rb")
+    },
+)
+
+private fun isJvmTestSource(segments: List<String>): Boolean =
+    segments.windowed(2).any { it[0] == "src" && it[1] == "test" } ||
+        segments.any { it == "androidTest" || it == "androidUnitTest" }
+
+private val NODE_TEST_DIRECTORIES = setOf("test", "tests", "spec", "specs", "__tests__")

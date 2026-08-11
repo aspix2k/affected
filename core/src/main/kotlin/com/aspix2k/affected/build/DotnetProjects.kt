@@ -23,30 +23,42 @@ object DotnetProjects {
         if (projects.isEmpty()) return emptyList()
 
         val byPath = projects.associateBy { it.invariantSeparatorsPath }
+        val nameCounts = projects.groupingBy { it.nameWithoutExtension }.eachCount()
+        val ids = projects.associateWith { project ->
+            if (nameCounts.getValue(project.nameWithoutExtension) == 1) {
+                project.nameWithoutExtension
+            } else {
+                relativeProjectPath(rootPath, project).substringBeforeLast('.')
+            }
+        }
 
         return projects.map { project ->
-            val text = project.readText()
+            val text = ManifestSearch.readText(project) ?: return emptyList()
             val directory = project.parentFile
 
             val dependencies = REFERENCE.findAll(text)
                 .mapNotNull { match -> resolve(directory, match.groupValues[1]) }
                 .mapNotNull { byPath[it] }
-                .mapTo(HashSet()) { "$rootPath|${it.nameWithoutExtension}" }
+                .mapTo(HashSet()) { "$rootPath|${ids.getValue(it)}" }
+
+            val id = ids.getValue(project)
+            val hasTests = TEST_MARKERS.any { text.contains(it, ignoreCase = true) }
 
             BuildModule(
-                id = project.nameWithoutExtension,
+                id = id,
                 root = rootPath,
                 contentRoots = listOf(directory.invariantSeparatorsPath),
-                testTask = TEST,
+                testTask = if (hasTests) TEST else COMPILE,
                 compileTask = COMPILE,
-                hasTests = TEST_MARKERS.any { text.contains(it, ignoreCase = true) },
-                dependencies = dependencies - "$rootPath|${project.nameWithoutExtension}",
+                hasTests = true,
+                dependencies = dependencies - "$rootPath|$id",
+                executionId = relativeProjectPath(rootPath, project),
             )
         }
     }
 
     internal fun isProjectFile(file: File): Boolean =
-        file.isFile && file.extension.lowercase() in PROJECT_EXTENSIONS
+        file.isRegularFileNoFollow() && file.extension.lowercase() in PROJECT_EXTENSIONS
 
     private fun resolve(from: File, reference: String): String? {
         val normalised = reference.replace('\\', '/')
@@ -55,4 +67,7 @@ object DotnetProjects {
 
     private fun findProjects(root: File): List<File> =
         PROJECT_EXTENSIONS.flatMap { ManifestSearch.findByExtension(root, it) }
+
+    private fun relativeProjectPath(root: String, project: File): String =
+        project.invariantSeparatorsPath.removePrefix("$root/")
 }

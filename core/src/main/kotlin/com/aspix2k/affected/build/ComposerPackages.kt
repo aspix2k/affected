@@ -12,24 +12,27 @@ object ComposerPackages {
     fun parse(root: File): List<BuildModule> {
         val rootPath = root.invariantSeparatorsPath
         val manifests = findManifests(root)
-        if (manifests.size < 2) return emptyList()
+        if (manifests.isEmpty()) return emptyList()
 
-        val described = manifests.mapNotNull { describe(it) }
+        val described = manifests.map { describe(it) ?: return emptyList() }
         val names = described.map { it.name }.toSet()
+        if (names.size != described.size) return emptyList()
 
         return described.map { entry ->
             val dependencies = entry.requires
                 .filter { it in names }
                 .mapTo(HashSet()) { "$rootPath|$it" }
+            val runnable = entry.hasTests || entry.analysed
 
             BuildModule(
                 id = entry.name,
                 root = rootPath,
                 contentRoots = listOf(entry.directory),
-                testTask = TEST,
+                testTask = if (entry.hasTests) TEST else ANALYSE,
                 compileTask = ANALYSE.takeIf { entry.analysed },
-                hasTests = entry.hasTests,
+                hasTests = runnable,
                 dependencies = dependencies - "$rootPath|${entry.name}",
+                executionId = if (entry.directory == rootPath) "." else entry.name,
             )
         }
     }
@@ -43,7 +46,8 @@ object ComposerPackages {
     )
 
     private fun describe(manifest: File): Described? {
-        val json = runCatching { JsonParser.parseString(manifest.readText()).asJsonObject }.getOrNull() ?: return null
+        val text = ManifestSearch.readText(manifest) ?: return null
+        val json = runCatching { JsonParser.parseString(text).asJsonObject }.getOrNull() ?: return null
         val name = json.get("name")?.takeIf { it.isJsonPrimitive }?.asString ?: return null
         val directory = manifest.parentFile ?: return null
 
