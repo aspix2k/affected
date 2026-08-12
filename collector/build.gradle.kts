@@ -10,8 +10,8 @@ val testJavaVersion = providers.gradleProperty("affected.test.javaVersion").orEl
 val runGradleEightTests = providers.gradleProperty("affected.test.gradle8").orElse("true")
 val symlinkMode = providers.gradleProperty("affected.test.symlinkMode").orElse("optional")
 val conformance = providers.gradleProperty("affected.conformance").map(String::toBoolean).orElse(false)
-val junitVersion = "5.14.4"
-val junitPlatformVersion = "1.14.4"
+val junitVersion = "6.1.3"
+val junitPlatformVersion = "6.1.3"
 val mavenLatestVersion = "3.9.16"
 val maven4Version = "4.0.0-rc-6"
 val smoke = sourceSets.create("smoke")
@@ -42,13 +42,13 @@ dependencies {
 
     add(maven.compileOnlyConfigurationName, "org.apache.maven:maven-core:$mavenLatestVersion")
     add(maven.compileOnlyConfigurationName, "org.apache.maven:maven-model:$mavenLatestVersion")
-    add(maven.compileOnlyConfigurationName, "org.codehaus.plexus:plexus-utils:3.6.1")
+    add(maven.compileOnlyConfigurationName, "org.codehaus.plexus:plexus-utils:4.0.3")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation(gradleTestKit())
     testImplementation("org.apache.maven:maven-core:$mavenLatestVersion")
     testImplementation("org.apache.maven:maven-model:$mavenLatestVersion")
-    testImplementation("org.codehaus.plexus:plexus-utils:3.6.1")
+    testImplementation("org.codehaus.plexus:plexus-utils:4.0.3")
     testCompileOnly("org.junit.jupiter:junit-jupiter-api:$junitVersion")
     testImplementation("org.junit.platform:junit-platform-engine:$junitPlatformVersion")
     testImplementation("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
