@@ -5,37 +5,18 @@
 
     <description><![CDATA[
         <p><b>A JetBrains IDE plugin that finds affected projects and runs only their tests and build checks.</b></p>
-        <p>
-            Built for multi-module projects and monorepos across JVM, Android,
-            Rust, Go, Node.js, .NET, Python, PHP, Ruby and C/C++.
-        </p>
+<!-- affected-support-summary:start -->
+        <p>Built for multi-module projects and monorepos across 10 supported build ecosystems and 11 JetBrains products.</p>
+        <p><a href="https://github.com/aspix2k/affected/blob/main/SUPPORT.md">Support matrix</a>: languages, test runners, selection units and evidence.</p>
+<!-- affected-support-summary:end -->
         <p><b>What you get</b></p>
         <ul>
-            <li>Run supported JVM, Android, Rust, Go, Node.js, .NET, Python, PHP,
-                Ruby and C/C++ projects from one action.</li>
+            <li>Run supported ecosystems from one action.</li>
             <li>Keep all commands for one build-system root in one Run session.</li>
-            <li>Narrow compatible Gradle and Maven modules to affected JUnit test classes,
-                supported VSTest and CTest projects to named tests, and supported Jest,
-                Vitest or pytest projects to related test files.</li>
+            <li>Narrow to the smallest unit proven by the native build system or test runner.</li>
             <li>Optionally verify direct dependents after a public API change.</li>
             <li>No account, server, telemetry or project-specific configuration file.</li>
         </ul>
-        <p><b>Supported projects</b></p>
-        <ul>
-            <li><b>Kotlin, Java and Android:</b> Gradle and Maven.</li>
-            <li><b>Rust and Go:</b> Cargo workspaces and packages; Go modules.</li>
-            <li><b>JavaScript and TypeScript:</b> npm, Yarn and pnpm packages with Jest or Vitest.</li>
-            <li><b>C#, F# and Visual Basic:</b> .NET solutions and projects.</li>
-            <li><b>Python:</b> pytest and mypy projects.</li>
-            <li><b>PHP:</b> Composer packages with affected PHPUnit classes or PHPStan.</li>
-            <li><b>Ruby:</b> Bundler projects with RSpec.</li>
-            <li><b>C and C++:</b> CMake projects with build targets and CTest.</li>
-        </ul>
-        <p>
-            Works in IntelliJ IDEA, Android Studio, Rider, GoLand, CLion, PyCharm,
-            WebStorm, PhpStorm, RubyMine, RustRover and DataSpell based on IntelliJ
-            Platform 2025.3 or newer.
-        </p>
         <p><b>Install Affected, open a supported project and choose Run affected tests.</b></p>
         <p>
             <a href="https://github.com/aspix2k/affected">Documentation</a> ·

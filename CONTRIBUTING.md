@@ -30,6 +30,8 @@ scripts/quality.sh shell
 scripts/quality.sh workflows
 python3 -m unittest scripts.tests.test_release_currentness
 python3 scripts/release_currentness.py
+python3 -m unittest scripts.tests.test_support_matrix
+python3 scripts/support_matrix.py --check
 ```
 
 Pull-request CI runs everything except `pitest`; `pitest` runs weekly. A push
@@ -55,6 +57,14 @@ Transitive lockfile entries are resolver output: update the direct manifest pin
 and regenerate its lock rather than inventorying transitive versions.
 The complete live gate measured 35.98 seconds and 34.3 MB maximum RSS on
 macOS arm64 on 2026-08-12.
+
+`config/support-matrix.json` is the source of truth for supported JetBrains
+products, build systems, test runners, selection units and operating-system
+evidence. Every registered build-system extension must have an entry backed by
+an existing public fixture and CI gate. `SUPPORT.md` and the concise README and
+Marketplace summaries are generated from it. After an intentional change, run
+`python3 scripts/support_matrix.py --write`; CI rejects stale documentation,
+undocumented adapters and unsupported claims.
 
 Every IDE the build or the verifier touches is unpacked into
 `~/.gradle/caches/<gradle>/transforms`, three to five gigabytes each, and old
@@ -224,8 +234,8 @@ two:
    the marketplace page and updates itself on publish.
 5. **Getting Started on the marketplace page** — the one thing no automation
    touches. It is edited through the web form and goes stale silently.
-6. The compatibility matrix in the vault when a system, product or minimum IDE
-   version changes.
+6. `config/support-matrix.json` and its generated `SUPPORT.md` when a system,
+   product, selection unit or minimum IDE version changes.
 
 Every version needs its own section in `CHANGELOG.md`. CI fails when the version
 in `build.gradle.kts` has no entries there, and the release fails when the tagged
