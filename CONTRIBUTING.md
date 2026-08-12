@@ -33,6 +33,12 @@ scripts/quality.sh workflows
 Pull-request CI runs everything except `pitest`; `pitest` runs weekly. A push
 to `main` only promotes the already verified pull-request artifact.
 
+PIT uses the same IntelliJ Platform runtime as the root test task. The complete
+2026-08-12 run took 2 minutes 3 seconds: 16 mutants were killed, 167 mutants in
+IDE glue had no coverage, and one Kotlin-generated non-null guard was
+equivalent. No meaningful mutant survived. Uncovered code remains visible in
+the report and is tracked in #94 rather than hidden with exclusions.
+
 The default wrapper, GitHub Actions and native conformance fixtures track the
 latest stable releases. Older versions belong only in an explicit compatibility
 case such as Gradle 8, Maven 3.9.0 or JDK 17; a regular build pin must be updated
