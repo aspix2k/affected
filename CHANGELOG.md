@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reject shell and workflow analyzer findings with checksummed ShellCheck 0.11.0 and actionlint 1.7.12 gates.
 - Reject Java collector and Gradle dependency findings with zero-baseline SpotBugs and dependency-analysis gates.
 - Add zero-finding CodeQL analysis and fork-safe Gradle dependency graph submission.
+- Reject newly introduced vulnerable dependencies and incomplete dependency graph comparisons in pull requests.
 - Keep CMake configuration, generated tests, fixtures, resources, added or deleted targets and incomplete metadata on the full CTest plan.
 - Keep .NET projects on their full test plan for unsupported SDKs, adapters, Microsoft Testing Platform, custom test settings, parameterized or shared fixtures, resources, generated code, changed test assemblies and incomplete evidence.
 - Build and filter every .NET project inside one fail-fast IDE Run session; skipped, selected, failed and cancelled runs cannot replace an unverified baseline.
@@ -33,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Retry the GitHub run lookup when release promotion starts before the merged pull request is visible through the Actions API.
+- Upgrade vulnerable transitive Jackson and jsoup build dependencies to patched releases.
 - Stop parent Python packages from inheriting tests owned by nested workspace packages.
 
 ## [1.14.1] - 2026-08-11
