@@ -169,6 +169,33 @@ jobs:
             echo "sha256=$actual_sha"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Inspect whether this is a new release
+        id: promotion
+        env:
+          RELEASE_TAG: ${{ steps.artifact.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            echo "currentness=false" >> "$GITHUB_OUTPUT"
+          else
+            current_commit=$(git rev-parse HEAD)
+            trusted_main=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+            if [ "$current_commit" != "$trusted_main" ]; then
+              echo "::error::A new release must use the current trusted main commit."
+              exit 1
+            fi
+            echo "currentness=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: steps.promotion.outputs.currentness == 'true'
+        with:
+          python-version: "3.14.7"
+
+      - name: Require current release pins
+        if: steps.promotion.outputs.currentness == 'true'
+        run: /usr/bin/time --verbose python3 scripts/release_currentness.py
+
       - name: Prepare the release tag
         id: state
         env:

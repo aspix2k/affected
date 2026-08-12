@@ -28,6 +28,8 @@ environment variable.
 scripts/quality.sh analyzers
 scripts/quality.sh shell
 scripts/quality.sh workflows
+python3 -m unittest scripts.tests.test_release_currentness
+python3 scripts/release_currentness.py
 ```
 
 Pull-request CI runs everything except `pitest`; `pitest` runs weekly. A push
@@ -43,6 +45,16 @@ The default wrapper, GitHub Actions and native conformance fixtures track the
 latest stable releases. Older versions belong only in an explicit compatibility
 case such as Gradle 8, Maven 3.9.0 or JDK 17; a regular build pin must be updated
 or carry a tested compatibility reason in its issue and changelog entry.
+
+`config/release-currentness.json` governs direct build, analyzer, fixture,
+toolchain and GitHub Action pins. The live command reads only bounded official
+release endpoints and fails on stale, missing, malformed or unverifiable data.
+Compatibility entries require an exact approved value, a reason and
+repository-owned test evidence.
+Transitive lockfile entries are resolver output: update the direct manifest pin
+and regenerate its lock rather than inventorying transitive versions.
+The complete live gate measured 35.98 seconds and 34.3 MB maximum RSS on
+macOS arm64 on 2026-08-12.
 
 Every IDE the build or the verifier touches is unpacked into
 `~/.gradle/caches/<gradle>/transforms`, three to five gigabytes each, and old

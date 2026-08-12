@@ -65,6 +65,9 @@ jobs:
       - name: Reject analyzer baselines and fail-open settings
         run: scripts/quality.sh analyzers
 
+      - name: Test the release currentness gate
+        run: python3 -m unittest scripts.tests.test_release_currentness
+
   spotbugs:
     name: SpotBugs (zero findings)
     runs-on: ubuntu-latest

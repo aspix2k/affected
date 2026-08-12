@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Block new releases when a governed direct dependency, toolchain, fixture or GitHub Action pin is stale or unverifiable.
 - Run related test files instead of every test in an affected npm, Yarn or pnpm package when a default-config Jest 29–30 or Vitest 2–4 dependency graph can prove the selection.
 - Run related pytest files after complete collection when a bounded current Python import graph proves the selection.
 - Run exact named CTest tests for changed C and C++ targets when CMake 4.1+ and CTest 3.29+ metadata proves the relationship.
