@@ -1,3 +1,4 @@
+import info.solidsoft.gradle.pitest.PitestTask
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.tasks.BuildPluginTask
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel
@@ -393,6 +394,10 @@ pitest {
     outputFormats.set(listOf("XML", "HTML"))
     threads.set(4)
     timestampedReports.set(false)
+}
+
+tasks.named<PitestTask>("pitest") {
+    additionalClasspath.from(configurations.named("intellijPlatformTestClasspath"))
 }
 
 changelog {
