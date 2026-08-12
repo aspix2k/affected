@@ -76,6 +76,95 @@ class AffectedMcpViewsTest {
     }
 
     @Test
+    fun `valid named tasks and settings stay fail-closed on the current snapshot`() {
+        val snapshot = snapshot(
+            analysisStatus = AnalysisStatus.READY,
+            modules = listOf(module(":alpha", tasks = setOf("detekt"))),
+        )
+        val current = AffectedMcpSettings(
+            baseBranch = "main",
+            checkConsumers = false,
+            runBeforeCommit = false,
+            runBeforePush = true,
+            animateWhileRunning = true,
+        )
+
+        val task = AffectedMcpInputs.validateNamedTask(snapshot, " detekt ")
+        val branch = AffectedMcpInputs.validateBaseBranch(" release/1.0 ")
+        val settings = AffectedMcpInputs.applySettings(
+            current = current,
+            baseBranch = "develop",
+            checkConsumers = true,
+            runBeforeCommit = true,
+            animateWhileRunning = false,
+        )
+        val invalidSettings = AffectedMcpInputs.applySettings(current, baseBranch = "../x")
+
+        assertFalse(task.error)
+        assertEquals("detekt", task.data["task"])
+        assertEquals(listOf(":alpha"), task.data["modules"])
+        assertFalse(branch.error)
+        assertEquals("release/1.0", branch.data["baseBranch"])
+        assertFalse(settings.error)
+        assertEquals("develop", settings.data["baseBranch"])
+        assertEquals(true, settings.data["checkConsumers"])
+        assertEquals(true, settings.data["runBeforeCommit"])
+        assertEquals(true, settings.data["runBeforePush"])
+        assertEquals(false, settings.data["animateWhileRunning"])
+        assertTrue(invalidSettings.error)
+        assertEquals("invalid-branch", invalidSettings.data["reason"])
+    }
+
+    @Test
+    fun `ready empty snapshots still report modules files tasks and an empty plan`() {
+        val snapshot = snapshot(
+            analysisStatus = AnalysisStatus.READY,
+            modules = emptyList(),
+            changes = changes("/repo/README.md").copy(files = emptyList(), apiTouched = emptySet()),
+            plans = Verification.PreparedPlans(
+                testsOnly = prepared(0, 0, emptyList()),
+                withConsumers = prepared(0, 0, emptyList()),
+            ),
+        )
+
+        val modules = AffectedMcpViews.modules(snapshot)
+        val files = AffectedMcpViews.changedFiles(snapshot, "/repo")
+        val plan = AffectedMcpViews.plan(snapshot, checkConsumers = false)
+        val tasks = AffectedMcpViews.availableTasks(snapshot)
+        val unavailable = AffectedMcpViews.plan(
+            snapshot(analysisStatus = AnalysisStatus.READY, plans = null),
+            checkConsumers = false,
+        )
+
+        assertFalse(modules.error)
+        assertEquals(emptyList<String>(), modules.data["modules"])
+        assertEquals("No source changes.", files.text)
+        assertEquals("Nothing to verify.", plan.text)
+        assertEquals("No tasks on affected modules.", tasks.text)
+        assertTrue(unavailable.error)
+        assertEquals("unavailable", unavailable.data["analysisStatus"])
+
+        val counted = AffectedMcpViews.availableTasks(
+            snapshot(
+                analysisStatus = AnalysisStatus.READY,
+                modules = listOf(
+                    module(":alpha", tasks = setOf("detekt", "test")),
+                    module(":beta", tasks = setOf("detekt")),
+                ),
+            ),
+        )
+        assertEquals("Tasks available on affected modules.", counted.text)
+        assertEquals(
+            listOf(
+                mapOf("name" to "detekt", "modules" to 2),
+                mapOf("name" to "test", "modules" to 1),
+            ),
+            counted.data["tasks"],
+        )
+        assertTrue(AffectedMcpInputs.validateNamedTask(snapshot(AnalysisStatus.ANALYZING), "detekt").error)
+    }
+
+    @Test
     fun `status reports owned sessions instead of every IDE run`() {
         val snapshot = snapshot(
             analysisStatus = AnalysisStatus.READY,
