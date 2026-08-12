@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import unittest
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -236,7 +236,9 @@ class SupportMatrixTest(unittest.TestCase):
             with self.assertRaisesRegex(support_matrix.SupportMatrixError, "calendar"):
                 support_matrix.check(root)
 
-            product["reviewed"] = (date.today() + timedelta(days=1)).isoformat()
+            product["reviewed"] = (
+                datetime.now(timezone.utc).date() + timedelta(days=1)
+            ).isoformat()
             self.write(root / "config/support-matrix.json", json.dumps(matrix))
 
             with self.assertRaisesRegex(support_matrix.SupportMatrixError, "Future"):

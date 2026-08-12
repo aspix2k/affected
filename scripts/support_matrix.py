@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Validate and render Affected's executable support matrix."""
 
 from __future__ import annotations
@@ -9,10 +8,10 @@ import os
 import re
 import sys
 import tempfile
-import xml.etree.ElementTree as ElementTree
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parents[1]
 MATRIX_PATH = Path("config/support-matrix.json")
@@ -120,7 +119,7 @@ def require_reviewed_date(value: object, field: str) -> str:
         reviewed_date = date.fromisoformat(reviewed)
     except ValueError as error:
         raise SupportMatrixError(f"Invalid calendar {field}: {reviewed}") from error
-    if reviewed_date > date.today():
+    if reviewed_date > datetime.now(timezone.utc).date():
         raise SupportMatrixError(f"Future {field}: {reviewed}")
     return reviewed
 
