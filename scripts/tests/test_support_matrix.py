@@ -170,6 +170,23 @@ class SupportMatrixTest(unittest.TestCase):
                 ):
                     support_matrix.check(root)
 
+    def test_selection_proof_allows_fail_closed_plugin_scope(self) -> None:
+        """ci_scope may skip plugin on docs; any other condition stays rejected."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            workflow_path = root / ".github/workflows/conformance.yml"
+            workflow = workflow_path.read_text(encoding="utf-8")
+            self.write(
+                workflow_path,
+                workflow.replace(
+                    "  verify:\n",
+                    "  verify:\n    if: needs.scope.outputs.plugin == 'true'\n",
+                    1,
+                ),
+            )
+            support_matrix.check(root)
+
     def test_selection_proof_rejects_conditional_target_job_or_step(self) -> None:
         """Reject proof executions whose conditions cannot be proven unconditional."""
         with TemporaryDirectory() as directory:
