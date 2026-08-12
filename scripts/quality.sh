@@ -8,8 +8,8 @@ if ! command -v git >/dev/null 2>&1; then
 fi
 
 mode=${1:-}
-if (( $# == 0 || $# > 3 )); then
-  echo "Usage: scripts/quality.sh <analyzers|codeql|dependency-comparison|dependency-graph|shell|workflows> [inputs]" >&2
+if (( $# == 0 || $# > 2 )); then
+  echo "Usage: scripts/quality.sh <analyzers|codeql|dependency-graph|shell|workflows> [input directory]" >&2
   exit 2
 fi
 
@@ -132,38 +132,6 @@ case "$mode" in
       printf 'CodeQL reported %d finding(s):\n' "$codeql_findings" >&2
       jq -r '.runs[] | .results[]? | "  \(.ruleId // "unknown"): \(.message.text // "no message")"' \
         "${sarif_files[@]}" >&2
-      exit 1
-    fi
-    ;;
-  dependency-comparison)
-    if (( $# != 3 )); then
-      echo "Usage: scripts/quality.sh dependency-comparison <headers file> <response file>" >&2
-      exit 2
-    fi
-    if ! command -v jq >/dev/null 2>&1; then
-      echo "jq is required to validate dependency comparisons." >&2
-      exit 127
-    fi
-
-    comparison_headers=$2
-    comparison_response=$3
-    if [[ ! -f "$comparison_headers" || ! -r "$comparison_headers" ||
-      ! -f "$comparison_response" || ! -r "$comparison_response" ]]; then
-      echo "Dependency comparison headers or response are missing or unreadable." >&2
-      exit 1
-    fi
-
-    comparison_warning=$(awk '
-      BEGIN { IGNORECASE = 1 }
-      /^x-github-dependency-graph-snapshot-warnings:/ {
-        sub(/^[^:]+:[[:space:]]*/, "")
-        sub(/\r$/, "")
-        value = $0
-      }
-      END { print value }
-    ' "$comparison_headers")
-    if [[ -n "$comparison_warning" ]] || ! jq -e 'type == "array"' "$comparison_response" > /dev/null; then
-      echo "GitHub returned an incomplete dependency comparison." >&2
       exit 1
     fi
     ;;
@@ -311,7 +279,7 @@ case "$mode" in
     actionlint -ignore 'unexpected key "queue" for "concurrency" section' "$release"
     ;;
   *)
-    echo "Usage: scripts/quality.sh <analyzers|codeql|dependency-comparison|dependency-graph|shell|workflows> [inputs]" >&2
+    echo "Usage: scripts/quality.sh <analyzers|codeql|dependency-graph|shell|workflows> [input directory]" >&2
     exit 2
     ;;
 esac

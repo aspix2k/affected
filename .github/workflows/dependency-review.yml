@@ -51,7 +51,30 @@ jobs:
               --dump-header "$headers" \
               --output "$response" \
               "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/dependency-graph/compare/$BASE_SHA...$HEAD_SHA"; then
-              if scripts/quality.sh dependency-comparison "$headers" "$response"; then
+              comparison_state=$(awk '
+                {
+                  line = tolower($0)
+                  if (line ~ /^http\/[0-9.]+ 200([[:space:]]|$)/) {
+                    statuses++
+                    status_ok++
+                  } else if (line ~ /^http\//) {
+                    statuses++
+                  } else if (line ~ /^content-type:[[:space:]]*application\/json([;+[:space:]]|$)/) {
+                    content_types++
+                  } else if (line ~ /^x-github-dependency-graph-snapshot-warnings:/) {
+                    warnings++
+                    sub(/^[^:]+:[[:space:]]*/, "", line)
+                    sub(/\r$/, "", line)
+                    warning = line
+                  }
+                }
+                END {
+                  if (statuses == 1 && status_ok == 1 && content_types == 1 && warnings <= 1 && warning == "") {
+                    print "complete"
+                  }
+                }
+              ' "$headers")
+              if [[ "$comparison_state" == complete ]] && jq -e 'type == "array"' "$response" > /dev/null; then
                 exit 0
               fi
             fi
