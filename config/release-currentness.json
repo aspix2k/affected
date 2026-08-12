@@ -53,7 +53,7 @@
     {"id":"dependency-review-action","local":{"type":"github-action","name":"actions/dependency-review-action"},"source":{"type":"github","name":"actions/dependency-review-action"},"policy":"latest"},
     {"id":"gh-release-action","local":{"type":"github-action","name":"softprops/action-gh-release"},"source":{"type":"github","name":"softprops/action-gh-release"},"policy":"latest"},
 
-    {"id":"python","local":{"type":"workflow-value","name":"python-version","occurrences":{".github/workflows/conformance.yml":1,".github/workflows/release.yml":1}},"source":{"type":"python"},"policy":"latest"},
+    {"id":"python","local":{"type":"workflow-value","name":"python-version","occurrences":{".github/workflows/ci.yml":1,".github/workflows/codeql.yml":2,".github/workflows/conformance.yml":5,".github/workflows/mutation.yml":1,".github/workflows/quality.yml":3,".github/workflows/release.yml":1}},"source":{"type":"python"},"policy":"latest"},
     {"id":"node","local":{"type":"workflow-value","name":"node-version","occurrences":{".github/workflows/conformance.yml":1}},"source":{"type":"node"},"policy":"latest"},
     {"id":"dotnet","local":{"type":"workflow-value","name":"dotnet-version","occurrences":{".github/workflows/conformance.yml":1}},"source":{"type":"dotnet"},"policy":"latest"},
     {"id":"go","local":{"type":"workflow-value","name":"go-version","occurrences":{".github/workflows/conformance.yml":1}},"source":{"type":"go"},"policy":"latest"},

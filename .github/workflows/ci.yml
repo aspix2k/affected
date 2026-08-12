@@ -24,6 +24,9 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14.7"
       - uses: gradle/actions/setup-gradle@67621b124fd2e251c5e8a0e6e3b91318f2287669 # v6.3.0
 
       - name: Free disk space for the downloaded IDEs
@@ -34,14 +37,19 @@ jobs:
       - name: The changelog must describe the current version
         id: version
         run: |
-          version=$(./gradlew -q printVersion)
+          version_output=$(python scripts/ci_gradle.py --task :printVersion -- -q :printVersion)
+          version=${version_output##*$'\n'}
           .github/changelog-section.sh "$version" > /dev/null \
             || { echo "::error file=CHANGELOG.md::Add a section for $version before bumping the version."; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - run: ./gradlew detekt
-      - run: ./gradlew test koverXmlReport buildPlugin
-      - run: ./gradlew verifyPlugin
+      - run: python scripts/ci_gradle.py --task :detekt -- :detekt
+      - run: >-
+          python scripts/ci_gradle.py
+          --task :test --task :core:test --task :collector:test --task :mcp:test
+          --task :koverXmlReport --task :buildPlugin --
+          :test :core:test :collector:test :mcp:test :koverXmlReport :buildPlugin
+      - run: python scripts/ci_gradle.py --task :verifyPlugin -- :verifyPlugin
 
       - name: Record the verified plugin artifact
         env:

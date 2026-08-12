@@ -28,6 +28,9 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14.7"
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
       - uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
         with:
@@ -45,8 +48,11 @@ jobs:
       - name: Build every Java and Kotlin source set
         run: >-
           /usr/bin/time --verbose
-          ./gradlew --no-daemon --no-build-cache --no-parallel --max-workers=1
-          clean classes :core:classes :mcp:classes :collector:classes :collector:mavenClasses
+          python scripts/ci_gradle.py
+          --task :clean --task :classes --task :core:classes --task :mcp:classes
+          --task :collector:classes --task :collector:mavenClasses --
+          --no-daemon --no-build-cache --no-parallel --max-workers=1
+          :clean :classes :core:classes :mcp:classes :collector:classes :collector:mavenClasses
 
       - uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
         with:
@@ -72,6 +78,9 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14.7"
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
       - uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
         with:
@@ -89,8 +98,11 @@ jobs:
       - name: Build every Java and Kotlin source set
         run: >-
           /usr/bin/time --verbose
-          ./gradlew --no-daemon --no-build-cache --no-parallel --max-workers=1
-          clean classes :core:classes :mcp:classes :collector:classes :collector:mavenClasses
+          python scripts/ci_gradle.py
+          --task :clean --task :classes --task :core:classes --task :mcp:classes
+          --task :collector:classes --task :collector:mavenClasses --
+          --no-daemon --no-build-cache --no-parallel --max-workers=1
+          :clean :classes :core:classes :mcp:classes :collector:classes :collector:mavenClasses
 
       - uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
         with:
