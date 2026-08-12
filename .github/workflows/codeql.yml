@@ -24,13 +24,19 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
+      - id: scope
+        run: python3 scripts/ci_scope.py --github-output "$GITHUB_OUTPUT"
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        if: steps.scope.outputs.codeql == 'true'
         with:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@67621b124fd2e251c5e8a0e6e3b91318f2287669 # v6.3.0
+        if: steps.scope.outputs.codeql == 'true'
       - uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        if: steps.scope.outputs.codeql == 'true'
         with:
           languages: java-kotlin
           build-mode: manual
@@ -39,23 +45,27 @@ jobs:
           threads: 2
 
       - name: Free disk space for the downloaded IDE
+        if: steps.scope.outputs.codeql == 'true'
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
           df -h /
 
       - name: Build every Java and Kotlin source set
+        if: steps.scope.outputs.codeql == 'true'
         run: >-
           /usr/bin/time --verbose
           scripts/run_gradle.sh --no-daemon --no-build-cache --no-parallel --max-workers=1
           clean classes :core:classes :mcp:classes :collector:classes :collector:mavenClasses
 
       - uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        if: steps.scope.outputs.codeql == 'true'
         with:
           upload: never
           upload-database: false
           post-processed-sarif-path: codeql-sarif
 
       - name: Require zero CodeQL findings
+        if: steps.scope.outputs.codeql == 'true'
         run: scripts/quality.sh codeql codeql-sarif
 
   main:
@@ -68,13 +78,19 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
+      - id: scope
+        run: python3 scripts/ci_scope.py --github-output "$GITHUB_OUTPUT"
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        if: steps.scope.outputs.codeql == 'true'
         with:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@67621b124fd2e251c5e8a0e6e3b91318f2287669 # v6.3.0
+        if: steps.scope.outputs.codeql == 'true'
       - uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        if: steps.scope.outputs.codeql == 'true'
         with:
           languages: java-kotlin
           build-mode: manual
@@ -83,21 +99,25 @@ jobs:
           threads: 2
 
       - name: Free disk space for the downloaded IDE
+        if: steps.scope.outputs.codeql == 'true'
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
           df -h /
 
       - name: Build every Java and Kotlin source set
+        if: steps.scope.outputs.codeql == 'true'
         run: >-
           /usr/bin/time --verbose
           scripts/run_gradle.sh --no-daemon --no-build-cache --no-parallel --max-workers=1
           clean classes :core:classes :mcp:classes :collector:classes :collector:mavenClasses
 
       - uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        if: steps.scope.outputs.codeql == 'true'
         with:
           upload: always
           upload-database: false
           post-processed-sarif-path: codeql-sarif
 
       - name: Require zero CodeQL findings
+        if: steps.scope.outputs.codeql == 'true'
         run: scripts/quality.sh codeql codeql-sarif

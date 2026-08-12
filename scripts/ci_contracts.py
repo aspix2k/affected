@@ -71,7 +71,9 @@ def check(root: Path = ROOT) -> None:
         "scripts.tests.test_support_matrix",
         "scripts/support_matrix.py --check",
         "scripts.tests.test_ci_contracts",
+        "scripts.tests.test_ci_scope",
         "scripts.tests.test_run_gradle",
+        "changelog-section.sh",
         "SHELLCHECK_VERSION",
         "ACTIONLINT_VERSION",
     ):
@@ -80,6 +82,8 @@ def check(root: Path = ROOT) -> None:
 
     if "buildHealth" not in slice_job(ci, "health"):
         raise CiContractError("buildHealth must remain a required CI job")
+
+    check_scope(root, ci, codeql)
 
     if '- "README.md"' in conformance:
         raise CiContractError("README edits must not start the exact-impact matrix")
@@ -99,6 +103,37 @@ def check(root: Path = ROOT) -> None:
 
     check_merge_queue(root, ci, codeql)
     check_wrapper(root)
+
+
+def check_scope(root: Path, ci: str, codeql: str) -> None:
+    """Required checks must always report; expensive work follows ci_scope."""
+    review = read(root / ".github/workflows/dependency-review.yml")
+    graph = read(root / ".github/workflows/dependency-graph.yml")
+    if not (root / "scripts/ci_scope.py").is_file():
+        raise CiContractError("ci_scope.py is missing")
+    if 'if: needs.scope.outputs.plugin == \'true\'' not in slice_job(ci, "plugin"):
+        raise CiContractError("plugin must run only when ci_scope asks for it")
+    if 'if: needs.scope.outputs.health == \'true\'' not in slice_job(ci, "health"):
+        raise CiContractError("health must run only when ci_scope asks for it")
+    verify = slice_job(ci, "verify")
+    if "PLUGIN_REQUIRED" not in verify or "skipped" not in verify:
+        raise CiContractError("verify must accept a scoped skip and fail a required skip")
+    if "needs.scope.result" not in verify:
+        raise CiContractError("verify must fail when scope classification fails")
+    if "paths:" in (has_on_block(ci) or ""):
+        raise CiContractError("ci.yml must not path-filter required checks")
+    if "scripts/ci_scope.py" not in codeql or "steps.scope.outputs.codeql" not in codeql:
+        raise CiContractError("CodeQL pull-request must keep its check name and skip only the analyze")
+    if "scripts/ci_scope.py" not in review or "steps.scope.outputs.dependencies" not in review:
+        raise CiContractError("Dependency review must keep its check name and skip only the compare")
+    if "scripts/ci_scope.py" not in graph or "needs.scope.outputs.dependencies" not in graph:
+        raise CiContractError("Dependency graph generate must follow ci_scope")
+
+
+def has_on_block(workflow: str) -> str:
+    """Return the top-level on: block of a workflow."""
+    match = re.search(r"(?ms)^on:\n(.*?)(?=^[A-Za-z]|\Z)", workflow)
+    return match.group(1) if match else ""
 
 
 def check_merge_queue(root: Path, ci: str, codeql: str) -> None:

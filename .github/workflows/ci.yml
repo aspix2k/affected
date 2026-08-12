@@ -13,6 +13,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  scope:
+    name: CI scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      plugin: ${{ steps.classify.outputs.plugin }}
+      health: ${{ steps.classify.outputs.health }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: classify
+        run: python3 scripts/ci_scope.py --github-output "$GITHUB_OUTPUT"
+
   scripts:
     name: Scripts and analyzers
     runs-on: ubuntu-latest
@@ -82,14 +97,26 @@ jobs:
 
       - name: Test pull-request CI contracts
         run: |
-          python3 -m unittest scripts.tests.test_ci_contracts scripts.tests.test_run_gradle
+          python3 -m unittest scripts.tests.test_ci_contracts scripts.tests.test_ci_scope scripts.tests.test_run_gradle
           python3 scripts/ci_contracts.py --check
 
       - name: Test the PIT survivor gate
         run: python3 -m unittest scripts.tests.test_pitest_gate
 
+      - name: The changelog must describe the current version
+        run: |
+          set -euo pipefail
+          version=$(python3 -c 'import re, pathlib, sys
+          text = pathlib.Path("build.gradle.kts").read_text(encoding="utf-8")
+          match = re.search(r"(?m)^version = \"([^\"]+)\"", text)
+          sys.exit("version is missing from build.gradle.kts") if match is None else print(match.group(1))')
+          .github/changelog-section.sh "$version" > /dev/null \
+            || { echo "::error file=CHANGELOG.md::Add a section for $version before bumping the version."; exit 1; }
+
   plugin:
     name: Plugin verification
+    needs: [scope]
+    if: needs.scope.outputs.plugin == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
@@ -172,6 +199,8 @@ jobs:
 
   health:
     name: Gradle dependency analysis
+    needs: [scope]
+    if: needs.scope.outputs.health == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -209,24 +238,39 @@ jobs:
   verify:
     name: verify
     if: ${{ always() && !cancelled() }}
-    needs: [scripts, plugin, health]
+    needs: [scope, scripts, plugin, health]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Require every fast gate
         env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
           SCRIPT_RESULT: ${{ needs.scripts.result }}
           PLUGIN_RESULT: ${{ needs.plugin.result }}
           HEALTH_RESULT: ${{ needs.health.result }}
+          PLUGIN_REQUIRED: ${{ needs.scope.outputs.plugin }}
+          HEALTH_REQUIRED: ${{ needs.scope.outputs.health }}
         run: |
           set -euo pipefail
           failed=0
-          for name_result in "scripts:$SCRIPT_RESULT" "plugin:$PLUGIN_RESULT" "health:$HEALTH_RESULT"; do
-            name=${name_result%%:*}
-            result=${name_result#*:}
+          require_success() {
+            local name=$1 result=$2
             if [ "$result" != success ]; then
               echo "::error::Required job $name finished as $result."
               failed=1
             fi
-          done
+          }
+          require_when() {
+            local name=$1 required=$2 result=$3
+            if [ "${required:-true}" = true ]; then
+              require_success "$name" "$result"
+            elif [ "$result" != success ] && [ "$result" != skipped ]; then
+              echo "::error::Optional job $name finished as $result."
+              failed=1
+            fi
+          }
+          require_success scope "$SCOPE_RESULT"
+          require_success scripts "$SCRIPT_RESULT"
+          require_when plugin "${PLUGIN_REQUIRED:-true}" "$PLUGIN_RESULT"
+          require_when health "${HEALTH_REQUIRED:-true}" "$HEALTH_RESULT"
           exit "$failed"

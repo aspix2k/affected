@@ -79,6 +79,23 @@ class CiContractsTest(unittest.TestCase):
             with self.assertRaisesRegex(ci_contracts.CiContractError, "merge_group"):
                 ci_contracts.check(root)
 
+    def test_plugin_must_stay_scoped(self) -> None:
+        """A required plugin job without a scope condition re-downloads IDEs for docs."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/ci.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "    if: needs.scope.outputs.plugin == 'true'\n",
+                    "",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "plugin must run only"):
+                ci_contracts.check(root)
+
     def test_queue_must_not_merge_immediately(self) -> None:
         """Agents enqueue. GitHub merges after required checks."""
         with TemporaryDirectory() as directory:
@@ -101,7 +118,9 @@ class CiContractsTest(unittest.TestCase):
             ".github/workflows/codeql.yml",
             ".github/workflows/mutation.yml",
             ".github/workflows/dependency-review.yml",
+            ".github/workflows/dependency-graph.yml",
             ".github/workflows/queue.yml",
+            "scripts/ci_scope.py",
             "gradle/wrapper/gradle-wrapper.properties",
         ):
             destination = root / relative
