@@ -129,6 +129,42 @@ class TaskPlannerTest {
     }
 
     @Test
+    fun `every build system keeps modules from one execution root in one invocation`() {
+        val systems = listOf(
+            "GRADLE",
+            "MAVEN",
+            "CARGO",
+            "GO",
+            "NODE",
+            "DOTNET",
+            "PYTHON",
+            "COMPOSER",
+            "RUBY",
+            "CMAKE",
+        )
+
+        systems.forEach { systemId ->
+            val modules = listOf("alpha", "beta").map { id ->
+                ModuleInfo(
+                    id = id,
+                    systemId = systemId,
+                    buildRoot = "/repo/$systemId/$id",
+                    testTask = "test",
+                    compileTask = null,
+                    hasTests = true,
+                    executionRoot = "/repo/$systemId",
+                    executionId = id,
+                )
+            }
+
+            val plan = TaskPlanner.plan(modules, emptyList())
+
+            assertEquals(1, plan.groups.size, systemId)
+            assertEquals(listOf("alpha:test", "beta:test"), plan.groups.single().tasks, systemId)
+        }
+    }
+
+    @Test
     fun `independent execution trees keep separate commands`() {
         val plan = TaskPlanner.plan(
             changed = listOf(

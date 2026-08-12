@@ -1,5 +1,6 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.BuildChanges
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.progress.ProcessCanceledException
@@ -15,11 +16,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 
 enum class VerificationStatus {
     IDLE,
+    PREPARING,
     RUNNING,
 }
 
@@ -38,15 +41,25 @@ data class AffectedStateSnapshot(
     val affectedModules: Int get() = modules.size
 }
 
+internal data class AffectedAnalysis(
+    val modules: List<AffectedModule>,
+    val changes: ProjectChanges.Result,
+    val plans: Verification.PreparedPlans,
+)
+
 internal class AffectedStateStore {
     private data class StoredState(
         val revision: Long,
         val analysisStatus: AnalysisStatus,
-        val modules: List<AffectedModule>,
-        val runningVerifications: Int,
+        val analysis: AffectedAnalysis?,
+        val verificationStatus: VerificationStatus,
+        val runToken: Long?,
     )
 
-    private val state = AtomicReference(StoredState(0, AnalysisStatus.ANALYZING, emptyList(), 0))
+    private val state = AtomicReference(
+        StoredState(0, AnalysisStatus.ANALYZING, null, VerificationStatus.IDLE, null),
+    )
+    private val nextRunToken = AtomicLong()
 
     val currentRevision: Long get() = state.get().revision
 
@@ -55,12 +68,8 @@ internal class AffectedStateStore {
         return AffectedStateSnapshot(
             revision = current.revision,
             analysisStatus = current.analysisStatus,
-            modules = current.modules,
-            verificationStatus = if (current.runningVerifications == 0) {
-                VerificationStatus.IDLE
-            } else {
-                VerificationStatus.RUNNING
-            },
+            modules = current.analysis?.modules.orEmpty(),
+            verificationStatus = current.verificationStatus,
         )
     }
 
@@ -75,19 +84,25 @@ internal class AffectedStateStore {
         }
     }
 
-    fun complete(expectedRevision: Long, modules: List<AffectedModule>): Boolean {
+    fun complete(expectedRevision: Long, analysis: AffectedAnalysis): Boolean {
+        val completed = analysis.snapshot()
         while (true) {
             val current = state.get()
             if (current.revision != expectedRevision) return false
             if (state.compareAndSet(
                     current,
-                    current.copy(analysisStatus = AnalysisStatus.READY, modules = modules.toList()),
+                    current.copy(analysisStatus = AnalysisStatus.READY, analysis = completed),
                 )
             ) {
                 return true
             }
         }
     }
+
+    fun complete(expectedRevision: Long, modules: List<AffectedModule>): Boolean = complete(
+        expectedRevision,
+        AffectedAnalysis(modules, EMPTY_CHANGES, EMPTY_PLANS),
+    )
 
     fun fail(expectedRevision: Long): Boolean {
         while (true) {
@@ -95,7 +110,7 @@ internal class AffectedStateStore {
             if (current.revision != expectedRevision) return false
             if (state.compareAndSet(
                     current,
-                    current.copy(analysisStatus = AnalysisStatus.UNAVAILABLE, modules = emptyList()),
+                    current.copy(analysisStatus = AnalysisStatus.UNAVAILABLE, analysis = null),
                 )
             ) {
                 return true
@@ -103,50 +118,96 @@ internal class AffectedStateStore {
         }
     }
 
-    fun tryClaimReadyRun(): AffectedRunClaim? = tryClaimRunning(requireReadyAnalysis = true)
+    fun tryClaimReadyRun(checkConsumers: Boolean = false): AffectedRunClaim? =
+        tryClaimRunning(requireReadyAnalysis = true, checkConsumers)
 
-    fun tryClaimVerification(): AffectedRunClaim? = tryClaimRunning(requireReadyAnalysis = false)
+    fun tryClaimVerification(): AffectedRunClaim? =
+        tryClaimRunning(requireReadyAnalysis = false, checkConsumers = false)
 
-    private fun tryClaimRunning(requireReadyAnalysis: Boolean): AffectedRunClaim? {
+    private fun tryClaimRunning(requireReadyAnalysis: Boolean, checkConsumers: Boolean): AffectedRunClaim? {
+        val token = nextRunToken.incrementAndGet()
         while (true) {
             val current = state.get()
-            val ready = current.analysisStatus == AnalysisStatus.READY && current.modules.isNotEmpty()
-            if ((requireReadyAnalysis && !ready) || current.runningVerifications != 0) return null
-            if (state.compareAndSet(current, current.copy(runningVerifications = 1))) {
+            val ready = current.analysisStatus == AnalysisStatus.READY &&
+                current.analysis?.modules?.isNotEmpty() == true
+            if ((requireReadyAnalysis && !ready) || current.verificationStatus != VerificationStatus.IDLE) return null
+            val claimed = current.copy(
+                verificationStatus = VerificationStatus.PREPARING,
+                runToken = token,
+            )
+            if (state.compareAndSet(current, claimed)) {
                 return AffectedRunClaim(
-                    snapshot = current.toSnapshot(VerificationStatus.RUNNING),
-                    release = ::markFinished,
+                    snapshot = current.toSnapshot(VerificationStatus.PREPARING),
+                    changes = current.analysis?.changes,
+                    prepared = current.analysis?.plans?.select(checkConsumers),
+                    markRunning = { markRunning(token, current.revision) },
+                    release = { markFinished(token) },
                 )
             }
         }
     }
 
-    private fun markFinished() {
-        update { current ->
-            current.copy(runningVerifications = (current.runningVerifications - 1).coerceAtLeast(0))
+    private fun markRunning(token: Long, revision: Long): Boolean {
+        while (true) {
+            val current = state.get()
+            if (current.runToken != token || current.revision != revision) return false
+            if (current.verificationStatus == VerificationStatus.RUNNING) return true
+            if (current.verificationStatus != VerificationStatus.PREPARING) return false
+            if (state.compareAndSet(current, current.copy(verificationStatus = VerificationStatus.RUNNING))) return true
         }
     }
 
-    private fun update(transform: (StoredState) -> StoredState) {
+    private fun markFinished(token: Long) {
         while (true) {
             val current = state.get()
-            if (state.compareAndSet(current, transform(current))) return
+            if (current.runToken != token) return
+            val finished = current.copy(verificationStatus = VerificationStatus.IDLE, runToken = null)
+            if (state.compareAndSet(current, finished)) return
         }
     }
 
     private fun StoredState.toSnapshot(verificationStatus: VerificationStatus) = AffectedStateSnapshot(
         revision = revision,
         analysisStatus = analysisStatus,
-        modules = modules,
+        modules = analysis?.modules.orEmpty(),
         verificationStatus = verificationStatus,
     )
+
+    private fun AffectedAnalysis.snapshot() = AffectedAnalysis(
+        modules = modules.toList(),
+        changes = changes.copy(
+            files = changes.files.toList(),
+            apiTouched = changes.apiTouched.toSet(),
+            exactSelectionEligible = changes.exactSelectionEligible.toSet(),
+        ),
+        plans = plans,
+    )
+
+    private companion object {
+        val EMPTY_CHANGES = ProjectChanges.Result(emptyList(), emptySet(), emptySet(), comparedToBase = false)
+        val EMPTY_PLANS = Verification.PreparedPlans(
+            testsOnly = Verification.Prepared(
+                Plan(emptyList(), 0, 0),
+                BuildChanges(emptyList(), emptySet(), comparedToBase = false),
+            ),
+            withConsumers = Verification.Prepared(
+                Plan(emptyList(), 0, 0),
+                BuildChanges(emptyList(), emptySet(), comparedToBase = false),
+            ),
+        )
+    }
 }
 
 class AffectedRunClaim internal constructor(
     val snapshot: AffectedStateSnapshot,
+    val changes: ProjectChanges.Result?,
+    val prepared: Verification.Prepared?,
+    private val markRunning: () -> Boolean,
     private val release: () -> Unit,
 ) : AutoCloseable {
     private val closed = AtomicBoolean()
+
+    fun markRunning(): Boolean = !closed.get() && markRunning.invoke()
 
     override fun close() {
         if (closed.compareAndSet(false, true)) release()
@@ -183,7 +244,7 @@ class AffectedState(
             }
         }
     }
-    private var analyzeProject: suspend () -> List<AffectedModule> = { analyze() }
+    private var analyzeProject: suspend () -> AffectedAnalysis = { analyze() }
 
     val modules: List<AffectedModule> get() = snapshot().modules
 
@@ -200,7 +261,7 @@ class AffectedState(
         scope: CoroutineScope,
         debounceMs: Long,
         awaitSmart: suspend () -> Unit,
-        analyzeProject: suspend () -> List<AffectedModule>,
+        analyzeProject: suspend () -> AffectedAnalysis,
     ) : this(project, scope) {
         this.debounceMs = debounceMs
         this.awaitSmart = awaitSmart
@@ -223,9 +284,10 @@ class AffectedState(
     fun snapshot(): AffectedStateSnapshot = state.snapshot()
 
     val verificationStatus: VerificationStatus get() = snapshot().verificationStatus
-    val isRunning: Boolean get() = verificationStatus == VerificationStatus.RUNNING
+    val isRunning: Boolean get() = verificationStatus != VerificationStatus.IDLE
 
-    fun tryClaimReadyRun(): AffectedRunClaim? = state.tryClaimReadyRun()
+    fun tryClaimReadyRun(): AffectedRunClaim? =
+        state.tryClaimReadyRun(AffectedSettings.getInstance().checkConsumers)
 
     fun tryClaimVerification(): AffectedRunClaim? = state.tryClaimVerification()
 
@@ -255,11 +317,16 @@ class AffectedState(
         }
     }
 
-    private suspend fun analyze(): List<AffectedModule> = withContext(Dispatchers.Default) {
-        val files = ProjectChanges.pathsSuspending(project)
+    private suspend fun analyze(): AffectedAnalysis = withContext(Dispatchers.Default) {
+        val changes = ProjectChanges.collectSuspending(project)
         val graph = ModuleGraph.create(project)
+        val owners = changes.files.associateWith(graph::nodesFor)
 
-        affectedModules(graph, files)
+        AffectedAnalysis(
+            modules = affectedModules(owners.values.flatten()),
+            changes = changes,
+            plans = Verification.prepare(graph, changes, owners),
+        )
     }
 
     private companion object {
@@ -269,7 +336,10 @@ class AffectedState(
 }
 
 internal fun affectedModules(graph: ModuleGraph, files: List<java.io.File>): List<AffectedModule> =
-    files.flatMap(graph::nodesFor)
+    affectedModules(files.flatMap(graph::nodesFor))
+
+private fun affectedModules(nodes: List<ModuleGraph.Node>): List<AffectedModule> =
+    nodes
         .distinct()
         .mapNotNull { node ->
             val directory = node.sourceRoot ?: return@mapNotNull null

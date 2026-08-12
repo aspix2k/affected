@@ -6,7 +6,6 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.DumbAware
-import com.intellij.openapi.project.DumbService
 
 class AffectedGroup : DefaultActionGroup(), DumbAware {
 
@@ -24,7 +23,7 @@ class AffectedGroup : DefaultActionGroup(), DumbAware {
         val state = project?.service<AffectedState>()
         val animate = AffectedSettings.getInstance().animateWhileRunning
         val snapshot = state?.snapshot()
-        val uiState = snapshot?.let { affectedUiState(it, ideBusy = DumbService.isDumb(project)) }
+        val uiState = snapshot?.let { affectedUiState(it, ideBusy = projectBusy(project)) }
 
         e.presentation.isEnabled = project != null
         e.presentation.icon = when {
@@ -36,6 +35,8 @@ class AffectedGroup : DefaultActionGroup(), DumbAware {
         e.presentation.text = AffectedBundle.message(uiState?.groupTitleKey ?: "group.title")
         e.presentation.description = when (uiState) {
             AffectedUiState.ANALYZING -> AffectedBundle.message("action.run.description.counting")
+            AffectedUiState.BUSY -> AffectedBundle.message("action.run.description.busy")
+            AffectedUiState.PREPARING -> AffectedBundle.message("action.run.description.preparing")
             AffectedUiState.UNAVAILABLE -> AffectedBundle.message("notification.unresolved.title")
             else -> null
         }

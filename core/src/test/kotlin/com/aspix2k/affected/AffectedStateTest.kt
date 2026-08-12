@@ -1,5 +1,6 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.BuildChanges
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.CoroutineScope
@@ -22,9 +23,11 @@ class AffectedStateTest {
         state.complete(revision, listOf(module()))
         val claim = state.tryClaimVerification()
 
-        assertEquals(VerificationStatus.RUNNING, state.snapshot().verificationStatus)
+        assertEquals(VerificationStatus.PREPARING, state.snapshot().verificationStatus)
         assertEquals(null, state.tryClaimVerification())
         assertEquals(null, state.tryClaimReadyRun())
+        claim?.markRunning()
+        assertEquals(VerificationStatus.RUNNING, state.snapshot().verificationStatus)
 
         claim?.close()
 
@@ -38,7 +41,7 @@ class AffectedStateTest {
         state.complete(revision, listOf(module()))
         val claim = state.tryClaimReadyRun()
 
-        assertEquals(VerificationStatus.RUNNING, state.snapshot().verificationStatus)
+        assertEquals(VerificationStatus.PREPARING, state.snapshot().verificationStatus)
         assertEquals(null, state.tryClaimVerification())
 
         claim?.close()
@@ -56,7 +59,11 @@ class AffectedStateTest {
             analyzeProject = {
                 attempts++
                 if (attempts == 1) throw ProcessCanceledException()
-                emptyList()
+                AffectedAnalysis(
+                    modules = emptyList(),
+                    changes = ProjectChanges.Result(emptyList(), emptySet(), emptySet(), comparedToBase = true),
+                    plans = emptyPlans(),
+                )
             },
         )
         try {
@@ -83,6 +90,14 @@ class AffectedStateTest {
         hasTests = true,
         tasks = emptySet(),
     )
+
+    private fun emptyPlans(): Verification.PreparedPlans {
+        val prepared = Verification.Prepared(
+            Plan(emptyList(), 0, 0),
+            BuildChanges(emptyList(), emptySet(), comparedToBase = true),
+        )
+        return Verification.PreparedPlans(prepared, prepared)
+    }
 
     private fun project(): Project = Proxy.newProxyInstance(
         Project::class.java.classLoader,

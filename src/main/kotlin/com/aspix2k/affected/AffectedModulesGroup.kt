@@ -8,7 +8,6 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.DumbAware
-import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
@@ -27,7 +26,7 @@ class AffectedModulesGroup : DefaultActionGroup(), DumbAware {
         val project = e.project
         val state = project?.service<AffectedState>()
         val snapshot = state?.snapshot()
-        val uiState = snapshot?.let { affectedUiState(it, ideBusy = DumbService.isDumb(project)) }
+        val uiState = snapshot?.let { affectedUiState(it, ideBusy = projectBusy(project)) }
         val modules = snapshot?.modules.orEmpty()
         e.presentation.isEnabledAndVisible = uiState?.canInspectModules == true && modules.isNotEmpty()
         e.presentation.text = AffectedBundle.message("group.modules", modules.size)
@@ -37,7 +36,7 @@ class AffectedModulesGroup : DefaultActionGroup(), DumbAware {
         val project = e?.project ?: return EMPTY_ARRAY
         val state = project.service<AffectedState>()
         val snapshot = state.snapshot()
-        if (!affectedUiState(snapshot, ideBusy = DumbService.isDumb(project)).canInspectModules) {
+        if (!affectedUiState(snapshot, ideBusy = projectBusy(project)).canInspectModules) {
             return EMPTY_ARRAY
         }
         return snapshot.modules

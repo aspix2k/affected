@@ -53,11 +53,14 @@ class GradleBuildSystem : SuspendingBuildSystem {
             val roots = descriptions.flatMap(Described::roots).distinct()
             val dependencies = descriptions.flatMapTo(HashSet(), Described::dependencies) - first.key
             val ownerRoot = buildRootOf(File(first.projectPath), project)
+            val linkedRoot = gradleCompositeRoot(ownerRoot, snapshot.linkedRoots, first.buildName)
             val (executionRoot, executionId) = gradleExecutionCoordinates(
                 ownerRoot,
                 first.path,
                 first.directoryToRunTask,
                 first.identityPath,
+                linkedRoot,
+                first.buildName,
             )
 
             build(
@@ -75,6 +78,7 @@ class GradleBuildSystem : SuspendingBuildSystem {
     private data class Snapshot(
         val tasks: Map<String, Set<String>>,
         val modules: List<Described>,
+        val linkedRoots: List<String>,
     )
 
     private fun snapshot(project: Project): Snapshot {
@@ -96,7 +100,9 @@ class GradleBuildSystem : SuspendingBuildSystem {
                 }
             data.copy(dependencies = dependencies)
         }
-        return Snapshot(tasksByDirectory(project), withDependencies)
+        val linkedRoots = GradleSettings.getInstance(project).linkedProjectsSettings
+            .map { File(it.externalProjectPath).invariantSeparatorsPath }
+        return Snapshot(tasksByDirectory(project), withDependencies, linkedRoots)
     }
 
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean {
@@ -161,6 +167,7 @@ class GradleBuildSystem : SuspendingBuildSystem {
         val roots: List<String>,
         val directoryToRunTask: String?,
         val identityPath: String?,
+        val buildName: String?,
         val dependencies: Set<String> = emptySet(),
     )
 
@@ -187,6 +194,7 @@ class GradleBuildSystem : SuspendingBuildSystem {
             roots = roots,
             directoryToRunTask = directoryToRunTask,
             identityPath = identityPath,
+            buildName = buildName,
         )
     }
 
@@ -219,14 +227,13 @@ class GradleBuildSystem : SuspendingBuildSystem {
     ): BuildModule {
         val source = roots.filterNot { it.contains("/build/") || it.contains("/.gradle/") }.minByOrNull { it.length }
         val availableTasks = tasks[projectPath] ?: source?.let(tasks::get).orEmpty()
-        val android = "testDebugUnitTest" in availableTasks ||
-            roots.any { File(it, "src/main/AndroidManifest.xml").isFile }
+        val (testTask, compileTask) = gradleVerificationTasks(projectPath, roots, availableTasks)
         return BuildModule(
             id = path,
             root = root,
             contentRoots = roots,
-            testTask = if (android) "testDebugUnitTest" else "test",
-            compileTask = if (android) "compileDebugUnitTestKotlin" else "compileTestKotlin",
+            testTask = testTask,
+            compileTask = compileTask,
             hasTests = roots.any(::holdsTests),
             extraTasks = availableTasks,
             executionRoot = executionRoot,
@@ -320,9 +327,52 @@ internal fun gradleExecutionCoordinates(
     ownerId: String,
     directoryToRunTask: String?,
     identityPath: String?,
+    linkedRoot: String? = null,
+    buildName: String? = null,
 ): Pair<String, String> {
-    if (directoryToRunTask.isNullOrBlank() || identityPath.isNullOrBlank()) return ownerRoot to ownerId
-    return File(directoryToRunTask).invariantSeparatorsPath to identityPath.removeSuffix(":")
+    if (!directoryToRunTask.isNullOrBlank() && !identityPath.isNullOrBlank()) {
+        return File(directoryToRunTask).invariantSeparatorsPath to identityPath.removeSuffix(":")
+    }
+
+    val fallbackRoot = linkedRoot?.takeUnless(String::isBlank) ?: return ownerRoot to ownerId
+    val ownerPath = File(ownerRoot).toPath().toAbsolutePath().normalize()
+    val fallbackPath = File(fallbackRoot).toPath().toAbsolutePath().normalize()
+    if (ownerPath == fallbackPath || !ownerPath.startsWith(fallbackPath)) return ownerRoot to ownerId
+    val fallbackId = when {
+        !identityPath.isNullOrBlank() -> identityPath.removeSuffix(":")
+        buildName.isNullOrBlank() -> return ownerRoot to ownerId
+        else -> listOf(buildName.trim(':'), ownerId.trim(':'))
+            .filter(String::isNotEmpty)
+            .joinToString(":", prefix = ":")
+    }
+    return fallbackPath.toFile().invariantSeparatorsPath to fallbackId
+}
+
+internal fun gradleCompositeRoot(ownerRoot: String, linkedRoots: List<String>, buildName: String?): String? {
+    if (buildName.isNullOrBlank()) return null
+    val owner = File(ownerRoot).toPath().toAbsolutePath().normalize()
+    val linked = linkedRoots.map { File(it).toPath().toAbsolutePath().normalize() }
+    val root = linked.firstOrNull { it == owner }
+        ?: linked.filter(owner::startsWith).maxByOrNull { it.nameCount }
+    return root?.toFile()?.invariantSeparatorsPath
+}
+
+internal fun gradleVerificationTasks(
+    projectPath: String,
+    roots: List<String>,
+    availableTasks: Set<String>,
+): Pair<String, String> {
+    val android = "testDebugUnitTest" in availableTasks ||
+        File(projectPath, "src/main/AndroidManifest.xml").isFile ||
+        roots.any {
+            File(it, "src/main/AndroidManifest.xml").isFile ||
+                File(it, "AndroidManifest.xml").isFile
+        }
+    return if (android) {
+        "testDebugUnitTest" to "compileDebugUnitTestKotlin"
+    } else {
+        "test" to "compileTestKotlin"
+    }
 }
 
 private val SOURCE_SET_NAMES = setOf("main", "unitTest", "androidTest", "test")

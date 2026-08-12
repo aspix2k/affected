@@ -67,5 +67,8 @@ require their command-line tools on `PATH`.
 2. Open a supported project and make a change.
 3. Choose **Run affected tests** or press `Ctrl+Alt+Shift+T`.
 
+The first successful compatible run may test a full module once while
+**Affected** learns its exact test relationships.
+
 [How it works](CONTRIBUTING.md#how-it-works) · [Privacy](PRIVACY.md) ·
 [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)

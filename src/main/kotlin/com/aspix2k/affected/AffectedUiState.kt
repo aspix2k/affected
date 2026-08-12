@@ -8,7 +8,9 @@ internal enum class AffectedUiState(
     val runActionTextKey: String = "action.run.text",
 ) {
     ANALYZING(false, false, true),
+    BUSY(false, false, true),
     EMPTY(false, false, false),
+    PREPARING(false, false, true, groupTitleKey = "group.title.preparing"),
     READY(true, true, false),
     RUNNING(false, false, true, groupTitleKey = "group.title.running"),
     UNAVAILABLE(false, false, false),
@@ -31,7 +33,9 @@ internal fun affectedUiState(
     affectedModules: Int,
 ): AffectedUiState = when {
     verificationStatus == VerificationStatus.RUNNING -> AffectedUiState.RUNNING
-    ideBusy || analysisStatus == AnalysisStatus.ANALYZING -> AffectedUiState.ANALYZING
+    verificationStatus == VerificationStatus.PREPARING -> AffectedUiState.PREPARING
+    ideBusy -> AffectedUiState.BUSY
+    analysisStatus == AnalysisStatus.ANALYZING -> AffectedUiState.ANALYZING
     analysisStatus == AnalysisStatus.UNAVAILABLE -> AffectedUiState.UNAVAILABLE
     affectedModules == 0 -> AffectedUiState.EMPTY
     else -> AffectedUiState.READY

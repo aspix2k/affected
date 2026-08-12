@@ -37,6 +37,7 @@ object AffectedIcons {
         counts.firstOrNull { count in it.first }?.second ?: Action
 
     fun forState(status: VerificationStatus, count: Int, animate: Boolean): Icon = when (status) {
+        VerificationStatus.PREPARING,
         VerificationStatus.RUNNING -> if (animate) Running else withCount(count)
         VerificationStatus.IDLE -> withCount(count)
     }

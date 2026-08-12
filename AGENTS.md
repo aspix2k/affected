@@ -14,8 +14,14 @@ against that build's linked root, remove the identity and keep the remaining
 project path. Source-set suffixes are metadata, but projects legally named
 `main` or `test` must remain intact.
 
+Gradle execution metadata may be incomplete immediately after project import.
+Recover an included build through its linked composite root and build identity,
+but keep a separately linked nested build independent. Compatible modules from
+one composite root must still produce one Run session.
+
 Android and JVM modules have different task names. `test` does not accept
-`--tests` in an Android module; the task is `testDebugUnitTest`.
+`--tests` in an Android module; the task is `testDebugUnitTest`. Imported tasks
+may be incomplete, so the module's Android manifest is also authoritative.
 
 Paths must survive Windows. Compare and store paths through
 `invariantSeparatorsPath`, never by gluing separators yourself.
