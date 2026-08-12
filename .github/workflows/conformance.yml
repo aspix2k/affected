@@ -162,7 +162,7 @@ jobs:
         with:
           php-version: "8.5.9"
           extensions: dom, mbstring, xml, xmlwriter
-          tools: composer:v2
+          tools: composer:2.10.2
           coverage: none
 
       - name: Install native fixture tools
@@ -215,4 +215,43 @@ jobs:
           ./gradlew :core:test
           --tests '*DotnetCliConformanceTest*'
           -Paffected.cliConformance=true
+          --rerun-tasks --no-daemon --no-parallel --max-workers=1
+
+  phpunit-versions:
+    name: PHPUnit exact / ${{ matrix.phpunit }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: "8.2"
+            phpunit: "11.5.56"
+          - php: "8.3"
+            phpunit: "12.5.33"
+          - php: "8.4"
+            phpunit: "13.2.6"
+          - php: "8.4"
+            phpunit: "13.3.0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@67621b124fd2e251c5e8a0e6e3b91318f2287669 # v6.3.0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, mbstring, xml, xmlwriter
+          tools: composer:2.10.2
+          coverage: none
+      - name: Run PHPUnit conformance
+        run: >-
+          ./gradlew :core:test
+          --tests '*CliAdapterConformanceTest*PHPUnit*'
+          -Paffected.cliConformance=true
+          -Daffected.phpunitVersion=${{ matrix.phpunit }}
           --rerun-tasks --no-daemon --no-parallel --max-workers=1

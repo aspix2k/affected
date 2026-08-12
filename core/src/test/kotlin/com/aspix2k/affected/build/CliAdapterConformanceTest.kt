@@ -1,7 +1,11 @@
 package com.aspix2k.affected.build
 
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
 import org.junit.Assume.assumeTrue
 import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
@@ -12,6 +16,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CliAdapterConformanceTest {
@@ -207,18 +212,173 @@ class CliAdapterConformanceTest {
     }
 
     @Test
-    fun `PHPUnit command runs both selected packages`() = fixture("composer") { root ->
+    fun `PHPUnit runs exact classes and preserves full fallback`() = fixture("composer") { root ->
+        val modules = installPhpunitFixture(root)
+        val fullPackages = execute(
+            root,
+            composerCommands(root.path, modules.map { "${it.executionId}:test" }, modules).single().arguments,
+        )
+        assertTrue(fullPackages.contains("OK (3 tests") || fullPackages.contains("Tests: 3"), fullPackages)
+        val adapter = Path.of(requireNotNull(System.getProperty("affected.test.phpunitAdapter")))
+        val alpha = modules.single { it.executionId == "affected/fixture-alpha" }
+        val runtime = assertNotNull(readPhpunitRuntime(root.toPath()))
+        val before = phpunitState(root, alpha, adapter, runtime)
+        val store = PhpunitTestBaselineStore(createTempDirectory("phpunit-conformance-store"))
+        val fullOutput = createTempDirectory("phpunit-conformance-full").resolve("run.json")
+        val fullContext = phpunitContext(root.toPath(), before, fullOutput, full = true)
+        val full = executePhpunit(root, adapter, fullContext, "packages/alpha")
+        assertTrue(full.contains("OK (2 tests") || full.contains("Tests: 2"), full)
+        assertTrue(promotePhpunitBaseline(store, before, before, fullOutput, full = true, passed = true))
+        assertExactPhpunit(root, alpha, adapter, runtime, before, store)
+    }
+
+    private fun assertExactPhpunit(
+        root: File,
+        alpha: BuildModule,
+        adapter: Path,
+        runtime: PhpunitTestMetadata,
+        before: PhpunitProjectState,
+        store: PhpunitTestBaselineStore,
+    ) {
+        val baseline = assertNotNull(store.read())
+        val owners = baseline.dependencies.entries
+            .flatMap { (testClass, dependencies) -> dependencies.map { it to testClass } }
+            .groupBy({ it.first }, { it.second })
+        val expectedClasses = baseline.artifacts.keys.associateWith { artifact ->
+            val sourceClass = Path.of(artifact).fileName.toString().removeSuffix(".php")
+            "Affected\\Fixture\\Alpha\\Tests\\${sourceClass}Test"
+        }
+        expectedClasses.forEach { (artifact, expectedClass) ->
+            assertTrue(expectedClass in owners[artifact].orEmpty(), baseline.toString())
+        }
+        val candidates = owners.entries.filter { (artifact, classes) ->
+            artifact.startsWith("packages/alpha/src/") && classes.distinct().size == 1
+        }
+        assertEquals(1, candidates.size, baseline.toString())
+        val candidate = candidates.single()
+        val expectedClass = expectedClasses.getValue(candidate.key)
+        assertEquals(listOf(expectedClass), candidate.value.distinct())
+        val source = root.toPath().resolve(candidate.key)
+        Files.writeString(source, Files.readString(source).replace("return ", "return /* changed */ "))
+        val current = phpunitState(root, alpha, adapter, runtime)
+        val selection = assertIs<PhpunitTestSelection.Exact>(
+            selectPhpunitTests(
+                root.toPath(),
+                current,
+                baseline,
+                BuildChanges(listOf(source.toString()), setOf(source.toString()), comparedToBase = true),
+            ),
+        )
+        assertEquals(listOf(expectedClass), selection.classes)
+        val selectedOutput = createTempDirectory("phpunit-conformance-selected").resolve("run.json")
+        val selectedContext = phpunitContext(root.toPath(), current, selectedOutput, full = false)
+        val selected = executePhpunit(
+            root,
+            adapter,
+            selectedContext,
+            "--filter",
+            phpunitClassFilter(selection.classes),
+            baseline.classes.getValue(selection.classes.single()),
+        )
+        assertTrue(selected.contains("OK (1 test") || selected.contains("Tests: 1"), selected)
+        assertTrue(completePhpunitSelection(selection, current, current, selectedOutput, baseline))
+        assertEquals(before.identity, baseline.identity)
+        assertPhpunitFallbacks(root, alpha, adapter, runtime, current, baseline)
+    }
+
+    private fun assertPhpunitFallbacks(
+        root: File,
+        alpha: BuildModule,
+        adapter: Path,
+        runtime: PhpunitTestMetadata,
+        current: PhpunitProjectState,
+        baseline: PhpunitTestSnapshot,
+    ) {
+        assertEquals(
+            PhpunitTestSelection.Full,
+            selectPhpunitTests(
+                root.toPath(),
+                current,
+                baseline,
+                BuildChanges(
+                    listOf(root.toPath().resolve("packages/alpha/schema.json").toString()),
+                    emptySet(),
+                    comparedToBase = true,
+                ),
+            ),
+        )
+        root.resolve("phpunit.xml").writeText("<phpunit/>")
+        assertNull(phpunitStateOrNull(root, alpha, adapter, runtime))
+    }
+
+    private fun installPhpunitFixture(root: File): List<BuildModule> {
+        val version = System.getProperty("affected.phpunitVersion")
+        version?.let {
+            val manifest = root.resolve("composer.json")
+            val configured = manifest.readText().replace(
+                "\"phpunit/phpunit\": \"13.3.0\"",
+                "\"phpunit/phpunit\": \"$it\"",
+            )
+            manifest.writeText(configured)
+            root.resolve("locks/phpunit-$it.lock").copyTo(root.resolve("composer.lock"), overwrite = true)
+        }
         execute(
             root,
             listOf("composer", "install", "--no-interaction", "--no-progress", "--no-plugins", "--no-scripts"),
         )
-        val modules = ComposerPackages.parse(root).filter(BuildModule::hasTests)
-        val output = execute(
-            root,
-            composerCommands(root.path, modules.map { "${it.executionId}:test" }, modules).single().arguments,
-        )
+        return ComposerPackages.parse(root).filter(BuildModule::hasTests)
+    }
 
-        assertTrue(output.contains("OK (2 tests") || output.contains("OK, but there were issues!\nTests: 2"), output)
+    private fun phpunitState(
+        root: File,
+        module: BuildModule,
+        adapter: Path,
+        runtime: PhpunitTestMetadata,
+    ): PhpunitProjectState = assertNotNull(phpunitStateOrNull(root, module, adapter, runtime))
+
+    private fun phpunitStateOrNull(
+        root: File,
+        module: BuildModule,
+        adapter: Path,
+        runtime: PhpunitTestMetadata,
+    ): PhpunitProjectState? = readPhpunitProjectState(
+        root.toPath(),
+        Path.of(module.contentRoots.single()),
+        setOf(Path.of(module.contentRoots.single())),
+        adapter,
+        runtime,
+        System.getenv(),
+    )
+
+    private fun executePhpunit(root: File, adapter: Path, context: Path, vararg selection: String): String {
+        return execute(
+            root,
+            listOf(
+                "php",
+                "-d",
+                "auto_prepend_file=${adapter.toAbsolutePath().normalize()}",
+                "vendor/bin/phpunit",
+                "--extension",
+                "Affected\\Phpunit\\Extension",
+                "--do-not-cache-result",
+                "--no-coverage",
+                "--fail-on-empty-test-suite",
+            ) + selection,
+            mapOf("AFFECTED_PHPUNIT_CONTEXT" to context.toString()),
+        )
+    }
+
+    private fun phpunitContext(root: Path, state: PhpunitProjectState, output: Path, full: Boolean): Path {
+        val context = createTempDirectory("phpunit-conformance-context").resolve("context.json")
+        val json = JsonObject().apply {
+            addProperty("schema", 1)
+            addProperty("root", root.toAbsolutePath().normalize().toString())
+            addProperty("output", output.toAbsolutePath().normalize().toString())
+            addProperty("full", full)
+            add("artifacts", JsonArray().also { array -> state.artifacts.keys.sorted().forEach(array::add) })
+        }
+        Files.writeString(context, json.toString(), StandardCharsets.UTF_8)
+        return context
     }
 
     @Test

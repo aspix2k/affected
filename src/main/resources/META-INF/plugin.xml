@@ -27,7 +27,7 @@
             <li><b>JavaScript and TypeScript:</b> npm, Yarn and pnpm packages with Jest or Vitest.</li>
             <li><b>C#, F# and Visual Basic:</b> .NET solutions and projects.</li>
             <li><b>Python:</b> pytest and mypy projects.</li>
-            <li><b>PHP:</b> Composer packages with PHPUnit or PHPStan.</li>
+            <li><b>PHP:</b> Composer packages with affected PHPUnit classes or PHPStan.</li>
             <li><b>Ruby:</b> Bundler projects with RSpec.</li>
             <li><b>C and C++:</b> CMake projects with build targets and CTest.</li>
         </ul>

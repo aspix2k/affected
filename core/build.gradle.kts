@@ -35,8 +35,13 @@ tasks.test {
         layout.projectDirectory.dir("src/main/dotnet/Affected.DotnetAnalyzer").asFile.absolutePath,
     )
     systemProperty(
+        "affected.test.phpunitAdapter",
+        layout.projectDirectory.file("src/main/php/affected_phpunit.php").asFile.absolutePath,
+    )
+    systemProperty(
         "affected.cliConformance",
         providers.gradleProperty("affected.cliConformance").orElse("false").get(),
     )
+    System.getProperty("affected.phpunitVersion")?.let { systemProperty("affected.phpunitVersion", it) }
     testLogging { events("passed", "failed", "skipped") }
 }

@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Run related pytest files after complete collection when a bounded current Python import graph proves the selection.
 - Run exact named CTest tests for changed C and C++ targets when CMake 4.1+ and CTest 3.29+ metadata proves the relationship.
 - Run exact VSTest identities for supported xUnit, NUnit and MSTest projects after compiled .NET assemblies prove the dependency.
+- Run affected PHPUnit classes for Composer projects on PHPUnit 11.5, 12.5 and 13.2–13.3 when a complete runtime include map proves the selection.
 
 ### Changed
 
@@ -25,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keep CMake configuration, generated tests, fixtures, resources, added or deleted targets and incomplete metadata on the full CTest plan.
 - Keep .NET projects on their full test plan for unsupported SDKs, adapters, Microsoft Testing Platform, custom test settings, parameterized or shared fixtures, resources, generated code, changed test assemblies and incomplete evidence.
 - Build and filter every .NET project inside one fail-fast IDE Run session; skipped, selected, failed and cancelled runs cannot replace an unverified baseline.
+- Keep PHPUnit packages on their full test plan for custom configuration, dependencies between tests, process isolation, dynamic I/O, resources, generated code, changed runtime settings and incomplete evidence; only an unchanged successful full run can replace the baseline.
 
 ### Fixed
 
