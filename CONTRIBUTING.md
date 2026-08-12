@@ -45,11 +45,12 @@ workflow files change, not on README-only edits. `pitest` runs weekly and
 fails on surviving mutants. A push to `main` only promotes the already
 verified pull-request artifact.
 
-`main` merges only through the GitHub merge queue. Required checks also run
-on `merge_group`. Same-repository ready pull requests are enqueued with
-`gh pr merge --auto --squash`; GitHub squash-merges after `verify`, CodeQL
-`pull-request` and dependency `review` pass on the queued commit. Agents
-must not merge by hand.
+`main` squash-merges after required checks, not by an agent clicking Merge.
+Same-repository ready pull requests are enqueued with
+`gh pr merge --auto --squash`. GitHub merges when `verify`, CodeQL
+`pull-request` and dependency `review` pass. Agents must not merge by hand.
+Required checks also listen for `merge_group` so a GitHub merge queue can be
+enabled if the repository is ever owned by an organization.
 
 PIT uses the same IntelliJ Platform runtime as the root test task. The complete
 2026-08-12 run took 2 minutes 3 seconds: 16 mutants were killed, 167 mutants in

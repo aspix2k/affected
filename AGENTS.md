@@ -55,7 +55,7 @@ Required checks must keep a `merge_group` trigger or the merge queue hangs.
 
 Never merge a pull request immediately. Open it, then stop. `Queue` enables
 `gh pr merge --auto --squash` for same-repository ready PRs. If you must
-enqueue by hand, use that same command. Do not pass `--merge` without `--auto`,
+enqueue by hand, use that same command. Do not merge without `--auto`,
 and do not squash from the GitHub UI.
 
 Node exact selection is runner-native and static-graph only. Unknown Jest or

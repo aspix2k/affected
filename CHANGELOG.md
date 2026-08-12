@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Move the detailed support matrix to its own generated page and keep the README and Marketplace description concise.
 - Collapse pull-request CI into one required `verify` aggregator: one Gradle graph for analysis, tests, coverage, packaging and SpotBugs, with `buildHealth` in parallel.
-- Merge `main` only through the GitHub merge queue. Required checks run on `merge_group`, and ready same-repository pull requests enqueue with squash auto-merge.
+- Enqueue ready same-repository pull requests with squash auto-merge so agents do not merge `main` by hand. Required checks also listen for `merge_group`.
 
 ### Fixed
 
