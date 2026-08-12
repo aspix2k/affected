@@ -32,10 +32,18 @@ python3 -m unittest scripts.tests.test_release_currentness
 python3 scripts/release_currentness.py
 python3 -m unittest scripts.tests.test_support_matrix
 python3 scripts/support_matrix.py --check
+python3 -m unittest scripts.tests.test_ci_contracts scripts.tests.test_pitest_gate
+python3 scripts/ci_contracts.py --check
 ```
 
-Pull-request CI runs everything except `pitest`; `pitest` runs weekly. A push
-to `main` only promotes the already verified pull-request artifact.
+Pull-request `CI` is the required fast gate: scripts, one Gradle graph
+(`detekt`, tests, Kover verify, plugin zip, Plugin Verifier and SpotBugs),
+and `buildHealth`. The required GitHub check named `verify` passes only when
+all three succeed. CodeQL and dependency review stay separate security
+workflows. Exact-impact conformance runs when product, collector, core or
+workflow files change, not on README-only edits. `pitest` runs weekly and
+fails on surviving mutants. A push to `main` only promotes the already
+verified pull-request artifact.
 
 PIT uses the same IntelliJ Platform runtime as the root test task. The complete
 2026-08-12 run took 2 minutes 3 seconds: 16 mutants were killed, 167 mutants in

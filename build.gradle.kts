@@ -103,6 +103,19 @@ intellijPlatform {
     }
 }
 
+kover {
+    reports {
+        total {
+            xml { onCheck = true }
+            verify {
+                rule {
+                    minBound(19)
+                }
+            }
+        }
+    }
+}
+
 detekt {
     buildUponDefaultConfig = true
     autoCorrect = !providers.environmentVariable("CI").isPresent

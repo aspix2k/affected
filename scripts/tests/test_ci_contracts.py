@@ -1,0 +1,68 @@
+"""Regression tests for the fail-closed pull-request CI shape."""
+
+from __future__ import annotations
+
+import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from scripts import ci_contracts
+
+
+class CiContractsTest(unittest.TestCase):
+    """Reject a split Gradle graph, a fake CLI matrix and a missing aggregator."""
+
+    def test_current_repository_must_satisfy_the_contract(self) -> None:
+        """Validate the production workflows."""
+        ci_contracts.check(Path(__file__).resolve().parents[2])
+
+    def test_three_gradle_invocations_are_rejected(self) -> None:
+        """Keep plugin analysis, tests and verification on one Gradle graph."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            ci = root / ".github/workflows/ci.yml"
+            ci.write_text(
+                ci.read_text(encoding="utf-8").replace(
+                    "./gradlew --no-daemon --max-workers=2",
+                    "./gradlew :detekt\n          ./gradlew --no-daemon --max-workers=2",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "exactly once"):
+                ci_contracts.check(root)
+
+    def test_readme_must_not_start_conformance(self) -> None:
+        """Documentation-only README edits are not exact-impact evidence."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/conformance.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    '- "SUPPORT.md"\n',
+                    '- "SUPPORT.md"\n      - "README.md"\n',
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "README"):
+                ci_contracts.check(root)
+
+    def copy_workflows(self, root: Path) -> None:
+        """Copy the production workflow set into a temporary repository."""
+        production = Path(__file__).resolve().parents[2]
+        for relative in (
+            ".github/workflows/ci.yml",
+            ".github/workflows/conformance.yml",
+            ".github/workflows/codeql.yml",
+            ".github/workflows/mutation.yml",
+        ):
+            destination = root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text((production / relative).read_text(encoding="utf-8"), encoding="utf-8")
+
+
+if __name__ == "__main__":
+    unittest.main()

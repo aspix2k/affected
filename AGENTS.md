@@ -48,6 +48,10 @@ latest stable versions compatible with the supported product matrix. A version
 may stay behind only for a verified compatibility reason recorded in the
 relevant changelog or issue.
 
+Do not split the pull-request plugin job back into multiple Gradle invocations,
+and do not start exact-impact from README-only edits. The required `verify`
+check must keep aggregating scripts, plugin verification and `buildHealth`.
+
 Node exact selection is runner-native and static-graph only. Unknown Jest or
 Vitest versions, custom config or transforms, dynamic dependencies, resources,
 lockfiles, added, deleted or generated paths, symlinks, missing merge bases and

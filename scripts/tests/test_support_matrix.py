@@ -388,7 +388,6 @@ class SupportMatrixTest(unittest.TestCase):
             "scripts/support_matrix.py",
             "scripts/tests/test_support_matrix.py",
             "SUPPORT.md",
-            "README.md",
             "src/main/resources/META-INF/plugin.xml",
         ):
             self.assertIn(f'- "{path}"', workflow)

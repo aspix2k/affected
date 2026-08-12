@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Move the detailed support matrix to its own generated page and keep the README and Marketplace description concise.
+- Collapse pull-request CI into one required `verify` aggregator: one Gradle graph for analysis, tests, coverage, packaging and SpotBugs, with `buildHealth` in parallel.
+
+### Fixed
+
+- Stop launching the exact-impact matrix from README-only edits, and stop rerunning the full core test suite as skipped CLI contracts.
 
 ## [2.0.1] - 2026-08-12
 

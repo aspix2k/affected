@@ -157,16 +157,16 @@
           "units": ["module"],
           "path": "core/src/test/kotlin/com/aspix2k/affected/TaskPlannerTest.kt",
           "marker": "an Android module gets a variant task",
-          "gate": ".github/workflows/conformance.yml",
-          "gateMarker": "\"$gradle\" :core:test",
-          "gateJob": "cli-adapters",
-          "gateStep": "Run CLI adapter contracts"
+          "gate": ".github/workflows/ci.yml",
+          "gateMarker": "test koverXmlReport",
+          "gateJob": "plugin",
+          "gateStep": "Analyze, test, package and verify"
         }
       ],
       "versions": "Gradle 8–9; JDK 17, 21 and 26",
       "support": "supported",
       "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java"],
-      "gates": [".github/workflows/conformance.yml"]
+      "gates": [".github/workflows/conformance.yml", ".github/workflows/ci.yml"]
     },
     {
       "id": "MAVEN",
