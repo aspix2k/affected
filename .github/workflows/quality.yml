@@ -99,7 +99,7 @@ jobs:
       - name: Require zero Java findings
         run: >-
           /usr/bin/time --verbose
-          python scripts/ci_gradle.py
+          python scripts/ci_gradle.py --timeout 420
           --task :collector:spotbugsMain --task :collector:spotbugsMaven --
           --no-daemon --no-parallel --max-workers=1
           :collector:spotbugsMain :collector:spotbugsMaven
@@ -136,7 +136,7 @@ jobs:
       - name: Require zero dependency findings
         run: >-
           /usr/bin/time --verbose
-          python scripts/ci_gradle.py --task :buildHealth --
+          python scripts/ci_gradle.py --timeout 1500 --task :buildHealth --
           --no-daemon --no-parallel --max-workers=1
           :buildHealth
 

@@ -9,9 +9,13 @@ import org.junit.Assume;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
+import java.io.InputStream;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.Base64;
@@ -21,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Scanner;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -250,6 +255,9 @@ public class GradleInjectionTest {
         if (configurationCache) arguments.add("--configuration-cache");
         arguments.add("--max-workers=4");
         arguments.add("--info");
+        String distribution = System.getProperty("affected.test.gradle8Distribution");
+        String testKitProperty = System.getProperty("affected.test.gradleTestKitDir");
+        if (testKitProperty != null) arguments.add("--offline");
         arguments.add("--init-script");
         arguments.add(required("affected.test.initScript"));
         arguments.add("-Daffected.collector.agent=" + required("affected.smoke.agent"));
@@ -261,7 +269,22 @@ public class GradleInjectionTest {
         GradleRunner runner = GradleRunner.create()
             .withProjectDir(project.toFile())
             .withArguments(arguments);
-        if (gradleVersion != null) runner.withGradleVersion(gradleVersion);
+        if (testKitProperty != null) {
+            runner.withTestKitDir(requiredDirectory("affected.test.gradleTestKitDir").toFile());
+        }
+        if (gradleVersion != null) {
+            if (distribution == null) {
+                runner.withGradleVersion(gradleVersion);
+            } else {
+                URI uri = URI.create(distribution);
+                if (!"file".equals(uri.getScheme())) throw new IllegalArgumentException("Gradle distribution must be local");
+                Path archive = Paths.get(uri).toAbsolutePath().normalize();
+                if (!Files.isRegularFile(archive, LinkOption.NOFOLLOW_LINKS)) {
+                    throw new IllegalArgumentException("Gradle distribution must be a regular file");
+                }
+                runner.withGradleDistribution(archive.toUri());
+            }
+        }
         return runner.build();
     }
 
@@ -471,18 +494,7 @@ public class GradleInjectionTest {
         write(project.resolve("settings.gradle"), "rootProject.name = 'fixture'\n");
         write(
             project.resolve("build.gradle"),
-            "plugins {\n" +
-                "    id 'java'\n" +
-                "    id 'jacoco'\n" +
-                "}\n" +
-                "repositories { mavenCentral() }\n" +
-                "dependencies {\n" +
-                "    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.14.4'\n" +
-                "    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.14.4'\n" +
-                "    testRuntimeOnly 'org.junit.vintage:junit-vintage-engine:5.14.4'\n" +
-                "    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.14.4'\n" +
-                "    testImplementation 'junit:junit:4.13.2'\n" +
-                "}\n" +
+            fixturePreamble() +
                 "tasks.register('testDebugUnitTest', Test) {\n" +
                 "    testClassesDirs = sourceSets.test.output.classesDirs\n" +
                 "    classpath = sourceSets.test.runtimeClasspath\n" +
@@ -571,6 +583,14 @@ public class GradleInjectionTest {
         );
     }
 
+    private static String fixturePreamble() throws Exception {
+        InputStream stream = GradleInjectionTest.class.getResourceAsStream("/gradle-injection-preamble.gradle");
+        if (stream == null) throw new IllegalStateException("Missing Gradle fixture preamble");
+        try (Scanner scanner = new Scanner(stream, "UTF-8").useDelimiter("\\A")) {
+            return scanner.hasNext() ? scanner.next() + "\n" : "";
+        }
+    }
+
     private static void writeAlpha(Path project, String body) throws Exception {
         write(
             project.resolve("src/main/java/fixture/Alpha.java"),
@@ -600,6 +620,16 @@ public class GradleInjectionTest {
         File file = new File(value);
         if (!file.isFile()) throw new IllegalStateException(file.toString());
         return file.getAbsolutePath();
+    }
+
+    private static Path requiredDirectory(String property) {
+        String value = System.getProperty(property);
+        if (value == null || value.trim().isEmpty()) throw new IllegalStateException(property);
+        Path directory = Paths.get(value).toAbsolutePath().normalize();
+        if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IllegalStateException(directory.toString());
+        }
+        return directory;
     }
 
     private static String collectorVersion() {

@@ -8,8 +8,16 @@ plugins {
 
 val testJavaVersion = providers.gradleProperty("affected.test.javaVersion").orElse("21")
 val runGradleEightTests = providers.gradleProperty("affected.test.gradle8").orElse("true")
+val gradleEightDistribution = providers.gradleProperty("affected.test.gradle8Distribution")
+val gradleTestKitDir = providers.gradleProperty("affected.test.gradleTestKitDir")
 val symlinkMode = providers.gradleProperty("affected.test.symlinkMode").orElse("optional")
 val conformance = providers.gradleProperty("affected.conformance").map(String::toBoolean).orElse(false)
+val useCacheRedirector = providers.gradleProperty("org.jetbrains.intellij.platform.useCacheRedirector")
+    .map { value ->
+        require(value == "true" || value == "false") { "useCacheRedirector must be true or false" }
+        value.toBoolean()
+    }
+    .orElse(true)
 val junitVersion = "5.14.4"
 val junitPlatformVersion = "1.14.4"
 val mavenLatestVersion = "3.9.16"
@@ -32,7 +40,13 @@ val maven4Distribution = configurations.create("maven4Distribution") {
 
 repositories {
     mavenCentral()
-    maven("https://cache-redirector.jetbrains.com/intellij-dependencies")
+    maven(
+        if (useCacheRedirector.get()) {
+            "https://cache-redirector.jetbrains.com/intellij-dependencies"
+        } else {
+            "https://packages.jetbrains.team/maven/p/ij/intellij-dependencies"
+        },
+    )
 }
 
 dependencies {
@@ -191,6 +205,8 @@ tasks.test {
     systemProperty("affected.test.mavenExtension", mavenExtensionArchive.get().asFile.absolutePath)
     systemProperty("affected.test.mavenAgent", mavenAgentArchive.get().asFile.absolutePath)
     systemProperty("affected.test.gradle8", runGradleEightTests.get())
+    gradleEightDistribution.orNull?.let { systemProperty("affected.test.gradle8Distribution", it) }
+    gradleTestKitDir.orNull?.let { systemProperty("affected.test.gradleTestKitDir", it) }
     systemProperty("affected.test.symlinkMode", symlinkMode.get())
     if (conformance.get()) {
         val report = layout.buildDirectory.file("reports/exact-impact-conformance/selector.properties")

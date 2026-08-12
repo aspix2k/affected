@@ -30,12 +30,22 @@ scripts/quality.sh shell
 scripts/quality.sh workflows
 python3 -m unittest scripts.tests.test_release_currentness
 python3 scripts/release_currentness.py
+python3 -m unittest scripts.tests.test_ci_gradle
 python3 -m unittest scripts.tests.test_support_matrix
 python3 scripts/support_matrix.py --check
 ```
 
 Pull-request CI runs everything except `pitest`; `pitest` runs weekly. A push
 to `main` only promotes the already verified pull-request artifact.
+
+Source-controlled Gradle jobs call `scripts/ci_gradle.py` with explicit absolute
+task paths. The driver resolves only the requested task input graph, retries a
+transient JetBrains redirector failure once against the official direct
+repository in a clean Gradle home, and then executes the real task exactly once
+and offline. The nested Gradle 8 TestKit distribution is downloaded separately
+with its official SHA-256, and its fixture dependencies are warmed without
+running tests. The GitHub dependency-submission action remains its own bounded
+online resolution boundary because it injects the graph task internally.
 
 PIT uses the same IntelliJ Platform runtime as the root test task. The complete
 2026-08-12 run took 2 minutes 3 seconds: 16 mutants were killed, 167 mutants in

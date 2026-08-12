@@ -149,7 +149,7 @@
           "path": "collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java",
           "marker": "gradleEightSelectsExactTestClasses",
           "gate": ".github/workflows/conformance.yml",
-          "gateMarker": "--tests com.aspix2k.affected.collector.GradleInjectionTest",
+          "gateMarker": "--timeout 2100 --task :collector:test",
           "gateJob": "exact-impact",
           "gateStep": "Run exact-impact fixtures"
         },
@@ -158,7 +158,7 @@
           "path": "core/src/test/kotlin/com/aspix2k/affected/TaskPlannerTest.kt",
           "marker": "an Android module gets a variant task",
           "gate": ".github/workflows/conformance.yml",
-          "gateMarker": "\"$gradle\" :core:test",
+          "gateMarker": "--timeout 1200 --task :core:test -- :core:test",
           "gateJob": "cli-adapters",
           "gateStep": "Run CLI adapter contracts"
         }

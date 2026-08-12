@@ -37,19 +37,19 @@ jobs:
       - name: The changelog must describe the current version
         id: version
         run: |
-          version_output=$(python scripts/ci_gradle.py --task :printVersion -- -q :printVersion)
+          version_output=$(python scripts/ci_gradle.py --timeout 180 --task :printVersion -- -q :printVersion)
           version=${version_output##*$'\n'}
           .github/changelog-section.sh "$version" > /dev/null \
             || { echo "::error file=CHANGELOG.md::Add a section for $version before bumping the version."; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - run: python scripts/ci_gradle.py --task :detekt -- :detekt
+      - run: python scripts/ci_gradle.py --timeout 300 --task :detekt -- :detekt
       - run: >-
-          python scripts/ci_gradle.py
+          python scripts/ci_gradle.py --timeout 2100
           --task :test --task :core:test --task :collector:test --task :mcp:test
           --task :koverXmlReport --task :buildPlugin --
           :test :core:test :collector:test :mcp:test :koverXmlReport :buildPlugin
-      - run: python scripts/ci_gradle.py --task :verifyPlugin -- :verifyPlugin
+      - run: python scripts/ci_gradle.py --timeout 600 --task :verifyPlugin -- :verifyPlugin
 
       - name: Record the verified plugin artifact
         env:

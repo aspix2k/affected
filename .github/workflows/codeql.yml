@@ -48,7 +48,7 @@ jobs:
       - name: Build every Java and Kotlin source set
         run: >-
           /usr/bin/time --verbose
-          python scripts/ci_gradle.py
+          python scripts/ci_gradle.py --timeout 1500
           --task :clean --task :classes --task :core:classes --task :mcp:classes
           --task :collector:classes --task :collector:mavenClasses --
           --no-daemon --no-build-cache --no-parallel --max-workers=1
@@ -98,7 +98,7 @@ jobs:
       - name: Build every Java and Kotlin source set
         run: >-
           /usr/bin/time --verbose
-          python scripts/ci_gradle.py
+          python scripts/ci_gradle.py --timeout 1500
           --task :clean --task :classes --task :core:classes --task :mcp:classes
           --task :collector:classes --task :collector:mavenClasses --
           --no-daemon --no-build-cache --no-parallel --max-workers=1

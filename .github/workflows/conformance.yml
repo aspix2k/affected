@@ -44,18 +44,22 @@ jobs:
             java: "17"
             gradle8: "true"
             symlinks: required
+            cold_cache: "true"
           - os: ubuntu-latest
             java: "26"
             gradle8: "false"
             symlinks: required
+            cold_cache: "false"
           - os: macos-latest
             java: "21"
             gradle8: "true"
             symlinks: required
+            cold_cache: "false"
           - os: windows-latest
             java: "21"
             gradle8: "true"
             symlinks: optional
+            cold_cache: "false"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -69,10 +73,15 @@ jobs:
           python-version: "3.14.7"
       - uses: gradle/actions/setup-gradle@67621b124fd2e251c5e8a0e6e3b91318f2287669 # v6.3.0
 
+      - name: Prove acquisition from an empty Gradle home
+        if: matrix.cold_cache == 'true'
+        shell: bash
+        run: echo "GRADLE_USER_HOME=$(mktemp -d "$RUNNER_TEMP/affected-gradle-home.XXXXXX")" >> "$GITHUB_ENV"
+
       - name: Run exact-impact fixtures
         shell: bash
         run: |
-          python scripts/ci_gradle.py --task :collector:test -- :collector:test \
+          python scripts/ci_gradle.py --timeout 2100 --task :collector:test -- :collector:test \
             --tests com.aspix2k.affected.collector.AffectedDependencySelectorTest \
             --tests com.aspix2k.affected.collector.AffectedMavenConfigTest \
             --tests com.aspix2k.affected.collector.CollectorContractTest \
@@ -118,7 +127,7 @@ jobs:
       - name: Run CLI adapter contracts
         shell: bash
         run: >-
-          python scripts/ci_gradle.py --task :core:test -- :core:test
+          python scripts/ci_gradle.py --timeout 1200 --task :core:test -- :core:test
           --rerun-tasks --no-daemon --no-parallel --max-workers=1
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -179,7 +188,7 @@ jobs:
 
       - name: Run native CLI fixtures
         run: >-
-          python scripts/ci_gradle.py --task :core:test -- :core:test
+          python scripts/ci_gradle.py --timeout 1200 --task :core:test -- :core:test
           --tests '*Cli*ConformanceTest'
           -Paffected.cliConformance=true
           --rerun-tasks --no-daemon --no-parallel --max-workers=1
@@ -219,7 +228,7 @@ jobs:
 
       - name: Run .NET exact fixtures
         run: >-
-          python scripts/ci_gradle.py --task :core:test -- :core:test
+          python scripts/ci_gradle.py --timeout 600 --task :core:test -- :core:test
           --tests '*DotnetCliConformanceTest*'
           -Paffected.cliConformance=true
           --rerun-tasks --no-daemon --no-parallel --max-workers=1
@@ -260,7 +269,7 @@ jobs:
           coverage: none
       - name: Run PHPUnit conformance
         run: >-
-          python scripts/ci_gradle.py --task :core:test -- :core:test
+          python scripts/ci_gradle.py --timeout 900 --task :core:test -- :core:test
           --tests '*CliAdapterConformanceTest*PHPUnit*'
           -Paffected.cliConformance=true
           -Daffected.phpunitVersion=${{ matrix.phpunit }}

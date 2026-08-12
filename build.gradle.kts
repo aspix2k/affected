@@ -1,8 +1,10 @@
 import info.solidsoft.gradle.pitest.PitestTask
+import org.gradle.api.Task
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.tasks.BuildPluginTask
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel
 import java.io.ByteArrayInputStream
+import java.util.ArrayDeque
 import java.util.Properties
 import java.util.jar.JarInputStream
 import java.util.zip.ZipFile
@@ -407,4 +409,33 @@ changelog {
 tasks.register("printVersion") {
     val current = project.version.toString()
     doLast { println(current) }
+}
+
+val ciTaskNames = providers.gradleProperty("affected.ci.tasks")
+tasks.register("acquireCiDependencies") {
+    doLast {
+        val requested = ciTaskNames.orNull
+            ?.split(',')
+            ?.filter(String::isNotBlank)
+            ?: error("affected.ci.tasks is required")
+        require(requested.isNotEmpty() && requested.size <= 32 && requested.distinct().size == requested.size) {
+            "affected.ci.tasks must contain 1 to 32 unique task paths"
+        }
+        require(
+            requested.all { Regex("^:[A-Za-z0-9_.:-]+$").matches(it) && it != ":acquireCiDependencies" },
+        ) {
+            "affected.ci.tasks contains an invalid task path"
+        }
+        val queue = ArrayDeque<Task>()
+        requested.mapTo(queue, tasks::getByPath)
+        val visited = linkedSetOf<Task>()
+        while (queue.isNotEmpty()) {
+            val task = queue.removeFirst()
+            if (!visited.add(task)) continue
+            require(visited.size <= 4_096) { "Gradle acquisition graph exceeds 4096 tasks" }
+            task.taskDependencies.getDependencies(task).sortedBy(Task::getPath).forEach(queue::addLast)
+            task.inputs.files.files
+        }
+        logger.lifecycle("Acquired inputs for ${visited.size} Gradle tasks")
+    }
 }

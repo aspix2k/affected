@@ -1,0 +1,27 @@
+import org.gradle.api.tasks.testing.Test
+
+plugins {
+    id 'java'
+    id 'jacoco'
+}
+repositories { mavenCentral() }
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.14.4'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.14.4'
+    testRuntimeOnly 'org.junit.vintage:junit-vintage-engine:5.14.4'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.14.4'
+    testImplementation 'junit:junit:4.13.2'
+}
+tasks.register('acquireFixtureDependencies') {
+    doLast {
+        configurations.testRuntimeClasspath.files
+        configurations.jacocoAgent.files
+    }
+}
+if (project.hasProperty('affected.fixtureAcquisition')) {
+    tasks.withType(Test).configureEach {
+        doFirst {
+            throw new GradleException('Fixture dependency acquisition must not execute tests')
+        }
+    }
+}

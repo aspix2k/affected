@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Move the detailed support matrix to its own generated page and keep the README and Marketplace description concise.
 
+### Fixed
+
+- Retry only verified CI dependency acquisition, then run Gradle compilation, tests, analyzers and plugin verification once from the acquired offline cache.
+
 ## [2.0.1] - 2026-08-12
 
 ### Fixed
