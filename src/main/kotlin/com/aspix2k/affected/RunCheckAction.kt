@@ -7,35 +7,67 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.progress.currentThreadCoroutineScope
 import com.intellij.openapi.project.DumbAware
-import javax.swing.Icon
+import com.intellij.openapi.project.DumbService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 
 abstract class RunCheckAction(
     private val taskName: String,
     private val titleKey: String,
-    private val actionIcon: Icon,
+    private val actionIcon: javax.swing.Icon,
 ) : AnAction(), DumbAware {
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun update(e: AnActionEvent) {
-        val state = e.project?.service<AffectedState>()
-        val supported = state?.modules.orEmpty().filter { it.supports(taskName) }
+        val project = e.project
+        val state = project?.service<AffectedState>()
+        val snapshot = state?.snapshot()
+        val supported = snapshot?.modules.orEmpty().filter { it.supports(taskName) }
+        val uiState = snapshot?.let { affectedUiState(it, ideBusy = DumbService.isDumb(project)) }
 
-        e.presentation.isEnabledAndVisible = supported.isNotEmpty() && state?.isRunning != true
+        e.presentation.isVisible = supported.isNotEmpty()
+        e.presentation.isEnabled = supported.isNotEmpty() && uiState == AffectedUiState.READY
         e.presentation.text = AffectedBundle.message(titleKey)
         e.presentation.icon = actionIcon
     }
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val modules = project.service<AffectedState>().modules.filter { it.supports(taskName) }
-        if (modules.isEmpty()) return
-
-        saveAllDocuments()
-
-        TaskPlanner.groups(modules.map(AffectedModule::info), taskName).forEach { group ->
-            BuildSystems.byId(group.systemId)?.run(project, group.root, group.tasks)
+        val state = project.service<AffectedState>()
+        val snapshot = state.snapshot()
+        if (DumbService.isDumb(project) || !state.tryMarkRunning(snapshot.revision)) {
+            return
+        }
+        try {
+            saveAllDocuments()
+        } catch (error: Exception) {
+            state.markFinished()
+            throw error
+        }
+        val modules = snapshot.modules.filter { it.supports(taskName) }
+        if (modules.isEmpty()) {
+            state.markFinished()
+            return
+        }
+        val groups = TaskPlanner.groups(modules.map(AffectedModule::info), taskName)
+        currentThreadCoroutineScope().launch {
+            try {
+                coroutineScope {
+                    groups.map { group ->
+                        async(Dispatchers.IO) {
+                            BuildSystems.byId(group.systemId)?.runAndWait(project, group.root, group.tasks) ?: true
+                        }
+                    }.awaitAll()
+                }
+            } finally {
+                state.markFinished()
+            }
         }
     }
 

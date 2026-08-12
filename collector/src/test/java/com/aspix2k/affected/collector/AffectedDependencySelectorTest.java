@@ -166,7 +166,7 @@ public class AffectedDependencySelectorTest {
 
         assertEquals(AffectedDependencySelector.Kind.ALL, decision.getKind());
         assertEquals(AffectedDependencySelector.Reason.BASELINE_MISSING, decision.getReason());
-        assertEquals("full fallback (baseline missing)", decision.describe());
+        assertEquals("full fallback (baseline not collected yet)", decision.describe());
     }
 
     @Test

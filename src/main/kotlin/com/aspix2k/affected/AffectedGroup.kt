@@ -22,21 +22,22 @@ class AffectedGroup : DefaultActionGroup(), DumbAware {
     override fun update(e: AnActionEvent) {
         val project = e.project
         val state = project?.service<AffectedState>()
-        val ready = project != null && state?.ready == true && !DumbService.isDumb(project)
         val animate = AffectedSettings.getInstance().animateWhileRunning
+        val snapshot = state?.snapshot()
+        val uiState = snapshot?.let { affectedUiState(it, ideBusy = DumbService.isDumb(project)) }
 
-        e.presentation.isEnabled = ready
-        e.presentation.icon = AffectedIcons.forState(
-            if (ready) state.verificationStatus else VerificationStatus.RUNNING,
-            state?.affectedModules ?: 0,
-            animate,
-        )
-        e.presentation.disabledIcon = if (!ready && animate) AffectedIcons.DisabledRunning else null
-        e.presentation.text = when {
-            state == null || !state.ready -> AffectedBundle.message("group.title")
-            state.isRunning -> AffectedBundle.message("group.title.running")
-            state.affectedModules == 0 -> AffectedBundle.message("group.title")
-            else -> AffectedBundle.message("group.title.count", state.affectedModules)
+        e.presentation.isEnabled = project != null
+        e.presentation.icon = when {
+            uiState?.animated == true && animate -> AffectedIcons.Running
+            uiState == AffectedUiState.READY -> AffectedIcons.withCount(snapshot.affectedModules)
+            else -> AffectedIcons.Action
+        }
+        e.presentation.disabledIcon = null
+        e.presentation.text = AffectedBundle.message(uiState?.groupTitleKey ?: "group.title")
+        e.presentation.description = when (uiState) {
+            AffectedUiState.ANALYZING -> AffectedBundle.message("action.run.description.counting")
+            AffectedUiState.UNAVAILABLE -> AffectedBundle.message("notification.unresolved.title")
+            else -> null
         }
     }
 }

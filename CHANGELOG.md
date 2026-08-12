@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Keep the toolbar in an analyzing state during project model updates, discard stale analysis results and retry after a cancelled IDE read instead of leaving the widget inactive.
+- Show the stable action name instead of presenting changed source-module ownership as the final test plan, while retaining every owner in the affected-modules menu.
 - Retry the GitHub run lookup when release promotion starts before the merged pull request is visible through the Actions API.
 - Upgrade vulnerable transitive Jackson and jsoup build dependencies to patched releases.
 - Stop parent Python packages from inheriting tests owned by nested workspace packages.

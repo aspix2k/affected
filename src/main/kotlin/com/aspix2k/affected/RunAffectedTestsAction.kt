@@ -8,6 +8,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.currentThreadCoroutineScope
+import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.launch
 
@@ -19,30 +20,30 @@ class RunAffectedTestsAction : AnAction() {
         val project = e.project
         val state = project?.service<AffectedState>()
 
-        if (state == null) {
+        if (project == null || state == null) {
             e.presentation.isEnabled = false
             return
         }
 
-        when {
-            state.isRunning -> {
-                e.presentation.isEnabled = false
-                e.presentation.text = AffectedBundle.message("action.run.text")
+        val snapshot = state.snapshot()
+        val uiState = affectedUiState(snapshot, ideBusy = DumbService.isDumb(project))
+        e.presentation.text = AffectedBundle.message(uiState.runActionTextKey)
+        e.presentation.isEnabled = uiState.canRun
+
+        when (uiState) {
+            AffectedUiState.RUNNING -> {
                 e.presentation.description = AffectedBundle.message("action.run.description.running")
             }
-            !state.ready -> {
-                e.presentation.isEnabled = false
-                e.presentation.text = AffectedBundle.message("action.run.text")
+            AffectedUiState.ANALYZING -> {
                 e.presentation.description = AffectedBundle.message("action.run.description.counting")
             }
-            state.affectedModules == 0 -> {
-                e.presentation.isEnabled = false
-                e.presentation.text = AffectedBundle.message("action.run.text")
+            AffectedUiState.UNAVAILABLE -> {
+                e.presentation.description = AffectedBundle.message("notification.unresolved.title")
+            }
+            AffectedUiState.EMPTY -> {
                 e.presentation.description = AffectedBundle.message("action.run.description.nothing")
             }
-            else -> {
-                e.presentation.isEnabled = true
-                e.presentation.text = AffectedBundle.message("action.run.text.count", state.affectedModules)
+            AffectedUiState.READY -> {
                 e.presentation.description = AffectedBundle.message("action.run.description")
             }
         }
@@ -50,45 +51,56 @@ class RunAffectedTestsAction : AnAction() {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
+        val state = project.service<AffectedState>()
+        val snapshot = state.snapshot()
+        if (DumbService.isDumb(project) || !state.tryMarkRunning(snapshot.revision)) {
+            return
+        }
 
-        FileDocumentManager.getInstance().saveAllDocuments()
+        try {
+            FileDocumentManager.getInstance().saveAllDocuments()
+        } catch (error: Exception) {
+            state.markFinished()
+            throw error
+        }
         currentThreadCoroutineScope().launch {
-            val changes = ProjectChanges.collectSuspending(project)
-            if (changes.files.isEmpty()) {
+            var delegated = false
+            try {
+                val changes = ProjectChanges.collectSuspending(project)
+                if (changes.files.isEmpty()) {
+                    notify(
+                        project,
+                        AffectedBundle.message("notification.nothing.title"),
+                        AffectedBundle.message("notification.nothing.text"),
+                        NotificationType.INFORMATION,
+                    )
+                    return@launch
+                }
+
+                val prepared = Verification.prepare(project, changes)
+                val plan = prepared.plan
+                if (plan.isEmpty) {
+                    notify(
+                        project,
+                        AffectedBundle.message("notification.unresolved.title"),
+                        AffectedBundle.message("notification.unresolved.text", changes.files.size),
+                        NotificationType.WARNING,
+                    )
+                    return@launch
+                }
+
                 notify(
                     project,
-                    AffectedBundle.message("notification.nothing.title"),
-                    AffectedBundle.message("notification.nothing.text"),
+                    AffectedBundle.message("notification.started.title"),
+                    describe(plan),
                     NotificationType.INFORMATION,
                 )
-                return@launch
+                delegated = true
+                Verification.runClaimedAndWait(project, prepared)
+            } finally {
+                if (!delegated) state.markFinished()
             }
-
-            val prepared = Verification.prepare(project, changes)
-            val plan = prepared.plan
-            if (plan.isEmpty) {
-                notify(
-                    project,
-                    AffectedBundle.message("notification.unresolved.title"),
-                    AffectedBundle.message("notification.unresolved.text", changes.files.size),
-                    NotificationType.WARNING,
-                )
-                return@launch
-            }
-
-            execute(project, prepared)
         }
-    }
-
-    private suspend fun execute(project: Project, prepared: Verification.Prepared) {
-        val plan = prepared.plan
-        notify(
-            project,
-            AffectedBundle.message("notification.started.title"),
-            describe(plan),
-            NotificationType.INFORMATION,
-        )
-        Verification.runAndWait(project, prepared)
     }
 
     private fun describe(plan: Plan): String =

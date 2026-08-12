@@ -72,6 +72,22 @@ class ModuleGraphTest {
     }
 
     @Test
+    fun `affected module snapshot keeps every owner of changed content`() {
+        val root = createTempDirectory("affected-module-snapshot").toFile()
+        val content = File(root, "shared").apply { mkdirs() }
+        val graph = ModuleGraph(
+            listOf(
+                ModuleGraph.Node(module(root, "library", "shared"), system("CMAKE")),
+                ModuleGraph.Node(module(root, "application", "shared"), system("CMAKE")),
+            ),
+        )
+
+        val modules = affectedModules(graph, listOf(File(content, "shared.h")))
+
+        assertEquals(setOf("library", "application"), modules.mapTo(HashSet(), AffectedModule::id))
+    }
+
+    @Test
     fun `dotnet changes reach transitive test projects`() {
         val root = createTempDirectory("module-graph-dotnet").toFile()
         val alpha = module(root, "Alpha", "Alpha").copy(testTask = "build", compileTask = "build")
