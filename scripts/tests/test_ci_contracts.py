@@ -122,6 +122,7 @@ class CiContractsTest(unittest.TestCase):
             ".github/workflows/queue.yml",
             "scripts/ci_scope.py",
             "scripts/run_gradle.sh",
+            "settings.gradle.kts",
             "gradle/wrapper/gradle-wrapper.properties",
         ):
             destination = root / relative

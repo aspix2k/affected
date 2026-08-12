@@ -41,6 +41,7 @@
     {"id":"actions-setup-java","local":{"type":"github-action","name":"actions/setup-java"},"source":{"type":"github","name":"actions/setup-java"},"policy":"latest"},
     {"id":"actions-upload-artifact","local":{"type":"github-action","name":"actions/upload-artifact"},"source":{"type":"github","name":"actions/upload-artifact"},"policy":"latest"},
     {"id":"actions-download-artifact","local":{"type":"github-action","name":"actions/download-artifact"},"source":{"type":"github","name":"actions/download-artifact"},"policy":"latest"},
+    {"id":"actions-cache","local":{"type":"github-action","name":"actions/cache"},"source":{"type":"github","name":"actions/cache"},"policy":"latest"},
     {"id":"gradle-actions","local":{"type":"github-action","name":"gradle/actions"},"source":{"type":"github","name":"gradle/actions"},"policy":"latest"},
     {"id":"actions-setup-python","local":{"type":"github-action","name":"actions/setup-python"},"source":{"type":"github","name":"actions/setup-python"},"policy":"latest"},
     {"id":"actions-setup-node","local":{"type":"github-action","name":"actions/setup-node"},"source":{"type":"github","name":"actions/setup-node"},"policy":"latest"},

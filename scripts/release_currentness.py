@@ -8,6 +8,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -622,14 +623,31 @@ def inventory_keys(local: dict[str, Any]) -> set[str]:
     return set()
 
 
+def iter_gradle_scripts() -> list[Path]:
+    """Yield tracked Gradle scripts, or a local scan when git is unavailable."""
+    if (ROOT / ".git").exists():
+        try:
+            listed = subprocess.check_output(
+                ["git", "-C", str(ROOT), "ls-files", "-z", "*.gradle.kts"],
+                text=True,
+            )
+            return [ROOT / line for line in listed.split("\0") if line]
+        except (OSError, subprocess.CalledProcessError):
+            pass
+    skip = {"build", "fixtures", "superpowers"}
+    return [
+        file
+        for file in ROOT.rglob("*.gradle.kts")
+        if not file.is_symlink() and not any(part in skip for part in file.parts)
+    ]
+
+
 def discovered_pin_keys() -> set[str]:
     """Discover governed direct-pin surfaces independently from the inventory."""
     keys: set[str] = set()
     keys.add("gradle-wrapper")
     kotlin_toolchains: set[str] = set()
-    for file in ROOT.rglob("*.gradle.kts"):
-        if "build" in file.parts or file.is_symlink():
-            continue
+    for file in iter_gradle_scripts():
         relative = file.relative_to(ROOT).as_posix()
         text = file.read_text(encoding="utf-8")
         keys.update(f"plugin:{name}" for name in re.findall(r'id\(\s*"([^"]+)"\s*\)\s+version\s+"[^"]+"', text))

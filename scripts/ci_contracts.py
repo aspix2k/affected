@@ -101,6 +101,10 @@ def check(root: Path = ROOT) -> None:
 
     if "scripts/pitest_gate.py" not in mutation:
         raise CiContractError("Weekly mutation must fail on surviving mutants")
+    if "cache-redirector.jetbrains.com/repo1.maven.org/maven2" not in read(root / "settings.gradle.kts"):
+        raise CiContractError("Plugin resolution must prefer the JetBrains Maven Central mirror")
+    if "actions/cache@" not in read(root / ".github/workflows/dependency-graph.yml"):
+        raise CiContractError("Dependency graph must cache the Gradle wrapper distribution")
 
     check_merge_queue(root, ci, codeql)
     check_wrapper(root)

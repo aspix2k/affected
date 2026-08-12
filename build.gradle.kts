@@ -9,7 +9,9 @@ import java.util.zip.ZipFile
 
 buildscript {
     repositories {
+        maven("https://cache-redirector.jetbrains.com/repo1.maven.org/maven2")
         mavenCentral()
+        maven("https://cache-redirector.jetbrains.com/plugins.gradle.org")
         gradlePluginPortal()
     }
     dependencies {
@@ -34,6 +36,7 @@ group = "com.aspix2k"
 version = "2.0.1"
 
 repositories {
+    maven("https://cache-redirector.jetbrains.com/repo1.maven.org/maven2")
     mavenCentral()
     intellijPlatform { defaultRepositories() }
 }
