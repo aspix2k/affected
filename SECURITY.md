@@ -15,4 +15,5 @@ Do not include credentials, private source code or customer data.
 Reports are reviewed as maintainer capacity allows; there is no guaranteed
 response or fix timeline. Keep vulnerability details private until a fix and
 coordinated disclosure are ready. Ordinary bugs belong in the public
-[issue tracker](https://github.com/aspix2k/affected/issues).
+[issue tracker](https://github.com/aspix2k/affected/issues/new/choose).
+Conduct incidents belong in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).

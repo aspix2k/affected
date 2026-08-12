@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Make the product, ecosystem, runner, selection and operating-system support matrix executable, evidence-backed and self-auditing.
 - Document supported security versions and private vulnerability reporting.
+- Adopt the Contributor Covenant and a private channel for conduct reports.
 
 ### Changed
 
