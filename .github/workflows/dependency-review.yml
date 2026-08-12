@@ -2,6 +2,7 @@ name: Dependency review
 
 on:
   pull_request:
+  merge_group:
 
 permissions:
   contents: read
@@ -29,9 +30,9 @@ jobs:
 
       - name: Require a complete dependency comparison
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
           GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
 

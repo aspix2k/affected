@@ -97,7 +97,38 @@ def check(root: Path = ROOT) -> None:
     if "scripts/pitest_gate.py" not in mutation:
         raise CiContractError("Weekly mutation must fail on surviving mutants")
 
+    check_merge_queue(root, ci, codeql)
     check_wrapper(root)
+
+
+def check_merge_queue(root: Path, ci: str, codeql: str) -> None:
+    """Required checks must report on merge_group or the merge queue hangs."""
+    review = read(root / ".github/workflows/dependency-review.yml")
+    queue = read(root / ".github/workflows/queue.yml")
+    for name, text in (
+        ("ci.yml", ci),
+        ("codeql.yml", codeql),
+        ("dependency-review.yml", review),
+    ):
+        if not has_on_trigger(text, "merge_group"):
+            raise CiContractError(f"{name} must trigger on merge_group so the merge queue can report required checks")
+
+    if "github.event_name == 'pull_request' || github.event_name == 'merge_group'" not in codeql:
+        raise CiContractError("CodeQL pull-request must analyze merge_group")
+    if "github.event_name != 'pull_request'" in codeql:
+        raise CiContractError("CodeQL main must not run on merge_group")
+    if "github.event.merge_group.base_sha" not in review or "github.event.merge_group.head_sha" not in review:
+        raise CiContractError("Dependency review must compare merge_group SHAs")
+    if "gh pr merge" not in queue or "--squash" not in queue:
+        raise CiContractError("queue.yml must enable squash auto-merge")
+    if "--auto" not in queue or re.search(r"gh pr merge(?![^\n]*--auto)", queue):
+        raise CiContractError("queue.yml must never merge without --auto")
+
+
+def has_on_trigger(workflow: str, name: str) -> bool:
+    """Return whether a workflow listens for a top-level event."""
+    match = re.search(r"(?ms)^on:\n(.*?)(?=^[A-Za-z]|\Z)", workflow)
+    return bool(match and re.search(rf"(?m)^  {re.escape(name)}:\s*$", match.group(1)))
 
 
 def check_wrapper(root: Path) -> None:

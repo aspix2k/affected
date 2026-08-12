@@ -66,6 +66,32 @@ class CiContractsTest(unittest.TestCase):
             with self.assertRaisesRegex(ci_contracts.CiContractError, "README"):
                 ci_contracts.check(root)
 
+    def test_required_checks_must_run_on_merge_group(self) -> None:
+        """A merge queue without merge_group waits forever for verify."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/ci.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace("  merge_group:\n", "", 1),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "merge_group"):
+                ci_contracts.check(root)
+
+    def test_queue_must_not_merge_immediately(self) -> None:
+        """Agents enqueue. GitHub merges after required checks."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/queue.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(" --auto", "", 1),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "--auto"):
+                ci_contracts.check(root)
+
     def copy_workflows(self, root: Path) -> None:
         """Copy the production workflow set into a temporary repository."""
         production = Path(__file__).resolve().parents[2]
@@ -74,6 +100,8 @@ class CiContractsTest(unittest.TestCase):
             ".github/workflows/conformance.yml",
             ".github/workflows/codeql.yml",
             ".github/workflows/mutation.yml",
+            ".github/workflows/dependency-review.yml",
+            ".github/workflows/queue.yml",
             "gradle/wrapper/gradle-wrapper.properties",
         ):
             destination = root / relative

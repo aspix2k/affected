@@ -2,6 +2,7 @@ name: CodeQL
 
 on:
   pull_request:
+  merge_group:
   push:
     branches: ["main"]
   workflow_dispatch:
@@ -15,7 +16,7 @@ concurrency:
 
 jobs:
   pull-request:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -58,7 +59,7 @@ jobs:
         run: scripts/quality.sh codeql codeql-sarif
 
   main:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
