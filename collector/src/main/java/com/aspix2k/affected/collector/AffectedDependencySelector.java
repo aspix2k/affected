@@ -276,7 +276,7 @@ public final class AffectedDependencySelector {
 
     public enum Reason {
         NONE(""),
-        BASELINE_MISSING("baseline missing"),
+        BASELINE_MISSING("baseline not collected yet"),
         BASELINE_STALE("baseline stale"),
         BASELINE_CORRUPT("baseline corrupt"),
         BASELINE_UNAVAILABLE("baseline unavailable"),

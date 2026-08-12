@@ -6,6 +6,8 @@ import com.intellij.openapi.startup.ProjectActivity
 
 class StartupRefresh : ProjectActivity {
     override suspend fun execute(project: Project) {
-        project.service<AffectedState>().invalidate()
+        val state = project.service<AffectedState>()
+        state.watchDumbMode()
+        state.invalidate()
     }
 }

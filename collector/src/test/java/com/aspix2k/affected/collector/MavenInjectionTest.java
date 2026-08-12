@@ -38,7 +38,7 @@ public class MavenInjectionTest {
         Result result = run(project, output, maps, mavenHomes().get(mavenHomes().size() - 1));
 
         assertEquals(result.log, 0, result.exitCode);
-        assertDecision(result.log, "fixture:app:test", "full fallback (baseline missing)");
+        assertDecision(result.log, "fixture:app:test", "full fallback (baseline not collected yet)");
         assertEquals(setOf("AlphaTest", "VintageOmegaTest", "ZetaBetaTest"), executedTests(project));
         Path task = onlyDirectory(output, result.log);
         assertTrue(result.log + fallback(output), Files.isRegularFile(task.resolve("task.manifest")));
@@ -121,7 +121,7 @@ public class MavenInjectionTest {
         Result result = run(project, output, maps, mavenHomes().get(mavenHomes().size() - 1));
 
         assertEquals(result.log, 0, result.exitCode);
-        assertDecision(result.log, "fixture:app:test", "full fallback (baseline missing)");
+        assertDecision(result.log, "fixture:app:test", "full fallback (baseline not collected yet)");
         assertEquals(setOf("AlphaTest", "VintageOmegaTest", "ZetaBetaTest"), executedTests(project));
     }
 
@@ -224,8 +224,8 @@ public class MavenInjectionTest {
         Result full = run(project, fullOutput, maps, mavenHome, "verify");
 
         assertEquals(full.log, 0, full.exitCode);
-        assertDecision(full.log, "fixture:app:test", "full fallback (baseline missing)");
-        assertDecision(full.log, "fixture:app:integration-test", "full fallback (baseline missing)");
+        assertDecision(full.log, "fixture:app:test", "full fallback (baseline not collected yet)");
+        assertDecision(full.log, "fixture:app:integration-test", "full fallback (baseline not collected yet)");
         assertEquals(
             setOf(
                 "AlphaTest", "VintageOmegaTest", "ZetaBetaTest",
@@ -287,7 +287,7 @@ public class MavenInjectionTest {
         );
 
         assertEquals(result.log, 0, result.exitCode);
-        assertDecision(result.log, "fixture:app:integration-test", "full fallback (baseline missing)");
+        assertDecision(result.log, "fixture:app:integration-test", "full fallback (baseline not collected yet)");
         String manifest = read(taskDirectory(output, "|integration-test").resolve("task.manifest"));
         assertTrue(manifest, manifest.contains("all=false"));
     }
@@ -302,8 +302,8 @@ public class MavenInjectionTest {
         Result result = run(project, output, maps, mavenHomes().get(0), "verify");
 
         assertEquals(result.log, 0, result.exitCode);
-        assertDecision(result.log, "fixture:app:test", "full fallback (baseline missing)");
-        assertDecision(result.log, "fixture:app:integration-test", "full fallback (baseline missing)");
+        assertDecision(result.log, "fixture:app:test", "full fallback (baseline not collected yet)");
+        assertDecision(result.log, "fixture:app:integration-test", "full fallback (baseline not collected yet)");
         assertEquals(result.log, 2, directories(output).size());
     }
 
@@ -405,7 +405,7 @@ public class MavenInjectionTest {
         Result full = run(project, fullOutput, maps, mavenHome);
 
         assertEquals(full.log, 0, full.exitCode);
-        assertDecision(full.log + fallback(fullOutput), "fixture:app:test", "full fallback (baseline missing)");
+        assertDecision(full.log + fallback(fullOutput), "fixture:app:test", "full fallback (baseline not collected yet)");
         assertEquals(setOf("AlphaTest", "VintageOmegaTest", "ZetaBetaTest"), executedTests(project));
         Path task = onlyDirectory(fullOutput, full.log);
         assertEquals(full.log + fallback(fullOutput), reuseForks ? 2 : 3, directories(task).size());
@@ -444,7 +444,7 @@ public class MavenInjectionTest {
         Result full = run(project, fullOutput, maps, mavenHome, "verify");
 
         assertEquals(full.log, 0, full.exitCode);
-        assertDecision(full.log, "fixture:app:integration-test", "full fallback (baseline missing)");
+        assertDecision(full.log, "fixture:app:integration-test", "full fallback (baseline not collected yet)");
         assertEquals(
             setOf(
                 "AlphaTest", "VintageOmegaTest", "ZetaBetaTest",

@@ -48,7 +48,7 @@ public class GradleInjectionTest {
         Path corruptOutput = temporary.newFolder("corrupt-output").toPath();
 
         BuildResult first = run(project, firstOutput);
-        assertDecision(first, ":testDebugUnitTest", "full fallback (baseline missing)");
+        assertDecision(first, ":testDebugUnitTest", "full fallback (baseline not collected yet)");
         assertComplete(firstOutput, 5, first.getOutput());
         assertEquals(
             setOf("AlphaTest", "BetaTest", "GammaTest", "DeltaTest", "VintageAlphaTest"),

@@ -33,8 +33,7 @@ Node.js, .NET, Python, PHP, Ruby and C/C++.
 - **Less waiting.** Run checks for affected parts of the repository.
 - **One action.** Cover JVM, Android, Rust, Go, Node.js, .NET, Python, PHP, Ruby
   and C/C++ projects together.
-- **One Run session per build-system root.** Commands stay together and stop on the
-  first failure.
+- **One Run session per build-system root.** Commands stay together in the IDE.
 - **Smaller test runs.** Gradle and Maven can narrow to affected JUnit classes;
   supported VSTest and CTest projects to named tests; Jest, Vitest and pytest
   projects to related test files; PHPUnit projects to affected test classes.

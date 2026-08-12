@@ -56,11 +56,25 @@ object Verification {
     }
 
     suspend fun runAndWait(project: Project, prepared: Prepared): Outcome {
-        val plan = prepared.plan
-        if (plan.isEmpty) return Outcome(plan, passed = true)
+        return runAndWait(project, prepared, alreadyClaimed = false)
+    }
 
+    suspend fun runClaimedAndWait(project: Project, prepared: Prepared): Outcome {
+        return runAndWait(project, prepared, alreadyClaimed = true)
+    }
+
+    private suspend fun runAndWait(
+        project: Project,
+        prepared: Prepared,
+        alreadyClaimed: Boolean,
+    ): Outcome {
+        val plan = prepared.plan
         val state = project.service<AffectedState>()
-        state.markRunning()
+        if (plan.isEmpty) {
+            return Outcome(plan, passed = true)
+        }
+        val claim = if (alreadyClaimed) null else state.tryClaimVerification()
+        if (!alreadyClaimed && claim == null) return Outcome(plan, passed = false)
         var passed = false
         try {
             passed = coroutineScope {
@@ -81,7 +95,7 @@ object Verification {
             }
             return Outcome(plan, passed)
         } finally {
-            state.markFinished()
+            claim?.close()
         }
     }
 }
