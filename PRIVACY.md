@@ -44,8 +44,8 @@ safely; the next run uses the full test plan.
 To gather the graph and run verification, the plugin executes the version
 control, build, language and test tools your project already uses. Verification
 output appears in the Run tool window. The plugin may capture bounded metadata
-responses locally, and tools may create their standard metadata files, such as
-CMake File API queries, in the project build directory.
+responses locally and may create standard metadata requests, such as CMake File
+API queries, in the project build directory.
 
 ## Network
 
