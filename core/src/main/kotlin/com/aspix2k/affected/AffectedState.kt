@@ -11,11 +11,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.resume
 
 enum class VerificationStatus {
     IDLE,
@@ -176,7 +177,11 @@ class AffectedState(
     private val state = AffectedStateStore()
     private var debounceMs = DEBOUNCE_MS.toLong()
     private var awaitSmart: suspend () -> Unit = {
-        DumbService.getInstance(project).state.first { !it.isDumb }
+        suspendCancellableCoroutine { continuation ->
+            DumbService.getInstance(project).runWhenSmart {
+                if (continuation.isActive) continuation.resume(Unit)
+            }
+        }
     }
     private var analyzeProject: suspend () -> List<AffectedModule> = { analyze() }
 
