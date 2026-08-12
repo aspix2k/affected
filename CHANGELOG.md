@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-08-12
+
 ### Added
 
 - Block new releases when a governed direct dependency, toolchain, fixture or GitHub Action pin is stale or unverifiable.
@@ -271,7 +273,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v1.14.1...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/aspix2k/affected/compare/v1.14.1...v2.0.0
 [1.14.1]: https://github.com/aspix2k/affected/compare/v1.14.0...v1.14.1
 [1.14.0]: https://github.com/aspix2k/affected/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/aspix2k/affected/compare/v1.12.0...v1.13.0
