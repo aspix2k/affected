@@ -81,7 +81,7 @@ jobs:
 
       - name: Test pull-request CI contracts
         run: |
-          python3 -m unittest scripts.tests.test_ci_contracts
+          python3 -m unittest scripts.tests.test_ci_contracts scripts.tests.test_run_gradle
           python3 scripts/ci_contracts.py --check
 
       - name: Test the PIT survivor gate
@@ -120,7 +120,7 @@ jobs:
 
       - name: Analyze, test, package and verify
         run: >-
-          ./gradlew --no-daemon --max-workers=2
+          scripts/run_gradle.sh --no-daemon --max-workers=2
           detekt test koverXmlReport koverVerify buildPlugin verifyPlugin
           :collector:spotbugsMain :collector:spotbugsMaven
 
@@ -191,7 +191,7 @@ jobs:
       - name: Require zero dependency findings
         run: >-
           /usr/bin/time --verbose
-          ./gradlew --no-daemon --no-parallel --max-workers=1
+          scripts/run_gradle.sh --no-daemon --no-parallel --max-workers=1
           :buildHealth
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

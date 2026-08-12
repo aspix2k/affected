@@ -25,7 +25,7 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@67621b124fd2e251c5e8a0e6e3b91318f2287669 # v6.3.0
-      - run: ./gradlew pitest
+      - run: scripts/run_gradle.sh pitest
       - name: Fail on surviving mutants
         run: python3 scripts/pitest_gate.py build/reports/pitest/mutations.xml
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

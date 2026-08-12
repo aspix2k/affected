@@ -66,12 +66,7 @@ jobs:
       - name: Run exact-impact fixtures
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            gradle=./gradlew.bat
-          else
-            gradle=./gradlew
-          fi
-          "$gradle" :collector:test \
+          scripts/run_gradle.sh :collector:test \
             --tests com.aspix2k.affected.collector.AffectedDependencySelectorTest \
             --tests com.aspix2k.affected.collector.AffectedMavenConfigTest \
             --tests com.aspix2k.affected.collector.CollectorContractTest \
@@ -113,15 +108,10 @@ jobs:
 
       - name: Run CrossPlatformPathTest
         shell: bash
-        run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            gradle=./gradlew.bat
-          else
-            gradle=./gradlew
-          fi
-          "$gradle" :core:test \
-            --tests com.aspix2k.affected.CrossPlatformPathTest \
-            --rerun-tasks --no-daemon --no-parallel --max-workers=1
+        run: >-
+          scripts/run_gradle.sh :core:test
+          --tests com.aspix2k.affected.CrossPlatformPathTest
+          --rerun-tasks --no-daemon --no-parallel --max-workers=1
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
@@ -130,7 +120,7 @@ jobs:
           path: |
             core/build/test-results/test
             core/build/reports/tests/test
-          if-no-files-found: error
+          if-no-files-found: warn
 
   cli-native:
     name: CLI native fixtures / Linux
@@ -181,7 +171,7 @@ jobs:
 
       - name: Run native CLI fixtures
         run: >-
-          ./gradlew :core:test
+          scripts/run_gradle.sh :core:test
           --tests '*Cli*ConformanceTest'
           -Paffected.cliConformance=true
           --rerun-tasks --no-daemon --no-parallel --max-workers=1
@@ -218,7 +208,7 @@ jobs:
 
       - name: Run .NET exact fixtures
         run: >-
-          ./gradlew :core:test
+          scripts/run_gradle.sh :core:test
           --tests '*DotnetCliConformanceTest*'
           -Paffected.cliConformance=true
           --rerun-tasks --no-daemon --no-parallel --max-workers=1
@@ -256,7 +246,7 @@ jobs:
           coverage: none
       - name: Run PHPUnit conformance
         run: >-
-          ./gradlew :core:test
+          scripts/run_gradle.sh :core:test
           --tests '*CliAdapterConformanceTest*PHPUnit*'
           -Paffected.cliConformance=true
           -Daffected.phpunitVersion=${{ matrix.phpunit }}

@@ -24,8 +24,8 @@ class CiContractsTest(unittest.TestCase):
             ci = root / ".github/workflows/ci.yml"
             ci.write_text(
                 ci.read_text(encoding="utf-8").replace(
-                    "./gradlew --no-daemon --max-workers=2",
-                    "./gradlew :detekt\n          ./gradlew --no-daemon --max-workers=2",
+                    "scripts/run_gradle.sh --no-daemon --max-workers=2",
+                    "scripts/run_gradle.sh :detekt\n          ./gradlew --no-daemon --max-workers=2",
                     1,
                 ),
                 encoding="utf-8",

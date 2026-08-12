@@ -32,7 +32,7 @@ python3 -m unittest scripts.tests.test_release_currentness
 python3 scripts/release_currentness.py
 python3 -m unittest scripts.tests.test_support_matrix
 python3 scripts/support_matrix.py --check
-python3 -m unittest scripts.tests.test_ci_contracts scripts.tests.test_pitest_gate
+python3 -m unittest scripts.tests.test_ci_contracts scripts.tests.test_pitest_gate scripts.tests.test_run_gradle
 python3 scripts/ci_contracts.py --check
 ```
 

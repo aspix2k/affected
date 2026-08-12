@@ -53,8 +53,8 @@ def check(root: Path = ROOT) -> None:
         raise CiContractError("The required verify job must depend on every fast gate")
 
     plugin = slice_job(ci, "plugin")
-    if len(re.findall(r"\./gradlew(?:\.bat)?", plugin)) != 1:
-        raise CiContractError("The plugin job must start Gradle exactly once")
+    if plugin.count("scripts/run_gradle.sh") != 1 or "./gradlew" in plugin:
+        raise CiContractError("The plugin job must start Gradle exactly once through scripts/run_gradle.sh")
     for task in PLUGIN_TASKS:
         if task not in plugin:
             raise CiContractError(f"The plugin job must keep {task}")
@@ -71,6 +71,7 @@ def check(root: Path = ROOT) -> None:
         "scripts.tests.test_support_matrix",
         "scripts/support_matrix.py --check",
         "scripts.tests.test_ci_contracts",
+        "scripts.tests.test_run_gradle",
         "SHELLCHECK_VERSION",
         "ACTIONLINT_VERSION",
     ):

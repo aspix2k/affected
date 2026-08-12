@@ -45,7 +45,7 @@ jobs:
       - name: Build every Java and Kotlin source set
         run: >-
           /usr/bin/time --verbose
-          ./gradlew --no-daemon --no-build-cache --no-parallel --max-workers=1
+          scripts/run_gradle.sh --no-daemon --no-build-cache --no-parallel --max-workers=1
           clean classes :core:classes :mcp:classes :collector:classes :collector:mavenClasses
 
       - uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
@@ -89,7 +89,7 @@ jobs:
       - name: Build every Java and Kotlin source set
         run: >-
           /usr/bin/time --verbose
-          ./gradlew --no-daemon --no-build-cache --no-parallel --max-workers=1
+          scripts/run_gradle.sh --no-daemon --no-build-cache --no-parallel --max-workers=1
           clean classes :core:classes :mcp:classes :collector:classes :collector:mavenClasses
 
       - uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
