@@ -101,7 +101,7 @@ class GradleTaskPathTest {
         val plan = TaskPlanner.plan(modules, emptyList())
 
         assertEquals(1, plan.groups.size)
-        assertEquals("/repo", plan.groups.single().root)
+        assertEquals(absolutePath("/repo"), plan.groups.single().root)
         assertEquals(
             listOf(":features:screen:testDebugUnitTest", ":application:integration:testDebugUnitTest"),
             plan.groups.single().tasks,
@@ -111,7 +111,7 @@ class GradleTaskPathTest {
     @Test
     fun `composite root is recovered from linked Gradle roots`() {
         assertEquals(
-            "/repo",
+            absolutePath("/repo"),
             gradleCompositeRoot(
                 ownerRoot = "/repo/features",
                 linkedRoots = listOf("/unrelated", "/repo"),
@@ -123,7 +123,7 @@ class GradleTaskPathTest {
     @Test
     fun `a separately linked nested build stays independent`() {
         assertEquals(
-            "/repo/features",
+            absolutePath("/repo/features"),
             gradleCompositeRoot(
                 ownerRoot = "/repo/features",
                 linkedRoots = listOf("/repo", "/repo/features"),
@@ -237,4 +237,7 @@ class GradleTaskPathTest {
             executionId = executionId,
         )
     }
+
+    private fun absolutePath(path: String): String =
+        File(path).toPath().toAbsolutePath().normalize().toFile().invariantSeparatorsPath
 }

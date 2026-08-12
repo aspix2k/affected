@@ -90,7 +90,10 @@ class AffectedAnalysisStateTest {
         assertTrue(state.complete(second, analysis(":second", "/repo/second.kt")))
         val current = requireNotNull(state.tryClaimReadyRun())
 
-        assertEquals(listOf("/repo/second.kt"), requireNotNull(current.changes).files.map { it.path })
+        assertEquals(
+            listOf(java.io.File("/repo/second.kt")),
+            requireNotNull(current.changes).files,
+        )
         current.close()
     }
 
