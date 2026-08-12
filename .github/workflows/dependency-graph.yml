@@ -54,7 +54,7 @@ jobs:
       - name: Fetch the Gradle distribution
         run: scripts/run_gradle.sh --version
 
-      - uses: gradle/actions/dependency-submission@67621b124fd2e251c5e8a0e6e3b91318f2287669 # v6.3.0
+      - uses: gradle/actions/dependency-submission@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           dependency-graph: generate-and-upload
           dependency-graph-report-dir: dependency-graph-reports
