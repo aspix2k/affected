@@ -292,30 +292,8 @@ final class AffectedClassInstrumenter {
         private void emitProductionHit(String internalName) {
             if (owner.guarded) {
                 int execution = newLocal(Type.LONG_TYPE);
-                int thread = newLocal(Type.LONG_TYPE);
-                Label slow = new Label();
-                Label resolved = new Label();
-                super.visitMethodInsn(Opcodes.INVOKESTATIC, THREAD, "currentThread", "()Ljava/lang/Thread;", false);
-                super.visitMethodInsn(Opcodes.INVOKEVIRTUAL, THREAD, "getId", "()J", false);
-                storeLocal(thread, Type.LONG_TYPE);
-                loadLocal(thread, Type.LONG_TYPE);
-                super.visitLdcInsn(Long.valueOf(AffectedCollectorAgent.THREAD_EXECUTION_IDS.length));
-                super.visitInsn(Opcodes.LCMP);
-                super.visitJumpInsn(Opcodes.IFGE, slow);
-                super.visitFieldInsn(Opcodes.GETSTATIC, AGENT, "THREAD_EXECUTION_IDS", "[J");
-                loadLocal(thread, Type.LONG_TYPE);
-                super.visitInsn(Opcodes.L2I);
-                super.visitInsn(Opcodes.LALOAD);
+                super.visitMethodInsn(Opcodes.INVOKESTATIC, AGENT, "currentExecutionId", "()J", false);
                 storeLocal(execution, Type.LONG_TYPE);
-                loadLocal(execution, Type.LONG_TYPE);
-                super.visitInsn(Opcodes.LCONST_0);
-                super.visitInsn(Opcodes.LCMP);
-                super.visitJumpInsn(Opcodes.IFEQ, slow);
-                super.visitJumpInsn(Opcodes.GOTO, resolved);
-                super.visitLabel(slow);
-                super.visitMethodInsn(Opcodes.INVOKESTATIC, AGENT, "executionId", "()J", false);
-                storeLocal(execution, Type.LONG_TYPE);
-                super.visitLabel(resolved);
                 loadLocal(execution, Type.LONG_TYPE);
                 super.visitFieldInsn(Opcodes.GETSTATIC, internalName, EXECUTION_FIELD, "J");
                 super.visitInsn(Opcodes.LCMP);

@@ -125,6 +125,7 @@ public final class AffectedMavenFilter implements PostDiscoveryFilter {
             );
             writeDecision(output, fallback.description);
         } catch (Exception ignored) {
+            reportDiagnosticFailure(ignored);
         }
     }
 
@@ -137,7 +138,12 @@ public final class AffectedMavenFilter implements PostDiscoveryFilter {
                     "detail=" + encode(String.valueOf(failure.getMessage())) + "\n"
             );
         } catch (Exception ignored) {
+            reportDiagnosticFailure(ignored);
         }
+    }
+
+    private static void reportDiagnosticFailure(Exception failure) {
+        System.err.println("[Affected] collector diagnostic unavailable: " + failure.getClass().getSimpleName());
     }
 
     static Snapshot snapshot(Properties properties) throws Exception {
@@ -213,8 +219,10 @@ public final class AffectedMavenFilter implements PostDiscoveryFilter {
                 if (count.incrementAndGet() > MAX_FILES || Files.isSymbolicLink(path)) {
                     throw new IllegalStateException(path.toString());
                 }
+                Path fileName = path.getFileName();
                 if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
-                    && (!excludeClasses || !path.getFileName().toString().endsWith(".class"))) {
+                    && fileName != null
+                    && (!excludeClasses || !fileName.toString().endsWith(".class"))) {
                     files.add(path);
                 }
             });
@@ -237,8 +245,10 @@ public final class AffectedMavenFilter implements PostDiscoveryFilter {
                     if (count.incrementAndGet() > MAX_FILES || Files.isSymbolicLink(path)) {
                         throw new IllegalStateException(path.toString());
                     }
+                    Path fileName = path.getFileName();
                     if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
-                        && path.getFileName().toString().endsWith(".class")) {
+                        && fileName != null
+                        && fileName.toString().endsWith(".class")) {
                         classes.add(path);
                     }
                 });
@@ -361,7 +371,9 @@ public final class AffectedMavenFilter implements PostDiscoveryFilter {
 
     private static void writeAtomically(Path target, String content) throws Exception {
         Path directory = target.getParent();
-        Path temporary = Files.createTempFile(directory, target.getFileName().toString() + ".", ".tmp");
+        Path fileName = target.getFileName();
+        if (directory == null || fileName == null) throw new IOException("output path");
+        Path temporary = Files.createTempFile(directory, fileName.toString() + ".", ".tmp");
         byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
         try {
             Files.write(temporary, bytes);

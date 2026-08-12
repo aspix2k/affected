@@ -23,6 +23,9 @@ environment variable.
 ./gradlew buildPlugin   # zip in build/distributions
 ./gradlew verifyPlugin  # JetBrains plugin verifier
 ./gradlew pitest        # mutation testing, slow
+./gradlew :collector:spotbugsMain :collector:spotbugsMaven
+./gradlew buildHealth
+scripts/quality.sh analyzers
 scripts/quality.sh shell
 scripts/quality.sh workflows
 ```
@@ -52,6 +55,20 @@ execution and records their elapsed time and peak memory in the job log.
 
 The zero-finding macOS arm64 baseline measured ShellCheck at 0.11 seconds and
 35.4 MB maximum RSS, and actionlint at 0.07 seconds and 31.3 MB maximum RSS.
+
+SpotBugs 4.10.3 analyzes the Java 8 collector and Maven extension bytecode at
+maximum effort and default confidence. Low-confidence style advice is excluded
+because it overlaps Detekt and can contradict required JVM instrumentation
+contracts. Gradle dependency analysis 3.18.0 covers every project and rejects
+unused, transitively used or incorrectly scoped dependencies. Both
+gates have zero findings, no baseline or suppression file, and every finding
+fails CI. Fix the reported code or dependency declaration rather than weakening
+the gate.
+
+The zero-finding macOS arm64 `--rerun-tasks` baseline measured both SpotBugs
+tasks at 17.78 seconds and 501.8 MB maximum RSS. The four-project dependency
+analysis took 103.91 seconds and 112.4 MB maximum RSS. Their CI jobs disable
+parallel execution and use one Gradle worker.
 
 ## How it works
 

@@ -304,7 +304,7 @@ public final class AffectedDependencySelector {
 
         private Decision(Kind kind, List<String> testClasses, Reason reason) {
             this.kind = kind;
-            this.testClasses = testClasses;
+            this.testClasses = Collections.unmodifiableList(new ArrayList<String>(testClasses));
             this.reason = reason;
         }
 

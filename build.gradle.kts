@@ -13,6 +13,7 @@ plugins {
     id("info.solidsoft.pitest") version "1.19.0"
     id("org.jetbrains.changelog") version "2.5.0"
     id("io.gitlab.arturbosch.detekt") version "1.23.8"
+    id("com.autonomousapps.dependency-analysis") version "3.18.0"
 }
 
 group = "com.aspix2k"
@@ -40,8 +41,8 @@ dependencies {
             intellijIdea(providers.gradleProperty("affected.idea.version").get())
         }
         bundledModule("intellij.platform.vcs.dvcs.impl")
-        pluginComposedModule(implementation(project(":core")))
-        pluginModule(implementation(project(":mcp")))
+        pluginComposedModule(api(project(":core")))
+        pluginModule(runtimeOnly(project(":mcp")))
     }
 
     testImplementation(kotlin("test"))
@@ -94,6 +95,20 @@ detekt {
     config.setFrom(files("$rootDir/config/detekt.yml"))
     source.setFrom(files("src", "core/src", "mcp/src"))
     parallel = true
+}
+
+subprojects {
+    apply(plugin = "com.autonomousapps.dependency-analysis")
+}
+
+dependencyAnalysis {
+    issues {
+        all {
+            onAny {
+                severity("fail")
+            }
+        }
+    }
 }
 
 dependencies {
