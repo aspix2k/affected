@@ -65,6 +65,15 @@ gates have zero findings, no baseline or suppression file, and every finding
 fails CI. Fix the reported code or dependency declaration rather than weakening
 the gate.
 
+CodeQL runs the `java-kotlin` security-extended suite against a clean manual
+build of every production source set. Pull requests receive only a read token;
+the trusted `main` run additionally publishes the same zero-finding analysis to
+GitHub code scanning. Gradle dependency submission uses GitHub's two-workflow
+model: untrusted code can only generate an artifact, while a trusted workflow
+submits it without checking out or executing pull-request code. This bootstrap
+creates the base and pull-request snapshots required by the fail-closed
+dependency review gate; Dependabot remains responsible for update discovery.
+
 The zero-finding macOS arm64 `--rerun-tasks` baseline measured both SpotBugs
 tasks at 17.78 seconds and 501.8 MB maximum RSS. The four-project dependency
 analysis took 103.91 seconds and 112.4 MB maximum RSS. Their CI jobs disable

@@ -51,24 +51,34 @@ jobs:
 
           run_id=$REQUESTED_RUN_ID
           if [ -z "$run_id" ]; then
-            pulls=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls")
-            matching=$(jq --arg sha "$GITHUB_SHA" \
-              '[.[] | select(.merged_at != null and .merge_commit_sha == $sha)]' <<< "$pulls")
-            if [ "$(jq 'length' <<< "$matching")" -ne 1 ]; then
-              echo "::error::Expected exactly one merged pull request for $GITHUB_SHA."
-              exit 1
-            fi
+            for attempt in 1 2 3 4 5; do
+              pulls=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls")
+              matching=$(jq --arg sha "$GITHUB_SHA" \
+                '[.[] | select(.merged_at != null and .merge_commit_sha == $sha)]' <<< "$pulls")
+              matching_count=$(jq 'length' <<< "$matching")
+              if [ "$matching_count" -gt 1 ]; then
+                echo "::error::Expected exactly one merged pull request for $GITHUB_SHA."
+                exit 1
+              fi
 
-            head_sha=$(jq -r '.[0].head.sha' <<< "$matching")
-            runs=$(gh api --method GET \
-              "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
-              -f event=pull_request \
-              -f status=success \
-              -f head_sha="$head_sha" \
-              -f per_page=20)
-            run_id=$(jq -r \
-              '[.workflow_runs[] | select(.status == "completed" and .conclusion == "success")] | sort_by(.created_at, .run_attempt) | last | .id // empty' \
-              <<< "$runs")
+              if [ "$matching_count" -eq 1 ]; then
+                head_sha=$(jq -r '.[0].head.sha' <<< "$matching")
+                runs=$(gh api --method GET \
+                  "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
+                  -f event=pull_request \
+                  -f status=success \
+                  -f head_sha="$head_sha" \
+                  -f per_page=20)
+                run_id=$(jq -r \
+                  '[.workflow_runs[] | select(.status == "completed" and .conclusion == "success")] | sort_by(.created_at, .run_attempt) | last | .id // empty' \
+                  <<< "$runs")
+                if [[ "$run_id" =~ ^[0-9]+$ ]]; then break; fi
+              fi
+
+              if [ "$attempt" -lt 5 ]; then
+                sleep $((1 << (attempt - 1)))
+              fi
+            done
           fi
 
           if [[ ! "$run_id" =~ ^[0-9]+$ ]]; then
