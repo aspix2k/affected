@@ -7,10 +7,6 @@ updates:
       interval: monthly
     commit-message:
       prefix: ci
-    groups:
-      github-actions:
-        patterns:
-          - "*"
 
   - package-ecosystem: gradle
     directory: /
@@ -18,7 +14,12 @@ updates:
       interval: monthly
     commit-message:
       prefix: build
-    groups:
-      gradle:
-        patterns:
-          - "*"
+    ignore:
+      - dependency-name: "org.junit.jupiter:*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.junit.platform:*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.junit.vintage:*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.codehaus.plexus:plexus-utils"
+        update-types: ["version-update:semver-major"]
