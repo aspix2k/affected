@@ -33,6 +33,22 @@ class CiContractsTest(unittest.TestCase):
             with self.assertRaisesRegex(ci_contracts.CiContractError, "exactly once"):
                 ci_contracts.check(root)
 
+    def test_wrapper_must_not_use_a_single_ten_second_fetch(self) -> None:
+        """A 10s timeout with retries=0 is how CI died on services.gradle.org."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            wrapper = root / "gradle/wrapper/gradle-wrapper.properties"
+            wrapper.write_text(
+                "distributionUrl=https\\://services.gradle.org/distributions/gradle-9.7.0-bin.zip\n"
+                "distributionSha256Sum=abc\n"
+                "networkTimeout=10000\n"
+                "retries=0\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "networkTimeout"):
+                ci_contracts.check(root)
+
     def test_readme_must_not_start_conformance(self) -> None:
         """Documentation-only README edits are not exact-impact evidence."""
         with TemporaryDirectory() as directory:
@@ -58,6 +74,7 @@ class CiContractsTest(unittest.TestCase):
             ".github/workflows/conformance.yml",
             ".github/workflows/codeql.yml",
             ".github/workflows/mutation.yml",
+            "gradle/wrapper/gradle-wrapper.properties",
         ):
             destination = root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)

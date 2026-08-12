@@ -97,6 +97,29 @@ def check(root: Path = ROOT) -> None:
     if "scripts/pitest_gate.py" not in mutation:
         raise CiContractError("Weekly mutation must fail on surviving mutants")
 
+    check_wrapper(root)
+
+
+def check_wrapper(root: Path) -> None:
+    """Keep the wrapper checksum and refuse a one-shot 10-second download."""
+    text = read(root / "gradle/wrapper/gradle-wrapper.properties")
+    timeout = wrapper_int(text, "networkTimeout")
+    retries = wrapper_int(text, "retries")
+    if timeout < 60_000:
+        raise CiContractError(f"Gradle wrapper networkTimeout must be at least 60s, found {timeout}")
+    if retries < 3:
+        raise CiContractError(f"Gradle wrapper retries must be at least 3, found {retries}")
+    if "distributionSha256Sum=" not in text:
+        raise CiContractError("Gradle wrapper must keep distributionSha256Sum")
+
+
+def wrapper_int(text: str, name: str) -> int:
+    """Read one integer Gradle wrapper property."""
+    match = re.search(rf"(?m)^{re.escape(name)}=(\d+)$", text)
+    if match is None:
+        raise CiContractError(f"Gradle wrapper is missing {name}")
+    return int(match.group(1))
+
 
 def slice_job(workflow: str, name: str) -> str:
     """Return one top-level GitHub Actions job block."""
