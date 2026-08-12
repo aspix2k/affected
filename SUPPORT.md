@@ -18,6 +18,7 @@ is tied to public repository evidence and an executable CI gate.
 | RubyMine | Platform-compatible | 2025.3 | [plugin.xml](src/main/resources/META-INF/plugin.xml) · [ci.yml](.github/workflows/ci.yml) |
 | RustRover | Platform-compatible | 2025.3 | [plugin.xml](src/main/resources/META-INF/plugin.xml) · [ci.yml](.github/workflows/ci.yml) |
 | DataSpell | Platform-compatible | 2025.3 | [plugin.xml](src/main/resources/META-INF/plugin.xml) · [ci.yml](.github/workflows/ci.yml) |
+| DataGrip | Platform-compatible | 2025.3 | [plugin.xml](src/main/resources/META-INF/plugin.xml) · [ci.yml](.github/workflows/ci.yml) |
 
 Product-verified entries run a product-specific verifier. Platform-compatible
 entries share the supported IntelliJ Platform contract but do not yet have a

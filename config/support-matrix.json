@@ -90,6 +90,14 @@
       "gates": [".github/workflows/ci.yml"]
     },
     {
+      "id": "datagrip",
+      "name": "DataGrip",
+      "support": "platform",
+      "since": "2025.3",
+      "fixtures": ["src/main/resources/META-INF/plugin.xml"],
+      "gates": [".github/workflows/ci.yml"]
+    },
+    {
       "id": "aqua",
       "name": "Aqua",
       "support": "excluded",
