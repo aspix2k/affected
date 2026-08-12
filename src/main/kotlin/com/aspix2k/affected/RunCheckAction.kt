@@ -9,7 +9,6 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.currentThreadCoroutineScope
 import com.intellij.openapi.project.DumbAware
-import com.intellij.openapi.project.DumbService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -28,7 +27,7 @@ abstract class RunCheckAction(
         val state = project?.service<AffectedState>()
         val snapshot = state?.snapshot()
         val supported = snapshot?.modules.orEmpty().filter { it.supports(taskName) }
-        val uiState = snapshot?.let { affectedUiState(it, ideBusy = DumbService.isDumb(project)) }
+        val uiState = snapshot?.let { affectedUiState(it, ideBusy = projectBusy(project)) }
 
         e.presentation.isVisible = supported.isNotEmpty()
         e.presentation.isEnabled = supported.isNotEmpty() && uiState == AffectedUiState.READY
@@ -40,12 +39,14 @@ abstract class RunCheckAction(
         val project = e.project ?: return
         val state = project.service<AffectedState>()
         saveAllDocuments()
-        if (DumbService.isDumb(project)) return
+        if (projectBusy(project)) return
         val claim = state.tryClaimReadyRun() ?: return
         launchClaimed(claim, ::currentThreadCoroutineScope) {
             val modules = claim.snapshot.modules.filter { it.supports(taskName) }
             if (modules.isEmpty()) return@launchClaimed
             val groups = TaskPlanner.groups(modules.map(AffectedModule::info), taskName)
+            if (projectBusy(project)) return@launchClaimed
+            if (!claim.markRunning()) return@launchClaimed
             coroutineScope {
                 groups.map { group ->
                     async(Dispatchers.IO) {

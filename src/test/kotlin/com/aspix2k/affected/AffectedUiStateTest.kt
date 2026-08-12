@@ -10,13 +10,27 @@ class AffectedUiStateTest {
     @Test
     fun `sync and invalidation show analysis instead of stale ready data`() {
         assertEquals(
-            AffectedUiState.ANALYZING,
+            AffectedUiState.BUSY,
             affectedUiState(AnalysisStatus.READY, VerificationStatus.IDLE, ideBusy = true, affectedModules = 1),
         )
         assertEquals(
             AffectedUiState.ANALYZING,
             affectedUiState(AnalysisStatus.ANALYZING, VerificationStatus.IDLE, ideBusy = false, affectedModules = 1),
         )
+    }
+
+    @Test
+    fun `preparation is visible before the build starts`() {
+        val preparing = affectedUiState(
+            AnalysisStatus.READY,
+            VerificationStatus.PREPARING,
+            ideBusy = false,
+            affectedModules = 2,
+        )
+
+        assertEquals(AffectedUiState.PREPARING, preparing)
+        assertTrue(preparing.animated)
+        assertFalse(preparing.canRun)
     }
 
     @Test

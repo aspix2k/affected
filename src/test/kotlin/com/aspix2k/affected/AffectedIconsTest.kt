@@ -34,6 +34,7 @@ class AffectedIconsTest {
 
     @Test
     fun `animation respects its setting`() {
+        assertSame(AffectedIcons.Running, AffectedIcons.forState(VerificationStatus.PREPARING, 4, true))
         assertSame(AffectedIcons.Running, AffectedIcons.forState(VerificationStatus.RUNNING, 4, true))
         assertSame(AffectedIcons.withCount(4), AffectedIcons.forState(VerificationStatus.RUNNING, 4, false))
     }

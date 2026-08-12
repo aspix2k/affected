@@ -1,11 +1,15 @@
 package com.aspix2k.affected
 
 import com.aspix2k.affected.build.GradleBuildSystem
+import com.aspix2k.affected.build.gradleCompositeRoot
 import com.aspix2k.affected.build.gradleExecutionCoordinates
 import com.aspix2k.affected.build.gradleExecutionMetadata
 import com.aspix2k.affected.build.gradleProjectPath
+import com.aspix2k.affected.build.gradleVerificationTasks
 import com.intellij.openapi.externalSystem.model.ProjectSystemId
 import com.intellij.openapi.externalSystem.model.project.ModuleData
+import java.io.File
+import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -89,23 +93,70 @@ class GradleTaskPathTest {
     }
 
     @Test
-    fun `incomplete Gradle execution data falls back to owning coordinates`() {
+    fun `incomplete included build metadata keeps one composite invocation`() {
+        val modules = listOf(
+            fallbackModuleInfo("/repo/features", ":screen", "features"),
+            fallbackModuleInfo("/repo/application", ":integration", "application"),
+        )
+        val plan = TaskPlanner.plan(modules, emptyList())
+
+        assertEquals(1, plan.groups.size)
+        assertEquals("/repo", plan.groups.single().root)
         assertEquals(
-            "/repo/platform" to ":shared-data",
-            gradleExecutionCoordinates(
-                "/repo/platform",
-                ":shared-data",
-                "/repo",
-                null,
+            listOf(":features:screen:testDebugUnitTest", ":application:integration:testDebugUnitTest"),
+            plan.groups.single().tasks,
+        )
+    }
+
+    @Test
+    fun `composite root is recovered from linked Gradle roots`() {
+        assertEquals(
+            "/repo",
+            gradleCompositeRoot(
+                ownerRoot = "/repo/features",
+                linkedRoots = listOf("/unrelated", "/repo"),
+                buildName = "features",
             ),
         )
+    }
+
+    @Test
+    fun `a separately linked nested build stays independent`() {
+        assertEquals(
+            "/repo/features",
+            gradleCompositeRoot(
+                ownerRoot = "/repo/features",
+                linkedRoots = listOf("/repo", "/repo/features"),
+                buildName = "features",
+            ),
+        )
+    }
+
+    @Test
+    fun `Android task detection does not require the imported task list`() {
+        val module = createTempDirectory("affected-android-module").toFile()
+        File(module, "src/main/AndroidManifest.xml").apply {
+            parentFile.mkdirs()
+            writeText("<manifest />")
+        }
+
+        assertEquals(
+            "testDebugUnitTest" to "compileDebugUnitTestKotlin",
+            gradleVerificationTasks(module.path, emptyList(), emptySet()),
+        )
+    }
+
+    @Test
+    fun `incomplete standalone metadata stays on the owning build`() {
         assertEquals(
             "/repo/platform" to ":shared-data",
             gradleExecutionCoordinates(
-                "/repo/platform",
-                ":shared-data",
-                null,
-                ":platform:shared-data",
+                ownerRoot = "/repo/platform",
+                ownerId = ":shared-data",
+                directoryToRunTask = null,
+                identityPath = null,
+                linkedRoot = "/repo/platform",
+                buildName = "platform",
             ),
         )
     }
@@ -160,6 +211,27 @@ class GradleTaskPathTest {
             buildRoot = ownerRoot,
             testTask = "test",
             compileTask = "compileTestKotlin",
+            hasTests = true,
+            executionRoot = executionRoot,
+            executionId = executionId,
+        )
+    }
+
+    private fun fallbackModuleInfo(ownerRoot: String, ownerId: String, buildName: String): ModuleInfo {
+        val (executionRoot, executionId) = gradleExecutionCoordinates(
+            ownerRoot = ownerRoot,
+            ownerId = ownerId,
+            directoryToRunTask = null,
+            identityPath = null,
+            linkedRoot = "/repo",
+            buildName = buildName,
+        )
+        return ModuleInfo(
+            id = ownerId,
+            systemId = "GRADLE",
+            buildRoot = ownerRoot,
+            testTask = "testDebugUnitTest",
+            compileTask = "compileDebugUnitTestKotlin",
             hasTests = true,
             executionRoot = executionRoot,
             executionId = executionId,

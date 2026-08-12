@@ -21,6 +21,13 @@ object Verification {
         internal val changes: BuildChanges,
     )
 
+    internal data class PreparedPlans(
+        val testsOnly: Prepared,
+        val withConsumers: Prepared,
+    ) {
+        fun select(checkConsumers: Boolean): Prepared = if (checkConsumers) withConsumers else testsOnly
+    }
+
     suspend fun prepare(project: Project): Prepared {
         val changes = ProjectChanges.collectSuspending(project)
         return prepare(project, changes)
@@ -28,13 +35,8 @@ object Verification {
 
     suspend fun prepare(project: Project, changes: ProjectChanges.Result): Prepared =
         withContext(Dispatchers.Default) {
-            val buildChanges = BuildChanges(
-                files = changes.files.map { it.absoluteFile.normalize().invariantSeparatorsPath },
-                exactSelectionEligible = changes.exactSelectionEligible
-                    .mapTo(HashSet()) { it.absoluteFile.normalize().invariantSeparatorsPath },
-                comparedToBase = changes.comparedToBase,
-            )
-            Prepared(plan(project, changes), buildChanges)
+            prepare(ModuleGraph.create(project), changes)
+                .select(AffectedSettings.getInstance().checkConsumers)
         }
 
     suspend fun plan(project: Project): Plan {
@@ -42,10 +44,26 @@ object Verification {
     }
 
     suspend fun plan(project: Project, changes: ProjectChanges.Result): Plan = withContext(Dispatchers.Default) {
-        if (changes.files.isEmpty()) return@withContext Plan(emptyList(), 0, 0)
-
         val graph = ModuleGraph.create(project)
         verificationPlan(graph, changes, AffectedSettings.getInstance().checkConsumers)
+    }
+
+    internal fun prepare(
+        graph: ModuleGraph,
+        changes: ProjectChanges.Result,
+        owners: Map<java.io.File, List<ModuleGraph.Node>> = changes.files.associateWith(graph::nodesFor),
+    ): PreparedPlans {
+        val buildChanges = BuildChanges(
+            files = changes.files.map { it.absoluteFile.normalize().invariantSeparatorsPath },
+            exactSelectionEligible = changes.exactSelectionEligible
+                .mapTo(HashSet()) { it.absoluteFile.normalize().invariantSeparatorsPath },
+            comparedToBase = changes.comparedToBase,
+        )
+        val plans = verificationPlans(graph, changes, owners)
+        return PreparedPlans(
+            testsOnly = Prepared(plans.testsOnly, buildChanges),
+            withConsumers = Prepared(plans.withConsumers, buildChanges),
+        )
     }
 
     suspend fun runAndWait(project: Project, plan: Plan): Outcome {
@@ -56,27 +74,23 @@ object Verification {
     }
 
     suspend fun runAndWait(project: Project, prepared: Prepared): Outcome {
-        return runAndWait(project, prepared, alreadyClaimed = false)
+        val plan = prepared.plan
+        if (plan.isEmpty) return Outcome(plan, passed = true)
+        val claim = project.service<AffectedState>().tryClaimVerification()
+            ?: return Outcome(plan, passed = false)
+        return runClaimedAndWait(project, prepared, claim)
     }
 
-    suspend fun runClaimedAndWait(project: Project, prepared: Prepared): Outcome {
-        return runAndWait(project, prepared, alreadyClaimed = true)
-    }
-
-    private suspend fun runAndWait(
+    suspend fun runClaimedAndWait(
         project: Project,
         prepared: Prepared,
-        alreadyClaimed: Boolean,
+        claim: AffectedRunClaim,
     ): Outcome {
         val plan = prepared.plan
-        val state = project.service<AffectedState>()
-        if (plan.isEmpty) {
-            return Outcome(plan, passed = true)
-        }
-        val claim = if (alreadyClaimed) null else state.tryClaimVerification()
-        if (!alreadyClaimed && claim == null) return Outcome(plan, passed = false)
         var passed = false
         try {
+            if (plan.isEmpty) return Outcome(plan, passed = true)
+            if (!claim.markRunning()) return Outcome(plan, passed = false)
             passed = coroutineScope {
                 plan.groups.map { group ->
                     async(Dispatchers.Default) {
@@ -95,7 +109,7 @@ object Verification {
             }
             return Outcome(plan, passed)
         } finally {
-            claim?.close()
+            claim.close()
         }
     }
 }
@@ -104,8 +118,24 @@ internal fun verificationPlan(
     graph: ModuleGraph,
     changes: ProjectChanges.Result,
     checkConsumers: Boolean,
-): Plan {
-    val owners = changes.files.associateWith(graph::nodesFor)
+): Plan = verificationPlans(graph, changes).select(checkConsumers)
+
+private data class VerificationPlans(
+    val testsOnly: Plan,
+    val withConsumers: Plan,
+) {
+    fun select(checkConsumers: Boolean): Plan = if (checkConsumers) withConsumers else testsOnly
+}
+
+private fun verificationPlans(
+    graph: ModuleGraph,
+    changes: ProjectChanges.Result,
+    owners: Map<java.io.File, List<ModuleGraph.Node>> = changes.files.associateWith(graph::nodesFor),
+): VerificationPlans {
+    if (changes.files.isEmpty()) {
+        val empty = Plan(emptyList(), 0, 0)
+        return VerificationPlans(empty, empty)
+    }
     val changed = owners.values.flatten().distinct()
     val testConsumers = graph.transitiveTestConsumers(changed.toSet())
     val apiNodes = owners.flatMapTo(HashSet()) { (file, nodes) ->
@@ -117,11 +147,17 @@ internal fun verificationPlan(
             )
         }
     }
-    val consumers = when {
-        !checkConsumers || apiNodes.isEmpty() -> emptyList()
-        else -> graph.directDependents(apiNodes)
-    }
-    return TaskPlanner.plan((changed + testConsumers).map { it.info() }, consumers.map { it.info() })
+    val tested = (changed + testConsumers).map { it.info() }
+    val testsOnly = TaskPlanner.plan(tested, emptyList())
+    val consumers = if (apiNodes.isEmpty()) emptyList() else graph.directDependents(apiNodes)
+    return VerificationPlans(
+        testsOnly = testsOnly,
+        withConsumers = if (consumers.isEmpty()) {
+            testsOnly
+        } else {
+            TaskPlanner.plan(tested, consumers.map { it.info() })
+        },
+    )
 }
 
 internal fun affectsConsumers(systemId: String, path: String, signatureTouched: Boolean): Boolean =

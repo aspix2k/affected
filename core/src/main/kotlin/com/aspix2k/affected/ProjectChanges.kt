@@ -33,11 +33,6 @@ object ProjectChanges {
     suspend fun collectSuspending(project: Project): Result =
         runInterruptible(Dispatchers.IO) { collect(project) }
 
-    fun paths(project: Project): List<File> = changedFiles(project).first
-
-    suspend fun pathsSuspending(project: Project): List<File> =
-        runInterruptible(Dispatchers.IO) { paths(project) }
-
     private fun changedFiles(project: Project): Pair<List<File>, ChangeAnalyzer?> {
         val projectDir = project.basePath?.let(::File) ?: return emptyList<File>() to null
         val extensions = BuildSystems.sourceExtensions(project)
