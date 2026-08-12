@@ -70,9 +70,16 @@ build of every production source set. Pull requests receive only a read token;
 the trusted `main` run additionally publishes the same zero-finding analysis to
 GitHub code scanning. Gradle dependency submission uses GitHub's two-workflow
 model: untrusted code can only generate an artifact, while a trusted workflow
-submits it without checking out or executing pull-request code. This bootstrap
-creates the base and pull-request snapshots required by the fail-closed
-dependency review gate; Dependabot remains responsible for update discovery.
+submits it without checking out or executing pull-request code. Dependency
+review rejects every newly introduced vulnerability from low severity upward
+across runtime, development and unknown scopes, and independently rejects an
+incomplete base or pull-request snapshot. Dependabot remains responsible for
+update discovery.
+
+The first zero-finding CodeQL pull-request job took 5 minutes 30 seconds. Its
+clean one-worker build took 3 minutes 36 seconds and measured 189,664 KB maximum
+RSS; CodeQL analysis itself is bounded to 4 GB and two threads. The first Gradle
+dependency snapshot took 3 minutes 41 seconds and resolved 531 components.
 
 The zero-finding macOS arm64 `--rerun-tasks` baseline measured both SpotBugs
 tasks at 17.78 seconds and 501.8 MB maximum RSS. The four-project dependency

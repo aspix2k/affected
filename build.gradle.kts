@@ -6,6 +6,19 @@ import java.util.Properties
 import java.util.jar.JarInputStream
 import java.util.zip.ZipFile
 
+buildscript {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+    dependencies {
+        classpath(enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.1"))
+        constraints {
+            classpath("org.jsoup:jsoup:1.23.1")
+        }
+    }
+}
+
 plugins {
     kotlin("jvm") version "2.4.10"
     id("org.jetbrains.intellij.platform") version "2.18.1"
