@@ -92,10 +92,10 @@
     {
       "id": "datagrip",
       "name": "DataGrip",
-      "support": "platform",
-      "since": "2025.3",
-      "fixtures": ["src/main/resources/META-INF/plugin.xml"],
-      "gates": [".github/workflows/ci.yml"]
+      "support": "planned",
+      "reason": "SQL and database-project impact selection is tracked but not implemented yet.",
+      "issue": "https://github.com/aspix2k/affected/issues/120",
+      "reviewed": "2026-08-12"
     },
     {
       "id": "aqua",
@@ -143,6 +143,16 @@
       "languages": ["Kotlin", "Java"],
       "runners": ["JUnit", "consumer test compilation"],
       "selection": ["class", "module"],
+      "selectionProofs": {
+        "class": {
+          "path": "collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java",
+          "marker": "gradleEightSelectsExactTestClasses"
+        },
+        "module": {
+          "path": "core/src/test/kotlin/com/aspix2k/affected/TaskPlannerTest.kt",
+          "marker": "an Android module gets a variant task"
+        }
+      },
       "versions": "Gradle 8–9; JDK 17, 21 and 26",
       "support": "supported",
       "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java"],
@@ -155,6 +165,16 @@
       "languages": ["Kotlin", "Java"],
       "runners": ["Surefire", "Failsafe", "consumer test compilation"],
       "selection": ["class", "module"],
+      "selectionProofs": {
+        "class": {
+          "path": "collector/src/test/java/com/aspix2k/affected/collector/MavenInjectionTest.java",
+          "marker": "firstMiddleAndLastProductionClassesRunOnlyTheirDependentTests"
+        },
+        "module": {
+          "path": "collector/src/test/java/com/aspix2k/affected/collector/MavenInjectionTest.java",
+          "marker": "reactorModulesUseIndependentDependencyMaps"
+        }
+      },
       "versions": "Maven 3.9.x; Maven 4 RC keeps the full goal",
       "support": "supported",
       "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/MavenInjectionTest.java"],
@@ -167,6 +187,12 @@
       "languages": ["Rust", "TOML"],
       "runners": ["cargo test", "cargo check --tests"],
       "selection": ["package"],
+      "selectionProofs": {
+        "package": {
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
+          "marker": "Cargo commands run the selected workspace packages"
+        }
+      },
       "versions": "Current stable Rust toolchain",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/cargo"],
@@ -179,6 +205,12 @@
       "languages": ["Go"],
       "runners": ["go test", "go build"],
       "selection": ["package"],
+      "selectionProofs": {
+        "package": {
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
+          "marker": "Go commands run the selected module packages"
+        }
+      },
       "versions": "Current stable Go toolchain",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/go"],
@@ -191,6 +223,16 @@
       "languages": ["JavaScript", "TypeScript", "JSX", "TSX", "Vue", "Svelte"],
       "runners": ["Jest", "Vitest", "package test", "tsc --noEmit"],
       "selection": ["file", "package"],
+      "selectionProofs": {
+        "file": {
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
+          "marker": "npm runs exact Jest and Vitest files and preserves full fallback"
+        },
+        "package": {
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
+          "marker": "npm runs exact Jest and Vitest files and preserves full fallback"
+        }
+      },
       "versions": "Current stable Node.js; Jest 29–30; Vitest 2–4",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/node"],
@@ -203,6 +245,16 @@
       "languages": ["C#", "F#", "Visual Basic", "Razor"],
       "runners": ["VSTest with xUnit", "NUnit", "MSTest", "dotnet build"],
       "selection": ["test", "project"],
+      "selectionProofs": {
+        "test": {
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/DotnetCliConformanceTest.kt",
+          "marker": "dotnet runs exact VSTest identities and preserves full fallback"
+        },
+        "project": {
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/DotnetCliConformanceTest.kt",
+          "marker": "dotnet runs exact VSTest identities and preserves full fallback"
+        }
+      },
       "versions": ".NET SDK 8–10",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/dotnet"],
@@ -215,6 +267,16 @@
       "languages": ["Python"],
       "runners": ["pytest", "mypy"],
       "selection": ["file", "package"],
+      "selectionProofs": {
+        "file": {
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
+          "marker": "pytest runs exact files and preserves full fallback"
+        },
+        "package": {
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
+          "marker": "pytest runs exact files and preserves full fallback"
+        }
+      },
       "versions": "Current stable Python; pytest 8–9",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/python"],
@@ -227,6 +289,16 @@
       "languages": ["PHP"],
       "runners": ["PHPUnit", "PHPStan"],
       "selection": ["class", "package"],
+      "selectionProofs": {
+        "class": {
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
+          "marker": "PHPUnit runs exact classes and preserves full fallback"
+        },
+        "package": {
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
+          "marker": "PHPUnit runs exact classes and preserves full fallback"
+        }
+      },
       "versions": "PHP 8.2–8.5; PHPUnit 11.5, 12.5, 13.2 and 13.3",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/composer"],
@@ -239,6 +311,12 @@
       "languages": ["Ruby"],
       "runners": ["RSpec"],
       "selection": ["gem"],
+      "selectionProofs": {
+        "gem": {
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
+          "marker": "RSpec command runs both selected gems"
+        }
+      },
       "versions": "Ruby 4; RSpec 3.13.x",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/ruby"],
@@ -251,6 +329,16 @@
       "languages": ["C", "C++"],
       "runners": ["CMake build", "CTest"],
       "selection": ["test", "target"],
+      "selectionProofs": {
+        "test": {
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
+          "marker": "CMake runs exact CTest files and preserves full fallback"
+        },
+        "target": {
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
+          "marker": "CMake runs exact CTest files and preserves full fallback"
+        }
+      },
       "versions": "CMake 4.1+ and CTest 3.29+; tested with CMake 4.4.2",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/cmake"],

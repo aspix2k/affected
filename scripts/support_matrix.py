@@ -24,6 +24,7 @@ MAX_MATRIX_BYTES = 256 * 1024
 MAX_ENTRIES = 128
 MAX_EVIDENCE = 16
 DATE = re.compile(r"20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])")
+ISSUE = re.compile(r"https://github\.com/aspix2k/affected/issues/([1-9]\d*)")
 IDENTIFIER = re.compile(r"[a-z][a-z0-9-]{1,63}")
 ADAPTER_IDENTIFIER = re.compile(r"[A-Z][A-Z0-9_]{1,31}")
 SELECTION_LABELS = {
@@ -171,16 +172,20 @@ def validate_products(root: Path, products: object) -> list[dict[str, Any]]:
             raise SupportMatrixError(f"Duplicate product: {identifier}")
         identifiers.add(identifier)
         names.add(name)
-        if support == "excluded":
+        if support in {"excluded", "planned"}:
             reason = require_string(product.get("reason"), f"{identifier} reason")
             reviewed = require_string(
                 product.get("reviewed"), f"{identifier} reviewed", DATE
             )
             if len(reason) < 20:
                 raise SupportMatrixError(
-                    f"Excluded product reason is too short: {identifier}"
+                    f"{support.title()} product reason is too short: {identifier}"
                 )
             product["reviewed"] = reviewed
+            if support == "planned":
+                product["issue"] = require_string(
+                    product.get("issue"), f"{identifier} issue", ISSUE
+                )
         elif support in {"verified", "platform"}:
             product["since"] = require_string(
                 product.get("since"), f"{identifier} since"
@@ -272,6 +277,32 @@ def validate_adapters(root: Path, adapters: object) -> list[dict[str, Any]]:
             raise SupportMatrixError(
                 f"Unsupported selection units for {identifier}: {sorted(unknown_selection)}"
             )
+        proofs = adapter.get("selectionProofs")
+        if not isinstance(proofs, dict) or set(proofs) != set(adapter["selection"]):
+            raise SupportMatrixError(
+                f"{identifier} selection proofs must exactly match its selection units"
+            )
+        normalized_proofs: dict[str, dict[str, str]] = {}
+        for unit in adapter["selection"]:
+            proof = proofs[unit]
+            if not isinstance(proof, dict) or set(proof) != {"path", "marker"}:
+                raise SupportMatrixError(f"Invalid {identifier} {unit} selection proof")
+            path = require_evidence(
+                root,
+                [proof.get("path")],
+                f"{identifier} {unit} selection proof",
+                regular_files=True,
+            )[0]
+            marker = require_string(
+                proof.get("marker"), f"{identifier} {unit} selection marker"
+            )
+            occurrences = read_file(root, Path(path)).count(marker)
+            if occurrences != 1:
+                raise SupportMatrixError(
+                    f"{identifier} {unit} selection marker must occur exactly once: {marker}"
+                )
+            normalized_proofs[unit] = {"path": path, "marker": marker}
+        adapter["selectionProofs"] = normalized_proofs
         adapter["fixtures"] = require_evidence(
             root, adapter.get("fixtures"), f"{identifier} fixtures"
         )
@@ -325,7 +356,12 @@ def render(matrix: dict[str, Any]) -> str:
     systems = matrix["operatingSystems"]
     adapters = matrix["adapters"]
     supported_products = [
-        product for product in products if product["support"] != "excluded"
+        product
+        for product in products
+        if product["support"] in {"verified", "platform"}
+    ]
+    planned_products = [
+        product for product in products if product["support"] == "planned"
     ]
     excluded_products = [
         product for product in products if product["support"] == "excluded"
@@ -353,6 +389,22 @@ def render(matrix: dict[str, Any]) -> str:
         "Product-verified entries run a product-specific verifier. Platform-compatible",
         "entries share the supported IntelliJ Platform contract but do not yet have a",
         "dedicated product lifecycle fixture.",
+    ]
+    if planned_products:
+        lines += [
+            "",
+            "## Planned coverage",
+            "",
+            "| Product | Goal | Tracking issue | Last reviewed |",
+            "|---|---|---|---:|",
+        ]
+        for product in planned_products:
+            issue_number = ISSUE.fullmatch(product["issue"]).group(1)
+            lines.append(
+                f"| {markdown(product['name'])} | {markdown(product['reason'])} | "
+                f"[Issue #{issue_number}]({product['issue']}) | {product['reviewed']} |"
+            )
+    lines += [
         "",
         "## Build systems and test runners",
         "",
@@ -360,7 +412,12 @@ def render(matrix: dict[str, Any]) -> str:
         "|---|---|---|---|---|---|",
     ]
     for adapter in adapters:
-        evidence = links(adapter["fixtures"] + adapter["gates"])
+        proof_paths = [
+            adapter["selectionProofs"][unit]["path"] for unit in adapter["selection"]
+        ]
+        evidence = links(
+            list(dict.fromkeys(adapter["fixtures"] + proof_paths + adapter["gates"]))
+        )
         lines.append(
             f"| {markdown(adapter['ecosystem'])} | {markdown(', '.join(adapter['languages']))} | "
             f"{markdown(', '.join(adapter['runners']))} | "
@@ -409,7 +466,9 @@ def render(matrix: dict[str, Any]) -> str:
 
 def readme_summary(matrix: dict[str, Any]) -> str:
     """Render the compact README pointer derived from matrix counts."""
-    products = sum(product["support"] != "excluded" for product in matrix["products"])
+    products = sum(
+        product["support"] in {"verified", "platform"} for product in matrix["products"]
+    )
     adapters = len(matrix["adapters"])
     return (
         f"Built for multi-module projects and monorepos across {adapters} supported build "
@@ -420,7 +479,9 @@ def readme_summary(matrix: dict[str, Any]) -> str:
 
 def plugin_summary(matrix: dict[str, Any]) -> str:
     """Render the compact Marketplace pointer derived from matrix counts."""
-    products = sum(product["support"] != "excluded" for product in matrix["products"])
+    products = sum(
+        product["support"] in {"verified", "platform"} for product in matrix["products"]
+    )
     adapters = len(matrix["adapters"])
     return (
         f"        <p>Built for multi-module projects and monorepos across {adapters} supported build "

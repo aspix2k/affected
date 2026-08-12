@@ -78,6 +78,33 @@ class SupportMatrixTest(unittest.TestCase):
             with self.assertRaisesRegex(support_matrix.SupportMatrixError, "reviewed"):
                 support_matrix.check(root)
 
+    def test_planned_product_is_linked_and_not_counted_as_supported(self) -> None:
+        """Publish future coverage without presenting it as available today."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            matrix["products"].append(
+                {
+                    "id": "planned-ide",
+                    "name": "Planned IDE",
+                    "support": "planned",
+                    "reason": "A dedicated adapter and public fixture are still required.",
+                    "issue": "https://github.com/aspix2k/affected/issues/120",
+                    "reviewed": "2026-08-12",
+                }
+            )
+            self.write(root / "config/support-matrix.json", json.dumps(matrix))
+
+            support_matrix.write(root)
+
+            support = (root / "SUPPORT.md").read_text()
+            readme = (root / "README.md").read_text()
+            self.assertIn("## Planned coverage", support)
+            self.assertIn("[Issue #120]", support)
+            self.assertIn("1 JetBrains products", readme)
+            support_matrix.check(root)
+
     def test_generated_support_page_must_match_the_matrix(self) -> None:
         """Detect hand-edited or stale human-facing support claims."""
         with TemporaryDirectory() as directory:
@@ -102,6 +129,20 @@ class SupportMatrixTest(unittest.TestCase):
             with self.assertRaisesRegex(support_matrix.SupportMatrixError, "magic"):
                 support_matrix.check(root)
 
+    def test_known_selection_unit_requires_a_specific_regression_proof(self) -> None:
+        """Reject a plausible precision claim that is not backed by its named test."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            matrix["adapters"][0]["selection"] = ["test"]
+            self.write(root / "config/support-matrix.json", json.dumps(matrix))
+
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError, "selection proofs"
+            ):
+                support_matrix.check(root)
+
     def test_repository_matrix_is_complete_and_current(self) -> None:
         """Validate the real production registrations and generated support page."""
         support_matrix.check(Path(__file__).resolve().parents[2])
@@ -117,6 +158,12 @@ class SupportMatrixTest(unittest.TestCase):
             "languages": ["Example"],
             "runners": ["Example runner"],
             "selection": ["package"],
+            "selectionProofs": {
+                "package": {
+                    "path": "fixtures/selection-test.txt",
+                    "marker": "selects one package",
+                }
+            },
             "versions": "1.0",
             "support": "supported",
             "fixtures": ["fixtures/example"],
@@ -158,6 +205,7 @@ class SupportMatrixTest(unittest.TestCase):
         self.write(root / "fixtures/example", "fixture\n")
         self.write(root / "fixtures/ide", "fixture\n")
         self.write(root / "fixtures/os", "fixture\n")
+        self.write(root / "fixtures/selection-test.txt", "selects one package\n")
         self.write(root / ".github/workflows/conformance.yml", "name: conformance\n")
         self.write(root / ".github/workflows/ci.yml", "name: ci\n")
         self.write(
