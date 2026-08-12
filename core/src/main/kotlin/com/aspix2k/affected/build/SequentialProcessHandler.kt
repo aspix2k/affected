@@ -21,6 +21,7 @@ internal sealed interface CliStep {
 internal data class CliCommand(
     val title: String,
     val arguments: List<String>,
+    val environment: Map<String, String> = emptyMap(),
 ) : CliStep {
     init {
         require(title.isNotBlank())
@@ -32,13 +33,16 @@ internal data class CliCommand(
 
 internal class DeferredCliCommand(
     private val title: String,
+    private val environment: () -> Map<String, String>,
     private val arguments: () -> List<String>?,
 ) : CliStep {
+    constructor(title: String, arguments: () -> List<String>?) : this(title, { emptyMap() }, arguments)
+
     init {
         require(title.isNotBlank())
     }
 
-    override fun resolve(): CliCommand? = arguments()?.let { CliCommand(title, it) }
+    override fun resolve(): CliCommand? = arguments()?.let { CliCommand(title, it, environment()) }
 }
 
 internal class SequentialProcessHandler(
@@ -131,7 +135,8 @@ internal class SequentialProcessHandler(
             OSProcessHandler(
                 GeneralCommandLine(command.arguments)
                     .withWorkDirectory(workingDirectory)
-                    .withCharset(Charsets.UTF_8),
+                    .withCharset(Charsets.UTF_8)
+                    .withEnvironment(command.environment),
             )
         }.getOrElse { error ->
             notifyTextAvailable(

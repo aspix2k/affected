@@ -37,7 +37,7 @@ Node.js, .NET, Python, PHP, Ruby and C/C++.
   first failure.
 - **Smaller test runs.** Gradle and Maven can narrow to affected JUnit classes;
   supported VSTest and CTest projects to named tests; Jest, Vitest and pytest
-  projects to related test files.
+  projects to related test files; PHPUnit projects to affected test classes.
 - **Consumer checks.** Optionally verify direct dependents after a public API
   change.
 - **Local by design.** No account, server, telemetry or project-specific config file.
@@ -53,7 +53,7 @@ Node.js, .NET, Python, PHP, Ruby and C/C++.
 | npm, Yarn and pnpm | JavaScript, TypeScript, JSX, TSX, Vue, Svelte | Jest, Vitest, package test, `tsc --noEmit` | related test file or workspace package |
 | .NET | C#, F#, Visual Basic, Razor | VSTest via `dotnet test`, `dotnet build` | test or project |
 | Python | Python | pytest, mypy | test file or package |
-| Composer | PHP | PHPUnit, PHPStan | package |
+| Composer | PHP | PHPUnit, PHPStan | PHPUnit class or package |
 | Bundler | Ruby | RSpec | gem |
 | CMake | C, C++ | build and CTest | named CTest test or target |
 

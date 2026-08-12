@@ -1,10 +1,20 @@
 package com.aspix2k.affected.build
 
+import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.project.Project
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicReference
 
-class ComposerBuildSystem : SuspendingBuildSystem {
+class ComposerBuildSystem :
+    ChangeAwareSuspendingBuildSystem,
+    AllFileChangesBuildSystem,
+    TransitiveTestConsumersBuildSystem {
 
     private data class Snapshot(val root: String, val stamp: String, val modules: List<BuildModule>)
 
@@ -45,6 +55,26 @@ class ComposerBuildSystem : SuspendingBuildSystem {
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         CommandRunner.runBatchAndWait(project, root, commands(project, root, tasks), "Affected Composer")
 
+    override suspend fun runAndWaitSuspending(
+        project: Project,
+        root: String,
+        tasks: List<String>,
+        changes: BuildChanges,
+    ): Boolean {
+        val adapter = configuredPhpunitAdapter()
+            ?: findPhpunitAdapter(Path.of(PathManager.getJarPathForClass(ComposerBuildSystem::class.java)))
+            ?: return CommandRunner.runBatchAndWait(project, root, commands(project, root, tasks), "Affected Composer")
+        val selective = withContext(Dispatchers.IO) {
+            PhpunitSelectiveRun.create(project, Path.of(root), tasks, modules(project), changes, adapter)
+        } ?: return CommandRunner.runBatchAndWait(project, root, commands(project, root, tasks), "Affected Composer")
+        return try {
+            val passed = CommandRunner.runBatchAndWait(project, root, selective.commands, "Affected Composer")
+            passed && withContext(Dispatchers.IO) { selective.complete() }
+        } finally {
+            withContext(NonCancellable + Dispatchers.IO) { selective.close() }
+        }
+    }
+
     private fun commands(project: Project, root: String, tasks: List<String>): List<CliCommand> {
         return composerCommands(root, tasks, modules(project))
     }
@@ -52,6 +82,27 @@ class ComposerBuildSystem : SuspendingBuildSystem {
     private fun rootOf(project: Project): File? =
         project.basePath?.let(::File)?.takeIf { File(it, "composer.json").isRegularFileNoFollow() }
 }
+
+private fun configuredPhpunitAdapter(): Path? = System.getProperty(PHPUNIT_ADAPTER_PROPERTY)
+    ?.let(Path::of)
+    ?.toAbsolutePath()
+    ?.normalize()
+    ?.takeIf(::readablePhpunitAdapter)
+
+internal fun findPhpunitAdapter(classPath: Path): Path? {
+    var directory = classPath.toAbsolutePath().normalize().let {
+        if (Files.isDirectory(it, LinkOption.NOFOLLOW_LINKS)) it else it.parent
+    } ?: return null
+    repeat(MAX_PHPUNIT_PLUGIN_PARENT_DEPTH) {
+        val adapter = directory.resolve(PHPUNIT_ADAPTER_PATH)
+        if (readablePhpunitAdapter(adapter)) return adapter
+        directory = directory.parent ?: return null
+    }
+    return null
+}
+
+private fun readablePhpunitAdapter(path: Path): Boolean =
+    Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) && Files.isReadable(path) && !Files.isSymbolicLink(path)
 
 private val COMPOSER_TEST_DIRECTORIES = setOf("test", "tests", "Tests")
 
@@ -70,3 +121,7 @@ internal fun composerCommands(root: String, tasks: List<String>, modules: List<B
         }
     }
 }
+
+private const val PHPUNIT_ADAPTER_PROPERTY = "affected.test.phpunitAdapter"
+private const val PHPUNIT_ADAPTER_PATH = "agent/affected-phpunit.php"
+private const val MAX_PHPUNIT_PLUGIN_PARENT_DEPTH = 5

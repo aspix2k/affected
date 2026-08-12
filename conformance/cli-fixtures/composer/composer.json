@@ -1,6 +1,17 @@
 {
   "name": "affected/fixture-root",
+  "repositories": [
+    {
+      "type": "path",
+      "url": "packages/*",
+      "options": {
+        "symlink": true
+      }
+    }
+  ],
   "require-dev": {
-    "phpunit/phpunit": "13.3.0"
+    "phpunit/phpunit": "13.3.0",
+    "affected/fixture-alpha": "1.0.0",
+    "affected/fixture-beta": "1.0.0"
   }
 }

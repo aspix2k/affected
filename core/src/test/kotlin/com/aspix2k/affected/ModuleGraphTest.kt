@@ -104,6 +104,28 @@ class ModuleGraphTest {
         )
     }
 
+    @Test
+    fun `Composer changes reach transitive PHPUnit packages`() {
+        val root = createTempDirectory("module-graph-composer").toFile()
+        val alpha = module(root, "affected/alpha", "packages/alpha")
+        val beta = module(root, "affected/beta", "packages/beta").copy(dependencies = setOf(alpha.key))
+        val composer = transitiveSystem("COMPOSER")
+        val graph = ModuleGraph(listOf(alpha, beta).map { ModuleGraph.Node(it, composer) })
+        val changed = File(root, "packages/alpha/src/Alpha.php").apply {
+            parentFile.mkdirs()
+            writeText("<?php")
+        }
+
+        assertEquals(
+            listOf("affected/alpha:test", "affected/beta:test"),
+            verificationPlan(
+                graph,
+                ProjectChanges.Result(listOf(changed), emptySet(), setOf(changed), comparedToBase = true),
+                checkConsumers = false,
+            ).groups.single().tasks,
+        )
+    }
+
     private fun graph(vararg modules: BuildModule): ModuleGraph =
         ModuleGraph(modules.map { ModuleGraph.Node(it, system("NODE")) })
 
@@ -125,8 +147,12 @@ class ModuleGraphTest {
         override fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean = false
     }
 
-    private fun dotnetSystem(): BuildSystem = object : BuildSystem, TransitiveTestConsumersBuildSystem {
-        override val id: String = "DOTNET"
+    private fun dotnetSystem(): BuildSystem = transitiveSystem("DOTNET")
+
+    private fun transitiveSystem(systemId: String): BuildSystem = object :
+        BuildSystem,
+        TransitiveTestConsumersBuildSystem {
+        override val id: String = systemId
         override val sourceExtensions: Set<String> = emptySet()
         override fun isPresent(project: Project): Boolean = false
         override fun modules(project: Project): List<BuildModule> = emptyList()

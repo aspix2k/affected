@@ -143,6 +143,7 @@ val mavenAgentArchive = mavenAgentArtifact.elements.map { it.single().asFile }
 val mavenExtensionArchive = mavenExtensionArtifact.elements.map { it.single().asFile }
 val collectorInitScript = project(":collector").layout.projectDirectory.file("src/main/gradle/affected-collector.init.gradle")
 val pytestAdapter = project(":core").layout.projectDirectory.file("src/main/python/affected_pytest.py")
+val phpunitAdapter = project(":core").layout.projectDirectory.file("src/main/php/affected_phpunit.php")
 val dotnetAnalyzer = project(":core").layout.projectDirectory.dir("src/main/dotnet/Affected.DotnetAnalyzer")
 val collectorAgentPath = "$pluginDirectory/agent/affected-collector-agent.jar"
 val collectorListenerPath = "$pluginDirectory/agent/affected-collector-listener.jar"
@@ -150,6 +151,7 @@ val collectorInitScriptPath = "$pluginDirectory/agent/affected-collector.init.gr
 val mavenAgentPath = "$pluginDirectory/agent/affected-maven-agent.jar"
 val mavenExtensionPath = "$pluginDirectory/agent/affected-maven-extension.jar"
 val pytestAdapterPath = "$pluginDirectory/agent/affected-pytest.py"
+val phpunitAdapterPath = "$pluginDirectory/agent/affected-phpunit.php"
 val dotnetAnalyzerPath = "$pluginDirectory/agent/dotnet/Affected.DotnetAnalyzer"
 val collectorPremain = "com.aspix2k.affected.collector.AffectedCollectorAgent"
 val collectorListener = "com.aspix2k.affected.collector.AffectedTestExecutionListener"
@@ -173,6 +175,10 @@ tasks.named<BuildPluginTask>("buildPlugin") {
     from(pytestAdapter) {
         into("agent")
         rename { "affected-pytest.py" }
+    }
+    from(phpunitAdapter) {
+        into("agent")
+        rename { "affected-phpunit.php" }
     }
     from(dotnetAnalyzer) {
         into("agent/dotnet/Affected.DotnetAnalyzer")
@@ -249,6 +255,17 @@ tasks.named<BuildPluginTask>("buildPlugin") {
             val packagedPytestAdapter = archive.getInputStream(packagedPytestAdapters.single()).use { it.readBytes() }
             check(packagedPytestAdapter.contentEquals(pytestAdapter.asFile.readBytes())) {
                 "Packaged pytest adapter must match the core module source"
+            }
+
+            val packagedPhpunitAdapters = archive.entries().asSequence()
+                .filter { it.name == phpunitAdapterPath }
+                .toList()
+            check(packagedPhpunitAdapters.size == 1) {
+                "Plugin distribution must contain exactly one $phpunitAdapterPath"
+            }
+            val packagedPhpunitAdapter = archive.getInputStream(packagedPhpunitAdapters.single()).use { it.readBytes() }
+            check(packagedPhpunitAdapter.contentEquals(phpunitAdapter.asFile.readBytes())) {
+                "Packaged PHPUnit adapter must match the core module source"
             }
 
             val dotnetAnalyzerFiles = listOf("Affected.DotnetAnalyzer.csproj", "Program.cs")

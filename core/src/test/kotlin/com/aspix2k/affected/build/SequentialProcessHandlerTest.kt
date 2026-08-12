@@ -37,6 +37,24 @@ class SequentialProcessHandlerTest {
     }
 
     @Test
+    fun `command environment reaches the child process`() {
+        val output = StringBuilder()
+        val windows = System.getProperty("os.name").startsWith("Windows")
+        val arguments = if (windows) listOf("cmd", "/c", "set", "AFFECTED_PROCESS_VALUE") else listOf("env")
+        val handler = SequentialProcessHandler(
+            createTempDirectory("sequential-environment").toFile(),
+            listOf(CliCommand("environment", arguments, mapOf("AFFECTED_PROCESS_VALUE" to "proof"))),
+        )
+        handler.addProcessListener(listener(output))
+
+        handler.startNotify()
+
+        assertTrue(handler.waitFor(30_000))
+        assertEquals(0, handler.exitCode)
+        assertTrue(output.contains("AFFECTED_PROCESS_VALUE=proof"), output.toString())
+    }
+
+    @Test
     fun `a failed command prevents later commands`() {
         val output = StringBuilder()
         val handler = SequentialProcessHandler(
