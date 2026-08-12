@@ -15,6 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Move the detailed support matrix to its own generated page and keep the README and Marketplace description concise.
+- Collapse pull-request CI into one required `verify` aggregator: one Gradle graph for analysis, tests, coverage, packaging and SpotBugs, with `buildHealth` in parallel.
+- Enqueue ready same-repository pull requests with squash auto-merge so agents do not merge `main` by hand. Required checks also listen for `merge_group`.
+- Run Plugin Verifier, `buildHealth`, CodeQL and dependency review only when the pull-request diff can affect them. Documentation-only changes keep the required check names and the cheap scripts job.
+
+### Fixed
+
+- Stop launching the exact-impact matrix from README-only edits, and stop rerunning the full core test suite as skipped CLI contracts.
+- Retry only Gradle distribution fetch on transient network errors; compilation, tests and analyzers still run once.
+- Give the Gradle wrapper 120s and four retries instead of a single 10s download from services.gradle.org.
+- Seed the Gradle wrapper cache from the official GitHub `gradle-distributions` release, verify the SHA-256, and reuse `~/.gradle/wrapper/dists` so CI does not download the zip from services.gradle.org on every job.
+- Resolve Maven artifacts through the JetBrains cache-redirector before repo.maven.apache.org so a Central 403 cannot fail CI.
 
 ## [2.0.1] - 2026-08-12
 

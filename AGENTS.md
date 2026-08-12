@@ -48,6 +48,19 @@ latest stable versions compatible with the supported product matrix. A version
 may stay behind only for a verified compatibility reason recorded in the
 relevant changelog or issue.
 
+Do not split the pull-request plugin job back into multiple Gradle invocations,
+and do not start exact-impact from README-only edits. The required `verify`
+check must keep aggregating scripts, plugin verification and `buildHealth`.
+Required checks must keep a `merge_group` trigger or the merge queue hangs.
+Do not add `on.paths` to `ci.yml`, `codeql.yml` or `dependency-review.yml`:
+a skipped required check blocks merge. Classify with `scripts/ci_scope.py`
+and fail closed on unknown paths.
+
+Never merge a pull request immediately. Open it, then stop. `Queue` enables
+`gh pr merge --auto --squash` for same-repository ready PRs. If you must
+enqueue by hand, use that same command. Do not merge without `--auto`,
+and do not squash from the GitHub UI.
+
 Node exact selection is runner-native and static-graph only. Unknown Jest or
 Vitest versions, custom config or transforms, dynamic dependencies, resources,
 lockfiles, added, deleted or generated paths, symlinks, missing merge bases and

@@ -32,10 +32,32 @@ python3 -m unittest scripts.tests.test_release_currentness
 python3 scripts/release_currentness.py
 python3 -m unittest scripts.tests.test_support_matrix
 python3 scripts/support_matrix.py --check
+python3 -m unittest scripts.tests.test_ci_contracts scripts.tests.test_ci_scope scripts.tests.test_fetch_gradle scripts.tests.test_pitest_gate scripts.tests.test_run_gradle
+python3 scripts/ci_contracts.py --check
 ```
 
-Pull-request CI runs everything except `pitest`; `pitest` runs weekly. A push
-to `main` only promotes the already verified pull-request artifact.
+`scripts/run_gradle.sh` seeds `~/.gradle/wrapper/dists` from the official
+GitHub `gradle-distributions` release, verifies the wrapper SHA-256, then
+starts Gradle once. `services.gradle.org` is only a fallback.
+
+Pull-request `CI` is the required fast gate. `scripts` always run. The
+plugin graph (`detekt`, tests, Kover verify, plugin zip, Plugin Verifier
+and SpotBugs) and `buildHealth` run only when `scripts/ci_scope.py` says
+the diff can affect them. The required GitHub check named `verify` always
+reports: a scoped skip is success, a failed or missing required job is
+not. CodeQL `pull-request` and dependency `review` keep their check names
+and skip only the expensive analyze or compare. Exact-impact conformance
+still uses workflow `paths`, not a skipped required check. Unknown paths
+fail closed and run every expensive gate. `pitest` runs weekly and fails
+on surviving mutants. A push to `main` only promotes the already verified
+pull-request artifact.
+
+`main` squash-merges after required checks, not by an agent clicking Merge.
+Same-repository ready pull requests are enqueued with
+`gh pr merge --auto --squash`. GitHub merges when `verify`, CodeQL
+`pull-request` and dependency `review` pass. Agents must not merge by hand.
+Required checks also listen for `merge_group` so a GitHub merge queue can be
+enabled if the repository is ever owned by an organization.
 
 PIT uses the same IntelliJ Platform runtime as the root test task. The complete
 2026-08-12 run took 2 minutes 3 seconds: 16 mutants were killed, 167 mutants in
