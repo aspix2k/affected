@@ -71,7 +71,6 @@ object Verification {
         val plan = prepared.plan
         val state = project.service<AffectedState>()
         if (plan.isEmpty) {
-            if (alreadyClaimed) state.markFinished()
             return Outcome(plan, passed = true)
         }
         if (!alreadyClaimed) state.markRunning()
@@ -95,7 +94,7 @@ object Verification {
             }
             return Outcome(plan, passed)
         } finally {
-            state.markFinished()
+            if (!alreadyClaimed) state.markFinished()
         }
     }
 }

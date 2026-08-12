@@ -10,7 +10,6 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.currentThreadCoroutineScope
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
-import kotlinx.coroutines.launch
 
 class RunAffectedTestsAction : AnAction() {
 
@@ -52,59 +51,41 @@ class RunAffectedTestsAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val state = project.service<AffectedState>()
-        val snapshot = state.snapshot()
-        if (DumbService.isDumb(project) || !state.tryMarkRunning(snapshot.revision)) {
-            return
-        }
+        FileDocumentManager.getInstance().saveAllDocuments()
+        if (DumbService.isDumb(project)) return
+        val claim = state.tryClaimRunning() ?: return
 
-        try {
-            FileDocumentManager.getInstance().saveAllDocuments()
-        } catch (error: Exception) {
-            state.markFinished()
-            throw error
-        }
-        try {
-            currentThreadCoroutineScope().launch {
-                var delegated = false
-                try {
-                    val changes = ProjectChanges.collectSuspending(project)
-                    if (changes.files.isEmpty()) {
-                        notify(
-                            project,
-                            AffectedBundle.message("notification.nothing.title"),
-                            AffectedBundle.message("notification.nothing.text"),
-                            NotificationType.INFORMATION,
-                        )
-                        return@launch
-                    }
-
-                    val prepared = Verification.prepare(project, changes)
-                    val plan = prepared.plan
-                    if (plan.isEmpty) {
-                        notify(
-                            project,
-                            AffectedBundle.message("notification.unresolved.title"),
-                            AffectedBundle.message("notification.unresolved.text", changes.files.size),
-                            NotificationType.WARNING,
-                        )
-                        return@launch
-                    }
-
-                    notify(
-                        project,
-                        AffectedBundle.message("notification.started.title"),
-                        describe(plan),
-                        NotificationType.INFORMATION,
-                    )
-                    delegated = true
-                    Verification.runClaimedAndWait(project, prepared)
-                } finally {
-                    if (!delegated) state.markFinished()
-                }
+        launchClaimed(claim, ::currentThreadCoroutineScope) {
+            val changes = ProjectChanges.collectSuspending(project)
+            if (changes.files.isEmpty()) {
+                notify(
+                    project,
+                    AffectedBundle.message("notification.nothing.title"),
+                    AffectedBundle.message("notification.nothing.text"),
+                    NotificationType.INFORMATION,
+                )
+                return@launchClaimed
             }
-        } catch (error: Exception) {
-            state.markFinished()
-            throw error
+
+            val prepared = Verification.prepare(project, changes)
+            val plan = prepared.plan
+            if (plan.isEmpty) {
+                notify(
+                    project,
+                    AffectedBundle.message("notification.unresolved.title"),
+                    AffectedBundle.message("notification.unresolved.text", changes.files.size),
+                    NotificationType.WARNING,
+                )
+                return@launchClaimed
+            }
+
+            notify(
+                project,
+                AffectedBundle.message("notification.started.title"),
+                describe(plan),
+                NotificationType.INFORMATION,
+            )
+            Verification.runClaimedAndWait(project, prepared)
         }
     }
 

@@ -8,6 +8,7 @@ import com.intellij.openapi.project.Project
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -105,13 +106,17 @@ internal class AffectedStateStore {
         update { current -> current.copy(runningVerifications = current.runningVerifications + 1) }
     }
 
-    fun tryMarkRunning(expectedRevision: Long): Boolean {
+    fun tryClaimRunning(): AffectedRunClaim? {
         while (true) {
             val current = state.get()
-            val currentRevision = current.revision == expectedRevision
             val ready = current.analysisStatus == AnalysisStatus.READY && current.modules.isNotEmpty()
-            if (!currentRevision || !ready || current.runningVerifications != 0) return false
-            if (state.compareAndSet(current, current.copy(runningVerifications = 1))) return true
+            if (!ready || current.runningVerifications != 0) return null
+            if (state.compareAndSet(current, current.copy(runningVerifications = 1))) {
+                return AffectedRunClaim(
+                    snapshot = current.toSnapshot(VerificationStatus.RUNNING),
+                    release = ::markFinished,
+                )
+            }
         }
     }
 
@@ -127,6 +132,39 @@ internal class AffectedStateStore {
             if (state.compareAndSet(current, transform(current))) return
         }
     }
+
+    private fun StoredState.toSnapshot(verificationStatus: VerificationStatus) = AffectedStateSnapshot(
+        revision = revision,
+        analysisStatus = analysisStatus,
+        modules = modules,
+        verificationStatus = verificationStatus,
+    )
+}
+
+class AffectedRunClaim internal constructor(
+    val snapshot: AffectedStateSnapshot,
+    private val release: () -> Unit,
+) : AutoCloseable {
+    private val closed = AtomicBoolean()
+
+    override fun close() {
+        if (closed.compareAndSet(false, true)) release()
+    }
+}
+
+fun launchClaimed(
+    claim: AffectedRunClaim,
+    scope: () -> CoroutineScope,
+    block: suspend CoroutineScope.() -> Unit,
+): Job {
+    val job = try {
+        scope().launch(block = block)
+    } catch (error: Exception) {
+        claim.close()
+        throw error
+    }
+    job.invokeOnCompletion { claim.close() }
+    return job
 }
 
 @Service(Service.Level.PROJECT)
@@ -184,7 +222,7 @@ class AffectedState(
 
     fun markRunning() = state.markRunning()
 
-    fun tryMarkRunning(expectedRevision: Long): Boolean = state.tryMarkRunning(expectedRevision)
+    fun tryClaimRunning(): AffectedRunClaim? = state.tryClaimRunning()
 
     fun markFinished() = state.markFinished()
 

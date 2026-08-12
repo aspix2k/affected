@@ -1,7 +1,11 @@
 package com.aspix2k.affected
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -38,17 +42,20 @@ class AffectedAnalysisStateTest {
     }
 
     @Test
-    fun `a stale ready snapshot cannot claim a run after invalidation`() {
+    fun `an invalidated result cannot be claimed before fresh analysis`() {
         val state = AffectedStateStore()
         val revision = state.invalidate()
         assertTrue(state.complete(revision, listOf(module(":ready"))))
-        val ready = state.snapshot()
 
-        state.invalidate()
+        val latest = state.invalidate()
 
-        assertFalse(state.tryMarkRunning(ready.revision))
+        assertEquals(null, state.tryClaimRunning())
         assertEquals(AnalysisStatus.ANALYZING, state.snapshot().analysisStatus)
         assertEquals(VerificationStatus.IDLE, state.snapshot().verificationStatus)
+        assertTrue(state.complete(latest, listOf(module(":fresh"))))
+        val claim = state.tryClaimRunning()
+        assertEquals(listOf(":fresh"), claim?.snapshot?.modules?.map(AffectedModule::id))
+        claim?.close()
     }
 
     @Test
@@ -57,9 +64,43 @@ class AffectedAnalysisStateTest {
         val revision = state.invalidate()
         assertTrue(state.complete(revision, listOf(module(":ready"))))
 
-        assertTrue(state.tryMarkRunning(revision))
-        assertFalse(state.tryMarkRunning(revision))
+        val claim = state.tryClaimRunning()
+        assertTrue(claim != null)
+        assertEquals(null, state.tryClaimRunning())
         assertEquals(VerificationStatus.RUNNING, state.snapshot().verificationStatus)
+        claim.close()
+        claim.close()
+        assertEquals(VerificationStatus.IDLE, state.snapshot().verificationStatus)
+    }
+
+    @Test
+    fun `a cancelled scope releases a claim before the coroutine body starts`() = runBlocking {
+        val state = AffectedStateStore()
+        val revision = state.invalidate()
+        assertTrue(state.complete(revision, listOf(module(":ready"))))
+        val claim = requireNotNull(state.tryClaimRunning())
+        val cancelled = Job().apply { cancel() }
+        var entered = false
+
+        val job = launchClaimed(claim, { CoroutineScope(cancelled) }) { entered = true }
+        job.join()
+
+        assertFalse(entered)
+        assertEquals(VerificationStatus.IDLE, state.snapshot().verificationStatus)
+    }
+
+    @Test
+    fun `failure to obtain an action scope releases a claim`() {
+        val state = AffectedStateStore()
+        val revision = state.invalidate()
+        assertTrue(state.complete(revision, listOf(module(":ready"))))
+        val claim = requireNotNull(state.tryClaimRunning())
+
+        assertFailsWith<IllegalStateException> {
+            launchClaimed(claim, { error("scope unavailable") }) {}
+        }
+
+        assertEquals(VerificationStatus.IDLE, state.snapshot().verificationStatus)
     }
 
     @Test

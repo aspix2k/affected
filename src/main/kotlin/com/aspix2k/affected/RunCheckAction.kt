@@ -14,7 +14,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 
 abstract class RunCheckAction(
     private val taskName: String,
@@ -40,39 +39,20 @@ abstract class RunCheckAction(
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val state = project.service<AffectedState>()
-        val snapshot = state.snapshot()
-        if (DumbService.isDumb(project) || !state.tryMarkRunning(snapshot.revision)) {
-            return
-        }
-        try {
-            saveAllDocuments()
-        } catch (error: Exception) {
-            state.markFinished()
-            throw error
-        }
-        val modules = snapshot.modules.filter { it.supports(taskName) }
-        if (modules.isEmpty()) {
-            state.markFinished()
-            return
-        }
-        val groups = TaskPlanner.groups(modules.map(AffectedModule::info), taskName)
-        try {
-            currentThreadCoroutineScope().launch {
-                try {
-                    coroutineScope {
-                        groups.map { group ->
-                            async(Dispatchers.IO) {
-                                BuildSystems.byId(group.systemId)?.runAndWait(project, group.root, group.tasks) ?: true
-                            }
-                        }.awaitAll()
+        saveAllDocuments()
+        if (DumbService.isDumb(project)) return
+        val claim = state.tryClaimRunning() ?: return
+        launchClaimed(claim, ::currentThreadCoroutineScope) {
+            val modules = claim.snapshot.modules.filter { it.supports(taskName) }
+            if (modules.isEmpty()) return@launchClaimed
+            val groups = TaskPlanner.groups(modules.map(AffectedModule::info), taskName)
+            coroutineScope {
+                groups.map { group ->
+                    async(Dispatchers.IO) {
+                        BuildSystems.byId(group.systemId)?.runAndWait(project, group.root, group.tasks) ?: true
                     }
-                } finally {
-                    state.markFinished()
-                }
+                }.awaitAll()
             }
-        } catch (error: Exception) {
-            state.markFinished()
-            throw error
         }
     }
 
