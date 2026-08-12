@@ -170,6 +170,33 @@ class SupportMatrixTest(unittest.TestCase):
                 ):
                     support_matrix.check(root)
 
+    def test_selection_proof_rejects_conditional_target_job_or_step(self) -> None:
+        """Reject proof executions whose conditions cannot be proven unconditional."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            workflow_path = root / ".github/workflows/conformance.yml"
+            workflow = workflow_path.read_text(encoding="utf-8")
+            cases = (
+                workflow.replace(
+                    "  verify:\n",
+                    "  verify:\n    if: github.event_name == 'workflow_dispatch'\n",
+                    1,
+                ),
+                workflow.replace(
+                    "      - name: Run support matrix tests\n",
+                    "      - name: Run support matrix tests\n"
+                    "        if: github.event_name == 'workflow_dispatch'\n",
+                    1,
+                ),
+            )
+            for altered in cases:
+                self.write(workflow_path, altered)
+                with self.assertRaisesRegex(
+                    support_matrix.SupportMatrixError, "conditional"
+                ):
+                    support_matrix.check(root)
+
     def test_excluded_product_requires_a_dated_reason(self) -> None:
         """Keep exclusions explicit, dated, and reviewable."""
         with TemporaryDirectory() as directory:

@@ -183,7 +183,7 @@ def supported_workflow_jobs(workflow: str, field: str) -> dict[str, dict[str, An
                 raise SupportMatrixError(
                     f"Evidence gate has duplicate job {name} for {field}"
                 )
-            job = {"name": name, "disabled": False, "steps": []}
+            job = {"name": name, "condition": None, "steps": []}
             jobs[name] = job
             step = None
             index += 1
@@ -193,12 +193,12 @@ def supported_workflow_jobs(workflow: str, field: str) -> dict[str, dict[str, An
             continue
         job_if = re.fullmatch(r"    if:\s*(.+)", line)
         if job_if is not None:
-            job["disabled"] = disabled_condition(job_if.group(1))
+            job["condition"] = job_if.group(1)
             index += 1
             continue
         step_match = re.fullmatch(r"      - (?:name:\s*(.+)|(run|uses):\s*(.+))", line)
         if step_match is not None:
-            step = {"name": step_match.group(1), "disabled": False}
+            step = {"name": step_match.group(1), "condition": None}
             if step_match.group(2) is not None:
                 step[step_match.group(2)] = without_yaml_comment(step_match.group(3))
             job["steps"].append(step)
@@ -209,7 +209,7 @@ def supported_workflow_jobs(workflow: str, field: str) -> dict[str, dict[str, An
             continue
         step_if = re.fullmatch(r"        if:\s*(.+)", line)
         if step_if is not None:
-            step["disabled"] = disabled_condition(step_if.group(1))
+            step["condition"] = step_if.group(1)
             index += 1
             continue
         executable = re.fullmatch(r"        (run|uses):\s*(.+)", line)
@@ -252,9 +252,10 @@ def require_workflow(root: Path, text: str, field: str) -> dict[str, dict[str, A
         )
     jobs = supported_workflow_jobs(read_file(root, relative), field)
     if not any(
-        not job["disabled"]
+        not disabled_condition(job["condition"] or "")
         and any(
-            not step["disabled"] and ("run" in step or "uses" in step)
+            not disabled_condition(step["condition"] or "")
+            and ("run" in step or "uses" in step)
             for step in job["steps"]
         )
         for job in jobs.values()
@@ -278,16 +279,18 @@ def require_proof_execution(
     job = jobs.get(job_name)
     if job is None:
         raise SupportMatrixError(f"{field} gate job is missing: {job_name}")
-    if job["disabled"]:
-        raise SupportMatrixError(f"{field} gate job is disabled: {job_name}")
+    if job["condition"] is not None:
+        state = "disabled" if disabled_condition(job["condition"]) else "conditional"
+        raise SupportMatrixError(f"{field} gate job is {state}: {job_name}")
     steps = [step for step in job["steps"] if step["name"] == step_name]
     if len(steps) != 1:
         raise SupportMatrixError(
             f"{field} gate step must occur exactly once: {step_name}"
         )
     step = steps[0]
-    if step["disabled"]:
-        raise SupportMatrixError(f"{field} gate step is disabled: {step_name}")
+    if step["condition"] is not None:
+        state = "disabled" if disabled_condition(step["condition"]) else "conditional"
+        raise SupportMatrixError(f"{field} gate step is {state}: {step_name}")
     executable = step.get("run") or step.get("uses")
     if not isinstance(executable, str) or executable.count(marker) != 1:
         raise SupportMatrixError(
