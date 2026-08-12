@@ -49,5 +49,5 @@ Built for multi-module projects and monorepos across 10 supported build ecosyste
 The first successful compatible run may test a full module once while
 **Affected** learns its exact test relationships.
 
-[How it works](CONTRIBUTING.md#how-it-works) · [Privacy](PRIVACY.md) ·
+[How it works](CONTRIBUTING.md#how-it-works) · [Privacy](PRIVACY.md) · [Security](SECURITY.md) ·
 [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE)
