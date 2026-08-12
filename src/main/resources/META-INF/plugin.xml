@@ -15,7 +15,8 @@
                 Ruby and C/C++ projects from one action.</li>
             <li>Keep all commands for one build-system root in one Run session.</li>
             <li>Narrow compatible Gradle and Maven modules to affected JUnit test classes,
-                and supported Jest, Vitest or pytest projects to related test files.</li>
+                supported VSTest and CTest projects to named tests, and supported Jest,
+                Vitest or pytest projects to related test files.</li>
             <li>Optionally verify direct dependents after a public API change.</li>
             <li>No account, server, telemetry or project-specific configuration file.</li>
         </ul>

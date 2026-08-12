@@ -115,6 +115,16 @@ plan with unchanged metadata replaces the baseline. Headers, configuration,
 generated registrations, fixtures, resources and unsupported metadata keep the
 full CTest plan.
 
+Supported .NET 8–10 SDK projects using VSTest-compatible xUnit, NUnit or MSTest
+adapters build before selection. A packaged, locally compiled metadata analyzer
+reads the unmodified test and dependency assemblies, while a complete TRX run
+provides stable fully qualified identities. Later runs compare compiled DLLs
+and pass exact identities through `dotnet test --no-build --filter` in the same
+Run session. Parameterized or shared fixtures, custom settings, Microsoft
+Testing Platform, test-assembly changes and incomplete metadata keep the full
+project plan. Only a complete unchanged full run replaces the counted and
+checksummed baseline.
+
 `ChangeAnalyzer` and `TaskPlanner` have no IDE dependencies and are covered by
 unit tests. Keep them that way: return data and let the action format it. The
 `collector` module produces Java 8 agents, a JUnit listener, a Gradle init script

@@ -2,6 +2,7 @@ package com.aspix2k.affected
 
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.BuildSystem
+import com.aspix2k.affected.build.TransitiveTestConsumersBuildSystem
 import com.intellij.openapi.project.Project
 import java.io.File
 import kotlin.io.path.createTempDirectory
@@ -70,6 +71,39 @@ class ModuleGraphTest {
         )
     }
 
+    @Test
+    fun `dotnet changes reach transitive test projects`() {
+        val root = createTempDirectory("module-graph-dotnet").toFile()
+        val alpha = module(root, "Alpha", "Alpha").copy(testTask = "build", compileTask = "build")
+        val facade = module(root, "Facade", "Facade").copy(
+            testTask = "build",
+            compileTask = "build",
+            dependencies = setOf(alpha.key),
+        )
+        val tests = module(root, "Facade.Tests", "Facade.Tests").copy(
+            compileTask = "build",
+            dependencies = setOf(facade.key),
+        )
+        val hiddenConsumer = module(root, "Hidden.Tests", "Hidden.Tests").copy(compileTask = "build")
+        val dotnet = dotnetSystem()
+        val graph = ModuleGraph(
+            listOf(alpha, facade, tests, hiddenConsumer).map { ModuleGraph.Node(it, dotnet) },
+        )
+
+        val changed = File(root, "Alpha/Value.cs").apply { writeText("namespace Alpha;") }
+        val consumers = graph.transitiveTestConsumers(setOf(graph.all().first()))
+
+        assertEquals(setOf("Facade.Tests", "Hidden.Tests"), consumers.mapTo(HashSet(), ModuleGraph.Node::id))
+        assertEquals(
+            listOf("Alpha:build", "Facade.Tests:test", "Hidden.Tests:test"),
+            verificationPlan(
+                graph,
+                ProjectChanges.Result(listOf(changed), emptySet(), setOf(changed), comparedToBase = true),
+                checkConsumers = false,
+            ).groups.single().tasks,
+        )
+    }
+
     private fun graph(vararg modules: BuildModule): ModuleGraph =
         ModuleGraph(modules.map { ModuleGraph.Node(it, system("NODE")) })
 
@@ -84,6 +118,15 @@ class ModuleGraphTest {
 
     private fun system(systemId: String): BuildSystem = object : BuildSystem {
         override val id: String = systemId
+        override val sourceExtensions: Set<String> = emptySet()
+        override fun isPresent(project: Project): Boolean = false
+        override fun modules(project: Project): List<BuildModule> = emptyList()
+        override fun run(project: Project, root: String, tasks: List<String>) = Unit
+        override fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean = false
+    }
+
+    private fun dotnetSystem(): BuildSystem = object : BuildSystem, TransitiveTestConsumersBuildSystem {
+        override val id: String = "DOTNET"
         override val sourceExtensions: Set<String> = emptySet()
         override fun isPresent(project: Project): Boolean = false
         override fun modules(project: Project): List<BuildModule> = emptyList()

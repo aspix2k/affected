@@ -4,6 +4,9 @@ import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
 import com.intellij.openapi.util.Key
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -54,6 +57,55 @@ class SequentialProcessHandlerTest {
     }
 
     @Test
+    fun `a deferred command resolves only after the previous command completes`() {
+        val output = StringBuilder()
+        val firstCompleted = AtomicBoolean()
+        val handler = SequentialProcessHandler(
+            createTempDirectory("sequential-deferred").toFile(),
+            listOf(
+                CliCommand("first", listOf(java(), "-version")),
+                DeferredCliCommand("second") {
+                    check(firstCompleted.get())
+                    listOf(java(), "-version")
+                },
+            ),
+        )
+        handler.addProcessListener(object : ProcessListener {
+            override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
+                output.append(event.text)
+                if (event.text.contains("> first")) firstCompleted.set(true)
+            }
+        })
+
+        handler.startNotify()
+
+        assertTrue(handler.waitFor(30_000))
+        assertEquals(0, handler.exitCode)
+        assertTrue(output.indexOf("> first") < output.indexOf("> second"), output.toString())
+    }
+
+    @Test
+    fun `an empty deferred selection skips the command without ending the session`() {
+        val output = StringBuilder()
+        val handler = SequentialProcessHandler(
+            createTempDirectory("sequential-skipped").toFile(),
+            listOf(
+                CliCommand("build", listOf(java(), "-version")),
+                DeferredCliCommand("empty") { null },
+                CliCommand("consumer", listOf(java(), "-version")),
+            ),
+        )
+        handler.addProcessListener(listener(output))
+
+        handler.startNotify()
+
+        assertTrue(handler.waitFor(30_000))
+        assertEquals(0, handler.exitCode)
+        assertFalse(output.contains("> empty"), output.toString())
+        assertTrue(output.indexOf("> build") < output.indexOf("> consumer"), output.toString())
+    }
+
+    @Test
     fun `an unresolved command batch fails visibly`() {
         val output = StringBuilder()
         val handler = SequentialProcessHandler(
@@ -67,6 +119,38 @@ class SequentialProcessHandlerTest {
         assertTrue(handler.waitFor(30_000))
         assertTrue(handler.exitCode != 0)
         assertTrue(output.contains("could not resolve the planned modules"), output.toString())
+    }
+
+    @Test
+    fun `stopping the run interrupts deferred resolution`() {
+        val entered = CountDownLatch(1)
+        val resolved = CountDownLatch(1)
+        val interrupted = AtomicBoolean()
+        val handler = SequentialProcessHandler(
+            createTempDirectory("sequential-cancelled").toFile(),
+            listOf(
+                DeferredCliCommand("resolve") {
+                    entered.countDown()
+                    try {
+                        Thread.sleep(30_000)
+                    } catch (_: InterruptedException) {
+                        interrupted.set(true)
+                    } finally {
+                        resolved.countDown()
+                    }
+                    null
+                },
+            ),
+        )
+
+        handler.startNotify()
+        assertTrue(entered.await(5, TimeUnit.SECONDS))
+        handler.destroyProcess()
+
+        assertTrue(handler.waitFor(5_000))
+        assertTrue(resolved.await(5, TimeUnit.SECONDS))
+        assertTrue(interrupted.get())
+        assertTrue(handler.exitCode != 0)
     }
 
     private fun listener(output: StringBuilder): ProcessListener = object : ProcessListener {

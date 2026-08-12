@@ -4,6 +4,7 @@ import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.BuildSystem
 import com.aspix2k.affected.build.BuildSystems
 import com.aspix2k.affected.build.SuspendingBuildSystem
+import com.aspix2k.affected.build.TransitiveTestConsumersBuildSystem
 import com.intellij.openapi.project.Project
 import java.io.File
 
@@ -67,6 +68,33 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
         return nodes.filter { node ->
             node !in targets && node.module.dependencies.any { it in targetKeys }
         }
+    }
+
+    fun transitiveTestConsumers(targets: Set<Node>): List<Node> {
+        val eligibleTargets = targets.filterTo(LinkedHashSet()) {
+            it.system is TransitiveTestConsumersBuildSystem
+        }
+        val reached = LinkedHashSet(eligibleTargets)
+        var frontier = eligibleTargets
+        while (frontier.isNotEmpty()) {
+            val keys = frontier.mapTo(HashSet()) { it.module.key }
+            frontier = nodes.filterTo(LinkedHashSet()) { node ->
+                node.system is TransitiveTestConsumersBuildSystem &&
+                    node !in reached &&
+                    node.module.dependencies.any(keys::contains)
+            }
+            reached += frontier
+        }
+        val reachable = reached.filter { it !in eligibleTargets && it.module.testTask != it.module.compileTask }
+        val productionRoots = eligibleTargets
+            .filter { it.module.testTask == it.module.compileTask }
+            .mapTo(HashSet()) { it.system.id to it.module.root }
+        val conservative = nodes.filter { node ->
+            node.system is TransitiveTestConsumersBuildSystem &&
+                node.module.testTask != node.module.compileTask &&
+                node.system.id to node.module.root in productionRoots
+        }
+        return (reachable + conservative).distinct()
     }
 
     fun all(): List<Node> = nodes

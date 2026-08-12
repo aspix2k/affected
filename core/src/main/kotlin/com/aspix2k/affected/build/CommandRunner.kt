@@ -35,7 +35,7 @@ object CommandRunner {
     internal fun runBatch(
         project: Project,
         workingDirectory: String,
-        commands: List<CliCommand>,
+        commands: List<CliStep>,
         title: String,
         unresolvedMessage: String? = null,
     ) {
@@ -64,7 +64,7 @@ object CommandRunner {
     internal suspend fun runBatchAndWait(
         project: Project,
         workingDirectory: String,
-        commands: List<CliCommand>,
+        commands: List<CliStep>,
         title: String,
         unresolvedMessage: String? = null,
     ): Boolean {
