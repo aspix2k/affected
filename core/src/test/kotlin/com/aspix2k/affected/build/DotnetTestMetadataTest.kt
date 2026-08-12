@@ -140,6 +140,8 @@ class DotnetTestMetadataTest {
         val fingerprint = assertNotNull(
             dotnetImportFingerprint(root, assets, "8.0.100", sdkDirectory.toString(), supported),
         )
+        val prerelease = "8.0.100-preview.7.12345.1"
+        assertNull(dotnetImportFingerprint(root, assets, prerelease, sdkDirectory.toString(), supported))
 
         packageImport.writeText("changed package")
         assertTrue(

@@ -58,6 +58,7 @@ internal fun dotnetImportFingerprint(
     preprocessedProject: String,
 ): String? = runCatching {
     require(preprocessedProject.toByteArray(StandardCharsets.UTF_8).size <= DOTNET_PREPROCESS_MAX_BYTES)
+    require(sdk.matches(DOTNET_STABLE_SDK_VERSION))
     val realRoot = root.toAbsolutePath().normalize().toRealPath()
     val sdkDirectory = Path.of(sdkPath).toAbsolutePath().normalize().secureRealDirectory()
     require(sdkDirectory.fileName.toString() == "Sdks")
@@ -264,3 +265,4 @@ private const val MAX_DOTNET_IMPORTS = 4096
 private const val MAX_DOTNET_PACKAGE_FILES = 131_072
 private const val MAX_DOTNET_IMPORT_BYTES = 128L * 1024 * 1024
 private val DOTNET_PREPROCESS_IMPORT = Regex("^<Import(?:\\s|>)")
+private val DOTNET_STABLE_SDK_VERSION = Regex("[0-9]+\\.[0-9]+\\.[0-9]+")
