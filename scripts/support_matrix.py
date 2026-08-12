@@ -142,7 +142,103 @@ def require_evidence(
     return paths
 
 
-def require_workflow(root: Path, text: str, field: str) -> str:
+def without_yaml_comment(value: str) -> str:
+    """Return the supported scalar value without a trailing YAML-style comment."""
+    return value.split(" #", 1)[0].strip()
+
+
+def disabled_condition(value: str) -> bool:
+    """Recognize only literal and unconditional false workflow conditions."""
+    normalized = without_yaml_comment(value).replace(" ", "").lower()
+    expression = normalized.removeprefix("$" + "{{").removesuffix("}}")
+    return expression in {
+        "false",
+        "1==0",
+        "0==1",
+        "always()&&false",
+        "false&&always()",
+    }
+
+
+def supported_workflow_jobs(workflow: str, field: str) -> dict[str, dict[str, Any]]:
+    """Parse the bounded job and step shape used by this repository's workflows."""
+    if re.search(r"(?m)^on:(?:\s+\S.*)?$", workflow) is None:
+        raise SupportMatrixError(f"Evidence gate has no trigger for {field}")
+    if workflow.count("\njobs:\n") + workflow.startswith("jobs:\n") != 1:
+        raise SupportMatrixError(
+            f"Evidence gate must declare exactly one jobs mapping for {field}"
+        )
+
+    jobs: dict[str, dict[str, Any]] = {}
+    job: dict[str, Any] | None = None
+    step: dict[str, Any] | None = None
+    lines = workflow.splitlines()
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        job_match = re.fullmatch(r"  ([A-Za-z0-9_-]+):\s*(?:#.*)?", line)
+        if job_match is not None:
+            name = job_match.group(1)
+            if name in jobs:
+                raise SupportMatrixError(
+                    f"Evidence gate has duplicate job {name} for {field}"
+                )
+            job = {"name": name, "disabled": False, "steps": []}
+            jobs[name] = job
+            step = None
+            index += 1
+            continue
+        if job is None:
+            index += 1
+            continue
+        job_if = re.fullmatch(r"    if:\s*(.+)", line)
+        if job_if is not None:
+            job["disabled"] = disabled_condition(job_if.group(1))
+            index += 1
+            continue
+        step_match = re.fullmatch(r"      - (?:name:\s*(.+)|(run|uses):\s*(.+))", line)
+        if step_match is not None:
+            step = {"name": step_match.group(1), "disabled": False}
+            if step_match.group(2) is not None:
+                step[step_match.group(2)] = without_yaml_comment(step_match.group(3))
+            job["steps"].append(step)
+            index += 1
+            continue
+        if step is None:
+            index += 1
+            continue
+        step_if = re.fullmatch(r"        if:\s*(.+)", line)
+        if step_if is not None:
+            step["disabled"] = disabled_condition(step_if.group(1))
+            index += 1
+            continue
+        executable = re.fullmatch(r"        (run|uses):\s*(.+)", line)
+        if executable is None:
+            index += 1
+            continue
+        kind, value = executable.groups()
+        if kind == "uses" or value not in {"|", "|-", ">", ">-"}:
+            step[kind] = without_yaml_comment(value)
+            index += 1
+            continue
+        block: list[str] = []
+        index += 1
+        while index < len(lines):
+            block_line = lines[index]
+            if block_line and not block_line.startswith("          "):
+                break
+            if block_line.lstrip().startswith("#"):
+                index += 1
+                continue
+            block.append(without_yaml_comment(block_line[10:]))
+            index += 1
+        step["run"] = "\n".join(block)
+    if not jobs:
+        raise SupportMatrixError(f"Evidence gate has no jobs for {field}")
+    return jobs
+
+
+def require_workflow(root: Path, text: str, field: str) -> dict[str, dict[str, Any]]:
     """Require one executable GitHub Actions workflow at the declared gate path."""
     if WORKFLOW_PATH.fullmatch(text) is None:
         raise SupportMatrixError(
@@ -154,20 +250,49 @@ def require_workflow(root: Path, text: str, field: str) -> str:
         raise SupportMatrixError(
             f"Evidence gate must be a regular file for {field}: {text}"
         )
-    workflow = read_file(root, relative)
-    if re.search(r"(?m)^on:(?:\s+\S.*)?$", workflow) is None:
-        raise SupportMatrixError(f"Evidence gate has no trigger for {field}: {text}")
-    if re.search(r"(?m)^jobs:\s*(?:#.*)?$", workflow) is None:
-        raise SupportMatrixError(f"Evidence gate has no jobs for {field}: {text}")
-    if re.search(r"(?m)^  [A-Za-z0-9_-]+:\s*(?:#.*)?$", workflow) is None:
-        raise SupportMatrixError(f"Evidence gate has no job for {field}: {text}")
-    if re.search(r"(?m)^    steps:\s*(?:#.*)?$", workflow) is None:
-        raise SupportMatrixError(f"Evidence gate has no steps for {field}: {text}")
-    if re.search(r"(?m)^ {6}- (?:uses|run):|^ {8}(?:uses|run):", workflow) is None:
+    jobs = supported_workflow_jobs(read_file(root, relative), field)
+    if not any(
+        not job["disabled"]
+        and any(
+            not step["disabled"] and ("run" in step or "uses" in step)
+            for step in job["steps"]
+        )
+        for job in jobs.values()
+    ):
         raise SupportMatrixError(
             f"Evidence gate has no executable step for {field}: {text}"
         )
-    return workflow
+    return jobs
+
+
+def require_proof_execution(
+    root: Path,
+    gate: str,
+    job_name: str,
+    step_name: str,
+    marker: str,
+    field: str,
+) -> None:
+    """Bind a selection proof marker to one enabled executable workflow step."""
+    jobs = require_workflow(root, gate, field)
+    job = jobs.get(job_name)
+    if job is None:
+        raise SupportMatrixError(f"{field} gate job is missing: {job_name}")
+    if job["disabled"]:
+        raise SupportMatrixError(f"{field} gate job is disabled: {job_name}")
+    steps = [step for step in job["steps"] if step["name"] == step_name]
+    if len(steps) != 1:
+        raise SupportMatrixError(
+            f"{field} gate step must occur exactly once: {step_name}"
+        )
+    step = steps[0]
+    if step["disabled"]:
+        raise SupportMatrixError(f"{field} gate step is disabled: {step_name}")
+    executable = step.get("run") or step.get("uses")
+    if not isinstance(executable, str) or executable.count(marker) != 1:
+        raise SupportMatrixError(
+            f"{field} gate marker must occur exactly once in {job_name}/{step_name}: {marker}"
+        )
 
 
 def require_gates(root: Path, value: object, field: str) -> list[str]:
@@ -374,7 +499,15 @@ def validate_adapters(root: Path, adapters: object) -> list[dict[str, Any]]:
                 raise SupportMatrixError(f"Invalid {identifier} selection proof")
             require_fields(
                 proof,
-                {"units", "path", "marker", "gate", "gateMarker"},
+                {
+                    "units",
+                    "path",
+                    "marker",
+                    "gate",
+                    "gateJob",
+                    "gateStep",
+                    "gateMarker",
+                },
                 "selection proof",
             )
             units = require_strings(
@@ -408,24 +541,31 @@ def validate_adapters(root: Path, adapters: object) -> list[dict[str, Any]]:
                 raise SupportMatrixError(
                     f"{identifier} selection proof gate must be one of its gates: {gate}"
                 )
+            gate_job = require_string(
+                proof.get("gateJob"), f"{identifier} selection proof gate job"
+            )
+            gate_step = require_string(
+                proof.get("gateStep"), f"{identifier} selection proof gate step"
+            )
             gate_marker = require_string(
                 proof.get("gateMarker"), f"{identifier} selection proof gate marker"
             )
-            if (
-                require_workflow(root, gate, f"{identifier} selection proof").count(
-                    gate_marker
-                )
-                != 1
-            ):
-                raise SupportMatrixError(
-                    f"{identifier} selection proof gate marker must occur exactly once: {gate_marker}"
-                )
+            require_proof_execution(
+                root,
+                gate,
+                gate_job,
+                gate_step,
+                gate_marker,
+                f"{identifier} selection proof",
+            )
             normalized_proofs.append(
                 {
                     "units": units,
                     "path": path,
                     "marker": marker,
                     "gate": gate,
+                    "gateJob": gate_job,
+                    "gateStep": gate_step,
                     "gateMarker": gate_marker,
                 }
             )

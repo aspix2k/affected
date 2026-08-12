@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from datetime import date, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -95,6 +96,80 @@ class SupportMatrixTest(unittest.TestCase):
             ):
                 support_matrix.check(root)
 
+    def test_selection_proof_marker_must_run_in_its_named_job_and_step(self) -> None:
+        """Reject markers that occur only outside the claimed executable step."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            workflow_path = root / ".github/workflows/conformance.yml"
+            workflow = workflow_path.read_text(encoding="utf-8")
+            marker = "python -m unittest scripts.tests.test_support_matrix"
+            cases = (
+                workflow.replace(
+                    "        run: python -m unittest scripts.tests.test_support_matrix",
+                    "        run: echo verified",
+                )
+                + (
+                    "  marker-only-name:\n"
+                    "    runs-on: ubuntu-latest\n"
+                    "    steps:\n"
+                    f"      - name: {marker}\n"
+                    "        run: echo verified\n"
+                ),
+                workflow.replace(
+                    "        run: python -m unittest scripts.tests.test_support_matrix",
+                    "        run: |\n          # python -m unittest scripts.tests.test_support_matrix\n          echo verified",
+                ),
+                workflow.replace(
+                    "        run: python -m unittest scripts.tests.test_support_matrix",
+                    "        run: echo verified",
+                )
+                + (
+                    "  wrong-job:\n"
+                    "    runs-on: ubuntu-latest\n"
+                    "    steps:\n"
+                    "      - name: Run support matrix tests\n"
+                    "        run: python -m unittest scripts.tests.test_support_matrix\n"
+                ),
+            )
+            for altered in cases:
+                self.write(workflow_path, altered)
+                with self.assertRaisesRegex(
+                    support_matrix.SupportMatrixError, "gate marker"
+                ):
+                    support_matrix.check(root)
+
+    def test_selection_proof_rejects_disabled_target_job_or_step(self) -> None:
+        """Reject literal false conditions on the claimed workflow execution."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            workflow_path = root / ".github/workflows/conformance.yml"
+            workflow = workflow_path.read_text(encoding="utf-8")
+            cases = (
+                workflow.replace("  verify:\n", "  verify:\n    if: false\n", 1)
+                + (
+                    "  enabled-job:\n"
+                    "    runs-on: ubuntu-latest\n"
+                    "    steps:\n"
+                    "      - run: echo verified\n"
+                ),
+                workflow.replace(
+                    "      - name: Run support matrix tests\n",
+                    "      - name: Run support matrix tests\n"
+                    "        if: $"
+                    "{{ false }}\n",
+                    1,
+                )
+                + "      - run: echo verified\n",
+            )
+            for altered in cases:
+                self.write(workflow_path, altered)
+                with self.assertRaisesRegex(
+                    support_matrix.SupportMatrixError, "disabled"
+                ):
+                    support_matrix.check(root)
+
     def test_excluded_product_requires_a_dated_reason(self) -> None:
         """Keep exclusions explicit, dated, and reviewable."""
         with TemporaryDirectory() as directory:
@@ -134,7 +209,7 @@ class SupportMatrixTest(unittest.TestCase):
             with self.assertRaisesRegex(support_matrix.SupportMatrixError, "calendar"):
                 support_matrix.check(root)
 
-            product["reviewed"] = "2026-08-13"
+            product["reviewed"] = (date.today() + timedelta(days=1)).isoformat()
             self.write(root / "config/support-matrix.json", json.dumps(matrix))
 
             with self.assertRaisesRegex(support_matrix.SupportMatrixError, "Future"):
@@ -306,7 +381,9 @@ class SupportMatrixTest(unittest.TestCase):
                     "path": "fixtures/selection-test.txt",
                     "marker": "selects one package",
                     "gate": ".github/workflows/conformance.yml",
-                    "gateMarker": "Run support matrix tests",
+                    "gateJob": "verify",
+                    "gateStep": "Run support matrix tests",
+                    "gateMarker": "python -m unittest scripts.tests.test_support_matrix",
                 }
             ],
             "versions": "1.0",
