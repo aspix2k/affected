@@ -64,7 +64,9 @@ internal fun dotnetImportFingerprint(
     val sdkVersionDirectory = requireNotNull(sdkDirectory.parent).also { require(it.fileName.toString() == sdk) }
     val sdkRoot = requireNotNull(sdkVersionDirectory.parent).also { require(it.fileName.toString() == "sdk") }
     val dotnetDirectory = requireNotNull(sdkRoot.parent)
-    val manifestRoot = dotnetDirectory.resolve("sdk-manifests").singleSecureChildDirectory()
+    val manifestBand = sdk.split('.').also { require(it.size >= 3) }
+        .let { "${it[0]}.${it[1]}.100" }
+    val manifestRoot = dotnetDirectory.resolve("sdk-manifests").resolve(manifestBand).secureRealDirectoryOrNull()
     val packages = dotnetPackageIndex(assets) ?: return null
     val imports = preprocessedDotnetImports(preprocessedProject) ?: return null
     require(imports.isNotEmpty() && imports.size <= MAX_DOTNET_IMPORTS)
@@ -207,12 +209,7 @@ private fun Path.secureRealDirectory(): Path {
     return toRealPath().also { require(it == this) }
 }
 
-private fun Path.singleSecureChildDirectory(): Path? = runCatching {
-    if (!Files.isDirectory(this, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(this)) return null
-    Files.list(this).use { children ->
-        children.limit(2).toList().single().toAbsolutePath().normalize().secureRealDirectory()
-    }
-}.getOrNull()
+private fun Path.secureRealDirectoryOrNull(): Path? = runCatching { secureRealDirectory() }.getOrNull()
 
 private fun Path.isSecureImportedFile(): Boolean =
     Files.isRegularFile(this, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(this) && Files.isReadable(this)

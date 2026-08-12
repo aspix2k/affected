@@ -115,6 +115,18 @@ class DotnetTestMetadataTest {
             Files.createDirectories(it.parent)
             it.writeText("other sdk")
         }
+        val manifestImport = dotnet.resolve(
+            "sdk-manifests/8.0.100/example.workload/1.0.0/WorkloadManifest.targets",
+        ).also {
+            Files.createDirectories(it.parent)
+            it.writeText("current workload")
+        }
+        val siblingManifestImport = dotnet.resolve(
+            "sdk-manifests/9.0.100/example.workload/1.0.0/WorkloadManifest.targets",
+        ).also {
+            Files.createDirectories(it.parent)
+            it.writeText("other workload")
+        }
         val packages = kotlin.io.path.createTempDirectory("dotnet-import-packages").toRealPath()
         val packageImport = packages.resolve("example.build/1.0.0/build/Example.targets").also {
             Files.createDirectories(it.parent)
@@ -123,7 +135,7 @@ class DotnetTestMetadataTest {
         val assets = root.resolve("obj/project.assets.json").apply {
             writeText(packageAssets(packages, "example.build/1.0.0", "build/Example.targets"))
         }
-        val supported = preprocessedImports(projectImport, sdkImport, packageImport)
+        val supported = preprocessedImports(projectImport, sdkImport, manifestImport, packageImport)
 
         val fingerprint = assertNotNull(
             dotnetImportFingerprint(root, assets, "8.0.100", sdkDirectory.toString(), supported),
@@ -152,6 +164,15 @@ class DotnetTestMetadataTest {
                 "8.0.100",
                 sdkDirectory.toString(),
                 preprocessedImports(projectImport, sdkImport, packageImport, siblingSdkImport),
+            ),
+        )
+        assertNull(
+            dotnetImportFingerprint(
+                root,
+                assets,
+                "8.0.100",
+                sdkDirectory.toString(),
+                preprocessedImports(projectImport, sdkImport, packageImport, siblingManifestImport),
             ),
         )
         projectImport.writeText("<Project><Target Name=\"Injected\" /></Project>")
