@@ -46,6 +46,9 @@ SAFE_WORKFLOWS = frozenset(
         ".github/workflows/mutation.yml",
         ".github/workflows/queue.yml",
         ".github/workflows/release.yml",
+        ".github/workflows/dependency-graph.yml",
+        ".github/workflows/dependency-graph-submit.yml",
+        ".github/dependabot.yml",
     }
 )
 GRADLE_NAMES = frozenset(
@@ -116,11 +119,7 @@ def flags_for(path: str) -> dict[str, bool] | None:
         return {"plugin": True, "health": True, "codeql": False, "dependencies": False}
     if path == ".github/workflows/codeql.yml":
         return {"plugin": False, "health": False, "codeql": True, "dependencies": False}
-    if path in {
-        ".github/workflows/dependency-review.yml",
-        ".github/workflows/dependency-graph.yml",
-        ".github/workflows/dependency-graph-submit.yml",
-    }:
+    if path == ".github/workflows/dependency-review.yml":
         return {"plugin": False, "health": False, "codeql": False, "dependencies": True}
     if path in {
         "scripts/run_gradle.sh",

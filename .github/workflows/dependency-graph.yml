@@ -29,7 +29,7 @@ jobs:
 
   generate:
     needs: [scope]
-    if: needs.scope.outputs.dependencies == 'true'
+    if: github.event_name == 'push' || needs.scope.outputs.dependencies == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

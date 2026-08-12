@@ -30,6 +30,8 @@ class CiScopeTest(unittest.TestCase):
                     "scripts/ci_scope.py",
                     "scripts/tests/test_ci_scope.py",
                     ".github/workflows/queue.yml",
+                    ".github/dependabot.yml",
+                    ".github/workflows/dependency-graph.yml",
                 ]
             ),
             ci_scope.empty_scope(),
