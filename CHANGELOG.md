@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Update the privacy policy and contribution templates for every supported ecosystem.
 - Keep the full package test script for unknown Node runners and versions, custom configuration or transforms, dependency overrides, dynamic dependencies, resources, lockfiles, added, deleted or generated paths, symlinks, bounded-scan failures and changes without a merge base.
 - Preserve one fail-fast Node Run session while exact workspaces execute their own runner-native related command.
 - Keep the full pytest package plan for custom configuration, conftest or third-party plugins, dynamic or external dependencies, resources, non-modification changes, ambiguous ownership and bounded-scan failures.
