@@ -12,10 +12,10 @@ class DotnetProjectsTest {
 
     private fun solution(): File = createTempDirectory("dotnet").toFile()
 
-    private fun project(root: File, path: String, body: String) {
+    private fun project(root: File, path: String, body: String, sdk: String = "Microsoft.NET.Sdk") {
         val file = File(root, path)
         file.parentFile.mkdirs()
-        file.writeText("<Project Sdk=\"Microsoft.NET.Sdk\">$body</Project>")
+        file.writeText("<Project Sdk=\"$sdk\">$body</Project>")
     }
 
     @Test
@@ -49,6 +49,25 @@ class DotnetProjectsTest {
     }
 
     @Test
+    fun `a project reference is parsed regardless of attribute order`() {
+        val root = solution()
+        project(root, "src/Lib/Lib.csproj", "")
+        project(
+            root,
+            "test/Lib.Tests/Lib.Tests.csproj",
+            """
+                <ItemGroup>
+                    <ProjectReference Condition="'$(Configuration)' == 'Debug'" Include="../../src/Lib/Lib.csproj" />
+                </ItemGroup>
+            """.trimIndent(),
+        )
+
+        val tests = DotnetProjects.parse(root).single { it.id == "Lib.Tests" }
+
+        assertEquals(setOf("${root.invariantSeparatorsPath}|Lib"), tests.dependencies)
+    }
+
+    @Test
     fun `a reference to a missing project creates no edge`() {
         val root = solution()
         project(
@@ -75,6 +94,17 @@ class DotnetProjectsTest {
         assertTrue(modules.single { it.id == "Lib.Tests" }.hasTests)
         assertEquals("test", modules.single { it.id == "Lib.Tests" }.testTask)
         assertEquals("build", modules.single { it.id == "Lib" }.testTask)
+    }
+
+    @Test
+    fun `an MSTest SDK project remains runnable at project level`() {
+        val root = solution()
+        project(root, "test/Lib.Tests/Lib.Tests.csproj", "", sdk = "MSTest.Sdk/4.3.3")
+
+        val module = DotnetProjects.parse(root).single()
+
+        assertTrue(module.hasTests)
+        assertEquals("test", module.testTask)
     }
 
     @Test

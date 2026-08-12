@@ -57,6 +57,13 @@ collected package plan. The packaged adapter must stay byte-identical to
 `core/src/main/python/affected_pytest.py`, pass Ruff with zero findings and
 preserve one Python Run session.
 
+.NET exact selection happens only after `dotnet build`. Keep the deferred
+VSTest command in the same `SequentialProcessHandler`, compare uninstrumented
+DLLs, filter only stable fully qualified identities, and promote a baseline only
+from a complete unchanged full TRX run. Microsoft Testing Platform, custom
+settings, parameterized/shared fixtures and any incomplete evidence stay on the
+original project-level test command.
+
 The plugin id is permanent. Changing it breaks updates for every existing user.
 
 Kotlin nests block comments. A glob like `packages/*` inside a KDoc opens an

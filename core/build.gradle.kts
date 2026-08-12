@@ -31,6 +31,10 @@ tasks.test {
         layout.projectDirectory.file("src/main/python/affected_pytest.py").asFile.absolutePath,
     )
     systemProperty(
+        "affected.test.dotnetAnalyzer",
+        layout.projectDirectory.dir("src/main/dotnet/Affected.DotnetAnalyzer").asFile.absolutePath,
+    )
+    systemProperty(
         "affected.cliConformance",
         providers.gradleProperty("affected.cliConformance").orElse("false").get(),
     )

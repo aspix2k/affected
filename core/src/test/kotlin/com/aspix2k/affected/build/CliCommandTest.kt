@@ -307,6 +307,36 @@ class CliCommandTest {
     }
 
     @Test
+    fun `dotnet exact selection uses native fully qualified filters after build`() {
+        val report = createTempDirectory("dotnet-report").resolve("results.trx")
+
+        assertEquals(
+            listOf("dotnet", "build", "tests/App.Tests.csproj"),
+            dotnetBuildCommand("tests/App.Tests.csproj").arguments,
+        )
+        assertEquals(
+            listOf(
+                "dotnet",
+                "test",
+                "tests/App.Tests.csproj",
+                "--no-build",
+                "--no-restore",
+                "--results-directory",
+                report.parent.toString(),
+                "--logger",
+                "trx;LogFileName=results.trx",
+                "--filter",
+                "FullyQualifiedName=Example.Tests.AlphaTest.Passes",
+            ),
+            dotnetTestArguments(
+                "tests/App.Tests.csproj",
+                DotnetTestSelection.Exact(listOf("Example.Tests.AlphaTest.Passes")),
+                report,
+            ),
+        )
+    }
+
+    @Test
     fun `root Node packages use the package manager without a workspace selector`() {
         val root = createTempDirectory("node-command").toFile()
 

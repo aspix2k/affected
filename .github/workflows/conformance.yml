@@ -176,7 +176,7 @@ jobs:
       - name: Run native CLI fixtures
         run: >-
           ./gradlew :core:test
-          --tests com.aspix2k.affected.build.CliAdapterConformanceTest
+          --tests '*Cli*ConformanceTest'
           -Paffected.cliConformance=true
           --rerun-tasks --no-daemon --no-parallel --max-workers=1
 
@@ -188,3 +188,31 @@ jobs:
             core/build/test-results/test
             core/build/reports/tests/test
           if-no-files-found: error
+
+  dotnet-sdks:
+    name: .NET exact / SDK ${{ matrix.dotnet-sdk }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        dotnet-sdk: ["8.0.424", "9.0.317"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@67621b124fd2e251c5e8a0e6e3b91318f2287669 # v6.3.0
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: ${{ matrix.dotnet-sdk }}
+
+      - name: Run .NET exact fixtures
+        run: >-
+          ./gradlew :core:test
+          --tests '*DotnetCliConformanceTest*'
+          -Paffected.cliConformance=true
+          --rerun-tasks --no-daemon --no-parallel --max-workers=1

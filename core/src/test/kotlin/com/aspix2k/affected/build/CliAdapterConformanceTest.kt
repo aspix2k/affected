@@ -119,16 +119,6 @@ class CliAdapterConformanceTest {
     }
 
     @Test
-    fun `dotnet commands run both selected test projects`() = fixture("dotnet") { root ->
-        val modules = DotnetProjects.parse(root)
-        val output = dotnetCommands(root.path, modules.map { "${it.executionId}:test" })
-            .joinToString("\n") { execute(root, it.arguments) }
-
-        assertContains(output, "Alpha.Tests")
-        assertContains(output, "Beta.Tests")
-    }
-
-    @Test
     fun `pytest runs exact files and preserves full fallback`() = fixture("python") { root ->
         val modules = PythonProjects.parse(root).filter(BuildModule::hasTests)
         val full = execute(

@@ -13,3 +13,7 @@
 /local.properties
 /fixtures/
 /docs/superpowers/
+/conformance/cli-fixtures/dotnet/**/bin/
+/conformance/cli-fixtures/dotnet/**/obj/
+/core/src/main/dotnet/**/bin/
+/core/src/main/dotnet/**/obj/

@@ -45,24 +45,7 @@ object Verification {
         if (changes.files.isEmpty()) return@withContext Plan(emptyList(), 0, 0)
 
         val graph = ModuleGraph.create(project)
-        val owners = changes.files.associateWith(graph::nodesFor)
-        val changed = owners.values.flatten().distinct()
-        val apiNodes = owners.flatMapTo(HashSet()) { (file, nodes) ->
-            nodes.filter { node ->
-                affectsConsumers(
-                    systemId = node.system.id,
-                    path = file.invariantSeparatorsPath,
-                    signatureTouched = file in changes.apiTouched,
-                )
-            }
-        }
-        val consumers = when {
-            !AffectedSettings.getInstance().checkConsumers -> emptyList()
-            apiNodes.isEmpty() -> emptyList()
-            else -> graph.directDependents(apiNodes)
-        }
-
-        TaskPlanner.plan(changed.map { it.info() }, consumers.map { it.info() })
+        verificationPlan(graph, changes, AffectedSettings.getInstance().checkConsumers)
     }
 
     suspend fun runAndWait(project: Project, plan: Plan): Outcome {
@@ -101,6 +84,30 @@ object Verification {
             state.markFinished()
         }
     }
+}
+
+internal fun verificationPlan(
+    graph: ModuleGraph,
+    changes: ProjectChanges.Result,
+    checkConsumers: Boolean,
+): Plan {
+    val owners = changes.files.associateWith(graph::nodesFor)
+    val changed = owners.values.flatten().distinct()
+    val testConsumers = graph.transitiveTestConsumers(changed.toSet())
+    val apiNodes = owners.flatMapTo(HashSet()) { (file, nodes) ->
+        nodes.filter { node ->
+            affectsConsumers(
+                systemId = node.system.id,
+                path = file.invariantSeparatorsPath,
+                signatureTouched = file in changes.apiTouched,
+            )
+        }
+    }
+    val consumers = when {
+        !checkConsumers || apiNodes.isEmpty() -> emptyList()
+        else -> graph.directDependents(apiNodes)
+    }
+    return TaskPlanner.plan((changed + testConsumers).map { it.info() }, consumers.map { it.info() })
 }
 
 internal fun affectsConsumers(systemId: String, path: String, signatureTouched: Boolean): Boolean =

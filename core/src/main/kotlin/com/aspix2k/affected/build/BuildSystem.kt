@@ -44,6 +44,8 @@ internal interface NamedSourceBuildSystem {
 
 internal interface AllFileChangesBuildSystem
 
+internal interface TransitiveTestConsumersBuildSystem
+
 internal interface SuspendingBuildSystem : BuildSystem {
     suspend fun modulesSuspending(project: Project): List<BuildModule> =
         runInterruptible(Dispatchers.IO) { modules(project) }

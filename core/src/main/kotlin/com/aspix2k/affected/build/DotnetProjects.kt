@@ -8,12 +8,14 @@ object DotnetProjects {
     const val COMPILE = "build"
 
     private val PROJECT_EXTENSIONS = setOf("csproj", "fsproj", "vbproj")
-    private val REFERENCE = Regex("""<ProjectReference\s+Include\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+    private val REFERENCE = Regex("""<ProjectReference\b([^>]*)>""", RegexOption.IGNORE_CASE)
+    private val INCLUDE = Regex("""\bInclude\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
     private val TEST_MARKERS = listOf(
         "Microsoft.NET.Test.Sdk",
         "xunit",
         "NUnit",
         "MSTest.TestFramework",
+        "MSTest.Sdk",
         "Microsoft.Testing.Platform",
     )
 
@@ -37,7 +39,8 @@ object DotnetProjects {
             val directory = project.parentFile
 
             val dependencies = REFERENCE.findAll(text)
-                .mapNotNull { match -> resolve(directory, match.groupValues[1]) }
+                .mapNotNull { match -> INCLUDE.find(match.groupValues[1])?.groupValues?.get(1) }
+                .mapNotNull { reference -> resolve(directory, reference) }
                 .mapNotNull { byPath[it] }
                 .mapTo(HashSet()) { "$rootPath|${ids.getValue(it)}" }
 

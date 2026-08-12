@@ -36,7 +36,8 @@ Node.js, .NET, Python, PHP, Ruby and C/C++.
 - **One Run session per build-system root.** Commands stay together and stop on the
   first failure.
 - **Smaller test runs.** Gradle and Maven can narrow to affected JUnit classes;
-  supported Jest, Vitest and pytest projects can narrow to related test files.
+  supported VSTest and CTest projects to named tests; Jest, Vitest and pytest
+  projects to related test files.
 - **Consumer checks.** Optionally verify direct dependents after a public API
   change.
 - **Local by design.** No account, server, telemetry or project-specific config file.
@@ -50,7 +51,7 @@ Node.js, .NET, Python, PHP, Ruby and C/C++.
 | Cargo | Rust | `cargo test`, `cargo check --tests` | package |
 | Go modules | Go | `go test`, `go build` | package |
 | npm, Yarn and pnpm | JavaScript, TypeScript, JSX, TSX, Vue, Svelte | Jest, Vitest, package test, `tsc --noEmit` | related test file or workspace package |
-| .NET | C#, F#, Visual Basic, Razor | `dotnet test`, `dotnet build` | project |
+| .NET | C#, F#, Visual Basic, Razor | VSTest via `dotnet test`, `dotnet build` | test or project |
 | Python | Python | pytest, mypy | test file or package |
 | Composer | PHP | PHPUnit, PHPStan | package |
 | Bundler | Ruby | RSpec | gem |
