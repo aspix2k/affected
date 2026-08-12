@@ -16,28 +16,32 @@ import kotlin.test.assertEquals
 class AffectedStateTest {
 
     @Test
-    fun `status stays running until every run finishes`() {
-        withState { state ->
-            state.markRunning()
-            state.markRunning()
-            state.markFinished()
+    fun `verification claims are exclusive`() {
+        val state = AffectedStateStore()
+        val revision = state.invalidate()
+        state.complete(revision, listOf(module()))
+        val claim = state.tryClaimVerification()
 
-            assertEquals(VerificationStatus.RUNNING, state.verificationStatus)
+        assertEquals(VerificationStatus.RUNNING, state.snapshot().verificationStatus)
+        assertEquals(null, state.tryClaimVerification())
+        assertEquals(null, state.tryClaimReadyRun())
 
-            state.markFinished()
+        claim?.close()
 
-            assertEquals(VerificationStatus.IDLE, state.verificationStatus)
-        }
+        assertEquals(VerificationStatus.IDLE, state.snapshot().verificationStatus)
     }
 
     @Test
-    fun `a completed run returns to idle`() {
-        withState { state ->
-            state.markRunning()
-            state.markFinished()
+    fun `an action claim blocks ordinary verification`() {
+        val state = AffectedStateStore()
+        val revision = state.invalidate()
+        state.complete(revision, listOf(module()))
+        val claim = state.tryClaimReadyRun()
 
-            assertEquals(VerificationStatus.IDLE, state.verificationStatus)
-        }
+        assertEquals(VerificationStatus.RUNNING, state.snapshot().verificationStatus)
+        assertEquals(null, state.tryClaimVerification())
+
+        claim?.close()
     }
 
     @Test
@@ -68,14 +72,17 @@ class AffectedStateTest {
         }
     }
 
-    private fun withState(block: (AffectedState) -> Unit) {
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
-        try {
-            block(AffectedState(project(), scope))
-        } finally {
-            scope.cancel()
-        }
-    }
+    private fun module() = AffectedModule(
+        id = ":ready",
+        systemId = "GRADLE",
+        buildRoot = "/repo",
+        directory = "/repo/ready",
+        testDirectory = null,
+        testTask = "test",
+        compileTask = null,
+        hasTests = true,
+        tasks = emptySet(),
+    )
 
     private fun project(): Project = Proxy.newProxyInstance(
         Project::class.java.classLoader,

@@ -49,11 +49,11 @@ class AffectedAnalysisStateTest {
 
         val latest = state.invalidate()
 
-        assertEquals(null, state.tryClaimRunning())
+        assertEquals(null, state.tryClaimReadyRun())
         assertEquals(AnalysisStatus.ANALYZING, state.snapshot().analysisStatus)
         assertEquals(VerificationStatus.IDLE, state.snapshot().verificationStatus)
         assertTrue(state.complete(latest, listOf(module(":fresh"))))
-        val claim = state.tryClaimRunning()
+        val claim = state.tryClaimReadyRun()
         assertEquals(listOf(":fresh"), claim?.snapshot?.modules?.map(AffectedModule::id))
         claim?.close()
     }
@@ -64,9 +64,10 @@ class AffectedAnalysisStateTest {
         val revision = state.invalidate()
         assertTrue(state.complete(revision, listOf(module(":ready"))))
 
-        val claim = state.tryClaimRunning()
+        val claim = state.tryClaimReadyRun()
         assertTrue(claim != null)
-        assertEquals(null, state.tryClaimRunning())
+        assertEquals(null, state.tryClaimReadyRun())
+        assertEquals(null, state.tryClaimVerification())
         assertEquals(VerificationStatus.RUNNING, state.snapshot().verificationStatus)
         claim.close()
         claim.close()
@@ -78,7 +79,7 @@ class AffectedAnalysisStateTest {
         val state = AffectedStateStore()
         val revision = state.invalidate()
         assertTrue(state.complete(revision, listOf(module(":ready"))))
-        val claim = requireNotNull(state.tryClaimRunning())
+        val claim = requireNotNull(state.tryClaimReadyRun())
         val cancelled = Job().apply { cancel() }
         var entered = false
 
@@ -94,7 +95,7 @@ class AffectedAnalysisStateTest {
         val state = AffectedStateStore()
         val revision = state.invalidate()
         assertTrue(state.complete(revision, listOf(module(":ready"))))
-        val claim = requireNotNull(state.tryClaimRunning())
+        val claim = requireNotNull(state.tryClaimReadyRun())
 
         assertFailsWith<IllegalStateException> {
             launchClaimed(claim, { error("scope unavailable") }) {}

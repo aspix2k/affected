@@ -102,15 +102,15 @@ internal class AffectedStateStore {
         }
     }
 
-    fun markRunning() {
-        update { current -> current.copy(runningVerifications = current.runningVerifications + 1) }
-    }
+    fun tryClaimReadyRun(): AffectedRunClaim? = tryClaimRunning(requireReadyAnalysis = true)
 
-    fun tryClaimRunning(): AffectedRunClaim? {
+    fun tryClaimVerification(): AffectedRunClaim? = tryClaimRunning(requireReadyAnalysis = false)
+
+    private fun tryClaimRunning(requireReadyAnalysis: Boolean): AffectedRunClaim? {
         while (true) {
             val current = state.get()
             val ready = current.analysisStatus == AnalysisStatus.READY && current.modules.isNotEmpty()
-            if (!ready || current.runningVerifications != 0) return null
+            if ((requireReadyAnalysis && !ready) || current.runningVerifications != 0) return null
             if (state.compareAndSet(current, current.copy(runningVerifications = 1))) {
                 return AffectedRunClaim(
                     snapshot = current.toSnapshot(VerificationStatus.RUNNING),
@@ -120,7 +120,7 @@ internal class AffectedStateStore {
         }
     }
 
-    fun markFinished() {
+    private fun markFinished() {
         update { current ->
             current.copy(runningVerifications = (current.runningVerifications - 1).coerceAtLeast(0))
         }
@@ -220,11 +220,9 @@ class AffectedState(
     val verificationStatus: VerificationStatus get() = snapshot().verificationStatus
     val isRunning: Boolean get() = verificationStatus == VerificationStatus.RUNNING
 
-    fun markRunning() = state.markRunning()
+    fun tryClaimReadyRun(): AffectedRunClaim? = state.tryClaimReadyRun()
 
-    fun tryClaimRunning(): AffectedRunClaim? = state.tryClaimRunning()
-
-    fun markFinished() = state.markFinished()
+    fun tryClaimVerification(): AffectedRunClaim? = state.tryClaimVerification()
 
     fun invalidate() {
         state.invalidate()

@@ -53,7 +53,7 @@ class RunAffectedTestsAction : AnAction() {
         val state = project.service<AffectedState>()
         FileDocumentManager.getInstance().saveAllDocuments()
         if (DumbService.isDumb(project)) return
-        val claim = state.tryClaimRunning() ?: return
+        val claim = state.tryClaimReadyRun() ?: return
 
         launchClaimed(claim, ::currentThreadCoroutineScope) {
             val changes = ProjectChanges.collectSuspending(project)

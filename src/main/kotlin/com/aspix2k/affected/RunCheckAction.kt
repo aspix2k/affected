@@ -41,7 +41,7 @@ abstract class RunCheckAction(
         val state = project.service<AffectedState>()
         saveAllDocuments()
         if (DumbService.isDumb(project)) return
-        val claim = state.tryClaimRunning() ?: return
+        val claim = state.tryClaimReadyRun() ?: return
         launchClaimed(claim, ::currentThreadCoroutineScope) {
             val modules = claim.snapshot.modules.filter { it.supports(taskName) }
             if (modules.isEmpty()) return@launchClaimed

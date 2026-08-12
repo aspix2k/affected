@@ -73,7 +73,8 @@ object Verification {
         if (plan.isEmpty) {
             return Outcome(plan, passed = true)
         }
-        if (!alreadyClaimed) state.markRunning()
+        val claim = if (alreadyClaimed) null else state.tryClaimVerification()
+        if (!alreadyClaimed && claim == null) return Outcome(plan, passed = false)
         var passed = false
         try {
             passed = coroutineScope {
@@ -94,7 +95,7 @@ object Verification {
             }
             return Outcome(plan, passed)
         } finally {
-            if (!alreadyClaimed) state.markFinished()
+            claim?.close()
         }
     }
 }
