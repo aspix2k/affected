@@ -1,0 +1,97 @@
+name: Submit dependency graph
+
+on:
+  workflow_run:
+    workflows: ["Dependency graph"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: dependency-graph_*
+          path: dependency-graph-reports
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Require submitted snapshots to exist
+        env:
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          PULL_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          SOURCE_EVENT: ${{ github.event.workflow_run.event }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          case "$SOURCE_EVENT" in
+            pull_request)
+              if [[ ! "$PULL_NUMBER" =~ ^[0-9]+$ ]]; then
+                echo "::error::The pull-request dependency graph has no trusted pull-request number."
+                exit 1
+              fi
+              expected_ref="refs/pull/$PULL_NUMBER/merge"
+              ;;
+            push)
+              if [ "$HEAD_BRANCH" != "main" ]; then
+                echo "::error::Only main push snapshots can be submitted."
+                exit 1
+              fi
+              expected_ref=refs/heads/main
+              ;;
+            *)
+              echo "::error::Unsupported dependency graph source event: $SOURCE_EVENT"
+              exit 1
+              ;;
+          esac
+
+          shopt -s nullglob globstar
+          snapshots=(dependency-graph-reports/**/*.json)
+          if [ "${#snapshots[@]}" -eq 0 ]; then
+            echo "::error::The dependency graph workflow produced no snapshot artifact."
+            exit 1
+          fi
+          for snapshot in "${snapshots[@]}"; do
+            jq -e \
+              --arg correlator dependency_graph-generate \
+              --arg job "$SOURCE_RUN_ID" \
+              --arg ref "$expected_ref" \
+              --arg sha "$EXPECTED_SHA" '
+              type == "object" and
+              .version == 0 and
+              .sha == $sha and
+              .ref == $ref and
+              .job.id == $job and
+              .job.correlator == $correlator and
+              (.detector.name | type == "string" and length > 0) and
+              (.detector.version | type == "string" and length > 0) and
+              (.detector.url | type == "string" and startswith("https://")) and
+              (.scanned | type == "string" and length > 0) and
+              (.manifests | type == "object" and length > 0) and
+              ([.manifests[].resolved[]] | length > 0)
+            ' "$snapshot" > /dev/null || {
+              echo "::error::Invalid dependency snapshot artifact: $snapshot"
+              exit 1
+            }
+          done
+
+      - uses: gradle/actions/dependency-submission@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          dependency-graph: download-and-submit
+          cache-disabled: true
+          add-job-summary: on-failure
