@@ -241,7 +241,7 @@ CI run, or any tree/hash mismatch stops the release.
 
 ```sh
 ./gradlew patchChangelog
-gh workflow run release.yml -f run_id=123456789 -f source_ref=v1.0.0
+gh workflow run release.yml -f run_id=123456789 -f source_ref=main
 ```
 
 Add `-f retry_marketplace=true` only to retry Marketplace submission after the
