@@ -68,6 +68,11 @@ jobs:
       - name: Test the release currentness gate
         run: python3 -m unittest scripts.tests.test_release_currentness
 
+      - name: Test the executable support matrix
+        run: |
+          python3 -m unittest scripts.tests.test_support_matrix
+          python3 scripts/support_matrix.py --check
+
   spotbugs:
     name: SpotBugs (zero findings)
     runs-on: ubuntu-latest
