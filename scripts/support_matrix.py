@@ -103,7 +103,9 @@ def require_strings(value: object, field: str) -> list[str]:
     return result
 
 
-def require_evidence(root: Path, value: object, field: str) -> list[str]:
+def require_evidence(
+    root: Path, value: object, field: str, *, regular_files: bool = False
+) -> list[str]:
     """Require every declared public fixture or gate to exist inside the repository."""
     paths = require_strings(value, field)
     for text in paths:
@@ -111,6 +113,10 @@ def require_evidence(root: Path, value: object, field: str) -> list[str]:
         path = secure_path(root, relative)
         if not path.exists() or path.is_symlink():
             raise SupportMatrixError(f"Missing evidence path for {field}: {text}")
+        if regular_files and not path.is_file():
+            raise SupportMatrixError(
+                f"Evidence gate must be a regular file for {field}: {text}"
+            )
     return paths
 
 
@@ -183,7 +189,10 @@ def validate_products(root: Path, products: object) -> list[dict[str, Any]]:
                 root, product.get("fixtures"), f"{identifier} fixtures"
             )
             product["gates"] = require_evidence(
-                root, product.get("gates"), f"{identifier} gates"
+                root,
+                product.get("gates"),
+                f"{identifier} gates",
+                regular_files=True,
             )
         else:
             raise SupportMatrixError(
@@ -217,7 +226,10 @@ def validate_operating_systems(root: Path, systems: object) -> list[dict[str, An
             root, system.get("fixtures"), f"{identifier} fixtures"
         )
         system["gates"] = require_evidence(
-            root, system.get("gates"), f"{identifier} gates"
+            root,
+            system.get("gates"),
+            f"{identifier} gates",
+            regular_files=True,
         )
         result.append(system)
     return result
@@ -264,7 +276,10 @@ def validate_adapters(root: Path, adapters: object) -> list[dict[str, Any]]:
             root, adapter.get("fixtures"), f"{identifier} fixtures"
         )
         adapter["gates"] = require_evidence(
-            root, adapter.get("gates"), f"{identifier} gates"
+            root,
+            adapter.get("gates"),
+            f"{identifier} gates",
+            regular_files=True,
         )
         result.append(adapter)
     registered = set(registered_adapters(root))

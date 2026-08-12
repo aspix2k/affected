@@ -44,6 +44,20 @@ class SupportMatrixTest(unittest.TestCase):
             ):
                 support_matrix.check(root)
 
+    def test_gate_evidence_must_be_an_executable_file_boundary(self) -> None:
+        """Reject a directory passed off as an executable CI gate."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            matrix["adapters"][0]["gates"] = [".github/workflows"]
+            self.write(root / "config/support-matrix.json", json.dumps(matrix))
+
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError, "regular file"
+            ):
+                support_matrix.check(root)
+
     def test_excluded_product_requires_a_dated_reason(self) -> None:
         """Keep exclusions explicit, dated, and reviewable."""
         with TemporaryDirectory() as directory:
