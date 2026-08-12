@@ -79,7 +79,7 @@ internal class AffectedStateStore {
             if (current.revision != expectedRevision) return false
             if (state.compareAndSet(
                     current,
-                    current.copy(analysisStatus = AnalysisStatus.READY, modules = modules),
+                    current.copy(analysisStatus = AnalysisStatus.READY, modules = modules.toList()),
                 )
             ) {
                 return true

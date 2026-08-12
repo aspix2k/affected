@@ -63,43 +63,48 @@ class RunAffectedTestsAction : AnAction() {
             state.markFinished()
             throw error
         }
-        currentThreadCoroutineScope().launch {
-            var delegated = false
-            try {
-                val changes = ProjectChanges.collectSuspending(project)
-                if (changes.files.isEmpty()) {
+        try {
+            currentThreadCoroutineScope().launch {
+                var delegated = false
+                try {
+                    val changes = ProjectChanges.collectSuspending(project)
+                    if (changes.files.isEmpty()) {
+                        notify(
+                            project,
+                            AffectedBundle.message("notification.nothing.title"),
+                            AffectedBundle.message("notification.nothing.text"),
+                            NotificationType.INFORMATION,
+                        )
+                        return@launch
+                    }
+
+                    val prepared = Verification.prepare(project, changes)
+                    val plan = prepared.plan
+                    if (plan.isEmpty) {
+                        notify(
+                            project,
+                            AffectedBundle.message("notification.unresolved.title"),
+                            AffectedBundle.message("notification.unresolved.text", changes.files.size),
+                            NotificationType.WARNING,
+                        )
+                        return@launch
+                    }
+
                     notify(
                         project,
-                        AffectedBundle.message("notification.nothing.title"),
-                        AffectedBundle.message("notification.nothing.text"),
+                        AffectedBundle.message("notification.started.title"),
+                        describe(plan),
                         NotificationType.INFORMATION,
                     )
-                    return@launch
+                    delegated = true
+                    Verification.runClaimedAndWait(project, prepared)
+                } finally {
+                    if (!delegated) state.markFinished()
                 }
-
-                val prepared = Verification.prepare(project, changes)
-                val plan = prepared.plan
-                if (plan.isEmpty) {
-                    notify(
-                        project,
-                        AffectedBundle.message("notification.unresolved.title"),
-                        AffectedBundle.message("notification.unresolved.text", changes.files.size),
-                        NotificationType.WARNING,
-                    )
-                    return@launch
-                }
-
-                notify(
-                    project,
-                    AffectedBundle.message("notification.started.title"),
-                    describe(plan),
-                    NotificationType.INFORMATION,
-                )
-                delegated = true
-                Verification.runClaimedAndWait(project, prepared)
-            } finally {
-                if (!delegated) state.markFinished()
             }
+        } catch (error: Exception) {
+            state.markFinished()
+            throw error
         }
     }
 

@@ -62,6 +62,18 @@ class AffectedAnalysisStateTest {
         assertEquals(VerificationStatus.RUNNING, state.snapshot().verificationStatus)
     }
 
+    @Test
+    fun `completed snapshot does not retain a mutable module list`() {
+        val state = AffectedStateStore()
+        val revision = state.invalidate()
+        val modules = mutableListOf(module(":ready"))
+
+        assertTrue(state.complete(revision, modules))
+        modules.clear()
+
+        assertEquals(listOf(":ready"), state.snapshot().modules.map(AffectedModule::id))
+    }
+
     private fun module(id: String) = AffectedModule(
         id = id,
         systemId = "GRADLE",

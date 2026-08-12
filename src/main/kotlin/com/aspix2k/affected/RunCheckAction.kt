@@ -56,18 +56,23 @@ abstract class RunCheckAction(
             return
         }
         val groups = TaskPlanner.groups(modules.map(AffectedModule::info), taskName)
-        currentThreadCoroutineScope().launch {
-            try {
-                coroutineScope {
-                    groups.map { group ->
-                        async(Dispatchers.IO) {
-                            BuildSystems.byId(group.systemId)?.runAndWait(project, group.root, group.tasks) ?: true
-                        }
-                    }.awaitAll()
+        try {
+            currentThreadCoroutineScope().launch {
+                try {
+                    coroutineScope {
+                        groups.map { group ->
+                            async(Dispatchers.IO) {
+                                BuildSystems.byId(group.systemId)?.runAndWait(project, group.root, group.tasks) ?: true
+                            }
+                        }.awaitAll()
+                    }
+                } finally {
+                    state.markFinished()
                 }
-            } finally {
-                state.markFinished()
             }
+        } catch (error: Exception) {
+            state.markFinished()
+            throw error
         }
     }
 
