@@ -32,9 +32,13 @@ python3 -m unittest scripts.tests.test_release_currentness
 python3 scripts/release_currentness.py
 python3 -m unittest scripts.tests.test_support_matrix
 python3 scripts/support_matrix.py --check
-python3 -m unittest scripts.tests.test_ci_contracts scripts.tests.test_ci_scope scripts.tests.test_pitest_gate scripts.tests.test_run_gradle
+python3 -m unittest scripts.tests.test_ci_contracts scripts.tests.test_ci_scope scripts.tests.test_fetch_gradle scripts.tests.test_pitest_gate scripts.tests.test_run_gradle
 python3 scripts/ci_contracts.py --check
 ```
+
+`scripts/run_gradle.sh` seeds `~/.gradle/wrapper/dists` from the official
+GitHub `gradle-distributions` release, verifies the wrapper SHA-256, then
+starts Gradle once. `services.gradle.org` is only a fallback.
 
 Pull-request `CI` is the required fast gate. `scripts` always run. The
 plugin graph (`detekt`, tests, Kover verify, plugin zip, Plugin Verifier

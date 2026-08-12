@@ -122,7 +122,11 @@ def flags_for(path: str) -> dict[str, bool] | None:
         ".github/workflows/dependency-graph-submit.yml",
     }:
         return {"plugin": False, "health": False, "codeql": False, "dependencies": True}
-    if path == "scripts/run_gradle.sh" or path == ".github/changelog-section.sh":
+    if path in {
+        "scripts/run_gradle.sh",
+        "scripts/fetch_gradle.py",
+        ".github/changelog-section.sh",
+    }:
         return {"plugin": True, "health": True, "codeql": True, "dependencies": False}
     if path == "config/detekt.yml":
         return {"plugin": True, "health": False, "codeql": False, "dependencies": False}

@@ -72,6 +72,7 @@ def check(root: Path = ROOT) -> None:
         "scripts/support_matrix.py --check",
         "scripts.tests.test_ci_contracts",
         "scripts.tests.test_ci_scope",
+        "scripts.tests.test_fetch_gradle",
         "scripts.tests.test_run_gradle",
         "changelog-section.sh",
         "SHELLCHECK_VERSION",
@@ -177,6 +178,9 @@ def check_wrapper(root: Path) -> None:
         raise CiContractError(f"Gradle wrapper retries must be at least 3, found {retries}")
     if "distributionSha256Sum=" not in text:
         raise CiContractError("Gradle wrapper must keep distributionSha256Sum")
+    runner = read(root / "scripts/run_gradle.sh")
+    if "scripts/fetch_gradle.py" not in runner and "fetch_gradle.py" not in runner:
+        raise CiContractError("run_gradle.sh must seed the wrapper cache before starting Gradle")
 
 
 def wrapper_int(text: str, name: str) -> int:

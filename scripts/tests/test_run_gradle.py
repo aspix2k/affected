@@ -1,4 +1,4 @@
-"""Tests for retrying only Gradle distribution fetch."""
+"""Tests for invoking Gradle after the distribution is already cached."""
 
 from __future__ import annotations
 
@@ -14,10 +14,10 @@ SCRIPT = Path(__file__).resolve().parents[1] / "run_gradle.sh"
 
 
 class RunGradleTest(unittest.TestCase):
-    """Retry wrapper download failures, never retry a finished task graph."""
+    """Do not retry a finished task graph; fetching the zip is a separate step."""
 
-    def test_retries_a_transient_wrapper_failure_then_runs_once(self) -> None:
-        """A SocketException during --version is retried; the real tasks run once."""
+    def test_runs_the_requested_tasks_once(self) -> None:
+        """After the cache is seeded, Gradle is invoked exactly once."""
         with TemporaryDirectory() as directory:
             root = Path(directory)
             wrapper = root / "gradlew"
@@ -26,15 +26,6 @@ class RunGradleTest(unittest.TestCase):
                 f"""#!/usr/bin/env bash
 set -euo pipefail
 echo \"$*\" >> "{log}"
-count=$(wc -l < "{log}" | tr -d ' ')
-if [[ "$*" == "--version" && "$count" == "1" ]]; then
-  echo "java.net.SocketException: Unexpected end of file from server" >&2
-  exit 1
-fi
-if [[ "$*" == "--version" ]]; then
-  echo "Gradle 9.7.0"
-  exit 0
-fi
 echo ran
 exit 0
 """,
@@ -42,7 +33,7 @@ exit 0
             )
             wrapper.chmod(wrapper.stat().st_mode | stat.S_IEXEC)
             env = os.environ.copy()
-            env["TMPDIR"] = directory
+            env["AFFECTED_SKIP_GRADLE_FETCH"] = "1"
             completed = subprocess.run(
                 ["bash", str(SCRIPT), ":test"],
                 cwd=root,
@@ -52,38 +43,23 @@ exit 0
                 env=env,
             )
             self.assertEqual(0, completed.returncode, completed.stderr)
-            calls = log.read_text(encoding="utf-8").splitlines()
-            self.assertEqual(["--version", "--version", ":test"], calls)
+            self.assertEqual([":test"], log.read_text(encoding="utf-8").splitlines())
 
-    def test_non_transient_warmup_failure_is_not_retried(self) -> None:
-        """A real Gradle configuration error must fail immediately."""
+    def test_missing_wrapper_fails_before_gradle(self) -> None:
+        """Refuse to exec a missing wrapper."""
         with TemporaryDirectory() as directory:
-            root = Path(directory)
-            wrapper = root / "gradlew"
-            log = root / "calls.log"
-            wrapper.write_text(
-                f"""#!/usr/bin/env bash
-echo \"$*\" >> "{log}"
-echo "FAILURE: Build failed with an exception." >&2
-echo "What went wrong:" >&2
-exit 1
-""",
-                encoding="utf-8",
-            )
-            wrapper.chmod(wrapper.stat().st_mode | stat.S_IEXEC)
             env = os.environ.copy()
-            env["TMPDIR"] = directory
+            env["AFFECTED_SKIP_GRADLE_FETCH"] = "1"
             completed = subprocess.run(
                 ["bash", str(SCRIPT), ":test"],
-                cwd=root,
+                cwd=directory,
                 check=False,
                 capture_output=True,
                 text=True,
                 env=env,
             )
             self.assertEqual(1, completed.returncode)
-            self.assertEqual(["--version"], log.read_text(encoding="utf-8").splitlines())
-            self.assertNotIn("Gradle distribution fetch failed", completed.stderr)
+            self.assertIn("wrapper is missing", completed.stderr)
 
 
 if __name__ == "__main__":
