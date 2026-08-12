@@ -9,13 +9,59 @@ fi
 
 mode=${1:-}
 if (( $# != 1 )); then
-  echo "Usage: scripts/quality.sh <shell|workflows>" >&2
+  echo "Usage: scripts/quality.sh <analyzers|shell|workflows>" >&2
   exit 2
 fi
 
 quality_tmp_root=${TMPDIR:-/tmp}
 
 case "$mode" in
+  analyzers)
+    analyzer_files=$(mktemp "${quality_tmp_root%/}/affected-analyzer-files.XXXXXX")
+    analyzer_findings=$(mktemp "${quality_tmp_root%/}/affected-analyzer-findings.XXXXXX")
+    trap 'rm -f -- "$analyzer_files" "$analyzer_findings"' EXIT
+    git ls-files -z > "$analyzer_files"
+
+    baseline_files=()
+    shopt -s nocasematch
+    while IFS= read -r -d '' path; do
+      if [[ "$path" =~ (^|/)(detekt|spotbugs|dependency-analysis)[^/]*baseline ]] ||
+        [[ "$path" =~ (^|/)baseline[^/]*(detekt|spotbugs|dependency-analysis) ]]; then
+        baseline_files+=("$path")
+      fi
+    done < "$analyzer_files"
+    shopt -u nocasematch
+    if (( ${#baseline_files[@]} > 0 )); then
+      printf 'Analyzer baseline files are forbidden:\n' >&2
+      printf '  %s\n' "${baseline_files[@]}" >&2
+      exit 1
+    fi
+
+    configurable='baseline(File)?|excludeFilter|includeFilter|onlyAnalyze|omitVisitors'
+    forbidden_config="($configurable)[[:space:]]*(\\.set[[:space:]]*\\(|[:=])|ignoreFailures[[:space:]]*(=|\\.set[[:space:]]*\\()|severity\\([[:space:]]*\"ignore\""
+    grep_status=0
+    git grep -nE "$forbidden_config" -- '*.gradle' '*.gradle.kts' 'config/*.yml' 'config/*.yaml' \
+      > "$analyzer_findings" || grep_status=$?
+    if (( grep_status > 1 )); then
+      echo "Unable to inspect analyzer configuration." >&2
+      exit "$grep_status"
+    fi
+    if [[ -s "$analyzer_findings" ]]; then
+      invalid_findings=()
+      while IFS= read -r finding; do
+        value=${finding#*:*:}
+        value=${value#"${value%%[![:space:]]*}"}
+        value=${value%"${value##*[![:space:]]}"}
+        if [[ "$value" == "ignoreFailures = false" ]]; then continue; fi
+        invalid_findings+=("$finding")
+      done < "$analyzer_findings"
+      if (( ${#invalid_findings[@]} > 0 )); then
+        printf '%s\n' "${invalid_findings[@]}" >&2
+        echo "Analyzer baselines and fail-open settings are forbidden." >&2
+        exit 1
+      fi
+    fi
+    ;;
   shell)
     if ! command -v shellcheck >/dev/null 2>&1; then
       echo "shellcheck is required for shell analysis." >&2
@@ -78,7 +124,7 @@ case "$mode" in
     actionlint -ignore 'unexpected key "queue" for "concurrency" section' "$release"
     ;;
   *)
-    echo "Usage: scripts/quality.sh <shell|workflows>" >&2
+    echo "Usage: scripts/quality.sh <analyzers|shell|workflows>" >&2
     exit 2
     ;;
 esac

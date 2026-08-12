@@ -93,11 +93,13 @@ public final class AffectedMavenConfig {
         if (!Files.isDirectory(realDirectory) || !Files.isWritable(realDirectory)) {
             throw new IOException("manifest directory");
         }
-        Path resolvedTarget = realDirectory.resolve(target.getFileName().toString());
+        Path fileName = target.getFileName();
+        if (fileName == null) throw new IOException("manifest target");
+        Path resolvedTarget = realDirectory.resolve(fileName.toString());
         if (Files.exists(resolvedTarget, LinkOption.NOFOLLOW_LINKS) && Files.isSymbolicLink(resolvedTarget)) {
             throw new IOException("manifest target");
         }
-        Path temporary = Files.createTempFile(realDirectory, target.getFileName().toString() + ".", ".tmp");
+        Path temporary = Files.createTempFile(realDirectory, fileName.toString() + ".", ".tmp");
         try {
             Files.write(temporary, content);
             try {

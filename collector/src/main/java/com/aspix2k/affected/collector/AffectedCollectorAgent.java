@@ -37,7 +37,7 @@ import java.util.stream.Stream;
 public final class AffectedCollectorAgent {
     static final String CODE_SOURCES_PROPERTY = "affected.collector.codeSources";
     static final String TEST_CODE_SOURCES_PROPERTY = "affected.collector.testClasses";
-    public static final long[] THREAD_EXECUTION_IDS = new long[65_536];
+    private static final long[] THREAD_EXECUTION_IDS = new long[65_536];
     private static final CollectorState STATE = new CollectorState();
     private static volatile AffectedMavenConfig.ProjectConfig mavenConfig;
 
@@ -95,6 +95,15 @@ public final class AffectedCollectorAgent {
 
     public static long executionId() {
         return STATE.executionId();
+    }
+
+    public static long currentExecutionId() {
+        long threadId = Thread.currentThread().getId();
+        if (threadId >= 0L && threadId < THREAD_EXECUTION_IDS.length) {
+            long executionId = THREAD_EXECUTION_IDS[(int) threadId];
+            if (executionId != 0L) return executionId;
+        }
+        return executionId();
     }
 
     public static void hitField(Field field) {
@@ -282,7 +291,10 @@ public final class AffectedCollectorAgent {
                     Iterator<Path> iterator = files.iterator();
                     while (iterator.hasNext()) {
                         Path file = iterator.next();
-                        if (!Files.isRegularFile(file) || !file.getFileName().toString().endsWith(".class")) continue;
+                        Path fileName = file.getFileName();
+                        if (!Files.isRegularFile(file) || fileName == null || !fileName.toString().endsWith(".class")) {
+                            continue;
+                        }
                         String relative = path.relativize(file).toString().replace(File.separatorChar, '/');
                         String internalName = relative.substring(0, relative.length() - ".class".length());
                         classes.add(internalName);
@@ -312,7 +324,10 @@ public final class AffectedCollectorAgent {
                     Iterator<Path> iterator = files.iterator();
                     while (iterator.hasNext()) {
                         Path file = iterator.next();
-                        if (!Files.isRegularFile(file) || !file.getFileName().toString().endsWith(".class")) continue;
+                        Path fileName = file.getFileName();
+                        if (!Files.isRegularFile(file) || fileName == null || !fileName.toString().endsWith(".class")) {
+                            continue;
+                        }
                         String relative = path.relativize(file).toString().replace(File.separatorChar, '/');
                         instrumented.add(relative.substring(0, relative.length() - ".class".length()));
                         if (instrumented.size() > MAX_CLASSES) throw new IllegalStateException("instrumentation catalog");

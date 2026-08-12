@@ -103,7 +103,7 @@ public class CollectorContractTest {
         assertNotNull(transformed);
         String transformedConstants = new String(transformed, StandardCharsets.ISO_8859_1);
         assertTrue(transformedConstants.contains("$affectedExecutionId"));
-        assertTrue(transformedConstants.contains("executionId"));
+        assertTrue(transformedConstants.contains("currentExecutionId"));
         state.beginExecution("execution", "fixture.ExampleTest");
         state.hit(ObservedFixture.class);
         state.endExecution("execution");

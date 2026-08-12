@@ -1,4 +1,4 @@
-name: Script and workflow quality
+name: Quality gates
 
 on:
   pull_request:
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  analyze:
+  scripts:
     name: ShellCheck and actionlint
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -61,3 +61,69 @@ jobs:
 
       - name: Require zero actionlint findings
         run: /usr/bin/time --verbose scripts/quality.sh workflows
+
+      - name: Reject analyzer baselines and fail-open settings
+        run: scripts/quality.sh analyzers
+
+  spotbugs:
+    name: SpotBugs (zero findings)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@67621b124fd2e251c5e8a0e6e3b91318f2287669 # v6.3.0
+
+      - name: Require zero Java findings
+        run: >-
+          /usr/bin/time --verbose
+          ./gradlew --no-daemon --no-parallel --max-workers=1
+          :collector:spotbugsMain :collector:spotbugsMaven
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: spotbugs-reports
+          path: collector/build/reports/spotbugs
+          if-no-files-found: warn
+
+  dependencies:
+    name: Gradle dependency analysis (zero findings)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@67621b124fd2e251c5e8a0e6e3b91318f2287669 # v6.3.0
+
+      - name: Free disk space for the downloaded IDE
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          df -h /
+
+      - name: Require zero dependency findings
+        run: >-
+          /usr/bin/time --verbose
+          ./gradlew --no-daemon --no-parallel --max-workers=1
+          buildHealth
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: dependency-analysis-reports
+          path: |
+            build/reports/dependency-analysis
+            collector/build/reports/dependency-analysis
+            core/build/reports/dependency-analysis
+            mcp/build/reports/dependency-analysis
+          if-no-files-found: warn

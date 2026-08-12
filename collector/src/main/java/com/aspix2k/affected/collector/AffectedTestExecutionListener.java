@@ -8,6 +8,7 @@ import org.junit.platform.launcher.TestIdentifier;
 import org.junit.platform.launcher.TestPlan;
 
 import java.util.Collections;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,18 +17,19 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class AffectedTestExecutionListener implements TestExecutionListener {
     private final Set<String> completedClasses = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private final Set<String> expectedClasses = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+    private final Map<String, String> classesByIdentifier = new ConcurrentHashMap<String, String>();
     private final AtomicBoolean unsupported = new AtomicBoolean();
     private volatile CollectorOutput output;
-    private volatile TestPlan plan;
 
     @Override
     public void testPlanExecutionStarted(TestPlan testPlan) {
-        plan = testPlan;
         Set<String> discovered = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
         for (TestIdentifier root : testPlan.getRoots()) {
+            rememberClass(testPlan, root);
             for (TestIdentifier identifier : testPlan.getDescendants(root)) {
+                rememberClass(testPlan, identifier);
                 if (!identifier.isTest()) continue;
-                String testClass = stableClass(testPlan, identifier);
+                String testClass = classesByIdentifier.get(identifier.getUniqueId());
                 if (testClass == null) unsupported.set(true);
                 else discovered.add(testClass);
             }
@@ -40,12 +42,15 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
 
     @Override
     public void dynamicTestRegistered(TestIdentifier testIdentifier) {
+        String testClass = directClass(testIdentifier);
+        if (testClass == null) unsupported.set(true);
+        else classesByIdentifier.put(testIdentifier.getUniqueId(), testClass);
     }
 
     @Override
     public void executionStarted(TestIdentifier testIdentifier) {
-        TestPlan current = plan;
-        String testClass = current == null ? null : stableClass(current, testIdentifier);
+        String testClass = classesByIdentifier.get(testIdentifier.getUniqueId());
+        if (testClass == null) testClass = directClass(testIdentifier);
         if (testClass != null) {
             AffectedCollectorAgent.beginExecution(testIdentifier.getUniqueId(), testClass);
             if ("maven".equals(System.getProperty("affected.collector.runner")) || output == null) {
@@ -62,8 +67,8 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
         TestIdentifier testIdentifier,
         org.junit.platform.engine.TestExecutionResult testExecutionResult
     ) {
-        TestPlan current = plan;
-        String stableClass = current == null ? null : stableClass(current, testIdentifier);
+        String stableClass = classesByIdentifier.get(testIdentifier.getUniqueId());
+        if (stableClass == null) stableClass = directClass(testIdentifier);
         if (stableClass != null) AffectedCollectorAgent.endExecution(testIdentifier.getUniqueId());
         Optional<TestSource> source = testIdentifier.getSource();
         if (!source.isPresent() || !(source.get() instanceof ClassSource)) return;
@@ -100,14 +105,24 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
     private static String stableClass(TestPlan testPlan, TestIdentifier identifier) {
         TestIdentifier current = identifier;
         while (current != null) {
-            Optional<TestSource> source = current.getSource();
-            if (source.isPresent()) {
-                if (source.get() instanceof ClassSource) return ((ClassSource) source.get()).getClassName();
-                if (source.get() instanceof MethodSource) return ((MethodSource) source.get()).getClassName();
-            }
+            String testClass = directClass(current);
+            if (testClass != null) return testClass;
             Optional<TestIdentifier> parent = testPlan.getParent(current);
             current = parent.isPresent() ? parent.get() : null;
         }
+        return null;
+    }
+
+    private void rememberClass(TestPlan testPlan, TestIdentifier identifier) {
+        String testClass = stableClass(testPlan, identifier);
+        if (testClass != null) classesByIdentifier.put(identifier.getUniqueId(), testClass);
+    }
+
+    private static String directClass(TestIdentifier identifier) {
+        Optional<TestSource> source = identifier.getSource();
+        if (!source.isPresent()) return null;
+        if (source.get() instanceof ClassSource) return ((ClassSource) source.get()).getClassName();
+        if (source.get() instanceof MethodSource) return ((MethodSource) source.get()).getClassName();
         return null;
     }
 

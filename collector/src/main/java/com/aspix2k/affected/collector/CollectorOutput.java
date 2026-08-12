@@ -43,13 +43,16 @@ public final class CollectorOutput {
             Files.createDirectory(requestedWorker);
         }
         workerDirectory = requestedWorker.toRealPath(LinkOption.NOFOLLOW_LINKS);
-        if (!workerDirectory.getParent().equals(resolvedRoot) || !Files.isWritable(workerDirectory)) {
+        Path workerParent = workerDirectory.getParent();
+        if (workerParent == null || !workerParent.equals(resolvedRoot) || !Files.isWritable(workerDirectory)) {
             throw new IOException(workerDirectory.toString());
         }
         Files.deleteIfExists(workerDirectory.resolve("complete.manifest"));
         try (java.nio.file.DirectoryStream<Path> files = Files.newDirectoryStream(workerDirectory)) {
             for (Path file : files) {
-                String name = file.getFileName().toString();
+                Path fileName = file.getFileName();
+                if (fileName == null) throw new IOException(file.toString());
+                String name = fileName.toString();
                 if (name.matches("test-[0-9a-f]{64}\\.map")) Files.delete(file);
             }
         }
@@ -138,8 +141,11 @@ public final class CollectorOutput {
 
     private static void writeAtomically(Path target, byte[] bytes) throws Exception {
         Path directory = target.getParent();
-        if (!Files.isDirectory(directory) || !Files.isWritable(directory)) throw new IOException(directory.toString());
-        Path temporary = Files.createTempFile(directory, target.getFileName().toString() + ".", ".tmp");
+        Path fileName = target.getFileName();
+        if (directory == null || fileName == null || !Files.isDirectory(directory) || !Files.isWritable(directory)) {
+            throw new IOException(target.toString());
+        }
+        Path temporary = Files.createTempFile(directory, fileName.toString() + ".", ".tmp");
         try {
             Files.write(temporary, bytes);
             try {

@@ -1,5 +1,9 @@
+import com.github.spotbugs.snom.Confidence
+import com.github.spotbugs.snom.Effort
+
 plugins {
-    java
+    `java-library`
+    id("com.github.spotbugs") version "6.5.10"
 }
 
 val testJavaVersion = providers.gradleProperty("affected.test.javaVersion").orElse("21")
@@ -36,19 +40,23 @@ dependencies {
     compileOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
 
     add(maven.compileOnlyConfigurationName, "org.apache.maven:maven-core:$mavenLatestVersion")
-    add(maven.compileOnlyConfigurationName, "org.codehaus.plexus:plexus-xml:4.1.1")
+    add(maven.compileOnlyConfigurationName, "org.apache.maven:maven-model:$mavenLatestVersion")
+    add(maven.compileOnlyConfigurationName, "org.codehaus.plexus:plexus-utils:3.6.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation(gradleTestKit())
     testImplementation("org.apache.maven:maven-core:$mavenLatestVersion")
-    testImplementation("org.junit.jupiter:junit-jupiter-api:$junitVersion")
-    testImplementation("org.junit.jupiter:junit-jupiter-engine:$junitVersion")
+    testImplementation("org.apache.maven:maven-model:$mavenLatestVersion")
+    testImplementation("org.codehaus.plexus:plexus-utils:3.6.1")
+    testCompileOnly("org.junit.jupiter:junit-jupiter-api:$junitVersion")
+    testImplementation("org.junit.platform:junit-platform-engine:$junitPlatformVersion")
     testImplementation("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitVersion")
     testRuntimeOnly("org.junit.vintage:junit-vintage-engine:$junitVersion")
 
-    add(smoke.implementationConfigurationName, "junit:junit:4.13.2")
-    add(smoke.implementationConfigurationName, "org.junit.jupiter:junit-jupiter-api:$junitVersion")
+    add(smoke.compileOnlyConfigurationName, "junit:junit:4.13.2")
+    add(smoke.compileOnlyConfigurationName, "org.junit.jupiter:junit-jupiter-api:$junitVersion")
+    add(smoke.implementationConfigurationName, "org.junit.platform:junit-platform-engine:$junitPlatformVersion")
     add(smoke.implementationConfigurationName, "org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
     add(smoke.runtimeOnlyConfigurationName, "org.junit.jupiter:junit-jupiter-engine:$junitVersion")
     add(smoke.runtimeOnlyConfigurationName, "org.junit.vintage:junit-vintage-engine:$junitVersion")
@@ -69,6 +77,18 @@ maven.compileClasspath += sourceSets.main.get().output
 
 java {
     toolchain.languageVersion.set(JavaLanguageVersion.of(testJavaVersion.get().toInt()))
+}
+
+spotbugs {
+    toolVersion = "4.10.3"
+    ignoreFailures = false
+    effort = Effort.MAX
+    reportLevel = Confidence.DEFAULT
+    runOnCheck = false
+}
+
+tasks.named("check") {
+    dependsOn("spotbugsMain", "spotbugsMaven")
 }
 
 tasks.withType<JavaCompile>().configureEach {
