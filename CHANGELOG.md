@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reject Java collector and Gradle dependency findings with zero-baseline SpotBugs and dependency-analysis gates.
 - Add zero-finding CodeQL analysis and fork-safe Gradle dependency graph submission.
 - Reject newly introduced vulnerable dependencies and incomplete dependency graph comparisons in pull requests.
+- Run PIT against the IntelliJ test runtime and cover every icon-count range boundary.
 - Keep CMake configuration, generated tests, fixtures, resources, added or deleted targets and incomplete metadata on the full CTest plan.
 - Keep .NET projects on their full test plan for unsupported SDKs, adapters, Microsoft Testing Platform, custom test settings, parameterized or shared fixtures, resources, generated code, changed test assemblies and incomplete evidence.
 - Build and filter every .NET project inside one fail-fast IDE Run session; skipped, selected, failed and cancelled runs cannot replace an unverified baseline.

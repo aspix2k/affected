@@ -25,9 +25,11 @@ class AffectedIconsTest {
     }
 
     @Test
-    fun `adjacent values in one range use the same icon`() {
+    fun `range boundaries use the same icon`() {
+        assertSame(AffectedIcons.withCount(1), AffectedIcons.withCount(2))
         assertSame(AffectedIcons.withCount(3), AffectedIcons.withCount(6))
-        assertSame(AffectedIcons.withCount(20), AffectedIcons.withCount(500))
+        assertSame(AffectedIcons.withCount(7), AffectedIcons.withCount(15))
+        assertSame(AffectedIcons.withCount(16), AffectedIcons.withCount(Int.MAX_VALUE))
     }
 
     @Test
