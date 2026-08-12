@@ -123,6 +123,36 @@ class CiContractsTest(unittest.TestCase):
                 with self.assertRaisesRegex(ci_contracts.CiContractError, "Dependabot version-update pull requests"):
                     ci_contracts.check(root)
 
+    def test_submit_must_accept_main_workflow_dispatch(self) -> None:
+        """GITHUB_TOKEN merges do not fire push generate; dispatch is the backfill."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/dependency-graph-submit.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace("push|workflow_dispatch", "push", 1),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "workflow_dispatch"):
+                ci_contracts.check(root)
+
+    def test_mcp_module_must_enforce_the_patched_jackson_bom(self) -> None:
+        """The MCP Server plugin pulls Jackson 2.19 unless the BOM is enforced."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / "mcp/build.gradle.kts"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    'add("intellijPlatformDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.1"))\n',
+                    "",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "Jackson BOM"):
+                ci_contracts.check(root)
+
     def copy_workflows(self, root: Path) -> None:
         """Copy the production workflow set into a temporary repository."""
         production = Path(__file__).resolve().parents[2]
@@ -133,10 +163,12 @@ class CiContractsTest(unittest.TestCase):
             ".github/workflows/mutation.yml",
             ".github/workflows/dependency-review.yml",
             ".github/workflows/dependency-graph.yml",
+            ".github/workflows/dependency-graph-submit.yml",
             ".github/workflows/queue.yml",
             "scripts/ci_scope.py",
             "scripts/run_gradle.sh",
             "settings.gradle.kts",
+            "mcp/build.gradle.kts",
             "gradle/wrapper/gradle-wrapper.properties",
         ):
             destination = root / relative

@@ -40,7 +40,9 @@ python3 scripts/mcp_capabilities.py --check
 
 `scripts/run_gradle.sh` seeds `~/.gradle/wrapper/dists` from the official
 GitHub `gradle-distributions` release, verifies the wrapper SHA-256, then
-starts Gradle once. `services.gradle.org` is only a fallback.
+starts Gradle. A cache-redirector 5xx is retried with Maven Central first;
+compilation and test failures still run once. `services.gradle.org` is only
+a fallback for the zip itself.
 
 Pull-request `CI` is the required fast gate. `scripts` always run. The
 plugin graph (`detekt`, tests, Kover verify, plugin zip, Plugin Verifier

@@ -31,8 +31,14 @@ val maven4Distribution = configurations.create("maven4Distribution") {
 }
 
 repositories {
-    maven("https://cache-redirector.jetbrains.com/repo1.maven.org/maven2")
-    mavenCentral()
+    val mavenCentralMirror = "https://cache-redirector.jetbrains.com/repo1.maven.org/maven2"
+    if (System.getenv("AFFECTED_PREFER_MAVEN_CENTRAL") == "1") {
+        mavenCentral()
+        maven(mavenCentralMirror)
+    } else {
+        maven(mavenCentralMirror)
+        mavenCentral()
+    }
     maven("https://cache-redirector.jetbrains.com/intellij-dependencies")
 }
 

@@ -14,52 +14,92 @@ SCRIPT = Path(__file__).resolve().parents[1] / "run_gradle.sh"
 
 
 class RunGradleTest(unittest.TestCase):
-    """Do not retry a finished task graph; fetching the zip is a separate step."""
+    """Fetch the zip once; retry only transient repository HTTP errors."""
 
-    def test_runs_the_requested_tasks_once(self) -> None:
-        """After the cache is seeded, Gradle is invoked exactly once."""
-        with TemporaryDirectory() as directory:
-            root = Path(directory)
-            wrapper = root / "gradlew"
-            log = root / "calls.log"
-            wrapper.write_text(
-                f"""#!/usr/bin/env bash
+    def test_runs_the_requested_tasks_once_when_gradle_succeeds(self) -> None:
+        """A green task graph is not retried."""
+        calls, completed = self.run_wrapper(
+            """#!/usr/bin/env bash
 set -euo pipefail
-echo \"$*\" >> "{log}"
+echo "$*" >> "$CALLS"
 echo ran
 exit 0
-""",
-                encoding="utf-8",
-            )
-            wrapper.chmod(wrapper.stat().st_mode | stat.S_IEXEC)
-            env = os.environ.copy()
-            env["AFFECTED_SKIP_GRADLE_FETCH"] = "1"
-            completed = subprocess.run(
-                ["bash", str(SCRIPT), ":test"],
-                cwd=root,
-                check=False,
-                capture_output=True,
-                text=True,
-                env=env,
-            )
-            self.assertEqual(0, completed.returncode, completed.stderr)
-            self.assertEqual([":test"], log.read_text(encoding="utf-8").splitlines())
+"""
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual([":test"], calls)
+
+    def test_does_not_retry_a_failed_task_graph(self) -> None:
+        """Compilation and test failures still fail the job once."""
+        calls, completed = self.run_wrapper(
+            """#!/usr/bin/env bash
+set -euo pipefail
+echo "$*" >> "$CALLS"
+echo "FAILURE: There were failing tests"
+exit 1
+"""
+        )
+        self.assertEqual(1, completed.returncode)
+        self.assertEqual([":test"], calls)
+
+    def test_retries_a_cache_redirector_bad_gateway_on_maven_central(self) -> None:
+        """A 502 from the JetBrains mirror must not fail the required job."""
+        calls, completed = self.run_wrapper(
+            """#!/usr/bin/env bash
+set -euo pipefail
+echo "$* prefer=${AFFECTED_PREFER_MAVEN_CENTRAL:-0}" >> "$CALLS"
+if [[ "${AFFECTED_PREFER_MAVEN_CENTRAL:-}" != 1 ]]; then
+  echo "Could not GET 'https://cache-redirector.jetbrains.com/repo1.maven.org/maven2/okio-bom.pom'."
+  echo "Received status code 502 from server: Bad Gateway"
+  exit 1
+fi
+echo ran
+exit 0
+"""
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual([":test prefer=0", ":test prefer=1"], calls)
+        self.assertIn("Maven Central first", completed.stderr)
 
     def test_missing_wrapper_fails_before_gradle(self) -> None:
         """Refuse to exec a missing wrapper."""
         with TemporaryDirectory() as directory:
-            env = os.environ.copy()
-            env["AFFECTED_SKIP_GRADLE_FETCH"] = "1"
             completed = subprocess.run(
                 ["bash", str(SCRIPT), ":test"],
                 cwd=directory,
                 check=False,
                 capture_output=True,
                 text=True,
-                env=env,
+                env=self.env(),
             )
             self.assertEqual(1, completed.returncode)
             self.assertIn("wrapper is missing", completed.stderr)
+
+    def run_wrapper(self, script: str) -> tuple[list[str], subprocess.CompletedProcess[str]]:
+        """Run run_gradle.sh against a fake wrapper and return its call log."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            calls = root / "calls.log"
+            wrapper = root / "gradlew"
+            wrapper.write_text(script.replace("$CALLS", str(calls)), encoding="utf-8")
+            wrapper.chmod(wrapper.stat().st_mode | stat.S_IEXEC)
+            completed = subprocess.run(
+                ["bash", str(SCRIPT), ":test"],
+                cwd=root,
+                check=False,
+                capture_output=True,
+                text=True,
+                env=self.env(),
+            )
+            lines = calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
+            return lines, completed
+
+    def env(self) -> dict[str, str]:
+        """Skip the distribution fetch and do not sleep between retries."""
+        env = os.environ.copy()
+        env["AFFECTED_SKIP_GRADLE_FETCH"] = "1"
+        env["AFFECTED_GRADLE_RETRY_SLEEP"] = "0"
+        return env
 
 
 if __name__ == "__main__":
