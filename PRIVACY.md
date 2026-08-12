@@ -4,8 +4,8 @@ Last updated: 12 August 2026
 
 ## The short version
 
-Affected collects nothing, sends nothing, and has no server. Everything it does
-happens on your machine.
+Affected has no telemetry or server. Project analysis and verification happen
+on your machine.
 
 ## What the plugin reads
 
@@ -33,16 +33,19 @@ Five settings, in your IDE configuration directory:
 
 Compatible exact-selection adapters also keep a derived cache below the IDE
 system directory. It contains local paths, test identities, dependency maps,
-content hashes and runtime fingerprints, but no source code or compiled-file
-contents. Selected, incomplete, failed and cancelled runs do not replace the
-last complete cache. The cache is local to the project and can be deleted
+content hashes and runtime fingerprints, but no copies of your source code or
+compiled project outputs. The .NET adapter also builds and caches its own local
+analyzer binary. Selected, incomplete, failed and cancelled runs do not replace
+the last complete cache. The cache is local to the project and can be deleted
 safely; the next run uses the full test plan.
 
 ## What the plugin runs
 
 To gather the graph and run verification, the plugin executes the version
-control, build, language and test tools your project already uses. Their output
-goes to the Run tool window of your IDE and nowhere else.
+control, build, language and test tools your project already uses. Verification
+output appears in the Run tool window. The plugin may capture bounded metadata
+responses locally, and tools may create their standard metadata files, such as
+CMake File API queries, in the project build directory.
 
 ## Network
 
@@ -56,12 +59,11 @@ your browser.
 
 If the plugin throws an exception, the IDE offers to report it. Choosing that
 opens a **prefilled GitHub issue in your browser** containing the stack trace,
-the IDE build, the operating system and the plugin version. Nothing is
-transmitted until you submit the form yourself, and the report contains only
-what the form shows you. Declining sends nothing.
+the IDE build, the operating system and the plugin version. Opening the page
+sends that prefilled URL to GitHub, but does not publish an issue until you
+submit the form. Declining sends nothing.
 
-Since the issue is filed on GitHub, GitHub's own privacy terms apply to it once
-you submit.
+GitHub's own privacy terms apply when the prefilled page opens.
 
 ## Statistics from JetBrains Marketplace
 
