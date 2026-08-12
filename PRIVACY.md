@@ -1,49 +1,51 @@
 # Privacy Policy
 
-Last updated: 11 August 2026
+Last updated: 12 August 2026
 
 ## The short version
 
-Affected collects nothing, sends nothing, and has no server. Everything it does
-happens on your machine.
+Affected has no telemetry or server. Project analysis and verification happen
+on your machine.
 
 ## What the plugin reads
 
 To decide what to run, the plugin reads:
 
 - the list of changed files, from the version control your IDE already tracks;
-- the module graph, from the IDE project model for Gradle and Maven, and from
-  `cargo metadata`, `go list`, `package.json`, `ProjectReference` or
-  `pyproject.toml` for the other build systems;
+- the project graph, from IDE models and the standard manifests or metadata
+  commands of your build system;
 - the changed lines of a source file, to tell whether a public declaration was
   touched;
-- compiled production and test outputs, resources and runtime classpaths for
-  compatible Gradle and Maven test-class selection.
+- compiled outputs, resources, runtime classpaths and test plans when a
+  compatible runner can select individual tests.
 
 All of it is processed locally.
 
 ## What the plugin stores
 
-Four settings, in your IDE configuration directory:
+Five settings, in your IDE configuration directory:
 
 - the base branch to compare against;
 - whether consumers of a changed API are checked;
 - whether the verification runs before a commit;
-- whether it runs before a push.
+- whether it runs before a push;
+- whether the toolbar icon animates during verification.
 
-Compatible Gradle and Maven runs also keep a derived cache below the IDE system
-directory. It contains task and test-class names, local class-output paths,
-production bytecode hashes and runtime fingerprints. It contains no source code
-or class-file contents. Selected, incomplete, failed and cancelled runs do not
-replace the last complete cache. The cache is local to the project and can be
-deleted safely; the next run falls back to the full test task.
+Compatible exact-selection adapters also keep a derived cache below the IDE
+system directory. It contains local paths, test identities, dependency maps,
+content hashes and runtime fingerprints, but no copies of your source code or
+compiled project outputs. The .NET adapter also builds and caches its own local
+analyzer binary. Selected, incomplete, failed and cancelled runs do not replace
+the last complete cache. The cache is local to the project and can be deleted
+safely; the next run uses the full test plan.
 
 ## What the plugin runs
 
-To gather the graph and to run the verification, the plugin executes the tools
-your project already uses: `git`, Gradle, Maven, `cargo`, `go`, `npm`, `yarn`,
-`pnpm`, `dotnet`, `pytest` and `mypy`. Their output goes to the Run tool window
-of your IDE and nowhere else.
+To gather the graph and run verification, the plugin executes the version
+control, build, language and test tools your project already uses. Verification
+output appears in the Run tool window. The plugin may capture bounded metadata
+responses locally and may create standard metadata requests, such as CMake File
+API queries, in the project build directory.
 
 ## Network
 
@@ -57,12 +59,11 @@ your browser.
 
 If the plugin throws an exception, the IDE offers to report it. Choosing that
 opens a **prefilled GitHub issue in your browser** containing the stack trace,
-the IDE build, the operating system and the plugin version. Nothing is
-transmitted until you submit the form yourself, and the report contains only
-what the form shows you. Declining sends nothing.
+the IDE build, the operating system and the plugin version. Opening the page
+sends that prefilled URL to GitHub, but does not publish an issue until you
+submit the form. Declining sends nothing.
 
-Since the issue is filed on GitHub, GitHub's own privacy terms apply to it once
-you submit.
+GitHub's own privacy terms apply when the prefilled page opens.
 
 ## Statistics from JetBrains Marketplace
 

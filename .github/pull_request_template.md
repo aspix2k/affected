@@ -2,6 +2,5 @@
 
 ## How it was verified
 
-- [ ] `./gradlew test`
-- [ ] `./gradlew verifyPlugin`
-- [ ] Tried in the IDE with `./gradlew runIde`
+List the commands, environments and observed results. See
+[CONTRIBUTING.md](../CONTRIBUTING.md#building) for the current gates.
