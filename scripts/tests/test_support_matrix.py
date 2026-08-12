@@ -53,8 +53,45 @@ class SupportMatrixTest(unittest.TestCase):
             matrix["adapters"][0]["gates"] = [".github/workflows"]
             self.write(root / "config/support-matrix.json", json.dumps(matrix))
 
+            with self.assertRaisesRegex(support_matrix.SupportMatrixError, "workflow"):
+                support_matrix.check(root)
+
+    def test_gate_must_be_a_workflow_with_an_executable_step(self) -> None:
+        """Reject ordinary files and inert workflow declarations as CI gates."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            matrix["adapters"][0]["gates"] = ["README.md"]
+            self.write(root / "config/support-matrix.json", json.dumps(matrix))
+
+            with self.assertRaisesRegex(support_matrix.SupportMatrixError, "workflow"):
+                support_matrix.check(root)
+
+            matrix["adapters"][0]["gates"] = [".github/workflows/empty.yml"]
+            self.write(root / "config/support-matrix.json", json.dumps(matrix))
+            self.write(
+                root / ".github/workflows/empty.yml",
+                "name: empty\non: workflow_dispatch\njobs:\n  verify:\n    runs-on: ubuntu-latest\n    steps:\n      - name: inert\n",
+            )
+
             with self.assertRaisesRegex(
-                support_matrix.SupportMatrixError, "regular file"
+                support_matrix.SupportMatrixError, "executable"
+            ):
+                support_matrix.check(root)
+
+    def test_selection_proof_is_bound_to_its_declared_gate_execution(self) -> None:
+        """Require the exact workflow command that executes every named proof."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            proof = matrix["adapters"][0]["selectionProofs"][0]
+            proof["gateMarker"] = "absent command"
+            self.write(root / "config/support-matrix.json", json.dumps(matrix))
+
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError, "gate marker"
             ):
                 support_matrix.check(root)
 
@@ -76,6 +113,31 @@ class SupportMatrixTest(unittest.TestCase):
             self.write(root / "config/support-matrix.json", json.dumps(matrix))
 
             with self.assertRaisesRegex(support_matrix.SupportMatrixError, "reviewed"):
+                support_matrix.check(root)
+
+    def test_reviewed_date_must_be_calendar_valid_and_not_future(self) -> None:
+        """Reject impossible and future exclusion-review dates."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            product = {
+                "id": "retired",
+                "name": "Retired IDE",
+                "support": "excluded",
+                "reason": "The product is no longer relevant to the supported platform range.",
+                "reviewed": "2026-02-30",
+            }
+            matrix["products"].append(product)
+            self.write(root / "config/support-matrix.json", json.dumps(matrix))
+
+            with self.assertRaisesRegex(support_matrix.SupportMatrixError, "calendar"):
+                support_matrix.check(root)
+
+            product["reviewed"] = "2026-08-13"
+            self.write(root / "config/support-matrix.json", json.dumps(matrix))
+
+            with self.assertRaisesRegex(support_matrix.SupportMatrixError, "Future"):
                 support_matrix.check(root)
 
     def test_planned_product_is_linked_and_not_counted_as_supported(self) -> None:
@@ -143,9 +205,89 @@ class SupportMatrixTest(unittest.TestCase):
             ):
                 support_matrix.check(root)
 
+    def test_support_entries_reject_unknown_fields(self) -> None:
+        """Keep every support level closed to unreviewed schema extensions."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            matrix["products"] += [
+                {
+                    "id": "planned-ide",
+                    "name": "Planned IDE",
+                    "support": "planned",
+                    "reason": "A dedicated adapter and public fixture are still required.",
+                    "issue": "https://github.com/aspix2k/affected/issues/120",
+                    "reviewed": "2026-08-12",
+                },
+                {
+                    "id": "excluded-ide",
+                    "name": "Excluded IDE",
+                    "support": "excluded",
+                    "reason": "The product is no longer relevant to the supported platform range.",
+                    "reviewed": "2026-08-12",
+                },
+            ]
+            matrix["operatingSystems"].append(
+                {
+                    "id": "macos",
+                    "name": "macOS",
+                    "support": "contract",
+                    "fixtures": ["fixtures/os"],
+                    "gates": [".github/workflows/conformance.yml"],
+                }
+            )
+            cases = (
+                *((product, "product") for product in matrix["products"]),
+                *(
+                    (operating_system, "operating system")
+                    for operating_system in matrix["operatingSystems"]
+                ),
+                (matrix["adapters"][0], "adapter"),
+                (matrix["adapters"][0]["selectionProofs"][0], "selection proof"),
+            )
+            for entry, label in cases:
+                entry["unreviewed"] = True
+                self.write(root / "config/support-matrix.json", json.dumps(matrix))
+                with self.assertRaisesRegex(support_matrix.SupportMatrixError, label):
+                    support_matrix.check(root)
+                del entry["unreviewed"]
+
+    def test_composite_selection_proof_must_cover_exactly_the_claimed_units(
+        self,
+    ) -> None:
+        """Prevent one proof from silently supporting extra selection precision."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            matrix["adapters"][0]["selection"] = ["file", "package"]
+            matrix["adapters"][0]["selectionProofs"][0]["units"] = ["file"]
+            self.write(root / "config/support-matrix.json", json.dumps(matrix))
+
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError, "selection proofs"
+            ):
+                support_matrix.check(root)
+
     def test_repository_matrix_is_complete_and_current(self) -> None:
         """Validate the real production registrations and generated support page."""
         support_matrix.check(Path(__file__).resolve().parents[2])
+
+    def test_conformance_workflow_runs_for_support_claim_changes(self) -> None:
+        """Keep support claims inside the pull-request conformance trigger."""
+        workflow = (
+            Path(__file__).resolve().parents[2] / ".github/workflows/conformance.yml"
+        ).read_text(encoding="utf-8")
+        for path in (
+            "config/support-matrix.json",
+            "scripts/support_matrix.py",
+            "scripts/tests/test_support_matrix.py",
+            "SUPPORT.md",
+            "README.md",
+            "src/main/resources/META-INF/plugin.xml",
+        ):
+            self.assertIn(f'- "{path}"', workflow)
 
     def write_repository(
         self, root: Path, adapters: list[dict[str, object]] | None = None
@@ -158,12 +300,15 @@ class SupportMatrixTest(unittest.TestCase):
             "languages": ["Example"],
             "runners": ["Example runner"],
             "selection": ["package"],
-            "selectionProofs": {
-                "package": {
+            "selectionProofs": [
+                {
+                    "units": ["package"],
                     "path": "fixtures/selection-test.txt",
                     "marker": "selects one package",
+                    "gate": ".github/workflows/conformance.yml",
+                    "gateMarker": "Run support matrix tests",
                 }
-            },
+            ],
             "versions": "1.0",
             "support": "supported",
             "fixtures": ["fixtures/example"],
@@ -206,8 +351,18 @@ class SupportMatrixTest(unittest.TestCase):
         self.write(root / "fixtures/ide", "fixture\n")
         self.write(root / "fixtures/os", "fixture\n")
         self.write(root / "fixtures/selection-test.txt", "selects one package\n")
-        self.write(root / ".github/workflows/conformance.yml", "name: conformance\n")
-        self.write(root / ".github/workflows/ci.yml", "name: ci\n")
+        workflow = (
+            "name: conformance\n"
+            "on: workflow_dispatch\n"
+            "jobs:\n"
+            "  verify:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    steps:\n"
+            "      - name: Run support matrix tests\n"
+            "        run: python -m unittest scripts.tests.test_support_matrix\n"
+        )
+        self.write(root / ".github/workflows/conformance.yml", workflow)
+        self.write(root / ".github/workflows/ci.yml", workflow)
         self.write(
             root / "README.md",
             f"{support_matrix.SUMMARY_START}\n{support_matrix.readme_summary(matrix)}\n"

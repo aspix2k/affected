@@ -10,6 +10,7 @@ import re
 import sys
 import tempfile
 import xml.etree.ElementTree as ElementTree
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,7 @@ DATE = re.compile(r"20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])")
 ISSUE = re.compile(r"https://github\.com/aspix2k/affected/issues/([1-9]\d*)")
 IDENTIFIER = re.compile(r"[a-z][a-z0-9-]{1,63}")
 ADAPTER_IDENTIFIER = re.compile(r"[A-Z][A-Z0-9_]{1,31}")
+WORKFLOW_PATH = re.compile(r"\.github/workflows/[A-Za-z0-9][A-Za-z0-9_.-]*\.yml")
 SELECTION_LABELS = {
     "test": "test",
     "class": "test class",
@@ -104,6 +106,25 @@ def require_strings(value: object, field: str) -> list[str]:
     return result
 
 
+def require_fields(value: dict[str, Any], allowed: set[str], field: str) -> None:
+    """Reject undeclared fields so support claims cannot grow implicitly."""
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        raise SupportMatrixError(f"Unexpected {field} fields: {unknown}")
+
+
+def require_reviewed_date(value: object, field: str) -> str:
+    """Require a calendar-valid review date that is not in the future."""
+    reviewed = require_string(value, field, DATE)
+    try:
+        reviewed_date = date.fromisoformat(reviewed)
+    except ValueError as error:
+        raise SupportMatrixError(f"Invalid calendar {field}: {reviewed}") from error
+    if reviewed_date > date.today():
+        raise SupportMatrixError(f"Future {field}: {reviewed}")
+    return reviewed
+
+
 def require_evidence(
     root: Path, value: object, field: str, *, regular_files: bool = False
 ) -> list[str]:
@@ -119,6 +140,42 @@ def require_evidence(
                 f"Evidence gate must be a regular file for {field}: {text}"
             )
     return paths
+
+
+def require_workflow(root: Path, text: str, field: str) -> str:
+    """Require one executable GitHub Actions workflow at the declared gate path."""
+    if WORKFLOW_PATH.fullmatch(text) is None:
+        raise SupportMatrixError(
+            f"Evidence gate must be a .github workflow for {field}: {text}"
+        )
+    relative = Path(text)
+    path = secure_path(root, relative)
+    if not path.is_file() or path.is_symlink():
+        raise SupportMatrixError(
+            f"Evidence gate must be a regular file for {field}: {text}"
+        )
+    workflow = read_file(root, relative)
+    if re.search(r"(?m)^on:(?:\s+\S.*)?$", workflow) is None:
+        raise SupportMatrixError(f"Evidence gate has no trigger for {field}: {text}")
+    if re.search(r"(?m)^jobs:\s*(?:#.*)?$", workflow) is None:
+        raise SupportMatrixError(f"Evidence gate has no jobs for {field}: {text}")
+    if re.search(r"(?m)^  [A-Za-z0-9_-]+:\s*(?:#.*)?$", workflow) is None:
+        raise SupportMatrixError(f"Evidence gate has no job for {field}: {text}")
+    if re.search(r"(?m)^    steps:\s*(?:#.*)?$", workflow) is None:
+        raise SupportMatrixError(f"Evidence gate has no steps for {field}: {text}")
+    if re.search(r"(?m)^ {6}- (?:uses|run):|^ {8}(?:uses|run):", workflow) is None:
+        raise SupportMatrixError(
+            f"Evidence gate has no executable step for {field}: {text}"
+        )
+    return workflow
+
+
+def require_gates(root: Path, value: object, field: str) -> list[str]:
+    """Validate every declared evidence gate as an executable GitHub workflow."""
+    gates = require_strings(value, field)
+    for gate in gates:
+        require_workflow(root, gate, field)
+    return gates
 
 
 def registered_adapters(root: Path) -> dict[str, str]:
@@ -173,9 +230,13 @@ def validate_products(root: Path, products: object) -> list[dict[str, Any]]:
         identifiers.add(identifier)
         names.add(name)
         if support in {"excluded", "planned"}:
+            allowed = {"id", "name", "support", "reason", "reviewed"}
+            if support == "planned":
+                allowed.add("issue")
+            require_fields(product, allowed, "product")
             reason = require_string(product.get("reason"), f"{identifier} reason")
-            reviewed = require_string(
-                product.get("reviewed"), f"{identifier} reviewed", DATE
+            reviewed = require_reviewed_date(
+                product.get("reviewed"), f"{identifier} reviewed"
             )
             if len(reason) < 20:
                 raise SupportMatrixError(
@@ -187,17 +248,19 @@ def validate_products(root: Path, products: object) -> list[dict[str, Any]]:
                     product.get("issue"), f"{identifier} issue", ISSUE
                 )
         elif support in {"verified", "platform"}:
+            require_fields(
+                product,
+                {"id", "name", "support", "since", "fixtures", "gates"},
+                "product",
+            )
             product["since"] = require_string(
                 product.get("since"), f"{identifier} since"
             )
             product["fixtures"] = require_evidence(
                 root, product.get("fixtures"), f"{identifier} fixtures"
             )
-            product["gates"] = require_evidence(
-                root,
-                product.get("gates"),
-                f"{identifier} gates",
-                regular_files=True,
+            product["gates"] = require_gates(
+                root, product.get("gates"), f"{identifier} gates"
             )
         else:
             raise SupportMatrixError(
@@ -221,6 +284,11 @@ def validate_operating_systems(root: Path, systems: object) -> list[dict[str, An
         if identifier in identifiers:
             raise SupportMatrixError(f"Duplicate operating system: {identifier}")
         identifiers.add(identifier)
+        require_fields(
+            system,
+            {"id", "name", "support", "fixtures", "gates"},
+            "operating system",
+        )
         require_string(system.get("name"), f"{identifier} name")
         level = require_string(system.get("support"), f"{identifier} support")
         if level not in {"native", "contract"}:
@@ -230,11 +298,8 @@ def validate_operating_systems(root: Path, systems: object) -> list[dict[str, An
         system["fixtures"] = require_evidence(
             root, system.get("fixtures"), f"{identifier} fixtures"
         )
-        system["gates"] = require_evidence(
-            root,
-            system.get("gates"),
-            f"{identifier} gates",
-            regular_files=True,
+        system["gates"] = require_gates(
+            root, system.get("gates"), f"{identifier} gates"
         )
         result.append(system)
     return result
@@ -259,6 +324,23 @@ def validate_adapters(root: Path, adapters: object) -> list[dict[str, Any]]:
             raise SupportMatrixError(f"Duplicate adapter: {identifier}")
         identifiers.add(identifier)
         implementations.add(implementation)
+        require_fields(
+            adapter,
+            {
+                "id",
+                "implementation",
+                "ecosystem",
+                "languages",
+                "runners",
+                "selection",
+                "selectionProofs",
+                "versions",
+                "support",
+                "fixtures",
+                "gates",
+            },
+            "adapter",
+        )
         if (
             require_string(adapter.get("support"), f"{identifier} support")
             != "supported"
@@ -277,40 +359,83 @@ def validate_adapters(root: Path, adapters: object) -> list[dict[str, Any]]:
             raise SupportMatrixError(
                 f"Unsupported selection units for {identifier}: {sorted(unknown_selection)}"
             )
+        adapter["gates"] = require_gates(
+            root, adapter.get("gates"), f"{identifier} gates"
+        )
         proofs = adapter.get("selectionProofs")
-        if not isinstance(proofs, dict) or set(proofs) != set(adapter["selection"]):
+        if not isinstance(proofs, list) or not proofs or len(proofs) > MAX_EVIDENCE:
             raise SupportMatrixError(
-                f"{identifier} selection proofs must exactly match its selection units"
+                f"{identifier} selection proofs must be a bounded list"
             )
-        normalized_proofs: dict[str, dict[str, str]] = {}
-        for unit in adapter["selection"]:
-            proof = proofs[unit]
-            if not isinstance(proof, dict) or set(proof) != {"path", "marker"}:
-                raise SupportMatrixError(f"Invalid {identifier} {unit} selection proof")
+        normalized_proofs: list[dict[str, Any]] = []
+        covered_units: set[str] = set()
+        for proof in proofs:
+            if not isinstance(proof, dict):
+                raise SupportMatrixError(f"Invalid {identifier} selection proof")
+            require_fields(
+                proof,
+                {"units", "path", "marker", "gate", "gateMarker"},
+                "selection proof",
+            )
+            units = require_strings(
+                proof.get("units"), f"{identifier} selection proof units"
+            )
+            if set(units) - set(adapter["selection"]) or covered_units.intersection(
+                units
+            ):
+                raise SupportMatrixError(
+                    f"{identifier} selection proofs must exactly match its selection units"
+                )
+            covered_units.update(units)
             path = require_evidence(
                 root,
                 [proof.get("path")],
-                f"{identifier} {unit} selection proof",
+                f"{identifier} selection proof",
                 regular_files=True,
             )[0]
             marker = require_string(
-                proof.get("marker"), f"{identifier} {unit} selection marker"
+                proof.get("marker"), f"{identifier} selection marker"
             )
             occurrences = read_file(root, Path(path)).count(marker)
             if occurrences != 1:
                 raise SupportMatrixError(
-                    f"{identifier} {unit} selection marker must occur exactly once: {marker}"
+                    f"{identifier} selection marker must occur exactly once: {marker}"
                 )
-            normalized_proofs[unit] = {"path": path, "marker": marker}
+            gate = require_string(
+                proof.get("gate"), f"{identifier} selection proof gate"
+            )
+            if gate not in adapter["gates"]:
+                raise SupportMatrixError(
+                    f"{identifier} selection proof gate must be one of its gates: {gate}"
+                )
+            gate_marker = require_string(
+                proof.get("gateMarker"), f"{identifier} selection proof gate marker"
+            )
+            if (
+                require_workflow(root, gate, f"{identifier} selection proof").count(
+                    gate_marker
+                )
+                != 1
+            ):
+                raise SupportMatrixError(
+                    f"{identifier} selection proof gate marker must occur exactly once: {gate_marker}"
+                )
+            normalized_proofs.append(
+                {
+                    "units": units,
+                    "path": path,
+                    "marker": marker,
+                    "gate": gate,
+                    "gateMarker": gate_marker,
+                }
+            )
+        if covered_units != set(adapter["selection"]):
+            raise SupportMatrixError(
+                f"{identifier} selection proofs must exactly match its selection units"
+            )
         adapter["selectionProofs"] = normalized_proofs
         adapter["fixtures"] = require_evidence(
             root, adapter.get("fixtures"), f"{identifier} fixtures"
-        )
-        adapter["gates"] = require_evidence(
-            root,
-            adapter.get("gates"),
-            f"{identifier} gates",
-            regular_files=True,
         )
         result.append(adapter)
     registered = set(registered_adapters(root))
@@ -412,9 +537,7 @@ def render(matrix: dict[str, Any]) -> str:
         "|---|---|---|---|---|---|",
     ]
     for adapter in adapters:
-        proof_paths = [
-            adapter["selectionProofs"][unit]["path"] for unit in adapter["selection"]
-        ]
+        proof_paths = [proof["path"] for proof in adapter["selectionProofs"]]
         evidence = links(
             list(dict.fromkeys(adapter["fixtures"] + proof_paths + adapter["gates"]))
         )
