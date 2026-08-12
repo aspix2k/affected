@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.AffectedRunSessions
 import com.intellij.execution.RunContentExecutor
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.ProcessEvent
@@ -47,6 +48,7 @@ object CommandRunner {
             unresolvedMessage ?: DEFAULT_UNRESOLVED_MESSAGE,
         )
         ProcessTerminatedListener.attach(handler)
+        AffectedRunSessions.getInstance(project).register(handler)
 
         ApplicationManager.getApplication().invokeLater {
             if (project.isDisposed) {
@@ -76,6 +78,7 @@ object CommandRunner {
             unresolvedMessage ?: DEFAULT_UNRESOLVED_MESSAGE,
         )
         ProcessTerminatedListener.attach(handler)
+        AffectedRunSessions.getInstance(project).register(handler)
         val completed = AtomicBoolean(false)
 
         return suspendCancellableCoroutine { continuation ->

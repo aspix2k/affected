@@ -62,6 +62,24 @@ relationship. Otherwise **Affected** keeps the larger unit shown in the same row
 | Aqua | JetBrains discontinued the standalone product before the supported platform range. | 2026-08-12 |
 | AppCode | JetBrains discontinued the product before the supported platform range. | 2026-08-12 |
 
+## JetBrains MCP Server
+
+The optional JetBrains MCP Server plugin exposes the same analysis snapshot and
+exclusive run lease as the toolbar. Read tools never write project state.
+
+| Operation | MCP tool | Kind | UI counterpart |
+|---|---|---|---|
+| inspect-modules | `affected_modules` | read | `com.aspix2k.affected.Modules` |
+| verification-plan | `affected_verification_plan` | read | MCP-only |
+| changed-files | `affected_changed_files` | read | MCP-only |
+| run-verification | `affected_run_verification` | mutating | `com.aspix2k.affected.Run`, `com.aspix2k.affected.RunBeforeCommit`, `com.aspix2k.affected.RunBeforePush` |
+| run-named-task | `affected_run_task` | mutating | `com.aspix2k.affected.Detekt`, `com.aspix2k.affected.Lint`, `com.aspix2k.affected.Coverage` |
+| stop-owned | `affected_stop` | mutating | MCP-only |
+| status | `affected_status` | read | MCP-only |
+| available-tasks | `affected_available_tasks` | read | MCP-only |
+| configure | `affected_configure` | mutating | `com.aspix2k.affected.CheckConsumers`, `com.aspix2k.affected.RunBeforeCommit`, `com.aspix2k.affected.RunBeforePush`, `com.aspix2k.affected.AnimateWhileRunning`; MCP-only fields: `baseBranch` |
+
+
 ## Keep the matrix current
 
 Run `python3 scripts/support_matrix.py --check`. Use `--write` after an

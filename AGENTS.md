@@ -43,6 +43,10 @@ Keep README behavior and support claims current in every user-visible change,
 but keep it a concise landing page. Put implementation detail in CONTRIBUTING
 or a focused document instead of expanding README.
 
+MCP tools must read the current `AffectedState` snapshot and start work through
+the same exclusive run lease as the toolbar. Never recompute a torn plan on
+demand, and never stop IDE Run processes that Affected did not start.
+
 Keep Gradle, Kotlin, the IntelliJ Platform, libraries and GitHub Actions on the
 latest stable versions compatible with the supported product matrix. A version
 may stay behind only for a verified compatibility reason recorded in the

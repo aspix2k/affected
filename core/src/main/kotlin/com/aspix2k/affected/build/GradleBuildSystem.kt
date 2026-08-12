@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.AffectedRunSessions
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.application.readAction
@@ -118,6 +119,8 @@ class GradleBuildSystem : SuspendingBuildSystem {
 
         return suspendCancellableCoroutine { continuation ->
             val completed = AtomicBoolean(false)
+            val sessions = AffectedRunSessions.getInstance(project)
+            sessions.expectExternal()
 
             fun complete(passed: Boolean) {
                 if (!completed.compareAndSet(false, true)) return
@@ -149,7 +152,10 @@ class GradleBuildSystem : SuspendingBuildSystem {
                     },
                     ProgressExecutionMode.IN_BACKGROUND_ASYNC,
                 )
-            }.onFailure { complete(false) }
+            }.onFailure {
+                sessions.claimExternal()
+                complete(false)
+            }
         }
     }
 

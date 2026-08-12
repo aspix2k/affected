@@ -34,6 +34,8 @@ python3 -m unittest scripts.tests.test_support_matrix
 python3 scripts/support_matrix.py --check
 python3 -m unittest scripts.tests.test_ci_contracts scripts.tests.test_ci_scope scripts.tests.test_fetch_gradle scripts.tests.test_pitest_gate scripts.tests.test_run_gradle
 python3 scripts/ci_contracts.py --check
+python3 -m unittest scripts.tests.test_mcp_capabilities
+python3 scripts/mcp_capabilities.py --check
 ```
 
 `scripts/run_gradle.sh` seeds `~/.gradle/wrapper/dists` from the official

@@ -74,6 +74,8 @@ def check(root: Path = ROOT) -> None:
         "scripts/release_currentness.py",
         "scripts.tests.test_support_matrix",
         "scripts/support_matrix.py --check",
+        "scripts.tests.test_mcp_capabilities",
+        "scripts/mcp_capabilities.py --check",
         "scripts.tests.test_ci_contracts",
         "scripts.tests.test_ci_scope",
         "scripts.tests.test_fetch_gradle",

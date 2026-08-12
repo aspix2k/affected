@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.AffectedRunSessions
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.runners.ProgramRunner
@@ -123,6 +124,7 @@ class MavenBuildSystem : SuspendingBuildSystem {
                         object : ProgramRunner.Callback {
                             override fun processStarted(descriptor: RunContentDescriptor) {
                                 val handler = descriptor.processHandler ?: return complete(false)
+                                AffectedRunSessions.getInstance(project).register(handler)
                                 continuation.invokeOnCancellation {
                                     if (!handler.isProcessTerminated) handler.destroyProcess()
                                 }
