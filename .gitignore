@@ -20,5 +20,9 @@
 /conformance/cli-fixtures/kotlin-toolchain/build/
 /conformance/cli-fixtures/bazel/bazel-*
 /conformance/cli-fixtures/bazel/MODULE.bazel.lock
+/conformance/cli-fixtures/kotlin-toolchain-multi/build/
+/conformance/cli-fixtures/kotlin-toolchain-multi/app/build/
+/conformance/cli-fixtures/kotlin-toolchain-multi/lib/build/
+/conformance/cli-fixtures/kotlin-toolchain-multi/**/affected-*.marker
 /core/src/main/dotnet/**/bin/
 /core/src/main/dotnet/**/obj/
