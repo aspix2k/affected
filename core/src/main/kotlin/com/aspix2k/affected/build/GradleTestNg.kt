@@ -6,8 +6,9 @@ import java.nio.file.LinkOption
 import java.nio.file.Path
 
 internal fun gradleTaskNames(tasks: List<String>, changes: BuildChanges?): List<String> {
-    val classes = changes?.let(::selectTestNgClasses) ?: return tasks
-    return tasks + classes.flatMap { listOf("--tests", it) }
+    val classes = changes?.let(::selectTestNgClasses)
+    val withFilters = if (classes == null) tasks else tasks + classes.flatMap { listOf("--tests", it) }
+    return gradleNarrowKmpTasks(withFilters, changes)
 }
 
 internal fun selectTestNgClasses(changes: BuildChanges): List<String>? = runCatching {

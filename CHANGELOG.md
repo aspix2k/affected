@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Narrow Kotlin Multiplatform target tests to the source-set family of the change (`androidMain` keeps `testDebugUnitTest`, `iosMain` keeps iOS tests); `commonMain` and unproved paths keep every target task.
 - Treat public Scala and Groovy declarations as API changes so mixed Kotlin/Java/Scala/Groovy consumers are compiled; private members still do not.
 - Select Spock specifications from a changed Gradle Groovy test file with `--tests`; JUnit, production and unproved changes keep the module task.
 - Select TestNG classes from a changed Gradle test file with `--tests`; JUnit, production and unproved changes keep the module task so the collector can stay honest.
