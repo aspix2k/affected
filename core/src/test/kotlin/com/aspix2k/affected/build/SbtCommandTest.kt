@@ -34,6 +34,22 @@ class SbtCommandTest {
     }
 
     @Test
+    fun `named sbt projects share one scoped invocation`() {
+        assertEquals(
+            listOf("sbt", "--batch", "alpha/test", "beta/test"),
+            sbtCommands(listOf("alpha:test", "beta:test")).single().arguments,
+        )
+    }
+
+    @Test
+    fun `a root sbt task keeps the unscoped project command`() {
+        assertEquals(
+            listOf("sbt", "--batch", "test"),
+            sbtCommands(listOf("alpha:test", ".:test")).single().arguments,
+        )
+    }
+
+    @Test
     fun `an sbt module with Scala tests is runnable`() {
         val root = createTempDirectory("sbt-tests").toFile()
         File(root, "src/test/scala/AlphaSpec.scala").apply {

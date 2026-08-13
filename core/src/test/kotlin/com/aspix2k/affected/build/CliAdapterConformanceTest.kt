@@ -32,6 +32,19 @@ class CliAdapterConformanceTest {
     }
 
     @Test
+    fun `sbt runs only the selected multi-project module`() = fixture("sbt-multi") { root ->
+        val modules = assertNotNull(sbtModules(root))
+        val alpha = modules.single { it.executionId == "alpha" }
+        val command = sbtCommands(listOf("${alpha.executionId}:${alpha.testTask}")).single()
+        assertEquals(listOf("sbt", "--batch", "alpha/test"), command.arguments)
+        val result = executeResult(root, command.arguments, timeoutSeconds = 360)
+        assertTrue(result.completed, result.output)
+        assertTrue(result.passed, result.output)
+        assertTrue(File(root, "affected-alpha.marker").isFile, result.output)
+        assertEquals(false, File(root, "affected-beta.marker").exists())
+    }
+
+    @Test
     fun `sbt runs the project test command for the affected root`() = fixture("sbt") { root ->
         val modules = listOf(sbtRootModule(root))
         val command = sbtCommands(modules.map { "${it.executionId}:${it.testTask}" }).single()
