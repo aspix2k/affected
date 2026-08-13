@@ -23,7 +23,7 @@ environment variable.
 ./gradlew buildPlugin   # zip in build/distributions
 ./gradlew verifyPlugin  # JetBrains plugin verifier
 ./gradlew pitest        # root mutation testing, slow
-./gradlew :core:pitest  # core mutation slice, currently TestRootResolver
+./gradlew :core:pitest  # core mutation slice: TestRootResolver and AffectedMcpInputs
 ./gradlew :collector:spotbugsMain :collector:spotbugsMaven
 ./gradlew buildHealth
 scripts/quality.sh analyzers
@@ -69,8 +69,9 @@ weekly workflow runs root `pitest` and `:core:pitest` and fails on any
 meaningful survivor in either XML report. Compiler-generated
 `Intrinsics.checkNotNull*` void-call mutants are classified as equivalent;
 uncovered mutants stay visible. The 2026-08-13 `:core` slice covers
-`TestRootResolver` (31 killed, 2 equivalent Intrinsics, 100% line coverage of
-mutated classes). Broader exact-impact mutation coverage remains in #94.
+`TestRootResolver` and `AffectedMcpInputs` (63 killed, 2 equivalent Intrinsics,
+100% line coverage of mutated classes). Broader exact-impact mutation coverage
+remains in #94.
 
 The default wrapper, GitHub Actions and native conformance fixtures track the
 latest stable releases. Older versions belong only in an explicit compatibility

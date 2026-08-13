@@ -59,8 +59,19 @@ tasks.test {
 }
 
 pitest {
-    targetClasses.set(listOf("com.aspix2k.affected.TestRootResolver*"))
-    targetTests.set(listOf("com.aspix2k.affected.TestRootResolverTest*"))
+    targetClasses.set(
+        listOf(
+            "com.aspix2k.affected.TestRootResolver*",
+            "com.aspix2k.affected.AffectedMcpInputs*",
+        ),
+    )
+    targetTests.set(
+        listOf(
+            "com.aspix2k.affected.TestRootResolverTest*",
+            "com.aspix2k.affected.AffectedMcpInputsTest*",
+            "com.aspix2k.affected.AffectedMcpViewsTest*",
+        ),
+    )
     mutators.set(listOf("STRONGER"))
     outputFormats.set(listOf("XML", "HTML"))
     threads.set(4)
