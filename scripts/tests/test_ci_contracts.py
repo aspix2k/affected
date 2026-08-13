@@ -123,6 +123,24 @@ class CiContractsTest(unittest.TestCase):
                 with self.assertRaisesRegex(ci_contracts.CiContractError, "Dependabot version-update pull requests"):
                     ci_contracts.check(root)
 
+    def test_submit_must_not_run_for_pull_request_graphs(self) -> None:
+        """A PR whose generate job is skipped still concludes success and emails on submit failure."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/dependency-graph-submit.yml"
+            text = path.read_text(encoding="utf-8")
+            path.write_text(
+                text.replace(
+                    "github.event.workflow_run.event == 'push'",
+                    "github.event.workflow_run.event == 'pull_request'",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "pull-request graphs"):
+                ci_contracts.check(root)
+
     def test_submit_must_accept_main_workflow_dispatch(self) -> None:
         """GITHUB_TOKEN merges do not fire push generate; dispatch is the backfill."""
         with TemporaryDirectory() as directory:

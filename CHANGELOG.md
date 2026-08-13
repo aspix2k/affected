@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Run Submit dependency graph only after a successful main `push` or `workflow_dispatch` generate job; a pull-request graph whose generate step is skipped no longer fails submit.
 - Pass Pest `--configuration` and `--no-output` before suite paths so Pest 5.1.1 cannot append those flags after them, and resolve the generated XML bootstrap from the project root.
 - Read Maven Central metadata through the JetBrains cache-redirector first so a Central 429 cannot fail Scripts; invalid metadata and 404 still fail closed.
 - Authenticate the live release-currentness GitHub lookups so a public API 403 cannot fail Scripts and analyzers.
