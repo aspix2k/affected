@@ -48,7 +48,9 @@ class ComposerPestCommandTest {
             ),
             commands.first().arguments,
         )
-        assertTrue(File(root, ".affected/pest-phpunit.xml").isFile)
+        val generated = File(root, ".affected/pest-phpunit.xml")
+        assertTrue(generated.isFile)
+        assertTrue(generated.readText().contains("bootstrap=\"../vendor/autoload.php\""))
         assertEquals(listOf("php", "vendor/bin/phpunit", "./packages/phpunit"), commands.last().arguments)
     }
 
