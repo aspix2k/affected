@@ -247,7 +247,10 @@ class NodeTestSelectionTest {
             listOf("yarn", "workspace", "@app/alpha", "test"),
             exactCommands(managers.root, "@app/alpha:test", managers.changed).single().arguments,
         )
-        assertFull(unsupported.fixture, unsupported.changed)
+        assertEquals(
+            listOf("bun", "--filter", "@app/alpha", "test"),
+            exactCommands(unsupported.root, "@app/alpha:test", unsupported.changed).single().arguments,
+        )
         assertFull(dependencies.fixture, dependencies.changed)
     }
 

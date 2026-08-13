@@ -408,6 +408,31 @@ class CliCommandTest {
     }
 
     @Test
+    fun `Bun packages use bun test and keep mixed managers on yarn`() {
+        val bun = createTempDirectory("bun-workspaces-command").toFile()
+        File(bun, "package.json").writeText("""{ "name": "app" }""")
+        File(bun, "bun.lock").writeText("")
+        val mixed = createTempDirectory("bun-yarn-command").toFile()
+        File(mixed, "package.json").writeText("""{ "name": "app" }""")
+        File(mixed, "bun.lock").writeText("")
+        File(mixed, "yarn.lock").writeText("")
+
+        assertEquals(listOf("bun", "test"), nodeCommands(bun.path, listOf(".:test")).single().arguments)
+        assertEquals(
+            listOf("bun", "--filter", "@app/core", "--filter", "@app/ui", "test"),
+            nodeCommands(bun.path, listOf("@app/core:test", "@app/ui:test")).single().arguments,
+        )
+        assertEquals(
+            listOf("bun", "x", "tsc", "--noEmit"),
+            nodeCommands(bun.path, listOf(".:typecheck")).single().arguments,
+        )
+        assertEquals(
+            listOf("yarn", "workspace", "@app/core", "test"),
+            nodeCommands(mixed.path, listOf("@app/core:test")).single().arguments,
+        )
+    }
+
+    @Test
     fun `Yarn workspace commands stay sequential inside the shared handler`() {
         val root = createTempDirectory("yarn-workspaces-command").toFile()
         File(root, "yarn.lock").writeText("")
