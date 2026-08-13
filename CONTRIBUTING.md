@@ -80,6 +80,9 @@ Compatibility entries require an exact approved value, a reason and
 repository-owned test evidence. A temporary security preview must also be
 published by its official source, declare its patched lower bound and expire as
 soon as the corresponding stable release appears.
+Until CodeQL supports that preview, its ephemeral manual build uses the newest
+supported stable compiler with `--no-build-cache`; every product and conformance
+build keeps the governed patched compiler.
 Transitive lockfile entries are resolver output: update the direct manifest pin
 and regenerate its lock rather than inventorying transitive versions.
 The complete live gate measured 35.98 seconds and 34.3 MB maximum RSS on

@@ -493,11 +493,17 @@ class ReleaseCurrentnessTest(unittest.TestCase):
         entry = next(item for item in currentness.load_config() if item["id"] == "kotlin")
 
         self.assertEqual("security-preview", entry["policy"])
-        self.assertEqual("2.4.20-Beta2", entry["expected"])
+        self.assertEqual("2.4.20-RC", entry["expected"])
         self.assertEqual("2.4.20-Beta1", entry["minimumPatched"])
         self.assertEqual("2.4.20", entry["stableReplacement"])
         self.assertIn("GHSA-r937-wjx7-w2jp", entry["reason"])
+        self.assertEqual("gradle-plugin-property", entry["local"]["type"])
         self.assertEqual((entry["expected"], None), currentness.local_version(entry["local"]))
+
+        codeql = next(item for item in currentness.load_config() if item["id"] == "kotlin-codeql")
+        self.assertEqual("compatibility", codeql["policy"])
+        self.assertEqual("2.4.10", codeql["expected"])
+        self.assertEqual((codeql["expected"], None), currentness.local_version(codeql["local"]))
 
     def test_security_preview_requires_official_patch_and_expires_on_stable(self) -> None:
         """Accept only a published patched preview while no patched stable release exists."""
@@ -510,32 +516,37 @@ class ReleaseCurrentnessTest(unittest.TestCase):
             "local": {"type": "gradle-plugin"},
             "source": {"type": "gradle-plugin", "name": "org.jetbrains.kotlin.jvm"},
             "policy": "security-preview",
-            "expected": "2.4.20-Beta2",
+            "expected": "2.4.20-RC",
             "minimumPatched": "2.4.20-Beta1",
             "stableReplacement": "2.4.20",
             "reason": "The security advisory requires a patched compiler before the next stable release.",
             "evidence": ["build.gradle.kts"],
         }
 
-        def validate(versions: list[str], local: str = "2.4.20-Beta2") -> str:
+        def validate(versions: list[str], local: str | None = None) -> str:
             metadata = "<metadata><versioning><versions>" + "".join(
                 f"<version>{version}</version>" for version in versions
             ) + "</versions></versioning></metadata>"
-            with patch.object(currentness, "local_version", return_value=(local, None)):
+            with patch.object(currentness, "local_version", return_value=(local or entry["expected"], None)):
                 return currentness.validate_entry(entry, FakeTransport({endpoint: metadata.encode()}))
 
-        self.assertIn("security preview", validate(["2.4.10", "2.4.20-Beta1", "2.4.20-Beta2"]))
+        published = ["2.4.10", "2.4.20-Beta1", "2.4.20-Beta2", "2.4.20-RC"]
+        self.assertIn("security preview", validate(published))
         with self.assertRaisesRegex(currentness.CurrentnessError, "not published"):
             validate(["2.4.10", "2.4.20-Beta1"])
         with self.assertRaisesRegex(currentness.CurrentnessError, "below the patched minimum"):
             entry["expected"] = "2.4.20-Beta0"
             validate(["2.4.10", "2.4.20-Beta0", "2.4.20-Beta1"], "2.4.20-Beta0")
-        entry["expected"] = "2.4.20-Beta2"
+        entry["expected"] = "2.4.20-RC"
         with self.assertRaisesRegex(currentness.CurrentnessError, "stable replacement"):
-            validate(["2.4.10", "2.4.20-Beta1", "2.4.20-Beta2", "2.4.20"])
+            validate(published + ["2.4.20"])
+        entry["expected"] = "2.4.20-Beta2"
+        with self.assertRaisesRegex(currentness.CurrentnessError, "newer patched preview"):
+            validate(published)
+        entry["expected"] = "2.4.20-RC"
         entry["stableReplacement"] = "9.0.0"
         with self.assertRaisesRegex(currentness.CurrentnessError, "same release line"):
-            validate(["2.4.10", "2.4.20-Beta1", "2.4.20-Beta2"])
+            validate(published)
 
     def test_unpinned_action_fails_discovery(self) -> None:
         """Reject a new Action reference before inventory comparison."""

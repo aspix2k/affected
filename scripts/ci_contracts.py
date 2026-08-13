@@ -90,6 +90,7 @@ def check(root: Path = ROOT) -> None:
         raise CiContractError("buildHealth must remain a required CI job")
 
     check_scope(root, ci, codeql)
+    check_codeql_kotlin(root, codeql)
 
     if '- "README.md"' in conformance:
         raise CiContractError("README edits must not start the exact-impact matrix")
@@ -144,6 +145,20 @@ def check_cache_redirector_property(properties: str) -> None:
             raise CiContractError(f"gradle.properties must set {CACHE_REDIRECTOR_PROPERTY}")
     if occurrences != 1:
         raise CiContractError(f"gradle.properties must set {CACHE_REDIRECTOR_PROPERTY}")
+
+
+def check_codeql_kotlin(root: Path, codeql: str) -> None:
+    """Keep the temporary supported CodeQL compiler isolated from product builds and build caches."""
+    compiler = 'CODEQL_KOTLIN_VERSION: "2.4.10"'
+    override = '-Paffected.kotlin.version="$CODEQL_KOTLIN_VERSION"'
+    binding = 'kotlin("jvm") version providers.gradleProperty("affected.kotlin.version").get()'
+    if codeql.count(compiler) != 1 or codeql.count(override) != 2 or codeql.count("--no-build-cache") != 2:
+        raise CiContractError("CodeQL Kotlin compatibility builds must use the bounded no-cache compiler")
+    if read(root / "settings.gradle.kts").count(binding) != 1:
+        raise CiContractError("CodeQL Kotlin compatibility builds require one governed product compiler binding")
+    for path in sorted((root / ".github/workflows").glob("*.y*ml")):
+        if path.name != "codeql.yml" and "affected.kotlin.version" in read(path):
+            raise CiContractError("CodeQL Kotlin compatibility override must not change product builds")
 
 
 def dependency_acquisition_files(root: Path) -> list[Path]:

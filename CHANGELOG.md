@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Use the current Kotlin EAP containing the GHSA-r937-wjx7-w2jp build-cache deserialization fix while no patched stable release exists.
+- Analyze Kotlin with CodeQL's newest supported compiler in an isolated no-build-cache build until its extractor supports the patched EAP.
 - Keep the expanded Gradle TestKit conformance scenario bounded on Windows without verbose build logging.
 - Keep cargo-nextest discovery deterministic when the environment forces colored Cargo output, and run its doctest phase through the same verified Cargo executable.
 - Stop launching the exact-impact matrix from README-only edits, and stop rerunning the full core test suite as skipped CLI contracts.

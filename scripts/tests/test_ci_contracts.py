@@ -18,6 +18,25 @@ class CiContractsTest(unittest.TestCase):
         """Validate the production workflows."""
         ci_contracts.check(Path(__file__).resolve().parents[2])
 
+    def test_codeql_kotlin_compatibility_build_is_isolated_and_bounded(self) -> None:
+        """Keep the supported analysis compiler out of product builds and unsafe build caches."""
+        mutations = {
+            "missing compiler pin": ('  CODEQL_KOTLIN_VERSION: "2.4.10"\n', ""),
+            "product compiler": ('  CODEQL_KOTLIN_VERSION: "2.4.10"', '  CODEQL_KOTLIN_VERSION: "2.4.20-Beta2"'),
+            "missing override": (' -Paffected.kotlin.version="$CODEQL_KOTLIN_VERSION"', ""),
+            "build cache": (" --no-build-cache", ""),
+        }
+        for name, (old, new) in mutations.items():
+            with self.subTest(name=name), TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.copy_workflows(root)
+                path = root / ".github/workflows/codeql.yml"
+                text = path.read_text(encoding="utf-8")
+                self.assertIn(old, text)
+                path.write_text(text.replace(old, new, 1), encoding="utf-8")
+                with self.assertRaisesRegex(ci_contracts.CiContractError, "CodeQL Kotlin"):
+                    ci_contracts.check(root)
+
     def test_three_gradle_invocations_are_rejected(self) -> None:
         """Keep plugin analysis, tests and verification on one Gradle graph."""
         with TemporaryDirectory() as directory:

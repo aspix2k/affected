@@ -197,11 +197,11 @@ def version_key(value: str) -> tuple[tuple[int, Any], ...]:
 
 def security_preview_key(value: str) -> tuple[int, int, int, int, int]:
     """Order the bounded Alpha, Beta, and RC versions allowed by a security exception."""
-    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)-(Alpha|Beta|RC)(\d+)", value, re.IGNORECASE)
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)-(Alpha|Beta|RC)(\d*)", value, re.IGNORECASE)
     if not match:
         raise CurrentnessError(f"Expected a bounded security preview version, found {value!r}")
     stage = {"alpha": 0, "beta": 1, "rc": 2}[match.group(4).lower()]
-    return tuple(int(match.group(index)) for index in range(1, 4)) + (stage, int(match.group(5)))
+    return tuple(int(match.group(index)) for index in range(1, 4)) + (stage, int(match.group(5) or 0))
 
 
 def newest(values: list[str], series: str | None = None) -> str:
@@ -239,6 +239,21 @@ def local_version(local: dict[str, Any]) -> tuple[str, str | None]:
         else:
             values = re.findall(rf"id\(\s*\"{re.escape(name)}\"\s*\)\s+version\s+\"([^\"]+)\"", text)
         return one(values, f"Gradle plugin {name}"), None
+    if kind == "gradle-plugin-property":
+        property_name = local.get("property")
+        declaration = local.get("declaration")
+        if not isinstance(property_name, str) or not isinstance(declaration, str):
+            raise CurrentnessError(f"Gradle plugin property {name} lacks a bounded declaration")
+        text = read_text(path)
+        value = one(
+            re.findall(rf"(?m)^{re.escape(property_name)}=([^\s]+)$", text),
+            f"Gradle plugin property {property_name}",
+        )
+        declaration_text = read_text(declaration)
+        pattern = rf'kotlin\(\s*"jvm"\s*\)\s+version\s+providers\.gradleProperty\(\s*"{re.escape(property_name)}"\s*\)\.get\(\)'
+        if len(re.findall(pattern, declaration_text)) != 1:
+            raise CurrentnessError(f"Gradle plugin {name} is not bound exactly once to {property_name}")
+        return value, None
     if kind == "gradle-variable":
         text = read_text(path)
         return one(re.findall(rf"(?m)^val\s+{re.escape(name)}\s*=\s*\"([^\"]+)\"", text), f"Gradle variable {name}"), None
@@ -683,6 +698,16 @@ def validate_entry(entry: dict[str, Any], transport: Transport) -> str:
         published = {value.strip() for value in versions}
         if expected not in published or minimum not in published:
             raise CurrentnessError(f"Security preview {identifier} is not published by its official source")
+        patched_previews = []
+        for version in published:
+            try:
+                key = security_preview_key(version)
+            except CurrentnessError:
+                continue
+            if key[:3] == expected_key[:3] and key >= minimum_key:
+                patched_previews.append((key, version))
+        if not patched_previews or max(patched_previews)[1] != expected:
+            raise CurrentnessError(f"Security preview {identifier} has a newer patched preview")
         stable = []
         for version in versions:
             try:
@@ -741,6 +766,8 @@ def inventory_keys(local: dict[str, Any]) -> set[str]:
         return {f"java-test-toolchain:{path}:{name}"}
     if kind == "gradle-plugin":
         return {f"plugin:{name}"}
+    if kind == "gradle-plugin-property":
+        return {f"plugin:{name}", f"property:{path}:{local.get('property')}"}
     if kind == "github-action":
         return {f"action:{name}"}
     if kind in {"maven", "maven-classifier"}:
@@ -807,6 +834,11 @@ def discovered_pin_keys() -> set[str]:
         text = file.read_text(encoding="utf-8")
         keys.update(f"plugin:{name}" for name in re.findall(r'id\(\s*"([^"]+)"\s*\)\s+version\s+"[^"]+"', text))
         if re.search(r'kotlin\(\s*"jvm"\s*\)\s+version\s+"[^"]+"', text):
+            keys.add("plugin:org.jetbrains.kotlin.jvm")
+        if re.search(
+            r'kotlin\(\s*"jvm"\s*\)\s+version\s+providers\.gradleProperty\(\s*"affected\.kotlin\.version"\s*\)\.get\(\)',
+            text,
+        ):
             keys.add("plugin:org.jetbrains.kotlin.jvm")
         keys.update(
             f"maven:{group}:{artifact}"
