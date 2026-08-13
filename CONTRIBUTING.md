@@ -39,6 +39,9 @@ python3 scripts/ci_contracts.py --check
 `scripts/run_gradle.sh` seeds `~/.gradle/wrapper/dists` from the official
 GitHub `gradle-distributions` release, verifies the wrapper SHA-256, then
 starts Gradle once. `services.gradle.org` is only a fallback.
+Gradle resolves Maven Central, Plugin Portal and IntelliJ dependencies through
+their official direct HTTPS repositories; the IntelliJ Platform plugin cache
+redirector is disabled in `gradle.properties`.
 
 Pull-request `CI` is the required fast gate. `scripts` always run. The
 plugin graph (`detekt`, tests, Kover verify, plugin zip, Plugin Verifier

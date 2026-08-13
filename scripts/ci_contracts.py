@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -14,6 +16,9 @@ CODEQL = ROOT / ".github/workflows/codeql.yml"
 MUTATION = ROOT / ".github/workflows/mutation.yml"
 QUALITY = ROOT / ".github/workflows/quality.yml"
 GRADLE_ACTION = re.compile(r"uses:\s*gradle/actions/[^\s@]+@([0-9a-f]{40})")
+CACHE_REDIRECTOR = "cache-redirector.jetbrains.com"
+CACHE_REDIRECTOR_PROPERTY = "org.jetbrains.intellij.platform.useCacheRedirector=false"
+DEPENDENCY_SCAN_TIMEOUT_SECONDS = 10
 PLUGIN_TASKS = (
     "detekt",
     "test",
@@ -101,13 +106,89 @@ def check(root: Path = ROOT) -> None:
 
     if "scripts/pitest_gate.py" not in mutation:
         raise CiContractError("Weekly mutation must fail on surviving mutants")
-    if "cache-redirector.jetbrains.com/repo1.maven.org/maven2" not in read(root / "settings.gradle.kts"):
-        raise CiContractError("Plugin resolution must prefer the JetBrains Maven Central mirror")
+    check_dependency_repositories(root)
     if "actions/cache@" not in read(root / ".github/workflows/dependency-graph.yml"):
         raise CiContractError("Dependency graph must cache the Gradle wrapper distribution")
 
     check_merge_queue(root, ci, codeql)
     check_wrapper(root)
+
+
+def check_dependency_repositories(root: Path) -> None:
+    """Reject the cache redirector from tracked build and release acquisition surfaces."""
+    for path in dependency_acquisition_files(root):
+        if not path.is_file() or path.is_symlink():
+            raise CiContractError(f"Missing dependency acquisition file: {path.relative_to(root)}")
+        if CACHE_REDIRECTOR in path.read_text(encoding="utf-8"):
+            raise CiContractError(f"Dependency acquisition must not use the cache redirector: {path.relative_to(root)}")
+    properties = read(root / "gradle.properties")
+    check_cache_redirector_property(properties)
+
+
+def check_cache_redirector_property(properties: str) -> None:
+    """Require one unambiguous physical Java Properties assignment disabling the redirector."""
+    occurrences = 0
+    for line in properties.splitlines():
+        stripped = line.lstrip()
+        if not stripped or stripped.startswith(("#", "!")):
+            continue
+        if line == CACHE_REDIRECTOR_PROPERTY:
+            occurrences += 1
+            continue
+        suspicious = (
+            "\\" in line
+            or "useCache" in line
+            or "CacheRedirector" in line
+        )
+        if suspicious:
+            raise CiContractError(f"gradle.properties must set {CACHE_REDIRECTOR_PROPERTY}")
+    if occurrences != 1:
+        raise CiContractError(f"gradle.properties must set {CACHE_REDIRECTOR_PROPERTY}")
+
+
+def dependency_acquisition_files(root: Path) -> list[Path]:
+    """List dependency acquisition files from a required fail-closed Git inventory."""
+    if not has_git_marker(root):
+        raise CiContractError("Dependency acquisition policy requires a Git repository")
+    relative = tracked_gradle_files(root)
+    relative.extend((Path("gradle.properties"), Path("scripts/release_currentness.py")))
+    return sorted({root / path for path in relative})
+
+
+def has_git_marker(root: Path) -> bool:
+    """Detect a repository or worktree marker without failing open on I/O errors."""
+    try:
+        os.lstat(root / ".git")
+    except FileNotFoundError:
+        return False
+    except OSError as error:
+        raise CiContractError("Unable to inspect the Git repository marker") from error
+    return True
+
+
+def tracked_gradle_files(root: Path) -> list[Path]:
+    """Enumerate tracked Gradle files and fail closed when Git cannot prove the inventory."""
+    try:
+        listed = subprocess.check_output(
+            ["git", "-C", str(root), "ls-files", "-z", "*.gradle", "*.gradle.kts"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=DEPENDENCY_SCAN_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        raise CiContractError("Unable to enumerate tracked dependency acquisition files") from error
+    relative = [safe_relative_path(path) for path in listed.split("\0") if path]
+    if not relative:
+        raise CiContractError("Git returned no tracked dependency acquisition files")
+    return relative
+
+
+def safe_relative_path(value: str) -> Path:
+    """Reject absolute and parent-traversing paths returned by an external inventory."""
+    path = Path(value)
+    if path.is_absolute() or ".." in path.parts:
+        raise CiContractError(f"Invalid dependency acquisition path: {value}")
+    return path
 
 
 def check_scope(root: Path, ci: str, codeql: str) -> None:

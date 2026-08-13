@@ -25,6 +25,13 @@ class FakeTransport:
         except KeyError as error:
             raise AssertionError(f"Unexpected URL: {url}") from error
 
+    def read(self, url: str) -> bytes:
+        """Return a byte fixture for an expected URL."""
+        value = self.documents.get(url)
+        if not isinstance(value, bytes):
+            raise AssertionError(f"Unexpected byte URL: {url}")
+        return value
+
 
 class EmptyTransport:
     """Return structurally empty source documents for adapter failure tests."""
@@ -105,6 +112,31 @@ class ReleaseCurrentnessTest(unittest.TestCase):
         )
         version, _ = currentness.remote_version({"type": "php"}, "latest", None, transport)
         self.assertEqual("9.0.1", version)
+
+    def test_jetbrains_maven_uses_the_official_direct_repository(self) -> None:
+        """Resolve IntelliJ dependency metadata without the cache redirector."""
+        endpoint = (
+            "https://packages.jetbrains.team/maven/p/ij/intellij-dependencies/"
+            "org/jetbrains/intellij/deps/asm-all/maven-metadata.xml"
+        )
+        transport = FakeTransport(
+            {
+                endpoint: (
+                    b"<metadata><versioning><versions>"
+                    b"<version>9.10.0</version><version>9.10.1</version>"
+                    b"</versions></versioning></metadata>"
+                )
+            }
+        )
+
+        version, _ = currentness.remote_version(
+            {"type": "jetbrains-maven", "name": "org.jetbrains.intellij.deps:asm-all"},
+            "latest",
+            None,
+            transport,
+        )
+
+        self.assertEqual("9.10.1", version)
 
     def test_untrusted_request_and_redirect_hosts_are_rejected(self) -> None:
         """Reject credentials, HTTP, and hosts outside the official allowlist."""

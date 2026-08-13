@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Retry only Gradle distribution fetch on transient network errors; compilation, tests and analyzers still run once.
 - Give the Gradle wrapper 120s and four retries instead of a single 10s download from services.gradle.org.
 - Seed the Gradle wrapper cache from the official GitHub `gradle-distributions` release, verify the SHA-256, and reuse `~/.gradle/wrapper/dists` so CI does not download the zip from services.gradle.org on every job.
-- Resolve Maven artifacts through the JetBrains cache-redirector before repo.maven.apache.org so a Central 403 cannot fail CI.
+- Resolve Gradle plugins, Maven Central and IntelliJ dependencies through their official direct HTTPS endpoints instead of the JetBrains cache redirector.
 
 ## [2.0.1] - 2026-08-12
 
