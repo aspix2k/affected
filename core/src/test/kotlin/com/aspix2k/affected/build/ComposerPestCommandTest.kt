@@ -151,8 +151,12 @@ class ComposerPestCommandTest {
     }
 
     @Test
-    fun `a production change keeps the full Pest suite`() {
+    fun `a production change keeps the full Pest suite when nothing statically imports it`() {
         val root = createTempDirectory("composer-pest-src-full").toFile()
+        File(root, "package").mkdirs()
+        File(root, "package/composer.json").writeText(
+            """{"autoload":{"psr-4":{"App\\":"src/"}}}""",
+        )
         File(root, "package/tests").mkdirs()
         File(root, "package/tests/FeatureTest.php").writeText("<?php\n")
         val source = File(root, "package/src/Service.php").apply {
@@ -168,6 +172,35 @@ class ComposerPestCommandTest {
         )
 
         assertEquals(listOf("./package/tests"), commands.single().arguments.takeLast(1))
+    }
+
+    @Test
+    fun `a production change selects Pest files that import the PSR-4 class`() {
+        val root = createTempDirectory("composer-pest-src-use").toFile()
+        File(root, "package").mkdirs()
+        File(root, "package/composer.json").writeText(
+            """{"autoload":{"psr-4":{"App\\":"src/"}}}""",
+        )
+        File(root, "package/src").mkdirs()
+        File(root, "package/tests").mkdirs()
+        val source = File(root, "package/src/Service.php").apply {
+            writeText("<?php\nnamespace App;\nclass Service {}\n")
+        }
+        File(root, "package/tests/ServiceTest.php").writeText(
+            "<?php\nuse App\\Service;\ntest('service', fn () => expect(true)->toBeTrue());\n",
+        )
+        File(root, "package/tests/OtherTest.php").writeText(
+            "<?php\ntest('other', fn () => expect(true)->toBeTrue());\n",
+        )
+
+        val commands = composerCommands(
+            root.path,
+            listOf("package:${ComposerPackages.PEST}"),
+            listOf(module(root, "package", "package", ComposerPackages.PEST)),
+            changes(source),
+        )
+
+        assertEquals(listOf("./package/tests/ServiceTest.php"), commands.single().arguments.takeLast(1))
     }
 
     @Test

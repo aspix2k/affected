@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build
 
+import com.google.gson.JsonParser
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -23,23 +24,30 @@ internal fun selectPestTestFiles(
 
     val selected = LinkedHashSet<String>()
     val datasetNames = LinkedHashSet<String>()
+    val productionClasses = LinkedHashSet<String>()
     for (raw in changes.files) {
         val requested = Path.of(raw).toAbsolutePath().normalize()
         require(Files.isRegularFile(requested, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(requested))
         val real = requested.toRealPath(LinkOption.NOFOLLOW_LINKS)
-        val suite = suites.singleOrNull { real.startsWith(it) } ?: return@runCatching null
+        val suite = suites.singleOrNull { real.startsWith(it) }
         val relative = pestRelative(realRoot, real)
         when {
-            isPestExactTestFile(suite, real) -> selected += relative
-            isPestDatasetFile(suite, real) -> {
+            suite != null && isPestExactTestFile(suite, real) -> selected += relative
+            suite != null && isPestDatasetFile(suite, real) -> {
                 datasetNames += pestDatasetNames(real)
                 selected += relative
             }
+            suite == null -> productionClasses += pestPsr4Class(realRoot, real) ?: return@runCatching null
             else -> return@runCatching null
         }
     }
     if (datasetNames.isNotEmpty()) {
         val consumers = pestDatasetConsumers(realRoot, suites, datasetNames)
+        require(consumers.isNotEmpty())
+        selected += consumers
+    }
+    if (productionClasses.isNotEmpty()) {
+        val consumers = pestClassConsumers(realRoot, suites, productionClasses)
         require(consumers.isNotEmpty())
         selected += consumers
     }
@@ -76,6 +84,79 @@ private fun coversSuite(root: Path, relative: String, suite: Path): Boolean =
 private fun pestDatasetUses(file: Path, names: Set<String>): Set<String>? {
     val text = readPestPhp(file) ?: return null
     val used = WITH_DATASET.findAll(text).map { it.groupValues[1] }.filterTo(HashSet(), names::contains)
+    return used.takeIf { it.isNotEmpty() }
+}
+
+private fun pestPsr4Class(root: Path, file: Path): String? {
+    if (!file.fileName.toString().endsWith(".php", ignoreCase = true)) return null
+    val manifest = pestComposerManifest(root, file) ?: return null
+    val prefixes = pestPsr4Prefixes(manifest) ?: return null
+    val packageRoot = manifest.parent
+    val relative = packageRoot.relativize(file).toString().replace('\\', '/')
+    require(relative.endsWith(".php", ignoreCase = true) && !relative.startsWith("../"))
+    val withoutExtension = relative.removeSuffix(".php").removeSuffix(".PHP")
+    for ((prefix, directory) in prefixes) {
+        val dir = directory.trimEnd('/') + "/"
+        if (!withoutExtension.startsWith(dir) && withoutExtension != directory.trimEnd('/')) continue
+        val suffix = withoutExtension.removePrefix(directory.trimEnd('/')).trimStart('/')
+        return prefix.trimEnd('\\') + (if (suffix.isEmpty()) "" else "\\" + suffix.replace('/', '\\'))
+    }
+    return null
+}
+
+private fun pestComposerManifest(root: Path, file: Path): Path? {
+    var directory = file.parent ?: return null
+    while (directory.startsWith(root)) {
+        val candidate = directory.resolve("composer.json")
+        if (Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(candidate)) {
+            return candidate
+        }
+        directory = directory.parent ?: break
+    }
+    return null
+}
+
+private fun pestPsr4Prefixes(manifest: Path): List<Pair<String, String>>? {
+    val json = JsonParser.parseString(readPestPhp(manifest) ?: return null).asJsonObject
+    val prefixes = ArrayList<Pair<String, String>>()
+    for (section in listOf("autoload", "autoload-dev")) {
+        val psr4 = json.get(section)?.takeIf { it.isJsonObject }?.asJsonObject
+            ?.get("psr-4")?.takeIf { it.isJsonObject }?.asJsonObject ?: continue
+        for ((prefix, value) in psr4.entrySet()) {
+            val directory = value.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString ?: return null
+            prefixes += prefix.replace('/', '\\') to directory.replace('\\', '/').trimStart('/')
+        }
+    }
+    return prefixes.takeIf { it.isNotEmpty() }
+}
+
+private fun pestClassConsumers(root: Path, suites: List<Path>, classes: Set<String>): Set<String> {
+    require(classes.isNotEmpty())
+    val consumers = LinkedHashSet<String>()
+    val remaining = classes.toHashSet()
+    for (suite in suites) {
+        val files = ArrayList<Path>()
+        collectPestTestFiles(suite, suite, files)
+        require(files.size <= MAX_PEST_FILTER_FILES)
+        for (file in files) {
+            val used = pestImportedClasses(file, classes) ?: continue
+            consumers += pestRelative(root, file)
+            remaining.removeAll(used)
+        }
+    }
+    require(remaining.isEmpty())
+    return consumers
+}
+
+private fun pestImportedClasses(file: Path, classes: Set<String>): Set<String>? {
+    val text = readPestPhp(file) ?: return null
+    val used = LinkedHashSet<String>()
+    for (name in USE_CLASS.findAll(text).map { it.groupValues[1] }) {
+        if (name in classes) used += name
+    }
+    for (name in classes) {
+        if (text.contains("\\$name")) used += name
+    }
     return used.takeIf { it.isNotEmpty() }
 }
 
@@ -143,6 +224,7 @@ private val PEST_NON_EXACT_DIRECTORIES = setOf("Datasets", "Expectations", "Help
 
 private val DATASET_DECLARATION = Regex("""dataset\s*\(\s*['\"]([^'\"]+)['\"]""")
 private val WITH_DATASET = Regex("""->\s*with\s*\(\s*['\"]([^'\"]+)['\"]""")
+private val USE_CLASS = Regex("""(?:^|[\r\n])\s*use\s+([A-Za-z_][A-Za-z0-9_\\]*)""")
 
 private const val MAX_PEST_FILTER_FILES = 256
 private const val MAX_PEST_PHP_BYTES = 1024 * 1024
