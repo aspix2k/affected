@@ -260,6 +260,11 @@ class GradleBuildSystem : SuspendingBuildSystem {
             extraTasks = availableTasks,
             executionRoot = executionRoot,
             executionId = executionId,
+            additionalTestTasks = if (hasTests) {
+                gradleKmpAdditionalTestTasks(availableTasks, testTask)
+            } else {
+                emptySet()
+            },
         )
     }
 
@@ -436,6 +441,23 @@ internal fun gradleVerificationTasks(
 } else {
     "test" to "compileTestKotlin"
 }
+
+internal fun gradleKmpAdditionalTestTasks(available: Set<String>, primary: String): Set<String> =
+    KMP_TEST_TASKS.filterTo(LinkedHashSet()) { it in available && it != primary }
+
+private val KMP_TEST_TASKS = listOf(
+    "testDebugUnitTest",
+    "iosSimulatorArm64Test",
+    "iosX64Test",
+    "iosArm64Test",
+    "jvmTest",
+    "jsBrowserTest",
+    "jsNodeTest",
+    "wasmJsBrowserTest",
+    "linuxX64Test",
+    "macosArm64Test",
+    "macosX64Test",
+)
 
 internal fun gradleProductionCompileTask(available: Set<String>, android: Boolean): String? {
     val preferred = if (android) {

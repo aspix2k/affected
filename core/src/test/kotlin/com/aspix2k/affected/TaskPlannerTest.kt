@@ -57,6 +57,17 @@ class TaskPlannerTest {
     }
 
     @Test
+    fun `a KMP module with tests runs every available target test task`() {
+        val module = jvm(":shared").copy(additionalTestTasks = setOf("testDebugUnitTest", "iosSimulatorArm64Test"))
+        val plan = TaskPlanner.plan(listOf(module), emptyList())
+        assertEquals(
+            listOf(":shared:iosSimulatorArm64Test", ":shared:test", ":shared:testDebugUnitTest"),
+            plan.groups.single { it.root == "/repo" }.tasks.sorted(),
+        )
+        assertEquals(1, plan.tested)
+    }
+
+    @Test
     fun `a changed module without tests is compiled`() {
         val plan = TaskPlanner.plan(listOf(jvm(":no-tests", tests = false)), emptyList())
         assertEquals(listOf(":no-tests:compileTestKotlin"), plan.groups.single { it.root == "/repo" }.tasks)

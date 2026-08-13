@@ -19,6 +19,7 @@ data class BuildModule(
     val extraTasks: Set<String> = emptySet(),
     val executionRoot: String = root,
     val executionId: String = id,
+    val additionalTestTasks: Set<String> = emptySet(),
 ) {
     val key: String get() = "$root|$id"
 }

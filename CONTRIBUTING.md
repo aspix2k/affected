@@ -192,7 +192,9 @@ the aggregate failure.
 Independent roots and different build systems stay separate. A module already
 being verified is never also compiled as a consumer. A changed Gradle module
 without test sources is compiled with the production Kotlin/Android compile
-task so Kotlin Multiplatform libraries do not become an empty plan.
+task so Kotlin Multiplatform libraries do not become an empty plan. When a
+Kotlin Multiplatform module has tests, Affected runs every available target
+test task in the same Gradle invocation.
 
 A `BuildSystem` supplies source matching, module identity, task names and
 execution, and registers itself through the
