@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import subprocess
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from scripts import ci_contracts
 
@@ -48,6 +50,99 @@ class CiContractsTest(unittest.TestCase):
             )
             with self.assertRaisesRegex(ci_contracts.CiContractError, "networkTimeout"):
                 ci_contracts.check(root)
+
+    def test_cache_redirector_is_rejected_from_dependency_acquisition(self) -> None:
+        """Keep every tracked build and release dependency on an official direct endpoint."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            nested = root / "deep" / "nested" / "build.gradle.kts"
+            nested.parent.mkdir(parents=True)
+            forbidden = "cache-" + "redirector.jetbrains.com"
+            nested.write_text(f'repositories {{ maven("https://{forbidden}/repo1.maven.org/maven2") }}\n')
+            subprocess.run(
+                ["git", "add", "deep/nested/build.gradle.kts"],
+                cwd=root,
+                check=True,
+                timeout=10,
+            )
+
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "cache redirector"):
+                ci_contracts.check(root)
+
+    def test_git_dependency_scan_timeout_fails_closed(self) -> None:
+        """Never replace a failed tracked-file inventory with an incomplete fallback scan."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+
+            with (
+                patch.object(
+                    ci_contracts.subprocess,
+                    "check_output",
+                    side_effect=subprocess.TimeoutExpired("git ls-files", 10),
+                ),
+                self.assertRaisesRegex(ci_contracts.CiContractError, "tracked dependency acquisition files"),
+            ):
+                ci_contracts.check(root)
+
+    def test_intellij_cache_redirector_must_be_disabled(self) -> None:
+        """Prevent default IntelliJ repositories from silently restoring the redirector."""
+        mutations = {
+            "missing": "",
+            "append true": (
+                "org.jetbrains.intellij.platform.useCacheRedirector=false\n"
+                "org.jetbrains.intellij.platform.useCacheRedirector=true\n"
+            ),
+            "prepend true": (
+                "org.jetbrains.intellij.platform.useCacheRedirector=true\n"
+                "org.jetbrains.intellij.platform.useCacheRedirector=false\n"
+            ),
+            "duplicate false": (
+                "org.jetbrains.intellij.platform.useCacheRedirector=false\n"
+                "org.jetbrains.intellij.platform.useCacheRedirector=false\n"
+            ),
+            "comment and whitespace": (
+                "# org.jetbrains.intellij.platform.useCacheRedirector=false\n"
+                "org.jetbrains.intellij.platform.useCacheRedirector = false\n"
+            ),
+            "colon separator": (
+                "org.jetbrains.intellij.platform.useCacheRedirector=false\n"
+                "org.jetbrains.intellij.platform.useCacheRedirector:true\n"
+            ),
+            "whitespace separator": (
+                "org.jetbrains.intellij.platform.useCacheRedirector=false\n"
+                "org.jetbrains.intellij.platform.useCacheRedirector true\n"
+            ),
+            "leading whitespace": " org.jetbrains.intellij.platform.useCacheRedirector=false\n",
+            "escaped key": (
+                "org.jetbrains.intellij.platform.useCacheRedirector=false\n"
+                "org.jetbrains.intellij.platform.useCache\\Redirector=true\n"
+            ),
+            "unicode escaped prefix": (
+                "org.jetbrains.intellij.platform.useCacheRedirector=false\n"
+                "org.jetbrains.intellij.platform.\\u0075seCacheRedirector=true\n"
+            ),
+            "unicode escaped suffix": (
+                "org.jetbrains.intellij.platform.useCacheRedirector=false\n"
+                "org.jetbrains.intellij.platform.useCacheRedirecto\\u0072=true\n"
+            ),
+        }
+        for name, setting in mutations.items():
+            with self.subTest(mutation=name), TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.copy_workflows(root)
+                properties = root / "gradle.properties"
+                properties.write_text(
+                    properties.read_text(encoding="utf-8").replace(
+                        "org.jetbrains.intellij.platform.useCacheRedirector=false\n",
+                        setting,
+                    ),
+                    encoding="utf-8",
+                )
+
+                with self.assertRaisesRegex(ci_contracts.CiContractError, "useCacheRedirector=false"):
+                    ci_contracts.check(root)
 
     def test_readme_must_not_start_conformance(self) -> None:
         """Documentation-only README edits are not exact-impact evidence."""
@@ -122,13 +217,20 @@ class CiContractsTest(unittest.TestCase):
             ".github/workflows/queue.yml",
             "scripts/ci_scope.py",
             "scripts/run_gradle.sh",
+            "scripts/release_currentness.py",
             "settings.gradle.kts",
+            "build.gradle.kts",
+            "core/build.gradle.kts",
+            "collector/build.gradle.kts",
+            "mcp/build.gradle.kts",
+            "gradle.properties",
             "gradle/wrapper/gradle-wrapper.properties",
         ):
             destination = root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text((production / relative).read_text(encoding="utf-8"), encoding="utf-8")
-
+        subprocess.run(["git", "init", "-q"], cwd=root, check=True, timeout=10)
+        subprocess.run(["git", "add", "."], cwd=root, check=True, timeout=10)
 
 if __name__ == "__main__":
     unittest.main()

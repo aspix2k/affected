@@ -31,9 +31,8 @@ val maven4Distribution = configurations.create("maven4Distribution") {
 }
 
 repositories {
-    maven("https://cache-redirector.jetbrains.com/repo1.maven.org/maven2")
     mavenCentral()
-    maven("https://cache-redirector.jetbrains.com/intellij-dependencies")
+    maven("https://packages.jetbrains.team/maven/p/ij/intellij-dependencies")
 }
 
 dependencies {

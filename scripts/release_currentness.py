@@ -31,12 +31,12 @@ ALLOWED_HOSTS = {
     "artifacts-caching-proxy.aws.intellij.net",
     "azuresearch-usnc.nuget.org",
     "builds.dotnet.microsoft.com",
-    "cache-redirector.jetbrains.com",
     "cache.ruby-lang.org",
     "getcomposer.org",
     "go.dev",
     "jb.gg",
     "nodejs.org",
+    "packages.jetbrains.team",
     "plugins.gradle.org",
     "pypi.org",
     "registry.npmjs.org",
@@ -514,7 +514,7 @@ def remote_version(source: dict[str, Any], policy: str, series: str | None, tran
         versions = metadata_versions(transport, "https://repo.maven.apache.org/maven2", name)
         return newest(versions, series), None
     if kind == "jetbrains-maven":
-        versions = metadata_versions(transport, "https://cache-redirector.jetbrains.com/intellij-dependencies", name)
+        versions = metadata_versions(transport, "https://packages.jetbrains.team/maven/p/ij/intellij-dependencies", name)
         return newest(versions, series), None
     if kind in {"github", "github-release"}:
         return github_latest(transport, name)
