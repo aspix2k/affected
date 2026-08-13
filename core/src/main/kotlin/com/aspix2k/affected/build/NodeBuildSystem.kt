@@ -64,7 +64,14 @@ class NodeBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSys
     private fun manifestInputs(root: File, manifests: List<File>): List<File> =
         manifests + manifests.mapNotNull { manifest ->
             File(manifest.parentFile, "tsconfig.json").takeIf(File::isFile)
-        } + listOf("pnpm-workspace.yaml", "pnpm-lock.yaml", "yarn.lock", "package-lock.json")
+        } + listOf(
+            "pnpm-workspace.yaml",
+            "pnpm-lock.yaml",
+            "yarn.lock",
+            "package-lock.json",
+            "bun.lock",
+            "bun.lockb",
+        )
             .map { File(root, it) }
             .filter(File::isFile)
 
@@ -154,7 +161,7 @@ private fun nodeRelatedTestCommand(
     )
 }
 
-private fun nodeManager(root: File): String = unambiguousNodeManager(root) ?: when {
+private fun nodeManager(root: File): String = bunManager(root) ?: unambiguousNodeManager(root) ?: when {
     File(root, "pnpm-lock.yaml").isFile || File(root, "pnpm-workspace.yaml").isFile -> "pnpm"
     File(root, "yarn.lock").isFile -> "yarn"
     else -> "npm"
@@ -170,6 +177,11 @@ private fun nodeTestCommand(manager: String, packages: List<String>): List<Strin
         listOf("yarn", "test")
     } else {
         listOf("yarn", "workspace", packages.single(), "test")
+    }
+    "bun" -> if (packages == listOf(".")) {
+        listOf("bun", "test")
+    } else {
+        listOf("bun") + packages.flatMap { listOf("--filter", it) } + "test"
     }
     else -> if (packages == listOf(".")) {
         listOf("npm", "test")
@@ -188,6 +200,11 @@ private fun nodeTypeCheckCommand(manager: String, packages: List<String>): List<
         listOf("yarn", "exec", "tsc", "--noEmit")
     } else {
         listOf("yarn", "workspace", packages.single(), "exec", "tsc", "--noEmit")
+    }
+    "bun" -> if (packages == listOf(".")) {
+        listOf("bun", "x", "tsc", "--noEmit")
+    } else {
+        listOf("bun") + packages.flatMap { listOf("--filter", it) } + listOf("x", "tsc", "--noEmit")
     }
     else -> if (packages == listOf(".")) {
         listOf("npm", "exec", "--", "tsc", "--noEmit")
