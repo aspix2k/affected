@@ -134,6 +134,126 @@ class ComposerPestCommandTest {
     }
 
     @Test
+    fun `changed Pest test files become native pest paths`() {
+        val root = createTempDirectory("composer-pest-exact-files").toFile()
+        File(root, "package/tests").mkdirs()
+        val changed = File(root, "package/tests/FeatureTest.php").apply { writeText("<?php\n") }
+        File(root, "package/tests/OtherTest.php").writeText("<?php\n")
+
+        val commands = composerCommands(
+            root.path,
+            listOf("package:${ComposerPackages.PEST}"),
+            listOf(module(root, "package", "package", ComposerPackages.PEST)),
+            changes(changed),
+        )
+
+        assertEquals(listOf("./package/tests/FeatureTest.php"), commands.single().arguments.takeLast(1))
+    }
+
+    @Test
+    fun `a production change keeps the full Pest suite`() {
+        val root = createTempDirectory("composer-pest-src-full").toFile()
+        File(root, "package/tests").mkdirs()
+        File(root, "package/tests/FeatureTest.php").writeText("<?php\n")
+        val source = File(root, "package/src/Service.php").apply {
+            parentFile.mkdirs()
+            writeText("<?php\n")
+        }
+
+        val commands = composerCommands(
+            root.path,
+            listOf("package:${ComposerPackages.PEST}"),
+            listOf(module(root, "package", "package", ComposerPackages.PEST)),
+            changes(source),
+        )
+
+        assertEquals(listOf("./package/tests"), commands.single().arguments.takeLast(1))
+    }
+
+    @Test
+    fun `a dataset or boot file keeps the full Pest suite`() {
+        val root = createTempDirectory("composer-pest-dataset-full").toFile()
+        File(root, "package/tests/Datasets").mkdirs()
+        File(root, "package/tests/FeatureTest.php").writeText("<?php\n")
+        val dataset = File(root, "package/tests/Datasets/users.php").apply { writeText("<?php\n") }
+        val boot = File(root, "package/tests/Pest.php").apply { writeText("<?php\n") }
+
+        for (file in listOf(dataset, boot)) {
+            val commands = composerCommands(
+                root.path,
+                listOf("package:${ComposerPackages.PEST}"),
+                listOf(module(root, "package", "package", ComposerPackages.PEST)),
+                changes(file),
+            )
+            assertEquals(listOf("./package/tests"), commands.single().arguments.takeLast(1), file.name)
+        }
+    }
+
+    @Test
+    fun `changed Pest test files in every planned suite stay exact`() {
+        val root = createTempDirectory("composer-pest-multi-exact").toFile()
+        File(root, "packages/a/tests").mkdirs()
+        File(root, "packages/b/tests").mkdirs()
+        val first = File(root, "packages/a/tests/A.php").apply { writeText("<?php\n") }
+        val second = File(root, "packages/b/tests/B.php").apply { writeText("<?php\n") }
+
+        val commands = composerCommands(
+            root.path,
+            listOf("a:${ComposerPackages.PEST}", "b:${ComposerPackages.PEST}"),
+            listOf(
+                module(root, "a", "packages/a", ComposerPackages.PEST),
+                module(root, "b", "packages/b", ComposerPackages.PEST),
+            ),
+            changes(first, second),
+        )
+
+        assertEquals(
+            listOf("./packages/a/tests/A.php", "./packages/b/tests/B.php"),
+            commands.single().arguments.takeLast(2),
+        )
+    }
+
+    @Test
+    fun `an unproved planned suite keeps every Pest suite`() {
+        val root = createTempDirectory("composer-pest-partial-plan").toFile()
+        File(root, "packages/a/tests").mkdirs()
+        File(root, "packages/b/tests").mkdirs()
+        val changed = File(root, "packages/a/tests/A.php").apply { writeText("<?php\n") }
+        File(root, "packages/b/tests/B.php").writeText("<?php\n")
+
+        val commands = composerCommands(
+            root.path,
+            listOf("a:${ComposerPackages.PEST}", "b:${ComposerPackages.PEST}"),
+            listOf(
+                module(root, "a", "packages/a", ComposerPackages.PEST),
+                module(root, "b", "packages/b", ComposerPackages.PEST),
+            ),
+            changes(changed),
+        )
+
+        assertEquals(
+            listOf("./packages/a/tests", "./packages/b/tests"),
+            commands.single().arguments.takeLast(2),
+        )
+    }
+
+    @Test
+    fun `changes without a merge base keep the full Pest suite`() {
+        val root = createTempDirectory("composer-pest-no-base").toFile()
+        File(root, "package/tests").mkdirs()
+        val changed = File(root, "package/tests/FeatureTest.php").apply { writeText("<?php\n") }
+
+        val commands = composerCommands(
+            root.path,
+            listOf("package:${ComposerPackages.PEST}"),
+            listOf(module(root, "package", "package", ComposerPackages.PEST)),
+            BuildChanges(listOf(changed.path), exactSelectionEligible = emptySet(), comparedToBase = false),
+        )
+
+        assertEquals(listOf("./package/tests"), commands.single().arguments.takeLast(1))
+    }
+
+    @Test
     fun `only Pest global boot files require the workspace`() {
         val root = createTempDirectory("composer-pest-global-files").toFile()
         val global = listOf(
@@ -149,6 +269,12 @@ class ComposerPestCommandTest {
         assertFalse(pestWorkspaceChange(root.path, File(root, "tests/FeatureTest.php").path))
         assertFalse(pestWorkspaceChange(root.path, File(root, "packages/alpha/tests/Pest.php").path))
     }
+
+    private fun changes(vararg files: File) = BuildChanges(
+        files = files.map(File::getPath),
+        exactSelectionEligible = files.mapTo(LinkedHashSet(), File::getPath),
+        comparedToBase = true,
+    )
 
     private fun module(root: File, name: String, path: String, task: String) = BuildModule(
         name,
