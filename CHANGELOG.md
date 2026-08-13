@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Fail unit tests when a plugin descriptor would block a restartless update: `require-restart`, legacy components, nameless action groups, non-dynamic extension points, or a missing optional/content descriptor.
 - Run weekly PIT on `TestRootResolver` in `:core` and fail when either the root or core report has a meaningful survivor. Compiler-generated Kotlin `Intrinsics.checkNotNull*` void-call mutants stay classified as equivalent.
 - Disable Dependabot version-update pull requests; the fail-closed release
   currentness gate continues to discover stale governed pins from official
