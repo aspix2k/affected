@@ -358,6 +358,7 @@ class CliAdapterConformanceTest {
                 "--cache-directory",
                 File(root, ".affected/pest-cache").invariantSeparatorsPath,
                 "--do-not-cache-result",
+                "--no-output",
                 "./packages/alpha/tests",
                 "./packages/beta/tests",
             ),

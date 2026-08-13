@@ -208,6 +208,7 @@ internal fun pestArguments(root: String, paths: List<String>): List<String> {
         "--cache-directory",
         cache.invariantSeparatorsPath,
         "--do-not-cache-result",
+        "--no-output",
     ) + paths
 }
 

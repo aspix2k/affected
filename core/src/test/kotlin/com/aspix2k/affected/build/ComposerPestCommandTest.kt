@@ -40,6 +40,7 @@ class ComposerPestCommandTest {
                 "--cache-directory",
                 File(root, ".affected/pest-cache").invariantSeparatorsPath,
                 "--do-not-cache-result",
+                "--no-output",
                 "./packages/pest-a/tests",
                 "./packages/pest-b/tests",
             ),
