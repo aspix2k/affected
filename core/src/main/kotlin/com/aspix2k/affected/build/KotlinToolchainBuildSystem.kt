@@ -138,7 +138,15 @@ internal fun kotlinToolchainCommands(root: File, tasks: List<String>): List<CliC
     } else {
         KotlinToolchainTasks.TEST
     }
-    return listOf(CliCommand("kotlin $verb", listOf(wrapper, verb)))
+    val modules = tasks.map { it.substringBeforeLast(':') }.distinct()
+    val scoped = modules.none { it == "." } && modules.all { MODULE_NAME.matches(it) }
+    val arguments = when {
+        !scoped -> listOf(wrapper, verb)
+        verb == KotlinToolchainTasks.BUILD && modules.size == 1 -> listOf(wrapper, verb, "-m", modules.single())
+        verb == KotlinToolchainTasks.TEST -> listOf(wrapper, verb) + modules.sorted().flatMap { listOf("-m", it) }
+        else -> listOf(wrapper, verb)
+    }
+    return listOf(CliCommand("kotlin $verb", arguments))
 }
 
 private fun kotlinToolchainSourceFile(file: File): Boolean =
@@ -149,3 +157,4 @@ private val GRADLE_SETTINGS = listOf("settings.gradle.kts", "settings.gradle")
 private val MODULES_SECTION = Regex("""(?m)^modules:\s*\n((?:[ \t]+.*\n?)*)""")
 private val UNPROVED_TOOLCHAIN_MODULE = Regex("""[*?\[]|\*\*""")
 private val TOOLCHAIN_MODULE_PATH = Regex("""(?m)^[ \t]*-[ \t]+(?:\./)?([A-Za-z0-9][A-Za-z0-9_./-]*)[ \t]*$""")
+private val MODULE_NAME = Regex("""[A-Za-z0-9][A-Za-z0-9_./-]*""")

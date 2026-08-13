@@ -454,8 +454,17 @@
       "ecosystem": "Kotlin Toolchain",
       "languages": ["Kotlin", "Java"],
       "runners": ["kotlin test", "kotlin build"],
-      "selection": ["project"],
+      "selection": ["module", "project"],
       "selectionProofs": [
+        {
+          "units": ["module"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliKotlinToolchainModuleConformanceTest.kt",
+          "marker": "kotlin toolchain runs only the selected module tests",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        },
         {
           "units": ["project"],
           "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliKotlinToolchainConformanceTest.kt",
@@ -466,9 +475,9 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "Kotlin Toolchain 0.11.x Alpha; project-level until the CLI contract is stable",
+      "versions": "Kotlin Toolchain 0.11.x Alpha; named modules use -m, unproved lists keep the project command",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/kotlin-toolchain"],
+      "fixtures": ["conformance/cli-fixtures/kotlin-toolchain", "conformance/cli-fixtures/kotlin-toolchain-multi"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {

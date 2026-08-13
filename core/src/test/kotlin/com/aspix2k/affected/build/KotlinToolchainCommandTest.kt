@@ -121,7 +121,7 @@ class KotlinToolchainCommandTest {
         assertEquals(listOf(false, true, false), modules.map(BuildModule::hasTests))
         assertEquals(File(root, "app").invariantSeparatorsPath, modules[1].contentRoots.single())
         assertEquals(
-            listOf(kotlinToolchainWrapper(root), "test"),
+            listOf(kotlinToolchainWrapper(root), "test", "-m", "app"),
             kotlinToolchainCommands(root, modules.filter(BuildModule::hasTests).map { "${it.executionId}:test" })
                 .single()
                 .arguments,
@@ -158,6 +158,46 @@ class KotlinToolchainCommandTest {
                 module.root,
                 BuildChanges(listOf(File(root, "src/Alpha.kt").path), emptySet(), comparedToBase = true),
             ),
+        )
+    }
+
+    @Test
+    fun `named toolchain modules share one -m test invocation`() {
+        val root = toolchainRoot()
+
+        assertEquals(
+            listOf(kotlinToolchainWrapper(root), "test", "-m", "app", "-m", "lib"),
+            kotlinToolchainCommands(root, listOf("app:test", "lib:test")).single().arguments,
+        )
+    }
+
+    @Test
+    fun `a root toolchain task keeps the unscoped project command`() {
+        val root = toolchainRoot()
+
+        assertEquals(
+            listOf(kotlinToolchainWrapper(root), "test"),
+            kotlinToolchainCommands(root, listOf("app:test", ".:test")).single().arguments,
+        )
+    }
+
+    @Test
+    fun `one named production module builds with -m`() {
+        val root = toolchainRoot()
+
+        assertEquals(
+            listOf(kotlinToolchainWrapper(root), "build", "-m", "lib"),
+            kotlinToolchainCommands(root, listOf("lib:build")).single().arguments,
+        )
+    }
+
+    @Test
+    fun `several production modules keep the unscoped build command`() {
+        val root = toolchainRoot()
+
+        assertEquals(
+            listOf(kotlinToolchainWrapper(root), "build"),
+            kotlinToolchainCommands(root, listOf("app:build", "lib:build")).single().arguments,
         )
     }
 
