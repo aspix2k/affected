@@ -171,14 +171,50 @@ class ComposerPestCommandTest {
     }
 
     @Test
-    fun `a dataset or boot file keeps the full Pest suite`() {
+    fun `a named dataset change selects the Pest files that use it`() {
+        val root = createTempDirectory("composer-pest-dataset-exact").toFile()
+        File(root, "package/tests/Datasets").mkdirs()
+        File(root, "package/tests/UsersTest.php").writeText(
+            """
+            <?php
+            test('users', function (string ${'$'}user): void {
+                expect(${'$'}user)->not->toBeEmpty();
+            })->with('users');
+            """.trimIndent(),
+        )
+        File(root, "package/tests/OtherTest.php").writeText(
+            "<?php\ntest('other', fn () => expect(true)->toBeTrue());\n",
+        )
+        val dataset = File(root, "package/tests/Datasets/users.php").apply {
+            writeText("<?php\ndataset('users', ['ada', 'linus']);\n")
+        }
+
+        val commands = composerCommands(
+            root.path,
+            listOf("package:${ComposerPackages.PEST}"),
+            listOf(module(root, "package", "package", ComposerPackages.PEST)),
+            changes(dataset),
+        )
+
+        assertEquals(
+            listOf("./package/tests/Datasets/users.php", "./package/tests/UsersTest.php"),
+            commands.single().arguments.takeLast(2),
+        )
+    }
+
+    @Test
+    fun `an unused or boot Pest dataset keeps the full suite`() {
         val root = createTempDirectory("composer-pest-dataset-full").toFile()
         File(root, "package/tests/Datasets").mkdirs()
-        File(root, "package/tests/FeatureTest.php").writeText("<?php\n")
-        val dataset = File(root, "package/tests/Datasets/users.php").apply { writeText("<?php\n") }
+        File(root, "package/tests/FeatureTest.php").writeText(
+            "<?php\ntest('plain', fn () => expect(true)->toBeTrue());\n",
+        )
+        val unused = File(root, "package/tests/Datasets/users.php").apply {
+            writeText("<?php\ndataset('users', ['ada']);\n")
+        }
         val boot = File(root, "package/tests/Pest.php").apply { writeText("<?php\n") }
 
-        for (file in listOf(dataset, boot)) {
+        for (file in listOf(unused, boot)) {
             val commands = composerCommands(
                 root.path,
                 listOf("package:${ComposerPackages.PEST}"),

@@ -41,6 +41,54 @@ class CliPestConformanceTest {
         assertFalse(File(root, "packages/beta/beta.marker").exists())
     }
 
+    @Test
+    fun `Pest 5 runs tests that consume a changed dataset`() = fixture("pest") { root ->
+        val lock = root.resolve("composer.lock")
+        val locked = lock.readBytes()
+        execute(root, listOf("composer", "install", "--no-interaction", "--no-progress", "--no-scripts"))
+        val pestTemp = File(root, "vendor/pestphp/pest/.temp")
+        assertTrue(pestTemp.mkdirs() || pestTemp.isDirectory)
+        assertTrue(locked.contentEquals(lock.readBytes()))
+        File(root, "packages/alpha/tests/Datasets").mkdirs()
+        val dataset = File(root, "packages/alpha/tests/Datasets/extra.php").apply {
+            writeText("<?php\ndataset('extra colors', ['red']);\n")
+        }
+        File(root, "packages/alpha/tests/ExtraTest.php").writeText(
+            """
+            <?php
+            require_once __DIR__ . '/Datasets/extra.php';
+            test('extra dataset', function (string ${'$'}color): void {
+                expect(${'$'}color)->not->toBeEmpty();
+                file_put_contents(__DIR__ . '/../extra.marker', ${'$'}color);
+            })->with('extra colors');
+            """.trimIndent(),
+        )
+        val alpha = ComposerPackages.parse(root).single { it.id == "affected/fixture-pest-alpha" }
+        val command = composerCommands(
+            root.path,
+            listOf("${alpha.executionId}:${alpha.testTask}"),
+            listOf(alpha),
+            BuildChanges(
+                files = listOf(dataset.path),
+                exactSelectionEligible = setOf(dataset.path),
+                comparedToBase = true,
+            ),
+        ).single()
+
+        assertEquals(
+            listOf(
+                "./packages/alpha/tests/Datasets/extra.php",
+                "./packages/alpha/tests/ExtraTest.php",
+            ),
+            command.arguments.takeLast(2),
+        )
+        execute(root, command.arguments)
+
+        assertEquals("red", File(root, "packages/alpha/extra.marker").readText())
+        assertFalse(File(root, "packages/alpha/alpha.marker").exists())
+        assertFalse(File(root, "packages/alpha/phpunit.marker").exists())
+    }
+
     private fun fixture(name: String, block: (File) -> Unit) {
         assumeTrue(System.getProperty("affected.cliConformance") == "true")
         val source = File(fixtureRoot(), name)
