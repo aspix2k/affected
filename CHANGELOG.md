@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Disable Dependabot version-update pull requests; the fail-closed release
+  currentness gate continues to discover stale governed pins from official
+  sources.
 - Move the detailed support matrix to its own generated page and keep the README and Marketplace description concise.
 - Collapse pull-request CI into one required `verify` aggregator: one Gradle graph for analysis, tests, coverage, packaging and SpotBugs, with `buildHealth` in parallel.
 - Enqueue ready same-repository pull requests with squash auto-merge so agents do not merge `main` by hand. Required checks also listen for `merge_group`.

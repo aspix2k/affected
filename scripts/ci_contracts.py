@@ -46,6 +46,10 @@ def check(root: Path = ROOT) -> None:
     quality = root / ".github/workflows/quality.yml"
     if quality.exists():
         raise CiContractError("quality.yml must be folded into ci.yml")
+    for filename in ("dependabot.yml", "dependabot.yaml"):
+        dependabot = root / ".github" / filename
+        if dependabot.exists() or dependabot.is_symlink():
+            raise CiContractError("Dependabot version-update pull requests must remain disabled")
 
     if "needs:" not in ci or "if: ${{ always() && !cancelled() }}" not in ci:
         raise CiContractError("verify must aggregate required jobs even when one failed")
