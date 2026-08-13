@@ -86,7 +86,7 @@ class ChangeAnalyzer(
         val relative = runCatching { file.relativeTo(projectDir).invariantSeparatorsPath }.getOrElse { return true }
         if (isTestSource(relative)) return false
         val extension = relative.substringAfterLast('.', "")
-        if (extension != "kt" && extension != "java") return false
+        if (extension !in API_SOURCE_EXTENSIONS) return false
 
         val diff = when {
             base != null -> git("diff", "-U0", base, "--", relative)
@@ -162,6 +162,8 @@ class ChangeAnalyzer(
     companion object {
         val DEFAULT_EXTENSIONS = setOf("kt", "kts", "java", "xml", "json", "pro")
 
+        private val API_SOURCE_EXTENSIONS = setOf("kt", "java", "scala", "groovy")
+
         internal fun isTestSource(path: String): Boolean = isTestSource("GRADLE", path)
 
         internal fun isTestSource(systemId: String, path: String): Boolean {
@@ -184,7 +186,7 @@ class ChangeAnalyzer(
                 """(?:public\s+|internal\s+|open\s+|abstract\s+|sealed\s+|final\s+|override\s+|""" +
                 """data\s+|value\s+|annotation\s+|enum\s+|inline\s+|suspend\s+|expect\s+|actual\s+|""" +
                 """lateinit\s+|const\s+|external\s+|operator\s+|infix\s+|tailrec\s+|static\s+)*""" +
-                """(?:fun|val|var|class|interface|object|typealias|constructor|record)\b"""
+                """(?:fun|def|val|var|class|interface|object|trait|typealias|constructor|record)\b"""
         )
 
         private val TYPED_MEMBER = Regex(
