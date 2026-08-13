@@ -209,6 +209,9 @@ jobs:
           extensions: dom, mbstring, xml, xmlwriter
           tools: composer:2.10.2
           coverage: none
+      - uses: dart-lang/setup-dart@7654d458321ee25acccccfdb86cd48bd95768ff1 # v1.8.0
+        with:
+          sdk: "3.13.0"
 
       - name: Install native fixture tools
         run: |

@@ -51,6 +51,7 @@
     {"id":"rust-toolchain-action","local":{"type":"github-action","name":"dtolnay/rust-toolchain"},"source":{"type":"github-branch","name":"dtolnay/rust-toolchain","branch":"stable"},"policy":"branch"},
     {"id":"ruby-setup-action","local":{"type":"github-action","name":"ruby/setup-ruby"},"source":{"type":"github-branch","name":"ruby/setup-ruby","branch":"master"},"policy":"branch"},
     {"id":"php-setup-action","local":{"type":"github-action","name":"shivammathur/setup-php"},"source":{"type":"github","name":"shivammathur/setup-php"},"policy":"latest"},
+    {"id":"dart-setup-action","local":{"type":"github-action","name":"dart-lang/setup-dart"},"source":{"type":"github","name":"dart-lang/setup-dart"},"policy":"latest"},
     {"id":"sbt-setup-action","local":{"type":"github-action","name":"sbt/setup-sbt"},"source":{"type":"github","name":"sbt/setup-sbt"},"policy":"latest"},
     {"id":"codeql-action","local":{"type":"github-action","name":"github/codeql-action"},"source":{"type":"github","name":"github/codeql-action"},"policy":"latest"},
     {"id":"dependency-review-action","local":{"type":"github-action","name":"actions/dependency-review-action"},"source":{"type":"github","name":"actions/dependency-review-action"},"policy":"latest"},

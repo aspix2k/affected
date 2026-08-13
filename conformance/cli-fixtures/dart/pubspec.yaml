@@ -1,0 +1,5 @@
+name: affected_dart
+environment:
+  sdk: ^3.13.0
+dev_dependencies:
+  test: ^1.25.0

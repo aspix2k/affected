@@ -511,6 +511,29 @@
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/bazel", "conformance/cli-fixtures/bazel-packages"],
       "gates": [".github/workflows/conformance.yml"]
+    },
+    {
+      "id": "DART",
+      "implementation": "com.aspix2k.affected.build.DartBuildSystem",
+      "ecosystem": "Dart",
+      "languages": ["Dart"],
+      "runners": ["dart test", "dart analyze"],
+      "selection": ["project"],
+      "selectionProofs": [
+        {
+          "units": ["project"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliDartConformanceTest.kt",
+          "marker": "dart runs the project test command for the affected root",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        }
+      ],
+      "versions": "Dart 3.13.x; package-level until pub workspaces and Flutter contracts are proven",
+      "support": "supported",
+      "fixtures": ["conformance/cli-fixtures/dart"],
+      "gates": [".github/workflows/conformance.yml"]
     }
   ]
 }
