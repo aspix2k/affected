@@ -1,0 +1,21 @@
+<project name="affected-ant" default="test">
+    <target name="compile">
+        <mkdir dir="build/classes"/>
+        <javac srcdir="src" destdir="build/classes" includeantruntime="false"/>
+    </target>
+
+    <target name="test" depends="compile">
+        <mkdir dir="build/test-classes"/>
+        <javac srcdir="test" destdir="build/test-classes" includeantruntime="false">
+            <classpath>
+                <pathelement location="build/classes"/>
+            </classpath>
+        </javac>
+        <java classname="alpha.AlphaTest" fork="true" failonerror="true">
+            <classpath>
+                <pathelement location="build/classes"/>
+                <pathelement location="build/test-classes"/>
+            </classpath>
+        </java>
+    </target>
+</project>
