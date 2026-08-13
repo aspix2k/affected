@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Retry Gradle after a Maven Central 429 and put the JetBrains cache-redirector first again; compilation and test failures still run once.
 - Stop launching the exact-impact matrix from README-only edits, and stop rerunning the full core test suite as skipped CLI contracts.
 - Retry Gradle itself after a cache-redirector 502/503/504 and fall through to Maven Central; compilation and test failures still run once.
 - Submit main dependency snapshots from `workflow_dispatch` so a GITHUB_TOKEN merge can backfill the review baseline.
