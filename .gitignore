@@ -23,5 +23,6 @@
 /conformance/cli-fixtures/kotlin-toolchain-multi/build/
 /conformance/cli-fixtures/kotlin-toolchain-multi/app/build/
 /conformance/cli-fixtures/kotlin-toolchain-multi/lib/build/
+/conformance/cli-fixtures/kotlin-toolchain-multi/**/affected-*.marker
 /core/src/main/dotnet/**/bin/
 /core/src/main/dotnet/**/obj/
