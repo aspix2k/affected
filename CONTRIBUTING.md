@@ -103,6 +103,10 @@ Cargo runners and other ambiguous configuration keep the existing conservative
 `cargo test` plan. A compared-to-base set of regular `.rs` files that does not
 widen the workspace adds a cargo-nextest `-E 'file(path) + ...'` filter.
 
+A changed Go `*_test.go` file against a merge base selects its `Test*`
+functions with `go test <package> -run`. Production files, missing parseable
+tests and multi-package unproved batches keep the package test command.
+
 `config/support-matrix.json` is the source of truth for supported JetBrains
 products, build systems, test runners, selection units and operating-system
 evidence. Every registered build-system extension must have an entry backed by
