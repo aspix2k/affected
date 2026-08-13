@@ -470,6 +470,29 @@
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/kotlin-toolchain"],
       "gates": [".github/workflows/conformance.yml"]
+    },
+    {
+      "id": "BAZEL",
+      "implementation": "com.aspix2k.affected.build.BazelBuildSystem",
+      "ecosystem": "Bazel",
+      "languages": ["Java", "Kotlin", "C", "C++", "Python", "Go", "Rust", "Starlark"],
+      "runners": ["bazel test", "bazel build"],
+      "selection": ["project"],
+      "selectionProofs": [
+        {
+          "units": ["project"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliBazelConformanceTest.kt",
+          "marker": "bazel runs the workspace test command for the affected root",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        }
+      ],
+      "versions": "Bazel 8.x via Bazelisk 1.29.0; workspace-level //... until target ownership is proven",
+      "support": "supported",
+      "fixtures": ["conformance/cli-fixtures/bazel"],
+      "gates": [".github/workflows/conformance.yml"]
     }
   ]
 }
