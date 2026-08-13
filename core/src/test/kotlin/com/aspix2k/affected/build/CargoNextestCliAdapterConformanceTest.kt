@@ -62,9 +62,9 @@ class CargoNextestCliAdapterConformanceTest {
         val failed = executeBatch(root, commands)
 
         assertFalse(failed.passed)
-        assertContains(failed.output, "> cargo nextest")
-        assertContains(failed.output, "FAIL")
-        assertFalse(failed.output.contains("Doc-tests"), failed.output)
+        assertContains(failed.semanticOutput, "> cargo nextest")
+        assertContains(failed.semanticOutput, "FAIL")
+        assertFalse(failed.semanticOutput.contains("Doc-tests"), failed.output)
         val marker = File(root, "nextest.pid")
         source.writeText(SLEEPING_TEST)
         assertBatchStops(root, commands, marker)
@@ -82,9 +82,9 @@ class CargoNextestCliAdapterConformanceTest {
         val result = executeBatch(root, commands)
 
         assertFalse(result.passed)
-        assertContains(result.output, "> cargo nextest")
-        assertContains(result.output, "> cargo test --doc")
-        assertContains(result.output, "Doc-tests affected_alpha")
+        assertContains(result.semanticOutput, "> cargo nextest")
+        assertContains(result.semanticOutput, "> cargo test --doc")
+        assertContains(result.semanticOutput, "Doc-tests affected_alpha")
     }
 
     @Test
@@ -104,23 +104,23 @@ class CargoNextestCliAdapterConformanceTest {
         )
 
         assertFalse(result.passed)
-        assertContains(result.output, "Doc-tests affected_alpha")
-        assertContains(result.output, "Doc-tests affected_beta")
+        assertContains(result.semanticOutput, "Doc-tests affected_alpha")
+        assertContains(result.semanticOutput, "Doc-tests affected_beta")
     }
 
     private fun assertSelectedRun(result: CommandResult) {
         assertTrue(result.passed, result.output)
-        assertContains(result.output, "> cargo nextest")
-        assertContains(result.output, "> cargo test --doc")
-        assertFalse(result.output.contains("\n> cargo test\n"), result.output)
-        assertContains(result.output, "affected-alpha")
-        assertFalse(result.output.contains("affected-beta"))
-        assertContains(result.output, "Doc-tests affected_alpha")
+        assertContains(result.semanticOutput, "> cargo nextest")
+        assertContains(result.semanticOutput, "> cargo test --doc")
+        assertFalse(result.semanticOutput.contains("\n> cargo test\n"), result.output)
+        assertContains(result.semanticOutput, "affected-alpha")
+        assertFalse(result.semanticOutput.contains("affected-beta"))
+        assertContains(result.semanticOutput, "Doc-tests affected_alpha")
     }
 
     private fun nativePlan(root: File, profile: String? = null): CargoNextestPlan {
         val config = requireNotNull(cargoNextestValidationSnapshot(root, profile))
-        val environment = mapOf("CARGO" to "cargo")
+        val environment = cargoNextestDiscoveryEnvironment("cargo")
         val version = execute(root, listOf("cargo-nextest", "--version"), environment)
         val configuration = execute(
             root,
@@ -131,7 +131,9 @@ class CargoNextestCliAdapterConformanceTest {
             ),
             environment,
         )
-        return detectCargoNextest(root, version, configuration, requestedProfile = profile)
+        return detectCargoNextest(root, version, configuration, requestedProfile = profile).also {
+            assertEquals(CargoNextestMode.PACKAGES, it.mode, "Unexpected nextest fallback")
+        }
     }
 
     private fun fixture(block: (File) -> Unit) {
@@ -218,11 +220,14 @@ class CargoNextestCliAdapterConformanceTest {
         }
     }
 
-    private data class CommandResult(val passed: Boolean, val output: String)
+    private data class CommandResult(val passed: Boolean, val output: String) {
+        val semanticOutput: String = ANSI_ESCAPE.replace(output, "")
+    }
 
     private companion object {
         const val CONFORMANCE_PROPERTY = "affected.cliConformance"
         const val COMMAND_TIMEOUT_SECONDS = 180L
+        val ANSI_ESCAPE = Regex("\u001B\\[[0-?]*[ -/]*[@-~]")
         val SLEEPING_TEST = """
             pub fn value() -> u32 { 1 }
 

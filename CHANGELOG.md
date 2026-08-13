@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Submit main dependency snapshots from `workflow_dispatch` so a GITHUB_TOKEN merge can backfill the review baseline.
 - Enforce Jackson BOM 2.22.1 on the MCP module so the optional MCP Server plugin cannot reintroduce Jackson 2.19.
 - Count `:core` and `:mcp` in the Kover floor so MCP tests cannot hide behind the root plugin sources.
+- Keep cargo-nextest discovery deterministic when the environment forces colored Cargo output.
 - Give the Gradle wrapper 120s and four retries instead of a single 10s download from services.gradle.org.
 - Seed the Gradle wrapper cache from the official GitHub `gradle-distributions` release, verify the SHA-256, and reuse `~/.gradle/wrapper/dists` so CI does not download the zip from services.gradle.org on every job.
 - Resolve Maven artifacts through the JetBrains cache-redirector before repo.maven.apache.org so a Central 403 cannot fail CI.

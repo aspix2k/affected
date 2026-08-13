@@ -111,6 +111,32 @@ class CargoNextestTest {
     }
 
     @Test
+    fun `nextest discovery disables ambient Cargo color`() {
+        assertEquals(
+            mapOf("CARGO" to "/verified/cargo", "CARGO_TERM_COLOR" to "never"),
+            cargoNextestDiscoveryEnvironment("/verified/cargo"),
+        )
+    }
+
+    @Test
+    fun `colored nextest version output still enables package selection`() {
+        val root = workspace(
+            """
+            nextest-version = { required = "0.9.85" }
+
+            [profile.default]
+            fail-fast = false
+            """.trimIndent(),
+        )
+        val colored = "\u001B[1;32mcargo-nextest 0.9.143\u001B[0m"
+
+        assertEquals(
+            CargoNextestPlan(CargoNextestMode.PACKAGES, "default", "0.9.143", false),
+            detectCargoNextest(root, colored, configurationOutput = CONFIGURATION),
+        )
+    }
+
+    @Test
     fun `unsupported nextest settings retain cargo test`() {
         val configs = listOf(
             "nextest-version = { required = '0.9.85' }\n[script.setup]\ncommand = 'prepare'",
@@ -264,10 +290,12 @@ class CargoNextestTest {
             CargoNextestPlan(CargoNextestMode.PACKAGES, "default", "0.9.143", true, identity),
         )
 
-        val command = cargoCommandsForRun(root.path, listOf("alpha:$task"), environment).first()
+        val commands = cargoCommandsForRun(root.path, listOf("alpha:$task"), environment)
+        val command = commands.first()
 
         assertEquals(listOf(verified.canonicalPath, "nextest"), command.arguments.take(2))
         assertEquals(cargo.absolutePath, command.environment["CARGO"])
+        assertEquals(cargo.absolutePath, commands.last().arguments.first())
     }
 
     @Test
