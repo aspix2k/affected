@@ -263,7 +263,7 @@ class CliCommandTest {
         val commands = composerCommands("/repo", listOf("pkg-a:test", "pkg-b:test"), modules)
 
         assertEquals(
-            listOf("php", "vendor/bin/phpunit", "packages/a", "packages/b"),
+            listOf("php", "vendor/bin/phpunit", "./packages/a", "./packages/b"),
             commands.single().arguments,
         )
     }

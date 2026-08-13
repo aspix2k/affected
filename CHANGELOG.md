@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Run every test in affected Composer packages through Pest 5.1.1, including datasets and PHPUnit-style tests, while disabling focused and test-impact shortcuts.
 - Run affected Cargo workspace packages through repository-configured cargo-nextest 0.9.x profiles, retaining `cargo test --doc` and conservative `cargo test` fallback when exact execution cannot be proven.
 - Detect Composer projects that declare Pest and run the full package through `vendor/bin/pest` instead of PHPUnit class selection.
 - Run standard-library unittest for Python projects that import `unittest` and do not declare pytest, keeping pytest exact selection elsewhere.

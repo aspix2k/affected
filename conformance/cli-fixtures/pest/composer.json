@@ -1,0 +1,22 @@
+{
+  "name": "affected/pest-fixture-root",
+  "repositories": [
+    {
+      "type": "path",
+      "url": "packages/*",
+      "options": {
+        "symlink": true
+      }
+    }
+  ],
+  "require-dev": {
+    "pestphp/pest": "5.1.1",
+    "affected/fixture-pest-alpha": "1.0.0",
+    "affected/fixture-pest-beta": "1.0.0"
+  },
+  "config": {
+    "allow-plugins": {
+      "pestphp/pest-plugin": true
+    }
+  }
+}

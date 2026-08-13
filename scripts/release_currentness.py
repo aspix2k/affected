@@ -841,7 +841,11 @@ def discovered_pin_keys() -> set[str]:
         f"property:gradle.properties:{name}"
         for name in re.findall(r"(?m)^(affected\.[A-Za-z0-9_.-]+\.version)=", properties)
     )
-    for path in ("conformance/cli-fixtures/node/package.json", "conformance/cli-fixtures/composer/composer.json"):
+    for path in (
+        "conformance/cli-fixtures/node/package.json",
+        "conformance/cli-fixtures/composer/composer.json",
+        "conformance/cli-fixtures/pest/composer.json",
+    ):
         data = json.loads(read_text(path))
         for section_name in ("dependencies", "devDependencies", "require", "require-dev"):
             section = data.get(section_name)

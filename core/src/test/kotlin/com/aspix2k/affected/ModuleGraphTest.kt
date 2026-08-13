@@ -6,6 +6,8 @@ import com.aspix2k.affected.build.BuildSystem
 import com.aspix2k.affected.build.CargoBuildSystem
 import com.aspix2k.affected.build.CargoNextestMode
 import com.aspix2k.affected.build.CargoNextestPlan
+import com.aspix2k.affected.build.ComposerBuildSystem
+import com.aspix2k.affected.build.ComposerPackages
 import com.aspix2k.affected.build.TransitiveTestConsumersBuildSystem
 import com.aspix2k.affected.build.WorkspaceChangesBuildSystem
 import com.aspix2k.affected.build.cargoCommands
@@ -200,6 +202,38 @@ class ModuleGraphTest {
                 ProjectChanges.Result(listOf(changed), emptySet(), setOf(changed), comparedToBase = true),
                 checkConsumers = false,
             ).groups.single().tasks,
+        )
+    }
+
+    @Test
+    fun `a root Pest boot file change runs every Pest package`() {
+        val root = createTempDirectory("module-graph-pest-bootstrap").toFile()
+        val system = ComposerBuildSystem()
+        val rootModule = BuildModule(
+            id = "affected/root",
+            root = root.invariantSeparatorsPath,
+            contentRoots = listOf(root.invariantSeparatorsPath),
+            testTask = ComposerPackages.PEST,
+            compileTask = null,
+            hasTests = false,
+            executionId = ".",
+        )
+        val alpha = module(root, "affected/alpha", "packages/alpha").copy(testTask = ComposerPackages.PEST)
+        val beta = module(root, "affected/beta", "packages/beta").copy(testTask = ComposerPackages.PEST)
+        val graph = ModuleGraph(listOf(rootModule, alpha, beta).map { ModuleGraph.Node(it, system) })
+        val bootstrap = File(root, "tests/Helpers/Shared.php").apply {
+            parentFile.mkdirs()
+            writeText("<?php")
+        }
+        val changes = ProjectChanges.Result(listOf(bootstrap), emptySet(), setOf(bootstrap), comparedToBase = true)
+
+        assertEquals(
+            setOf("affected/root", "affected/alpha", "affected/beta"),
+            affectedModules(graph, changes).mapTo(HashSet(), AffectedModule::id),
+        )
+        assertEquals(
+            listOf("affected/alpha:${ComposerPackages.PEST}", "affected/beta:${ComposerPackages.PEST}"),
+            verificationPlan(graph, changes, checkConsumers = false).groups.single().tasks,
         )
     }
 

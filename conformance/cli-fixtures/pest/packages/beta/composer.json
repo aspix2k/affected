@@ -1,0 +1,12 @@
+{
+  "name": "affected/fixture-pest-beta",
+  "version": "1.0.0",
+  "require": {
+    "affected/fixture-pest-alpha": "1.0.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "Affected\\PestFixture\\Beta\\": "src/"
+    }
+  }
+}
