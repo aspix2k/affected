@@ -330,13 +330,16 @@ internal fun dotnetCommands(root: String, tasks: List<String>): List<CliCommand>
     val verb = if (task.substringAfterLast(':') == DotnetProjects.COMPILE) "build" else "test"
     val selection = when {
         project == "." -> emptyList()
-        verb == "test" && usesMicrosoftTestingPlatform(root) -> listOf("--project", project)
+        verb == "test" && usesMicrosoftTestingPlatform(root, project) -> listOf("--project", project)
         else -> listOf(project)
     }
     CliCommand("dotnet $verb $project", listOf("dotnet", verb) + selection)
 }
 
-internal fun usesMicrosoftTestingPlatform(root: String): Boolean = runCatching {
+internal fun usesMicrosoftTestingPlatform(root: String, project: String = "."): Boolean =
+    globalJsonDeclaresTestingPlatform(root) || projectDeclaresTestingPlatform(root, project)
+
+private fun globalJsonDeclaresTestingPlatform(root: String): Boolean = runCatching {
     val global = File(root, "global.json").takeIf(File::isRegularFileNoFollow) ?: return false
     val text = ManifestSearch.readText(global) ?: return false
     JsonParser.parseString(text).asJsonObject
@@ -346,3 +349,17 @@ internal fun usesMicrosoftTestingPlatform(root: String): Boolean = runCatching {
         ?.asString
         ?.equals("Microsoft.Testing.Platform", ignoreCase = true) == true
 }.getOrDefault(false)
+
+private fun projectDeclaresTestingPlatform(root: String, project: String): Boolean {
+    if (project == ".") return false
+    val file = File(root, project)
+    if (!file.isRegularFileNoFollow()) return false
+    val text = ManifestSearch.readText(file) ?: return false
+    return TESTING_PLATFORM_PROJECT_MARKERS.any { marker -> text.contains(marker, ignoreCase = true) }
+}
+
+private val TESTING_PLATFORM_PROJECT_MARKERS = listOf(
+    "Microsoft.Testing.Platform",
+    "UseMicrosoftTestingPlatformRunner",
+    "TestingPlatformDotnetTestSupport",
+)

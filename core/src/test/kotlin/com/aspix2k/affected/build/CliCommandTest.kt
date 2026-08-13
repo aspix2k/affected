@@ -337,6 +337,52 @@ class CliCommandTest {
     }
 
     @Test
+    fun `dotnet detects Microsoft Testing Platform from the project file`() {
+        val root = createTempDirectory("dotnet-mtp-csproj").toFile()
+        File(root, "tests/App.Tests.csproj").apply {
+            parentFile.mkdirs()
+            writeText(
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+                  </PropertyGroup>
+                  <ItemGroup>
+                    <PackageReference Include="Microsoft.Testing.Platform" Version="1.8.0" />
+                  </ItemGroup>
+                </Project>
+                """.trimIndent(),
+            )
+        }
+
+        val command = dotnetCommands(root.path, listOf("tests/App.Tests.csproj:test")).single()
+
+        assertEquals(listOf("dotnet", "test", "--project", "tests/App.Tests.csproj"), command.arguments)
+    }
+
+    @Test
+    fun `a VSTest project keeps the path-style dotnet test command`() {
+        val root = createTempDirectory("dotnet-vstest").toFile()
+        File(root, "tests/App.Tests.csproj").apply {
+            parentFile.mkdirs()
+            writeText(
+                """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <ItemGroup>
+                    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+                    <PackageReference Include="xunit" Version="2.9.3" />
+                  </ItemGroup>
+                </Project>
+                """.trimIndent(),
+            )
+        }
+
+        val command = dotnetCommands(root.path, listOf("tests/App.Tests.csproj:test")).single()
+
+        assertEquals(listOf("dotnet", "test", "tests/App.Tests.csproj"), command.arguments)
+    }
+
+    @Test
     fun `dotnet exact selection uses native fully qualified filters after build`() {
         val report = createTempDirectory("dotnet-report").resolve("results.trx")
 

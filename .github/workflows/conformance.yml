@@ -188,7 +188,7 @@ jobs:
           coverage: none
 
       - name: Install native fixture tools
-        run: python -m pip install cmake==4.4.2 pytest==9.1.1 ruff==0.16.2
+        run: python -m pip install cmake==4.4.2 pytest==9.1.1 ruff==0.16.3
 
       - name: Check Python adapter
         run: |
