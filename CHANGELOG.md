@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Detect Kotlin Toolchain roots from `module.yaml` / `project.yaml` plus the `kotlin` wrapper and run one `kotlin test` or `kotlin build` session; Gradle settings and Amper-only wrappers stay off this adapter. Alpha toolchains stay project-level.
 - Detect conventional Ant roots from `build.xml` and run one `ant test` or `ant compile` session; Gradle and Maven roots stay off this adapter, and a `junit` target is used when `test` is absent.
 - Narrow hierarchical Kotlin Multiplatform source sets so `nativeMain` keeps native target tests, `appleMain` keeps Apple tests, and included-build task paths stay in the same family; `commonMain` and unproved paths keep every target task.
 - Narrow Kotlin Multiplatform target tests to the source-set family of the change (`androidMain` keeps `testDebugUnitTest`, `iosMain` keeps iOS tests); `commonMain` and unproved paths keep every target task.

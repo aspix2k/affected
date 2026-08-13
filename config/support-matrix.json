@@ -447,6 +447,29 @@
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/ant"],
       "gates": [".github/workflows/conformance.yml"]
+    },
+    {
+      "id": "KOTLIN_TOOLCHAIN",
+      "implementation": "com.aspix2k.affected.build.KotlinToolchainBuildSystem",
+      "ecosystem": "Kotlin Toolchain",
+      "languages": ["Kotlin", "Java"],
+      "runners": ["kotlin test", "kotlin build"],
+      "selection": ["project"],
+      "selectionProofs": [
+        {
+          "units": ["project"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliKotlinToolchainConformanceTest.kt",
+          "marker": "kotlin toolchain runs the project test command for the affected root",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        }
+      ],
+      "versions": "Kotlin Toolchain 0.11.x Alpha; project-level until the CLI contract is stable",
+      "support": "supported",
+      "fixtures": ["conformance/cli-fixtures/kotlin-toolchain"],
+      "gates": [".github/workflows/conformance.yml"]
     }
   ]
 }
