@@ -382,16 +382,25 @@ class CliAdapterConformanceTest {
     }
 
     @Test
-    fun `RSpec command runs both selected gems`() = fixture("ruby") { root ->
+    fun `Bundler runs RSpec Minitest and Test Unit in one session`() = fixture("ruby") { root ->
+        val lock = File(root, "Gemfile.lock").readBytes()
         execute(root, listOf("bundle", "config", "set", "--local", "path", "vendor/bundle"))
+        execute(root, listOf("bundle", "config", "set", "--local", "frozen", "true"))
         execute(root, listOf("bundle", "install", "--jobs", "2", "--retry", "2"))
+        assertTrue(lock.contentEquals(File(root, "Gemfile.lock").readBytes()))
         val modules = RubyGems.parse(root).filter(BuildModule::hasTests)
-        val output = execute(
-            root,
-            rubyCommands(root.path, modules.map { "${it.executionId}:test" }, modules).single().arguments,
-        )
+        val commands = rubyCommands(root.path, modules.map { "${it.executionId}:${it.testTask}" }, modules)
+        val result = executeBatch(root, commands)
 
-        assertContains(output, "2 examples, 0 failures")
+        assertEquals(listOf("rspec", "minitest", "test-unit"), commands.map(CliCommand::title))
+        assertTrue(result.completed, result.output)
+        assertTrue(result.passed, result.output)
+        assertContains(result.output, "1 example, 0 failures")
+        assertContains(result.output, "2 runs, 4 assertions")
+        assertContains(result.output, "2 tests, 2 assertions")
+        assertContains(result.output, "> rspec")
+        assertContains(result.output, "> minitest")
+        assertContains(result.output, "> test-unit")
     }
 
     @Test
@@ -587,6 +596,23 @@ class CliAdapterConformanceTest {
         } finally {
             output.delete()
         }
+    }
+
+    private fun executeBatch(directory: File, commands: List<CliCommand>): CommandResult {
+        val output = StringBuilder()
+        val handler = SequentialProcessHandler(directory, commands)
+        handler.addProcessListener(object : com.intellij.execution.process.ProcessListener {
+            override fun onTextAvailable(
+                event: com.intellij.execution.process.ProcessEvent,
+                outputType: com.intellij.openapi.util.Key<*>,
+            ) {
+                output.append(event.text)
+            }
+        })
+        handler.startNotify()
+        val completed = handler.waitFor(TimeUnit.SECONDS.toMillis(COMMAND_TIMEOUT_SECONDS))
+        if (!completed) handler.destroyProcess()
+        return CommandResult(completed, completed && handler.exitCode == 0, output.toString())
     }
 
     private data class CommandResult(val completed: Boolean, val passed: Boolean, val output: String)

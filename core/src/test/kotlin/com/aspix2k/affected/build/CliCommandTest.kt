@@ -243,18 +243,6 @@ class CliCommandTest {
     }
 
     @Test
-    fun `Bundler gems share one RSpec command`() {
-        val modules = modules("/repo", "gem-a", "gems/a", "gem-b", "gems/b")
-
-        val commands = rubyCommands("/repo", listOf("gem-a:test", "gem-b:test"), modules)
-
-        assertEquals(
-            listOf("bundle", "exec", "rspec", "gems/a", "gems/b"),
-            commands.single().arguments,
-        )
-    }
-
-    @Test
     fun `a missing planned module invalidates the whole command batch`() {
         val modules = modules("/repo", "pkg-a", "packages/a")
 

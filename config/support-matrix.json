@@ -343,20 +343,20 @@
       "implementation": "com.aspix2k.affected.build.RubyBuildSystem",
       "ecosystem": "Bundler",
       "languages": ["Ruby"],
-      "runners": ["RSpec"],
+      "runners": ["RSpec", "Minitest", "Test::Unit"],
       "selection": ["gem"],
       "selectionProofs": [
         {
           "units": ["gem"],
           "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
-          "marker": "RSpec command runs both selected gems",
+          "marker": "Bundler runs RSpec Minitest and Test Unit in one session",
           "gate": ".github/workflows/conformance.yml",
           "gateMarker": "--tests '*Cli*ConformanceTest'",
           "gateJob": "cli-native",
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "Ruby 4; RSpec 3.13.x",
+      "versions": "Ruby 4; lockless RSpec or rubygems.org direct locks tested at RSpec 3.13.2, Minitest 6.0.6 and Test::Unit 3.7.8",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/ruby"],
       "gates": [".github/workflows/conformance.yml"]

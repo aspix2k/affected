@@ -75,6 +75,8 @@
     {"id":"vitest","local":{"type":"json-dependency","path":"conformance/cli-fixtures/node/package.json","name":"vitest"},"source":{"type":"npm","name":"vitest"},"policy":"latest"},
     {"id":"phpunit","local":{"type":"json-dependency","path":"conformance/cli-fixtures/composer/composer.json","name":"phpunit/phpunit"},"source":{"type":"packagist","name":"phpunit/phpunit"},"policy":"latest"},
     {"id":"rspec","local":{"type":"gem","path":"conformance/cli-fixtures/ruby/Gemfile","name":"rspec"},"source":{"type":"rubygems","name":"rspec"},"policy":"latest"},
+    {"id":"minitest","local":{"type":"gem","path":"conformance/cli-fixtures/ruby/Gemfile","name":"minitest"},"source":{"type":"rubygems","name":"minitest"},"policy":"latest"},
+    {"id":"test-unit","local":{"type":"gem","path":"conformance/cli-fixtures/ruby/Gemfile","name":"test-unit"},"source":{"type":"rubygems","name":"test-unit"},"policy":"latest"},
     {"id":"microsoft-test-sdk","local":{"type":"nuget","name":"Microsoft.NET.Test.Sdk"},"source":{"type":"nuget","name":"Microsoft.NET.Test.Sdk"},"policy":"latest"},
     {"id":"xunit","local":{"type":"nuget","name":"xunit"},"source":{"type":"nuget","name":"xunit"},"policy":"latest"},
     {"id":"xunit-vs","local":{"type":"nuget","name":"xunit.runner.visualstudio"},"source":{"type":"nuget","name":"xunit.runner.visualstudio"},"policy":"latest"},

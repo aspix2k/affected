@@ -13,8 +13,10 @@ object RubyGems {
         val rootPath = root.invariantSeparatorsPath
         val specs = findGemspecs(root)
         if (specs.isEmpty()) return emptyList()
+        val lockedRunners = RubyTestSuites.lockedRunners(root)
+        if (RubyTestSuites.invalidLock(root, lockedRunners)) return emptyList()
 
-        val described = specs.map { describe(it) ?: return emptyList() }
+        val described = specs.map { describe(it, lockedRunners) ?: return emptyList() }
         val names = described.map { it.name }.toSet()
         if (names.size != described.size) return emptyList()
 
@@ -27,39 +29,52 @@ object RubyGems {
                 id = entry.name,
                 root = rootPath,
                 contentRoots = listOf(entry.directory),
-                testTask = TEST,
+                testTask = entry.testTask,
                 compileTask = null,
-                hasTests = entry.hasTests,
+                hasTests = entry.testTask != TEST,
                 dependencies = dependencies - "$rootPath|${entry.name}",
                 executionId = if (entry.directory == rootPath) "." else entry.name,
             )
         }
     }
 
+    fun fallback(root: File, testTask: String): BuildModule {
+        val specs = findGemspecs(root)
+        val hasSpecs = ManifestSearch.anyFile(root) { it.extension.equals("gemspec", ignoreCase = true) }
+        val roots = when {
+            hasSpecs == null || hasSpecs && specs.isEmpty() -> listOf(root.invariantSeparatorsPath)
+            !hasSpecs -> listOf(root.invariantSeparatorsPath)
+            else -> specs.mapNotNull(File::getParentFile).map { it.invariantSeparatorsPath }.distinct()
+        }
+        return rootFallbackModule(root, testTask, null).copy(contentRoots = roots)
+    }
+
     private data class Described(
         val name: String,
         val directory: String,
         val dependencies: Set<String>,
-        val hasTests: Boolean,
+        val testTask: String,
     )
 
-    private fun describe(gemspec: File): Described? {
+    private fun describe(
+        gemspec: File,
+        lockedRunners: Set<RubyTestRunner>?,
+    ): Described? {
         val text = ManifestSearch.readText(gemspec) ?: return null
         val directory = gemspec.parentFile ?: return null
 
         val name = NAME.find(text)?.groupValues?.get(1)
             ?: gemspec.nameWithoutExtension.takeIf { it.isNotEmpty() }
             ?: return null
+        val testTask = RubyTestSuites.task(directory, lockedRunners) ?: return null
 
         return Described(
             name = name,
             directory = directory.invariantSeparatorsPath,
             dependencies = DEPENDENCY.findAll(text).mapTo(HashSet()) { it.groupValues[1] },
-            hasTests = TEST_DIRS.any { File(directory, it).isDirectory },
+            testTask = testTask,
         )
     }
 
     private fun findGemspecs(root: File): List<File> = ManifestSearch.findByExtension(root, "gemspec")
-
-    private val TEST_DIRS = listOf("spec", "test")
 }

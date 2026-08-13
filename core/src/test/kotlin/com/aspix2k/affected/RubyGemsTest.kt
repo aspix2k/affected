@@ -1,6 +1,7 @@
 package com.aspix2k.affected
 
 import com.aspix2k.affected.build.RubyGems
+import com.aspix2k.affected.build.RubyTestSuites
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -11,7 +12,23 @@ import kotlin.test.assertTrue
 
 class RubyGemsTest {
 
-    private fun monorepo(): File = createTempDirectory("ruby").toFile()
+    private fun monorepo(): File = createTempDirectory("ruby").toFile().also {
+        lock(it, "rspec" to "3.13.2")
+    }
+
+    private fun lock(root: File, vararg dependencies: Pair<String, String>) {
+        File(root, "Gemfile.lock").writeText(
+            buildString {
+                appendLine("GEM")
+                appendLine("  remote: https://rubygems.org/")
+                appendLine("  specs:")
+                dependencies.forEach { (name, version) -> appendLine("    $name ($version)") }
+                appendLine()
+                appendLine("DEPENDENCIES")
+                dependencies.forEach { (name, version) -> appendLine("  $name (= $version)") }
+            },
+        )
+    }
 
     private fun gem(
         root: File,
@@ -99,6 +116,236 @@ class RubyGemsTest {
 
         assertTrue(modules.single { it.id == "acme-with" }.hasTests)
         assertFalse(modules.single { it.id == "acme-without" }.hasTests)
+    }
+
+    @Test
+    fun `Minitest and Test Unit suites keep whole gem selection`() {
+        val root = monorepo()
+        lock(root, "minitest" to "6.0.6", "test-unit" to "3.7.8")
+        gem(root, "gems/minitest", "acme-minitest")
+        gem(root, "gems/test-unit", "acme-test-unit")
+        File(root, "gems/minitest/test").mkdirs()
+        File(root, "gems/minitest/test/widget_test.rb").writeText(
+            """
+            require "minitest/autorun"
+            class WidgetTest < Minitest::Test
+            end
+            """.trimIndent(),
+        )
+        File(root, "gems/test-unit/test").mkdirs()
+        File(root, "gems/test-unit/test/widget_test.rb").writeText(
+            """
+            require "test/unit"
+            class WidgetTest < Test::Unit::TestCase
+            end
+            """.trimIndent(),
+        )
+
+        val modules = RubyGems.parse(root).associateBy { it.id }
+
+        assertEquals("test-minitest+test-unit", modules.getValue("acme-minitest").testTask)
+        assertEquals("test-minitest+test-unit", modules.getValue("acme-test-unit").testTask)
+        assertEquals(
+            listOf(File(root, "gems/minitest").invariantSeparatorsPath),
+            modules.getValue("acme-minitest").contentRoots,
+        )
+        assertEquals(
+            listOf(File(root, "gems/test-unit").invariantSeparatorsPath),
+            modules.getValue("acme-test-unit").contentRoots,
+        )
+    }
+
+    @Test
+    fun `a library only gem does not invalidate a Minitest graph`() {
+        val root = monorepo()
+        lock(root, "minitest" to "6.0.6")
+        gem(root, "gems/library", "acme-library")
+        gem(root, "gems/tested", "acme-tested")
+        File(root, "gems/tested/test").mkdirs()
+        File(root, "gems/tested/test/widget_test.rb").writeText(
+            "require \"minitest/autorun\"\nclass WidgetTest < Minitest::Test\nend\n",
+        )
+
+        val modules = RubyGems.parse(root).associateBy { it.id }
+
+        assertFalse(modules.getValue("acme-library").hasTests)
+        assertEquals("test-minitest", modules.getValue("acme-tested").testTask)
+    }
+
+    @Test
+    fun `RSpec and Minitest suites in one gem are both retained`() {
+        val root = monorepo()
+        lock(root, "rspec" to "3.13.2", "minitest" to "6.0.6")
+        gem(root, "gems/mixed", "acme-mixed", specs = true)
+        File(root, "gems/mixed/test").mkdirs()
+        File(root, "gems/mixed/test/widget_test.rb").writeText(
+            "require \"minitest/autorun\"\nclass WidgetTest < Minitest::Test\nend\n",
+        )
+
+        assertEquals("test-rspec+minitest", RubyGems.parse(root).single().testTask)
+    }
+
+    @Test
+    fun `an unknown test suite invalidates the complete graph`() {
+        val root = monorepo()
+        lock(root, "rspec" to "3.13.2")
+        gem(root, "gems/known", "acme-known", specs = true)
+        gem(root, "gems/unknown", "acme-unknown")
+        File(root, "gems/unknown/test").mkdirs()
+        File(root, "gems/unknown/test/widget_test.rb").writeText("puts 'custom runner'\n")
+
+        assertEquals(emptyList(), RubyGems.parse(root))
+    }
+
+    @Test
+    fun `Minitest and Test Unit markers never become an RSpec-only plan`() {
+        val root = monorepo()
+        lock(root, "minitest" to "6.0.6", "test-unit" to "3.7.8")
+        gem(root, "gems/mixed", "acme-mixed")
+        File(root, "gems/mixed/test").mkdirs()
+        File(root, "gems/mixed/test/minitest_test.rb").writeText(
+            "require \"minitest/autorun\"\nclass MiniTest < Minitest::Test\nend\n",
+        )
+        File(root, "gems/mixed/test/test_unit_test.rb").writeText(
+            "require \"test/unit\"\nclass UnitTest < Test::Unit::TestCase\nend\n",
+        )
+
+        assertEquals("test-minitest+test-unit", RubyGems.parse(root).single().testTask)
+    }
+
+    @Test
+    fun `locked runner versions gate native Ruby executables`() {
+        val root = monorepo()
+        File(root, "Gemfile.lock").writeText(
+            """
+            GEM
+              remote: https://rubygems.org/
+              specs:
+                minitest (6.0.6)
+                test-unit (3.7.8)
+
+            DEPENDENCIES
+              minitest (= 6.0.6)
+              rails (= 9.0.0)
+              test-unit (= 3.7.8)
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            setOf("MINITEST", "TEST_UNIT"),
+            RubyTestSuites.lockedRunners(root).orEmpty().map { it.name }.toSet(),
+        )
+
+        File(root, "Gemfile.lock").writeText(
+            """
+            GEM
+              remote: https://rubygems.org/
+              specs:
+                minitest (5.25.4)
+
+            DEPENDENCIES
+              minitest (= 5.25.4)
+            """.trimIndent(),
+        )
+        assertNull(RubyTestSuites.lockedRunners(root))
+    }
+
+    @Test
+    fun `an unsupported locked RSpec version invalidates the complete graph`() {
+        val root = monorepo()
+        lock(root, "rspec" to "4.0.0")
+        gem(root, "gems/unsupported", "acme-unsupported", specs = true)
+
+        assertEquals(emptyList(), RubyGems.parse(root))
+        assertEquals(RubyTestSuites.INVALID, RubyTestSuites.fallbackTask(root))
+    }
+
+    @Test
+    fun `a path sourced Ruby runner is not treated as a supported executable`() {
+        val root = monorepo()
+        File(root, "Gemfile.lock").writeText(
+            """
+            PATH
+              remote: vendor/minitest
+              specs:
+                minitest (6.0.6)
+
+            DEPENDENCIES
+              minitest!
+            """.trimIndent(),
+        )
+
+        assertNull(RubyTestSuites.lockedRunners(root))
+    }
+
+    @Test
+    fun `a runner from a custom RubyGems source is not treated as supported`() {
+        val root = monorepo()
+        File(root, "Gemfile.lock").writeText(
+            """
+            GEM
+              remote: https://gems.example.test/
+              specs:
+                minitest (6.0.6)
+
+            DEPENDENCIES
+              minitest (= 6.0.6)
+            """.trimIndent(),
+        )
+
+        assertNull(RubyTestSuites.lockedRunners(root))
+    }
+
+    @Test
+    fun `an RSpec gem with a symlink outside spec is not runnable`() {
+        val root = monorepo()
+        gem(root, "gems/linked", "acme-linked", specs = true)
+        val outside = File(root, "outside_spec.rb").apply { writeText("raise 'outside'\n") }
+        val link = File(root, "gems/linked/integration/evil_spec.rb").apply { parentFile.mkdirs() }.toPath()
+        runCatching { java.nio.file.Files.createSymbolicLink(link, outside.toPath()) }.getOrElse { return }
+
+        val module = RubyGems.parse(root).single()
+
+        assertEquals(
+            emptyList(),
+            com.aspix2k.affected.build.rubyCommands(
+                root.path,
+                listOf("${module.executionId}:${module.testTask}"),
+                listOf(module),
+            ),
+        )
+    }
+
+    @Test
+    fun `a symlinked Ruby suite invalidates the complete graph`() {
+        val root = monorepo()
+        lock(root, "minitest" to "6.0.6")
+        gem(root, "gems/linked", "acme-linked")
+        val outside = File(root, "outside").apply { mkdirs() }
+        val suite = File(root, "gems/linked/test").toPath()
+        runCatching { java.nio.file.Files.createSymbolicLink(suite, outside.toPath()) }.getOrElse { return }
+
+        assertEquals(emptyList(), RubyGems.parse(root))
+    }
+
+    @Test
+    fun `transitive Ruby runners are not treated as project commands`() {
+        val root = monorepo()
+        File(root, "Gemfile.lock").writeText(
+            """
+            GEM
+              remote: https://rubygems.org/
+              specs:
+                minitest (6.0.6)
+                rails (9.0.0)
+                  minitest
+
+            DEPENDENCIES
+              rails (= 9.0.0)
+            """.trimIndent(),
+        )
+
+        assertEquals(emptySet(), RubyTestSuites.lockedRunners(root))
     }
 
     @Test

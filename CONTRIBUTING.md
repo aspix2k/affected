@@ -186,13 +186,22 @@ execution, and registers itself through the
 `com.aspix2k.affected.buildSystem` extension point behind an optional dependency
 on its IDE integration. CLI graph caches hash every discovered manifest and
 lock input. Missing tools, malformed or partial metadata, stale task identities,
-symlinks and discovery bounds fail closed to a visible root command.
+symlinks and discovery bounds fail closed to a visible root command or an
+explicit unresolved Run when no complete native command is safe.
 
 Minimal native projects for every CLI adapter live under
 `conformance/cli-fixtures`. Their gated test is
 `./gradlew :core:test --tests '*CliAdapterConformanceTest' -Paffected.cliConformance=true`;
 it requires the corresponding native tools and downloads only the pinned test
 runner dependencies declared by those fixtures.
+
+Bundler projects keep whole-gem selection because helpers, autorun and global
+state make file-level Ruby selection unsound. RSpec, Minitest and Test::Unit
+commands for one Bundler root still execute in one fail-fast IDE Run session.
+With a `Gemfile.lock`, each runner must be a compatible direct dependency from
+the canonical `https://rubygems.org/` source. Custom sources, mirrors,
+transitive runner dependencies and unsupported versions fail closed. Lockless
+projects retain the existing conventional RSpec path.
 
 Supported Jest and Vitest packages receive runner-native related-file commands
 only when a real merge base, an explicit runner version and a bounded static

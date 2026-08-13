@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Run affected Cargo workspace packages through repository-configured cargo-nextest 0.9.x profiles, retaining `cargo test --doc` and conservative `cargo test` fallback when exact execution cannot be proven.
+- Run affected Ruby gems through RSpec, Minitest and Test::Unit while preserving whole-gem helper, autorun and global-state semantics in one IDE Run session.
 - Make the product, ecosystem, runner, selection and operating-system support matrix executable, evidence-backed and self-auditing.
 - Document supported security versions and private vulnerability reporting.
 - Adopt the Contributor Covenant and a private channel for conduct reports.
