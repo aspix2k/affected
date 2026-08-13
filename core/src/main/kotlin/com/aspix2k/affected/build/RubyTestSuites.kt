@@ -57,6 +57,8 @@ internal object RubyTestSuites {
             .filter { it.value == "  specs:" }
             .map { it.index + gemSections.single() + 1 }
         if (specSections.size != 1) return null
+        if (lines.subList(gemSections.single() + 1, specSections.single()).filter { it.startsWith("  remote:") } !=
+            listOf("  remote: https://rubygems.org/")) return null
         val versions = lines.subList(specSections.single() + 1, gemEnd).mapNotNull { line ->
             LOCKED_SPEC.matchEntire(line)?.let { it.groupValues[1] to it.groupValues[2] }
         }.groupBy({ it.first }, { it.second })

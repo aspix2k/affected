@@ -256,7 +256,7 @@ class CliCommandTest {
         val commands = rubyCommands(root.path, listOf("gem-a:test-rspec", "gem-b:test-rspec"), modules)
 
         assertEquals(
-            listOf("bundle", "exec", "rspec", "gems/a", "gems/b"),
+            listOf("bundle", "exec", "rspec", "./gems/a", "./gems/b"),
             commands.single().arguments,
         )
     }
@@ -282,9 +282,9 @@ class CliCommandTest {
 
         assertEquals(
             listOf(
-                listOf("bundle", "exec", "rspec", "gems/rspec"),
-                listOf("bundle", "exec", "minitest", "gems/minitest/test"),
-                listOf("bundle", "exec", "test-unit", "gems/test-unit/test"),
+                listOf("bundle", "exec", "rspec", "./gems/rspec"),
+                listOf("bundle", "exec", "minitest", "./gems/minitest/test"),
+                listOf("bundle", "exec", "test-unit", "./gems/test-unit/test"),
             ),
             commands.map(CliCommand::arguments),
         )
@@ -304,8 +304,8 @@ class CliCommandTest {
 
         assertEquals(
             listOf(
-                listOf("bundle", "exec", "rspec", "gems/mixed"),
-                listOf("bundle", "exec", "minitest", "gems/mixed/test"),
+                listOf("bundle", "exec", "rspec", "./gems/mixed"),
+                listOf("bundle", "exec", "minitest", "./gems/mixed/test"),
             ),
             commands.map(CliCommand::arguments),
         )
@@ -324,6 +324,7 @@ class CliCommandTest {
         File(root, "Gemfile.lock").writeText(
             """
             GEM
+              remote: https://rubygems.org/
               specs:
                 minitest (6.0.6)
                 rspec (3.13.2)
@@ -351,9 +352,9 @@ class CliCommandTest {
         assertEquals("fallback-rspec+minitest+test-unit", task)
         assertEquals(
             listOf(
-                listOf("bundle", "exec", "rspec", "gems/minitest"),
-                listOf("bundle", "exec", "minitest", "gems/minitest/test", "gems/test-unit/test"),
-                listOf("bundle", "exec", "test-unit", "gems/minitest/test", "gems/test-unit/test"),
+                listOf("bundle", "exec", "rspec", "./gems/minitest"),
+                listOf("bundle", "exec", "minitest", "./gems/minitest/test", "./gems/test-unit/test"),
+                listOf("bundle", "exec", "test-unit", "./gems/minitest/test", "./gems/test-unit/test"),
             ),
             commands.map(CliCommand::arguments),
         )
@@ -400,6 +401,7 @@ class CliCommandTest {
         File(root, "Gemfile.lock").writeText(
             """
             GEM
+              remote: https://rubygems.org/
               specs:
                 minitest (6.0.6)
 
@@ -412,9 +414,75 @@ class CliCommandTest {
 
         assertEquals("fallback-minitest", task)
         assertEquals(
-            listOf(listOf("bundle", "exec", "minitest", "test")),
+            listOf(listOf("bundle", "exec", "minitest", "./test")),
             rubyCommands(root.path, listOf(".:$task"), listOf(RubyGems.fallback(root, task)))
                 .map(CliCommand::arguments),
+        )
+    }
+
+    @Test
+    fun `an RSpec fallback cannot omit an existing test suite`() {
+        val root = createTempDirectory("ruby-partial-rspec").toFile()
+        File(root, "Gemfile.lock").writeText(
+            """
+            GEM
+              remote: https://rubygems.org/
+              specs:
+                rspec (3.13.2)
+
+            DEPENDENCIES
+              rspec (= 3.13.2)
+            """.trimIndent(),
+        )
+        listOf("spec", "custom").forEach { name ->
+            val gem = File(root, "gems/$name").apply { mkdirs() }
+            File(gem, "$name.gemspec").writeText(
+                "Gem::Specification.new { |spec| spec.name = \"$name\"; spec.version = \"1.0.0\" }\n",
+            )
+        }
+        File(root, "gems/spec/spec").mkdirs()
+        File(root, "gems/custom/test").mkdirs()
+        val task = RubyTestSuites.fallbackTask(root)
+
+        assertEquals("fallback-rspec", task)
+        assertEquals(emptyList(), rubyCommands(root.path, listOf(".:$task"), listOf(RubyGems.fallback(root, task))))
+    }
+
+    @Test
+    fun `a Minitest fallback cannot omit an existing spec suite`() {
+        val root = createTempDirectory("ruby-partial-minitest").toFile()
+        File(root, "Gemfile.lock").writeText(
+            """
+            GEM
+              remote: https://rubygems.org/
+              specs:
+                minitest (6.0.6)
+
+            DEPENDENCIES
+              minitest (= 6.0.6)
+            """.trimIndent(),
+        )
+        val gem = File(root, "gem").apply { mkdirs() }
+        File(gem, "affected.gemspec").writeText(
+            "Gem::Specification.new { |spec| spec.name = \"affected\"; spec.version = \"1.0.0\" }\n",
+        )
+        File(gem, "spec").mkdirs()
+        File(gem, "test").mkdirs()
+        val task = RubyTestSuites.fallbackTask(root)
+
+        assertEquals("fallback-minitest", task)
+        assertEquals(emptyList(), rubyCommands(root.path, listOf(".:$task"), listOf(RubyGems.fallback(root, task))))
+    }
+
+    @Test
+    fun `Bundler suite paths cannot become runner options`() {
+        val root = createTempDirectory("ruby-option-path").toFile()
+        File(root, "--profile/test").mkdirs()
+        val modules = rubyModules(root.path, Triple("option", "--profile", "test-minitest"))
+
+        assertEquals(
+            listOf("bundle", "exec", "minitest", "./--profile/test"),
+            rubyCommands(root.path, listOf("option:test-minitest"), modules).single().arguments,
         )
     }
 

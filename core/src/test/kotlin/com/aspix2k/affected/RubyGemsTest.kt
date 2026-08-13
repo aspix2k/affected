@@ -20,6 +20,7 @@ class RubyGemsTest {
         File(root, "Gemfile.lock").writeText(
             buildString {
                 appendLine("GEM")
+                appendLine("  remote: https://rubygems.org/")
                 appendLine("  specs:")
                 dependencies.forEach { (name, version) -> appendLine("    $name ($version)") }
                 appendLine()
@@ -212,6 +213,7 @@ class RubyGemsTest {
         File(root, "Gemfile.lock").writeText(
             """
             GEM
+              remote: https://rubygems.org/
               specs:
                 minitest (6.0.6)
                 test-unit (3.7.8)
@@ -231,6 +233,7 @@ class RubyGemsTest {
         File(root, "Gemfile.lock").writeText(
             """
             GEM
+              remote: https://rubygems.org/
               specs:
                 minitest (5.25.4)
 
@@ -270,6 +273,44 @@ class RubyGemsTest {
     }
 
     @Test
+    fun `a runner from a custom RubyGems source is not treated as supported`() {
+        val root = monorepo()
+        File(root, "Gemfile.lock").writeText(
+            """
+            GEM
+              remote: https://gems.example.test/
+              specs:
+                minitest (6.0.6)
+
+            DEPENDENCIES
+              minitest (= 6.0.6)
+            """.trimIndent(),
+        )
+
+        assertNull(RubyTestSuites.lockedRunners(root))
+    }
+
+    @Test
+    fun `an RSpec gem with a symlink outside spec is not runnable`() {
+        val root = monorepo()
+        gem(root, "gems/linked", "acme-linked", specs = true)
+        val outside = File(root, "outside_spec.rb").apply { writeText("raise 'outside'\n") }
+        val link = File(root, "gems/linked/integration/evil_spec.rb").apply { parentFile.mkdirs() }.toPath()
+        runCatching { java.nio.file.Files.createSymbolicLink(link, outside.toPath()) }.getOrElse { return }
+
+        val module = RubyGems.parse(root).single()
+
+        assertEquals(
+            emptyList(),
+            com.aspix2k.affected.build.rubyCommands(
+                root.path,
+                listOf("${module.executionId}:${module.testTask}"),
+                listOf(module),
+            ),
+        )
+    }
+
+    @Test
     fun `a symlinked Ruby suite invalidates the complete graph`() {
         val root = monorepo()
         lock(root, "minitest" to "6.0.6")
@@ -287,6 +328,7 @@ class RubyGemsTest {
         File(root, "Gemfile.lock").writeText(
             """
             GEM
+              remote: https://rubygems.org/
               specs:
                 minitest (6.0.6)
                 rails (9.0.0)

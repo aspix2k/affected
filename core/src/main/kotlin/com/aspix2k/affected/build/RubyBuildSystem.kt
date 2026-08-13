@@ -62,6 +62,11 @@ private val RUBY_TEST_DIRECTORIES = setOf("test", "spec")
 
 internal fun rubyCommands(root: String, tasks: List<String>, modules: List<BuildModule>): List<CliCommand> {
     val byName = modules.associateBy { it.executionId }
+    val suiteStates = mutableMapOf<String, Boolean?>()
+    fun suiteState(path: String): Boolean? {
+        if (suiteStates.containsKey(path)) return suiteStates[path]
+        return RubyTestSuites.suitePresent(File(root, path)).also { suiteStates[path] = it }
+    }
     val selected = tasks.map { task ->
         val name = task.substringBeforeLast(':')
         val plannedTask = task.substringAfterLast(':')
@@ -71,11 +76,19 @@ internal fun rubyCommands(root: String, tasks: List<String>, modules: List<Build
         RubyTestSuites.runners(plannedTask)?.let { Triple(it, directories, RubyTestSuites.isFallback(plannedTask)) }
             ?: return emptyList()
     }
+    selected.filter { it.third }.forEach { (runners, roots) ->
+        roots.forEach { path ->
+            val spec = suiteState(if (path == ".") "spec" else "$path/spec") ?: return emptyList()
+            val test = suiteState(if (path == ".") "test" else "$path/test") ?: return emptyList()
+            if (spec && RubyTestRunner.RSPEC !in runners) return emptyList()
+            if (test && runners.none { it != RubyTestRunner.RSPEC }) return emptyList()
+        }
+    }
     return RubyTestRunner.entries.mapNotNull { runner ->
         val paths = mutableListOf<String>()
         selected.filter { runner in it.first }.forEach { (_, roots, fallback) ->
             roots.forEach { path ->
-                when (val suite = suitePath(root, path, runner, fallback)) {
+                when (val suite = suitePath(path, runner, fallback, ::suiteState)) {
                     null -> return emptyList()
                     "" -> Unit
                     else -> paths += suite
@@ -84,14 +97,20 @@ internal fun rubyCommands(root: String, tasks: List<String>, modules: List<Build
         }
         val distinctPaths = paths.distinct()
         distinctPaths.takeIf(List<String>::isNotEmpty)?.let {
-            CliCommand(runner.command, listOf("bundle", "exec", runner.command) + it)
+            CliCommand(runner.command, listOf("bundle", "exec", runner.command) + it.map(::rubyRunnerPath))
         }
     }
 }
 
-private fun suitePath(root: String, path: String, runner: RubyTestRunner, fallback: Boolean): String? {
+private fun suitePath(
+    path: String,
+    runner: RubyTestRunner,
+    fallback: Boolean,
+    suiteState: (String) -> Boolean?,
+): String? {
     if (runner == RubyTestRunner.RSPEC) {
-        when (RubyTestSuites.suitePresent(File(root, if (path == ".") "spec" else "$path/spec"))) {
+        if (suiteState(path) != true) return null
+        when (suiteState(if (path == ".") "spec" else "$path/spec")) {
             null -> return null
             false -> return if (fallback) "" else null
             true -> Unit
@@ -99,13 +118,15 @@ private fun suitePath(root: String, path: String, runner: RubyTestRunner, fallba
         return path
     }
     val relative = if (path == ".") "test" else "$path/test"
-    when (RubyTestSuites.suitePresent(File(root, relative))) {
+    when (suiteState(relative)) {
         null -> return null
         false -> return if (fallback) "" else null
         true -> Unit
     }
     return relative
 }
+
+private fun rubyRunnerPath(path: String): String = if (path == ".") path else "./$path"
 
 private fun relativeRubyPath(root: String, directory: String): String? {
     val rootPath = File(root).toPath().toAbsolutePath().normalize().let { path ->
