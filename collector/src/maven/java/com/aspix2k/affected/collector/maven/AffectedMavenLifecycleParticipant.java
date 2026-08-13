@@ -76,7 +76,7 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
     }
 
     public static boolean supportedRuntime(String version) {
-        return version != null && version.startsWith("3.9.");
+        return MavenRuntime.exactEligible(version);
     }
 
     public static boolean failsafeBaselineEligible(List<String> goals) {

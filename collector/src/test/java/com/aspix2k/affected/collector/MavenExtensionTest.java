@@ -374,6 +374,8 @@ public class MavenExtensionTest {
         assertTrue(AffectedMavenLifecycleParticipant.supportedRuntime("3.9.16"));
         assertTrue(!AffectedMavenLifecycleParticipant.supportedRuntime("3.8.9"));
         assertTrue(!AffectedMavenLifecycleParticipant.supportedRuntime("4.0.0-rc-6"));
+        assertTrue(!AffectedMavenLifecycleParticipant.supportedRuntime("4.0.0"));
+        assertTrue(!AffectedMavenLifecycleParticipant.supportedRuntime("3.9.0-rc-1"));
         assertTrue(!AffectedMavenLifecycleParticipant.supportedRuntime(null));
     }
 
