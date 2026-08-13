@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Keep cargo-nextest discovery deterministic when the environment forces colored Cargo output, and run its doctest phase through the same verified Cargo executable.
 - Stop launching the exact-impact matrix from README-only edits, and stop rerunning the full core test suite as skipped CLI contracts.
 - Retry only Gradle distribution fetch on transient network errors; compilation, tests and analyzers still run once.
 - Give the Gradle wrapper 120s and four retries instead of a single 10s download from services.gradle.org.
