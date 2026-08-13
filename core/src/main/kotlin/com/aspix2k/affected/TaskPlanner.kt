@@ -11,6 +11,7 @@ data class ModuleInfo(
     val hasTests: Boolean,
     val executionRoot: String = buildRoot,
     val executionId: String = id,
+    val additionalTestTasks: Set<String> = emptySet(),
 ) {
     fun test(): String = "$executionId:$testTask"
 
@@ -91,7 +92,13 @@ object TaskPlanner {
         val changedModules = changed.distinctOwners()
         val tested = changedModules.filter { it.hasTests }
         tested.forEach { module ->
-            tasks.getOrPut(module.systemId to module.executionRoot) { mutableListOf() }.add(module.plannedTest())
+            val planned = tasks.getOrPut(module.systemId to module.executionRoot) { mutableListOf() }
+            planned += module.plannedTest()
+            for (task in module.additionalTestTasks.sorted()) {
+                if (task.isNotEmpty() && task != module.testTask) {
+                    planned += PlannedTask("${module.executionId}:$task", TaskKind.TEST)
+                }
+            }
         }
 
         val testedKeys = tested.map { it.ownerKey() }.toSet()

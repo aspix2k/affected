@@ -6,6 +6,7 @@ import com.aspix2k.affected.build.gradleExecutionCoordinates
 import com.aspix2k.affected.build.gradleExecutionMetadata
 import com.aspix2k.affected.build.gradleHoldsTests
 import com.aspix2k.affected.build.gradleIsSourceFile
+import com.aspix2k.affected.build.gradleKmpAdditionalTestTasks
 import com.aspix2k.affected.build.gradleProductionCompileTask
 import com.aspix2k.affected.build.gradleProjectPath
 import com.aspix2k.affected.build.gradleVerificationTasks
@@ -178,6 +179,21 @@ class GradleTaskPathTest {
         assertTrue(gradleHoldsTests(module.path))
         assertContains(GradleBuildSystem().sourceExtensions, "scala")
         assertContains(GradleBuildSystem().sourceExtensions, "groovy")
+    }
+
+    @Test
+    fun `KMP additional tests exclude the primary task`() {
+        assertEquals(
+            setOf("iosSimulatorArm64Test", "testDebugUnitTest"),
+            gradleKmpAdditionalTestTasks(
+                setOf("test", "testDebugUnitTest", "iosSimulatorArm64Test", "assemble"),
+                "test",
+            ),
+        )
+        assertEquals(
+            emptySet(),
+            gradleKmpAdditionalTestTasks(setOf("test", "assemble"), "test"),
+        )
     }
 
     @Test
