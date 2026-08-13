@@ -194,6 +194,10 @@ Minimal native projects for every CLI adapter live under
 it requires the corresponding native tools and downloads only the pinned test
 runner dependencies declared by those fixtures.
 
+Bundler projects keep whole-gem selection because helpers, autorun and global
+state make file-level Ruby selection unsound. RSpec, Minitest and Test::Unit
+commands for one Bundler root still execute in one fail-fast IDE Run session.
+
 Supported Jest and Vitest packages receive runner-native related-file commands
 only when a real merge base, an explicit runner version and a bounded static
 package graph are available. Custom runner configuration or transforms, dynamic

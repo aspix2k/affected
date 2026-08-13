@@ -244,13 +244,93 @@ class CliCommandTest {
 
     @Test
     fun `Bundler gems share one RSpec command`() {
-        val modules = modules("/repo", "gem-a", "gems/a", "gem-b", "gems/b")
+        val modules = rubyModules(
+            "/repo",
+            Triple("gem-a", "gems/a", "test-rspec"),
+            Triple("gem-b", "gems/b", "test-rspec"),
+        )
 
-        val commands = rubyCommands("/repo", listOf("gem-a:test", "gem-b:test"), modules)
+        val commands = rubyCommands("/repo", listOf("gem-a:test-rspec", "gem-b:test-rspec"), modules)
 
         assertEquals(
             listOf("bundle", "exec", "rspec", "gems/a", "gems/b"),
             commands.single().arguments,
+        )
+    }
+
+    @Test
+    fun `Bundler runner groups stay in one ordered command batch`() {
+        val modules = rubyModules(
+            "/repo",
+            Triple("rspec", "gems/rspec", "test-rspec"),
+            Triple("minitest", "gems/minitest", "test-minitest"),
+            Triple("test-unit", "gems/test-unit", "test-test-unit"),
+        )
+
+        val commands = rubyCommands(
+            "/repo",
+            listOf("rspec:test-rspec", "minitest:test-minitest", "test-unit:test-test-unit"),
+            modules,
+        )
+
+        assertEquals(
+            listOf(
+                listOf("bundle", "exec", "rspec", "gems/rspec"),
+                listOf("bundle", "exec", "minitest", "gems/minitest/test"),
+                listOf("bundle", "exec", "test-unit", "gems/test-unit/test"),
+            ),
+            commands.map(CliCommand::arguments),
+        )
+    }
+
+    @Test
+    fun `a gem with multiple supported suites runs every suite`() {
+        val modules = rubyModules(
+            "/repo",
+            Triple("mixed", "gems/mixed", "test-rspec+minitest"),
+        )
+
+        val commands = rubyCommands("/repo", listOf("mixed:test-rspec+minitest"), modules)
+
+        assertEquals(
+            listOf(
+                listOf("bundle", "exec", "rspec", "gems/mixed"),
+                listOf("bundle", "exec", "minitest", "gems/mixed/test"),
+            ),
+            commands.map(CliCommand::arguments),
+        )
+    }
+
+    @Test
+    fun `an incomplete Bundler graph falls back to every declared runner`() {
+        val root = createTempDirectory("ruby-fallback").toFile()
+        File(root, "Gemfile").writeText(
+            """
+            source "https://rubygems.org"
+            gem "minitest", "6.0.6"
+            gem "test-unit", "3.7.8"
+            """.trimIndent(),
+        )
+        listOf("minitest", "test-unit").forEach { name ->
+            val directory = File(root, "gems/$name").apply { mkdirs() }
+            File(directory, "$name.gemspec").writeText(
+                "Gem::Specification.new { |spec| spec.name = \"$name\"; spec.version = \"1.0.0\" }\n",
+            )
+            File(directory, "test").mkdirs()
+        }
+        val task = RubyTestSuites.fallbackTask(root)
+        val module = RubyGems.fallback(root, task)
+
+        val commands = rubyCommands(root.path, listOf(".:$task"), listOf(module))
+
+        assertEquals("fallback-rspec+minitest+test-unit", task)
+        assertEquals(
+            listOf(
+                listOf("bundle", "exec", "rspec", "gems/minitest", "gems/test-unit"),
+                listOf("bundle", "exec", "minitest", "gems/minitest/test", "gems/test-unit/test"),
+                listOf("bundle", "exec", "test-unit", "gems/minitest/test", "gems/test-unit/test"),
+            ),
+            commands.map(CliCommand::arguments),
         )
     }
 
@@ -261,6 +341,29 @@ class CliCommandTest {
         assertEquals(emptyList(), pythonCommands("/repo", listOf("pkg-a:test", "missing:test"), modules))
         assertEquals(emptyList(), composerCommands("/repo", listOf("pkg-a:test", "missing:test"), modules))
         assertEquals(emptyList(), rubyCommands("/repo", listOf("pkg-a:test", "missing:test"), modules))
+    }
+
+    @Test
+    fun `a stale Bundler runner plan invalidates the whole command batch`() {
+        val modules = rubyModules("/repo", Triple("gem-a", "gems/a", "test-minitest"))
+
+        assertEquals(emptyList(), rubyCommands("/repo", listOf("gem-a:test-rspec"), modules))
+    }
+
+    @Test
+    fun `a symlink in a Bundler fallback suite invalidates the whole batch`() {
+        val root = createTempDirectory("ruby-symlink").toFile()
+        val gem = File(root, "gem").apply { mkdirs() }
+        val test = File(gem, "test").apply { mkdirs() }
+        val target = File(root, "outside.rb").apply { writeText("puts 'outside'\n") }
+        runCatching { java.nio.file.Files.createSymbolicLink(File(test, "evil_test.rb").toPath(), target.toPath()) }
+            .getOrElse { return }
+        val task = "fallback-minitest"
+
+        assertEquals(
+            emptyList(),
+            rubyCommands(root.path, listOf(".:$task"), listOf(RubyGems.fallback(root, task))),
+        )
     }
 
     @Test
@@ -551,6 +654,19 @@ class CliCommandTest {
                 testTask = "test",
                 compileTask = null,
                 hasTests = true,
+            )
+        }
+
+    private fun rubyModules(root: String, vararg entries: Triple<String, String, String>): List<BuildModule> =
+        entries.map { (id, relative, task) ->
+            BuildModule(
+                id = id,
+                root = root,
+                contentRoots = listOf("$root/$relative"),
+                testTask = task,
+                compileTask = null,
+                hasTests = true,
+                executionId = id,
             )
         }
 
