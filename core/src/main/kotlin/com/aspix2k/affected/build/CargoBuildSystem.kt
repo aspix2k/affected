@@ -114,12 +114,13 @@ class CargoBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSy
         val validationConfig = cargoNextestValidationSnapshot(root, requestedProfile)
             ?: return CargoNextestPlan(CargoNextestMode.CARGO_TEST, null)
         val directory = root.invariantSeparatorsPath
+        val discoveryEnvironment = cargoNextestDiscoveryEnvironment(cargo.toString())
         val version = CommandRunner.capture(
             directory,
             listOf(executable.toString(), "--version"),
             timeoutSeconds = 10,
             maxBytes = 4096,
-            environment = mapOf("CARGO" to cargo.toString()),
+            environment = discoveryEnvironment,
         )
         val configuration = version?.let {
             CommandRunner.capture(
@@ -131,7 +132,7 @@ class CargoBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSy
                 ),
                 timeoutSeconds = 20,
                 maxBytes = 16 * 1024,
-                environment = mapOf("CARGO" to cargo.toString()),
+                environment = discoveryEnvironment,
             )
         }
         if (cargoNextestExecutableIdentity(executable) != executableIdentity) {
@@ -259,7 +260,7 @@ private fun cargoNextestCommands(
         CliCommand(
             "cargo test --doc",
             listOf(
-                "cargo", "test", "--doc", "--manifest-path", File(root, "Cargo.toml").path,
+                cargo, "test", "--doc", "--manifest-path", File(root, "Cargo.toml").path,
             ) + if (failFast) selected else listOf("--no-fail-fast") + selected,
         )
     }

@@ -26,6 +26,11 @@ internal data class CargoNextestPlan(
     val executableIdentity: String = TEST_EXECUTABLE_IDENTITY,
 )
 
+internal fun cargoNextestDiscoveryEnvironment(cargo: String): Map<String, String> = mapOf(
+    "CARGO" to cargo,
+    "CARGO_TERM_COLOR" to "never",
+)
+
 internal fun detectCargoNextest(
     root: File,
     versionOutput: String?,
@@ -46,7 +51,7 @@ internal fun detectCargoNextest(
 }
 
 private fun supportedNextestVersion(output: String?): NextestVersion? {
-    val lines = output?.trim()?.lines() ?: return null
+    val lines = output?.let(::stripAnsi)?.trim()?.lines() ?: return null
     val version = lines.firstOrNull()?.let(NEXTEST_VERSION::matchEntire)?.groupValues?.get(1)
         ?.let(NextestVersion::parse) ?: return null
     if (!version.supportedInstalled) return null
@@ -293,6 +298,9 @@ private const val TEST_EXECUTABLE_IDENTITY = "test"
 private val CARGO_TEST_PLAN = CargoNextestPlan(CargoNextestMode.CARGO_TEST, null)
 private val MIN_SUPPORTED_NEXTEST = NextestVersion(0, 9, 143)
 private val SUPPORTED_ROOT_KEYS = setOf("nextest-version", "profile")
+private fun stripAnsi(text: String): String = ANSI_ESCAPE.replace(text, "")
+
+private val ANSI_ESCAPE = Regex("\u001B\\[[0-?]*[ -/]*[@-~]")
 private val VERSION = Regex("([0-9]+)\\.([0-9]+)\\.([0-9]+)")
 private val NEXTEST_VERSION = Regex("cargo-nextest ([0-9]+\\.[0-9]+\\.[0-9]+)(?: \\(.*\\))?")
 private val NEXTEST_COMMIT = Regex("commit-hash: [0-9a-f]{40}")
