@@ -12,6 +12,8 @@ repositories {
 }
 
 dependencies {
+    implementation("org.tomlj:tomlj:1.1.1")
+
     intellijPlatform {
         intellijIdea(providers.gradleProperty("affected.idea.version").get())
         bundledPlugin("com.intellij.gradle")

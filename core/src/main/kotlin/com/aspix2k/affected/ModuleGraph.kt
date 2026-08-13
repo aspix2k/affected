@@ -1,10 +1,12 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.BuildChanges
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.BuildSystem
 import com.aspix2k.affected.build.BuildSystems
 import com.aspix2k.affected.build.SuspendingBuildSystem
 import com.aspix2k.affected.build.TransitiveTestConsumersBuildSystem
+import com.aspix2k.affected.build.WorkspaceChangesBuildSystem
 import com.intellij.openapi.project.Project
 import java.io.File
 
@@ -61,6 +63,30 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
     }
 
     fun nodeFor(file: File): Node? = nodesFor(file).firstOrNull()
+
+    internal fun ownersForChanges(
+        changes: BuildChanges,
+        directOwners: Map<File, List<Node>> = changes.files.associate { path ->
+            File(path).let { it to nodesFor(it) }
+        },
+    ): Map<File, List<Node>> {
+        val workspaceNodes = HashMap<Pair<BuildSystem, String>, List<Node>>()
+        return directOwners.mapValues { (_, owners) ->
+            owners.groupBy { it.system to it.buildRoot }.flatMap { (key, group) ->
+                val (system, root) = key
+                val workspaceSystem = system as? WorkspaceChangesBuildSystem
+                val requiresWorkspace = workspaceSystem != null &&
+                    group.any { workspaceSystem.requiresWorkspace(it.module, changes) }
+                if (requiresWorkspace) {
+                    workspaceNodes.getOrPut(key) {
+                        nodes.filter { it.system === system && it.buildRoot == root }
+                    }
+                } else {
+                    group
+                }
+            }.distinct()
+        }
+    }
 
     fun directDependents(targets: Set<Node>): List<Node> {
         val targetKeys = targets.map { it.module.key }.toSet()

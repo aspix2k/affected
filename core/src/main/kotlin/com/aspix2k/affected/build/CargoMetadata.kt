@@ -6,7 +6,7 @@ object CargoMetadata {
 
     private fun String.normalizeSeparators(): String = replace('\\', '/')
 
-    fun parse(json: String, root: String): List<BuildModule> {
+    fun parse(json: String, root: String, testTask: (Boolean) -> String = { TEST }): List<BuildModule> {
         val normalizedRoot = root.normalizeSeparators()
         val packages = runCatching {
             JsonParser.parseString(json).asJsonObject.getAsJsonArray("packages")
@@ -37,12 +37,13 @@ object CargoMetadata {
             }
                 .filter { it in names }
                 .mapTo(HashSet()) { "$normalizedRoot|$it" }
+            val hasDoctests = packageHasDoctests(json) ?: return emptyList()
 
             BuildModule(
                 id = name,
                 root = normalizedRoot,
                 contentRoots = listOf(directory),
-                testTask = TEST,
+                testTask = testTask(hasDoctests),
                 compileTask = COMPILE,
                 hasTests = true,
                 dependencies = dependencies - "$normalizedRoot|$name",
@@ -50,6 +51,36 @@ object CargoMetadata {
         }
     }
 
+    fun hasCustomBuild(json: String): Boolean? = runCatching {
+        val packages = JsonParser.parseString(json).asJsonObject.getAsJsonArray("packages") ?: return null
+        packages.any { packageElement ->
+            val targets = packageElement.asJsonObject.getAsJsonArray("targets") ?: return null
+            targets.any { targetElement ->
+                val kinds = targetElement.asJsonObject.getAsJsonArray("kind") ?: return null
+                if (kinds.any { !it.isJsonPrimitive }) return null
+                kinds.any { it.asString == "custom-build" }
+            }
+        }
+    }.getOrNull()
+
+    private fun packageHasDoctests(json: com.google.gson.JsonObject): Boolean? {
+        val targets = json.get("targets")?.takeIf { it.isJsonArray }?.asJsonArray ?: return null
+        return targets.any { target ->
+            if (!target.isJsonObject) return null
+            val targetObject = target.asJsonObject
+            val kinds = targetObject.get("kind")?.takeIf { it.isJsonArray }?.asJsonArray ?: return null
+            val kindNames = kinds.map { kind ->
+                kind.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString ?: return null
+            }
+            val doctest = targetObject.get("doctest")
+                ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }
+                ?.asBoolean ?: return null
+            doctest && kindNames.any(LIBRARY_TARGET_KINDS::contains)
+        }
+    }
+
     const val TEST = "test"
     const val COMPILE = "check"
+
+    private val LIBRARY_TARGET_KINDS = setOf("lib", "proc-macro")
 }

@@ -177,6 +177,156 @@ class ReleaseCurrentnessTest(unittest.TestCase):
         self.assertEqual("2.0.0", version)
         self.assertEqual({tag_sha, commit_sha}, identities)
 
+    def test_github_release_asset_selects_latest_stable_series_and_digest(self) -> None:
+        """Bind a tool pin to the newest stable release asset and its official digest."""
+        repository = "nextest-rs/nextest"
+        source = {
+            "type": "github-release-asset",
+            "name": repository,
+            "tagPrefix": "cargo-nextest-",
+            "asset": "cargo-nextest-{version}-x86_64-unknown-linux-gnu.tar.gz",
+        }
+        transport = FakeTransport(
+            {
+                f"https://api.github.com/repos/{repository}/git/matching-refs/tags/cargo-nextest-0.9.": [
+                    {"ref": "refs/tags/cargo-nextest-0.9.142"},
+                    {"ref": "refs/tags/cargo-nextest-0.9.143"},
+                    {"ref": "refs/tags/cargo-nextest-0.9.144-rc.1"},
+                    {"ref": "refs/tags/cargo-nextest-0.9.144-b.1"},
+                ],
+                f"https://api.github.com/repos/{repository}/releases/tags/cargo-nextest-0.9.143": {
+                    "tag_name": "cargo-nextest-0.9.143",
+                    "draft": False,
+                    "prerelease": False,
+                    "assets": [
+                        {
+                            "name": "cargo-nextest-0.9.143-x86_64-unknown-linux-gnu.tar.gz",
+                            "state": "uploaded",
+                            "size": 1_000_000,
+                            "digest": f"sha256:{'b' * 64}",
+                        }
+                    ],
+                },
+            },
+        )
+
+        version, digests = currentness.remote_version(source, "series", "0.9", transport)
+
+        self.assertEqual("0.9.143", version)
+        self.assertEqual({"b" * 64}, digests)
+
+    def test_github_release_asset_rejects_missing_or_malformed_digest(self) -> None:
+        """Fail closed when the selected official asset has no usable SHA-256 digest."""
+        repository = "nextest-rs/nextest"
+        source = {
+            "type": "github-release-asset",
+            "name": repository,
+            "tagPrefix": "cargo-nextest-",
+            "asset": "cargo-nextest-{version}-x86_64-unknown-linux-gnu.tar.gz",
+        }
+        refs_endpoint = (
+            f"https://api.github.com/repos/{repository}/git/matching-refs/tags/cargo-nextest-0.9."
+        )
+        release_endpoint = (
+            f"https://api.github.com/repos/{repository}/releases/tags/cargo-nextest-0.9.143"
+        )
+        for digest in (None, "sha256:not-a-digest"):
+            release = {
+                "tag_name": "cargo-nextest-0.9.143",
+                "draft": False,
+                "prerelease": False,
+                "assets": [
+                    {
+                        "name": "cargo-nextest-0.9.143-x86_64-unknown-linux-gnu.tar.gz",
+                        "state": "uploaded",
+                        "size": 1_000_000,
+                        "digest": digest,
+                    }
+                ],
+            }
+            with self.subTest(digest=digest), self.assertRaises(currentness.CurrentnessError):
+                currentness.remote_version(
+                    source,
+                    "series",
+                    "0.9",
+                    FakeTransport(
+                        {
+                            refs_endpoint: [{"ref": "refs/tags/cargo-nextest-0.9.143"}],
+                            release_endpoint: release,
+                        }
+                    ),
+                )
+
+    def test_github_release_asset_rejects_incomplete_release_metadata(self) -> None:
+        """Require explicit stable release and uploaded bounded asset metadata."""
+        repository = "nextest-rs/nextest"
+        source = {
+            "type": "github-release-asset",
+            "name": repository,
+            "tagPrefix": "cargo-nextest-",
+            "asset": "cargo-nextest-{version}-x86_64-unknown-linux-gnu.tar.gz",
+        }
+        refs_endpoint = (
+            f"https://api.github.com/repos/{repository}/git/matching-refs/tags/cargo-nextest-0.9."
+        )
+        release_endpoint = (
+            f"https://api.github.com/repos/{repository}/releases/tags/cargo-nextest-0.9.143"
+        )
+        valid = {
+            "tag_name": "cargo-nextest-0.9.143",
+            "draft": False,
+            "prerelease": False,
+            "assets": [{
+                "name": "cargo-nextest-0.9.143-x86_64-unknown-linux-gnu.tar.gz",
+                "state": "uploaded",
+                "size": 1_000_000,
+                "digest": f"sha256:{'d' * 64}",
+            }],
+        }
+        invalid = []
+        for field in ("draft", "prerelease"):
+            release = dict(valid)
+            release.pop(field)
+            invalid.append(release)
+        for field, value in (("state", "new"), ("size", 0), ("size", 33 * 1024 * 1024)):
+            release = dict(valid)
+            release["assets"] = [dict(valid["assets"][0], **{field: value})]
+            invalid.append(release)
+
+        for release in invalid:
+            with self.subTest(release=release), self.assertRaises(currentness.CurrentnessError):
+                currentness.remote_version(
+                    source,
+                    "series",
+                    "0.9",
+                    FakeTransport({
+                        refs_endpoint: [{"ref": "refs/tags/cargo-nextest-0.9.143"}],
+                        release_endpoint: release,
+                    }),
+                )
+
+    def test_release_asset_local_pin_reads_version_and_digest_from_one_workflow(self) -> None:
+        """Require both installation values to occur exactly where the inventory declares."""
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workflow = root / ".github" / "workflows" / "conformance.yml"
+            workflow.parent.mkdir(parents=True)
+            workflow.write_text(
+                "env:\n"
+                '  CARGO_NEXTEST_VERSION: "0.9.143"\n'
+                f'  CARGO_NEXTEST_SHA256: "{"c" * 64}"\n',
+                encoding="utf-8",
+            )
+            local = {
+                "type": "github-release-asset",
+                "name": "CARGO_NEXTEST_VERSION",
+                "digestName": "CARGO_NEXTEST_SHA256",
+                "occurrences": {".github/workflows/conformance.yml": 1},
+            }
+
+            with patch.object(currentness, "ROOT", root.resolve()):
+                self.assertEqual(("0.9.143", "c" * 64), currentness.local_version(local))
+
     def test_stale_pin_fails_with_entry_identity(self) -> None:
         """Report the governed entry when its local and official versions differ."""
         entries = [

@@ -46,6 +46,10 @@ internal interface AllFileChangesBuildSystem
 
 internal interface TransitiveTestConsumersBuildSystem
 
+internal interface WorkspaceChangesBuildSystem {
+    fun requiresWorkspace(module: BuildModule, changes: BuildChanges): Boolean
+}
+
 internal interface SuspendingBuildSystem : BuildSystem {
     suspend fun modulesSuspending(project: Project): List<BuildModule> =
         runInterruptible(Dispatchers.IO) { modules(project) }

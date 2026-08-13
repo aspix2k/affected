@@ -53,12 +53,7 @@ object Verification {
         changes: ProjectChanges.Result,
         owners: Map<java.io.File, List<ModuleGraph.Node>> = changes.files.associateWith(graph::nodesFor),
     ): PreparedPlans {
-        val buildChanges = BuildChanges(
-            files = changes.files.map { it.absoluteFile.normalize().invariantSeparatorsPath },
-            exactSelectionEligible = changes.exactSelectionEligible
-                .mapTo(HashSet()) { it.absoluteFile.normalize().invariantSeparatorsPath },
-            comparedToBase = changes.comparedToBase,
-        )
+        val buildChanges = changes.toBuildChanges()
         val plans = verificationPlans(graph, changes, owners)
         return PreparedPlans(
             testsOnly = Prepared(plans.testsOnly, buildChanges),
@@ -136,9 +131,10 @@ private fun verificationPlans(
         val empty = Plan(emptyList(), 0, 0)
         return VerificationPlans(empty, empty)
     }
-    val changed = owners.values.flatten().distinct()
+    val effectiveOwners = graph.ownersForChanges(changes.toBuildChanges(), owners)
+    val changed = effectiveOwners.values.flatten().distinct()
     val testConsumers = graph.transitiveTestConsumers(changed.toSet())
-    val apiNodes = owners.flatMapTo(HashSet()) { (file, nodes) ->
+    val apiNodes = effectiveOwners.flatMapTo(HashSet()) { (file, nodes) ->
         nodes.filter { node ->
             affectsConsumers(
                 systemId = node.system.id,
@@ -159,6 +155,13 @@ private fun verificationPlans(
         },
     )
 }
+
+internal fun ProjectChanges.Result.toBuildChanges(): BuildChanges = BuildChanges(
+    files = files.map { it.absoluteFile.normalize().invariantSeparatorsPath },
+    exactSelectionEligible = exactSelectionEligible
+        .mapTo(HashSet()) { it.absoluteFile.normalize().invariantSeparatorsPath },
+    comparedToBase = comparedToBase,
+)
 
 internal fun affectsConsumers(systemId: String, path: String, signatureTouched: Boolean): Boolean =
     signatureTouched || systemId !in JVM_BUILD_SYSTEMS && !ChangeAnalyzer.isTestSource(systemId, path)

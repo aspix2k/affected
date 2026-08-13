@@ -75,6 +75,29 @@ class SequentialProcessHandlerTest {
     }
 
     @Test
+    fun `a non fail fast command runs the remainder and preserves failure`() {
+        val output = StringBuilder()
+        val handler = SequentialProcessHandler(
+            createTempDirectory("sequential-non-fail-fast").toFile(),
+            listOf(
+                CliCommand(
+                    "failure",
+                    listOf(java(), "--affected-invalid-option"),
+                    continueOnFailure = true,
+                ),
+                CliCommand("remainder", listOf(java(), "-version")),
+            ),
+        )
+        handler.addProcessListener(listener(output))
+
+        handler.startNotify()
+
+        assertTrue(handler.waitFor(30_000))
+        assertTrue(handler.exitCode != 0)
+        assertTrue(output.contains("> remainder"), output.toString())
+    }
+
+    @Test
     fun `a deferred command resolves only after the previous command completes`() {
         val output = StringBuilder()
         val firstCompleted = AtomicBoolean()

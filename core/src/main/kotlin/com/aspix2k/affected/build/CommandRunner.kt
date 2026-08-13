@@ -112,12 +112,14 @@ object CommandRunner {
         command: List<String>,
         timeoutSeconds: Long = 60,
         maxBytes: Int = DEFAULT_CAPTURE_LIMIT,
+        environment: Map<String, String> = emptyMap(),
     ): String? = try {
         val directory = File(workingDirectory).takeIf(File::isDirectory) ?: return null
         if (command.isEmpty() || timeoutSeconds <= 0 || maxBytes <= 0) return null
         val commandLine = GeneralCommandLine(command)
             .withWorkDirectory(directory)
             .withCharset(Charsets.UTF_8)
+            .withEnvironment(environment)
         capture(commandLine.createProcess(), timeoutSeconds, maxBytes)
     } catch (error: CancellationException) {
         throw error

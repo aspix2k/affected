@@ -13,6 +13,7 @@
 
     {"id":"jackson-bom","local":{"type":"maven","name":"com.fasterxml.jackson:jackson-bom"},"source":{"type":"maven","name":"com.fasterxml.jackson:jackson-bom"},"policy":"latest"},
     {"id":"jsoup","local":{"type":"maven","name":"org.jsoup:jsoup"},"source":{"type":"maven","name":"org.jsoup:jsoup"},"policy":"latest"},
+    {"id":"tomlj","local":{"type":"maven","name":"org.tomlj:tomlj"},"source":{"type":"maven","name":"org.tomlj:tomlj"},"policy":"latest"},
     {"id":"detekt-formatting","local":{"type":"maven","name":"io.gitlab.arturbosch.detekt:detekt-formatting"},"source":{"type":"maven","name":"io.gitlab.arturbosch.detekt:detekt-formatting"},"policy":"latest"},
     {"id":"junit4","local":{"type":"maven","name":"junit:junit"},"source":{"type":"maven","name":"junit:junit"},"policy":"latest"},
     {"id":"asm-all","local":{"type":"maven","name":"org.jetbrains.intellij.deps:asm-all"},"source":{"type":"jetbrains-maven","name":"org.jetbrains.intellij.deps:asm-all"},"policy":"latest"},
@@ -59,6 +60,7 @@
     {"id":"dotnet","local":{"type":"workflow-value","name":"dotnet-version","occurrences":{".github/workflows/conformance.yml":1}},"source":{"type":"dotnet"},"policy":"latest"},
     {"id":"go","local":{"type":"workflow-value","name":"go-version","occurrences":{".github/workflows/conformance.yml":1}},"source":{"type":"go"},"policy":"latest"},
     {"id":"rust","local":{"type":"workflow-value","name":"toolchain","occurrences":{".github/workflows/conformance.yml":1}},"source":{"type":"rust"},"policy":"latest"},
+    {"id":"cargo-nextest","local":{"type":"github-release-asset","name":"CARGO_NEXTEST_VERSION","digestName":"CARGO_NEXTEST_SHA256","occurrences":{".github/workflows/conformance.yml":1}},"source":{"type":"github-release-asset","name":"nextest-rs/nextest","tagPrefix":"cargo-nextest-","asset":"cargo-nextest-{version}-x86_64-unknown-linux-gnu.tar.gz"},"policy":"series","series":"0.9","reason":"The supported cargo-nextest compatibility contract remains on the stable 0.9 release line.","evidence":["core/src/test/kotlin/com/aspix2k/affected/build/CargoNextestTest.kt",".github/workflows/conformance.yml"]},
     {"id":"ruby","local":{"type":"workflow-value","name":"ruby-version","occurrences":{".github/workflows/conformance.yml":1}},"source":{"type":"ruby"},"policy":"latest"},
     {"id":"php","local":{"type":"workflow-value","name":"php-version","occurrences":{".github/workflows/conformance.yml":1}},"source":{"type":"php"},"policy":"latest"},
     {"id":"composer","local":{"type":"workflow-tool","name":"composer","occurrences":{".github/workflows/conformance.yml":2}},"source":{"type":"composer"},"policy":"latest"},

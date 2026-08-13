@@ -16,7 +16,8 @@ class CrossPlatformPathTest {
                 {
                   "name": "core",
                   "manifest_path": "C:\\projects\\demo\\crates\\core\\Cargo.toml",
-                  "dependencies": []
+                  "dependencies": [],
+                  "targets": [{"kind":["lib"],"doctest":true}]
                 }
               ]
             }
@@ -33,7 +34,12 @@ class CrossPlatformPathTest {
         val json = """
             {
               "packages": [
-                { "name": "app", "manifest_path": "C:\\ws\\app\\Cargo.toml", "dependencies": [] }
+                {
+                  "name": "app",
+                  "manifest_path": "C:\\ws\\app\\Cargo.toml",
+                  "dependencies": [],
+                  "targets": [{"kind":["bin"],"doctest":false}]
+                }
               ]
             }
         """.trimIndent()
@@ -45,7 +51,14 @@ class CrossPlatformPathTest {
 
     @Test
     fun `a path without a parent does not crash parsing`() {
-        val json = """{ "packages": [ { "name": "x", "manifest_path": "Cargo.toml", "dependencies": [] } ] }"""
+        val json = """{
+            "packages": [{
+                "name": "x",
+                "manifest_path": "Cargo.toml",
+                "dependencies": [],
+                "targets": [{"kind":["bin"],"doctest":false}]
+            }]
+        }"""
 
         val modules = CargoMetadata.parse(json, "/repo")
 

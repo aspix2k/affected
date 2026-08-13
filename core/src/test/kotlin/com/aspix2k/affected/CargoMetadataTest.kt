@@ -1,12 +1,37 @@
 package com.aspix2k.affected
 
 import com.aspix2k.affected.build.CargoMetadata
+import com.aspix2k.affected.build.cargoBuildScriptLayout
 import java.io.File
+import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class CargoMetadataTest {
+
+    @Test
+    fun `custom build targets are detected from Cargo metadata`() {
+        val metadata = """
+            {"packages":[{"name":"alpha","manifest_path":"/repo/alpha/Cargo.toml","dependencies":[],"targets":[{"kind":["custom-build"]}]}]}
+        """.trimIndent()
+
+        assertEquals(true, CargoMetadata.hasCustomBuild(metadata))
+        assertEquals(false, CargoMetadata.hasCustomBuild(metadata.replace("custom-build", "lib")))
+        assertEquals(null, CargoMetadata.hasCustomBuild("{}"))
+        assertEquals(null, CargoMetadata.hasCustomBuild(metadata.replace("\"custom-build\"", "{}")))
+    }
+
+    @Test
+    fun `build script presence changes Cargo cache identity`() {
+        val root = createTempDirectory("cargo-build-layout").toFile()
+        val manifest = File(root, "Cargo.toml").apply { writeText("[package]\nname='fixture'") }
+        val before = cargoBuildScriptLayout(root, listOf(manifest))
+
+        File(root, "build.rs").writeText("fn main() {}")
+
+        assertTrue(before != cargoBuildScriptLayout(root, listOf(manifest)))
+    }
 
     private fun workspace(): File {
         val root = File.createTempFile("cargo", "").let {
@@ -37,7 +62,8 @@ class CargoMetadataTest {
             {
               "name": "core-lib",
               "manifest_path": "${root.invariantSeparatorsPath}/crates/core/Cargo.toml",
-              "dependencies": []
+              "dependencies": [],
+              "targets": [{"kind":["lib"],"doctest":true}]
             },
             {
               "name": "app",
@@ -45,7 +71,8 @@ class CargoMetadataTest {
               "dependencies": [
                 { "name": "core-lib" },
                 { "name": "serde" }
-              ]
+              ],
+              "targets": [{"kind":["bin"],"doctest":false}]
             }
           ]
         }
@@ -81,6 +108,25 @@ class CargoMetadataTest {
 
         assertTrue(modules.single { it.id == "core-lib" }.hasTests)
         assertTrue(modules.single { it.id == "app" }.hasTests)
+    }
+
+    @Test
+    fun `Cargo metadata distinguishes doctested libraries from other targets`() {
+        val root = workspace()
+
+        val modules = CargoMetadata.parse(metadata(root), root.path) { hasDoctests ->
+            if (hasDoctests) "nextest-with-docs" else "nextest-without-docs"
+        }
+
+        assertEquals("nextest-with-docs", modules.single { it.id == "core-lib" }.testTask)
+        assertEquals("nextest-without-docs", modules.single { it.id == "app" }.testTask)
+    }
+
+    @Test
+    fun `Cargo metadata rejects non-boolean doctest capability`() {
+        val root = workspace()
+
+        assertEquals(emptyList(), CargoMetadata.parse(metadata(root).replace(":true", ":\"true\""), root.path))
     }
 
     @Test
