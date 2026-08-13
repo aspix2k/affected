@@ -222,11 +222,26 @@ class ChangeAnalyzerTest {
         assertTrue(scala in gradle.files, "a Scala production file belongs to the Gradle module")
         assertTrue(groovy in gradle.files, "a Groovy production file belongs to the Gradle module")
         assertTrue(gradle.files.none { it.name == "notes.txt" })
-        assertTrue(gradle.apiTouched.isEmpty(), "Scala and Groovy API shapes are not claimed yet")
+        assertEquals(setOf(scala, groovy), gradle.apiTouched, "a public Scala or Groovy type breaks consumers")
 
         val maven = analyze(dir, MavenBuildSystem().sourceExtensions)
         assertTrue(scala in maven.files, "a Scala production file belongs to the Maven module")
         assertTrue(groovy in maven.files, "a Groovy production file belongs to the Maven module")
+        assertEquals(setOf(scala, groovy), maven.apiTouched)
+    }
+
+    @Test
+    fun `a private Scala member does not change the API`() = repo { dir ->
+        val file = File(dir, "lib/src/main/scala/probe/Hidden.scala")
+        file.parentFile.mkdirs()
+        file.writeText("package probe\n\nclass Hidden {\n  def visible: Int = 1\n}\n")
+        run(dir, "git", "add", "-A")
+        run(dir, "git", "commit", "-qm", "scala")
+        file.writeText("package probe\n\nclass Hidden {\n  def visible: Int = 1\n  private def hidden: Int = 2\n}\n")
+
+        val changes = analyze(dir, GradleBuildSystem().sourceExtensions)
+        assertTrue(file in changes.files)
+        assertTrue(changes.apiTouched.isEmpty(), "a private Scala member is not externally visible")
     }
 
     @Test
