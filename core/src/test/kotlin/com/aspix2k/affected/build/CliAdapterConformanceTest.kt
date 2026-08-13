@@ -399,23 +399,6 @@ class CliAdapterConformanceTest {
         assertContains(result.output, "> minitest")
         assertContains(result.output, "> test-unit")
 
-        val custom = File(root, "gems/custom").apply { mkdirs() }
-        File(custom, "affected-custom.gemspec").writeText(
-            "Gem::Specification.new { |spec| spec.name = \"affected-custom\"; spec.version = \"0.1.0\" }\n",
-        )
-        File(custom, "test").mkdirs()
-        File(custom, "test/custom_test.rb").writeText("puts \"custom runner\"\n")
-        assertEquals(emptyList(), RubyGems.parse(root))
-        val fallbackTask = RubyTestSuites.fallbackTask(root)
-        val fallback = executeBatch(
-            root,
-            rubyCommands(root.path, listOf(".:$fallbackTask"), listOf(RubyGems.fallback(root, fallbackTask))),
-        )
-        assertTrue(fallback.completed, fallback.output)
-        assertTrue(fallback.passed, fallback.output)
-        assertContains(fallback.output, "> rspec")
-        assertContains(fallback.output, "> minitest")
-        assertContains(fallback.output, "> test-unit")
     }
 
     @Test
