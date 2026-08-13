@@ -38,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Pass Pest `--no-output` before suite paths so Collision cannot append it after them; PHPUnit 13 treats post-path flags as XML files.
+- Pass Pest `--configuration` and `--no-output` before suite paths so Pest 5.1.1 cannot append those flags after them; PHPUnit 13 treats post-path flags as XML files.
 - Read Maven Central metadata through the JetBrains cache-redirector first so a Central 429 cannot fail Scripts; invalid metadata and 404 still fail closed.
 - Authenticate the live release-currentness GitHub lookups so a public API 403 cannot fail Scripts and analyzers.
 - Retry Gradle after a Maven Central 429 and put the JetBrains cache-redirector first again; compilation and test failures still run once.

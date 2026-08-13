@@ -359,11 +359,14 @@ class CliAdapterConformanceTest {
                 File(root, ".affected/pest-cache").invariantSeparatorsPath,
                 "--do-not-cache-result",
                 "--no-output",
+                "--configuration",
+                File(root, ".affected/pest-phpunit.xml").invariantSeparatorsPath,
                 "./packages/alpha/tests",
                 "./packages/beta/tests",
             ),
             command.arguments,
         )
+        assertTrue(File(command.arguments[7]).isFile)
         assertTrue(File(command.arguments[3]).isDirectory)
         execute(root, command.arguments)
 

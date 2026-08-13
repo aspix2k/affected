@@ -41,12 +41,44 @@ class ComposerPestCommandTest {
                 File(root, ".affected/pest-cache").invariantSeparatorsPath,
                 "--do-not-cache-result",
                 "--no-output",
+                "--configuration",
+                File(root, ".affected/pest-phpunit.xml").invariantSeparatorsPath,
                 "./packages/pest-a/tests",
                 "./packages/pest-b/tests",
             ),
             commands.first().arguments,
         )
+        assertTrue(File(root, ".affected/pest-phpunit.xml").isFile)
         assertEquals(listOf("php", "vendor/bin/phpunit", "./packages/phpunit"), commands.last().arguments)
+    }
+
+    @Test
+    fun `a project phpunit xml is passed before Pest suite paths`() {
+        val root = createTempDirectory("composer-pest-phpunit-xml").toFile()
+        File(root, "package/tests").mkdirs()
+        File(root, "package/tests/A.php").writeText("<?php\n")
+        val xml = File(root, "phpunit.xml").apply { writeText("<phpunit/>") }
+
+        val commands = composerCommands(
+            root.path,
+            listOf("package:${ComposerPackages.PEST}"),
+            listOf(module(root, "package", "package", ComposerPackages.PEST)),
+        )
+
+        assertEquals(
+            listOf(
+                "php",
+                "vendor/bin/pest",
+                "--cache-directory",
+                File(root, ".affected/pest-cache").invariantSeparatorsPath,
+                "--do-not-cache-result",
+                "--no-output",
+                "--configuration",
+                xml.invariantSeparatorsPath,
+                "./package/tests",
+            ),
+            commands.single().arguments,
+        )
     }
 
     @Test

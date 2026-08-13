@@ -209,8 +209,41 @@ internal fun pestArguments(root: String, paths: List<String>): List<String> {
         cache.invariantSeparatorsPath,
         "--do-not-cache-result",
         "--no-output",
+        "--configuration",
+        pestConfigurationFile(root),
     ) + paths
 }
+
+internal fun pestConfigurationFile(root: String): String {
+    val dir = File(root)
+    val existing = listOf("phpunit.xml", "phpunit.xml.dist", "phpunit.dist.xml")
+        .map { File(dir, it) }
+        .firstOrNull { it.isFile }
+    if (existing != null) return existing.invariantSeparatorsPath
+    val generated = File(dir, ".affected/pest-phpunit.xml")
+    generated.parentFile.mkdirs()
+    generated.writeText(PEST_FALLBACK_PHPUNIT_XML)
+    generated.setReadable(false, false)
+    generated.setWritable(false, false)
+    generated.setExecutable(false, false)
+    generated.setReadable(true, true)
+    generated.setWritable(true, true)
+    return generated.invariantSeparatorsPath
+}
+
+private const val PEST_FALLBACK_PHPUNIT_XML =
+    """<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/13.3/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true">
+    <testsuites>
+        <testsuite name="default">
+            <directory suffix="Test.php">.</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>
+"""
 
 internal fun composerPackagePath(root: String, directory: String): String? {
     val normalizedRoot = File(root).invariantSeparatorsPath.trimEnd('/')
