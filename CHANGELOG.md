@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Select TestNG classes from a changed Gradle test file with `--tests`; JUnit, production and unproved changes keep the module task so the collector can stay honest.
 - Select proven sbt `lazy val` subprojects with one `sbt --batch <project>/test` invocation; unparseable `Project(` builds and `build.sbt` / `project/` changes keep the root command.
 - Detect sbt roots from `build.sbt` and run one `sbt test` or `sbt compile` session for the affected project; multi-project selection stays on the root command.
 - Attribute Scala and Groovy sources in Gradle and Maven modules so a changed `.scala` or `.groovy` file plans the owning module, including Groovy/Scala-only test trees.
