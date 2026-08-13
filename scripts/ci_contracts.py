@@ -33,7 +33,7 @@ class CiContractError(RuntimeError):
 def read(path: Path) -> str:
     """Read a tracked workflow file as UTF-8 text."""
     if not path.is_file() or path.is_symlink():
-        raise CiContractError(f"Missing workflow: {path.relative_to(ROOT)}")
+        raise CiContractError(f"Missing workflow: {path.name}")
     return path.read_text(encoding="utf-8")
 
 
@@ -110,6 +110,13 @@ def check(root: Path = ROOT) -> None:
         raise CiContractError("Weekly mutation must fail on surviving mutants")
     if ":core:pitest" not in mutation or "core/build/reports/pitest/mutations.xml" not in mutation:
         raise CiContractError("Weekly mutation must run and gate the core PIT report")
+    currentness = read(root / "scripts/release_currentness.py")
+    if "cache-redirector.jetbrains.com/repo1.maven.org/maven2" not in currentness:
+        raise CiContractError("release_currentness must read Maven metadata through cache-redirector first")
+    if currentness.find("cache-redirector.jetbrains.com/repo1.maven.org/maven2") > currentness.find(
+        "https://repo.maven.apache.org/maven2"
+    ):
+        raise CiContractError("release_currentness must prefer cache-redirector before repo.maven.apache.org")
     if "cache-redirector.jetbrains.com/repo1.maven.org/maven2" not in read(root / "settings.gradle.kts"):
         raise CiContractError("Plugin resolution must prefer the JetBrains Maven Central mirror")
     if "AFFECTED_PREFER_MAVEN_CENTRAL" not in read(root / "settings.gradle.kts"):

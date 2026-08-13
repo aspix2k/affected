@@ -42,6 +42,36 @@ class EmptyTransport:
         return ""
 
 
+class RecordingReadTransport:
+    """Record Maven metadata reads and return fixtures or configured errors."""
+
+    def __init__(self, documents: dict[str, bytes] | None = None, errors: dict[str, str] | None = None) -> None:
+        """Store fixture documents and fail-closed errors by exact URL."""
+        self.documents = documents or {}
+        self.errors = errors or {}
+        self.reads: list[str] = []
+
+    def read(self, url: str) -> bytes:
+        """Return a fixture document or raise the configured currentness error."""
+        self.reads.append(url)
+        if url in self.errors:
+            raise currentness.CurrentnessError(self.errors[url])
+        try:
+            return self.documents[url]
+        except KeyError as error:
+            raise AssertionError(f"Unexpected URL: {url}") from error
+
+
+def maven_metadata(*versions: str) -> bytes:
+    """Build a minimal Maven metadata document for the given versions."""
+    items = "".join(f"<version>{version}</version>" for version in versions)
+    return (
+        "<metadata><versioning><versions>"
+        f"{items}"
+        "</versions></versioning></metadata>"
+    ).encode()
+
+
 class FakeResponse:
     """Provide a bounded context-managed response to Transport tests."""
 
@@ -131,6 +161,111 @@ class ReleaseCurrentnessTest(unittest.TestCase):
             self.assertEqual(b"{}", transport.read("https://services.gradle.org/versions/current"))
         self.assertEqual(3, opener.calls)
         self.assertEqual([unittest.mock.call(1), unittest.mock.call(2)], sleep.call_args_list)
+
+    def test_maven_metadata_prefers_cache_redirector(self) -> None:
+        """Read Jackson BOM metadata from the JetBrains Central mirror first."""
+        redirector = (
+            "https://cache-redirector.jetbrains.com/repo1.maven.org/maven2/"
+            "com/fasterxml/jackson/jackson-bom/maven-metadata.xml"
+        )
+        transport = RecordingReadTransport({redirector: maven_metadata("2.22.0", "2.22.1")})
+
+        version, _ = currentness.remote_version(
+            {"type": "maven", "name": "com.fasterxml.jackson:jackson-bom"},
+            "latest",
+            None,
+            transport,
+        )
+
+        self.assertEqual("2.22.1", version)
+        self.assertEqual([redirector], transport.reads)
+
+    def test_maven_metadata_falls_back_to_central_after_redirector_429(self) -> None:
+        """A cache-redirector 429 must not skip the official Central metadata."""
+        redirector = (
+            "https://cache-redirector.jetbrains.com/repo1.maven.org/maven2/"
+            "com/fasterxml/jackson/jackson-bom/maven-metadata.xml"
+        )
+        central = (
+            "https://repo.maven.apache.org/maven2/"
+            "com/fasterxml/jackson/jackson-bom/maven-metadata.xml"
+        )
+        transport = RecordingReadTransport(
+            {central: maven_metadata("2.22.1")},
+            {
+                redirector: (
+                    "Unable to read official release endpoint "
+                    f"{redirector}: HTTP Error 429: Too Many Requests"
+                )
+            },
+        )
+
+        version, _ = currentness.remote_version(
+            {"type": "maven", "name": "com.fasterxml.jackson:jackson-bom"},
+            "latest",
+            None,
+            transport,
+        )
+
+        self.assertEqual("2.22.1", version)
+        self.assertEqual([redirector, central], transport.reads)
+
+    def test_maven_metadata_does_not_hide_a_redirector_404(self) -> None:
+        """A missing mirror document is a real failure, not a reason to guess Central."""
+        redirector = (
+            "https://cache-redirector.jetbrains.com/repo1.maven.org/maven2/"
+            "com/fasterxml/jackson/jackson-bom/maven-metadata.xml"
+        )
+        transport = RecordingReadTransport(
+            errors={
+                redirector: (
+                    "Unable to read official release endpoint "
+                    f"{redirector}: HTTP Error 404: Not Found"
+                )
+            }
+        )
+
+        with self.assertRaises(currentness.CurrentnessError):
+            currentness.remote_version(
+                {"type": "maven", "name": "com.fasterxml.jackson:jackson-bom"},
+                "latest",
+                None,
+                transport,
+            )
+        self.assertEqual([redirector], transport.reads)
+
+    def test_maven_metadata_fails_closed_when_every_official_source_is_rate_limited(self) -> None:
+        """Keep the currentness gate when both official Maven hosts return 429."""
+        redirector = (
+            "https://cache-redirector.jetbrains.com/repo1.maven.org/maven2/"
+            "com/fasterxml/jackson/jackson-bom/maven-metadata.xml"
+        )
+        central = (
+            "https://repo.maven.apache.org/maven2/"
+            "com/fasterxml/jackson/jackson-bom/maven-metadata.xml"
+        )
+        transport = RecordingReadTransport(
+            errors={
+                redirector: (
+                    "Unable to read official release endpoint "
+                    f"{redirector}: HTTP Error 429: Too Many Requests"
+                ),
+                central: (
+                    "Unable to read official release endpoint "
+                    f"{central}: HTTP Error 429: Too Many Requests"
+                ),
+            }
+        )
+
+        with self.assertRaises(currentness.CurrentnessError) as raised:
+            currentness.remote_version(
+                {"type": "maven", "name": "com.fasterxml.jackson:jackson-bom"},
+                "latest",
+                None,
+                transport,
+            )
+        self.assertIn("HTTP Error 429", str(raised.exception))
+        self.assertEqual([redirector, central], transport.reads)
 
     def test_transport_rejects_oversized_and_malformed_responses(self) -> None:
         """Fail before parsing oversized bytes and reject malformed JSON."""
