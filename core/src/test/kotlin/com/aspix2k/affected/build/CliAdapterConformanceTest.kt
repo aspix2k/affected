@@ -349,15 +349,11 @@ class CliAdapterConformanceTest {
             modules,
         ).single()
 
+        assertEquals(listOf("php", "vendor/bin/pest", "--ci", "--cache-directory"), command.arguments.take(4))
+        assertTrue(File(command.arguments[4]).isDirectory, command.arguments[4])
         assertEquals(
-            listOf(
-                "php",
-                "vendor/bin/pest",
-                "--ci",
-                "./packages/alpha/tests",
-                "./packages/beta/tests",
-            ),
-            command.arguments,
+            listOf("--do-not-cache-result", "./packages/alpha/tests", "./packages/beta/tests"),
+            command.arguments.drop(5),
         )
         execute(root, command.arguments)
 

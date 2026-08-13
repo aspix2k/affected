@@ -146,7 +146,7 @@ internal fun composerCommands(root: String, tasks: List<String>, modules: List<B
             ComposerPackages.ANALYSE ->
                 CliCommand("phpstan", listOf("php", "vendor/bin/phpstan", "analyse") + paths.distinct())
             ComposerPackages.PEST ->
-                CliCommand("pest", listOf("php", "vendor/bin/pest", "--ci") + paths.distinct())
+                CliCommand("pest", pestArguments(paths.distinct()))
             ComposerPackages.TEST ->
                 CliCommand("phpunit", listOf("php", "vendor/bin/phpunit") + paths.distinct())
             else -> return emptyList()
@@ -192,6 +192,19 @@ internal fun composerUsesPhpunitSelection(tasks: List<String>): Boolean =
     tasks.none { it.substringAfterLast(':') in PEST_TASKS }
 
 private val PEST_TASKS = setOf(ComposerPackages.PEST)
+
+internal fun pestArguments(paths: List<String>): List<String> {
+    val cache = File(System.getProperty("java.io.tmpdir"), "affected-pest-cache")
+    cache.mkdirs()
+    return listOf(
+        "php",
+        "vendor/bin/pest",
+        "--ci",
+        "--cache-directory",
+        cache.invariantSeparatorsPath,
+        "--do-not-cache-result",
+    ) + paths
+}
 
 internal fun composerPackagePath(root: String, directory: String): String? {
     val normalizedRoot = File(root).invariantSeparatorsPath.trimEnd('/')

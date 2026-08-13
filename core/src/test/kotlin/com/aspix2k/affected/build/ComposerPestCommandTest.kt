@@ -33,16 +33,14 @@ class ComposerPestCommandTest {
             modules,
         )
 
+        val pest = commands.first().arguments
+        assertEquals(listOf("php", "vendor/bin/pest", "--ci", "--cache-directory"), pest.take(4))
+        assertTrue(File(pest[4]).isDirectory, pest[4])
         assertEquals(
-            listOf(
-                listOf(
-                    "php", "vendor/bin/pest", "--ci",
-                    "./packages/pest-a/tests", "./packages/pest-b/tests",
-                ),
-                listOf("php", "vendor/bin/phpunit", "./packages/phpunit"),
-            ),
-            commands.map(CliCommand::arguments),
+            listOf("--do-not-cache-result", "./packages/pest-a/tests", "./packages/pest-b/tests"),
+            pest.drop(5),
         )
+        assertEquals(listOf("php", "vendor/bin/phpunit", "./packages/phpunit"), commands.last().arguments)
     }
 
     @Test
