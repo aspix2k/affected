@@ -25,11 +25,16 @@ internal fun selectTestNgClasses(changes: BuildChanges): List<String>? = runCatc
         )
         require(ChangeAnalyzer.isTestSource("GRADLE", real.toString().replace('\\', '/')))
         val text = Files.readString(real)
-        require("org.testng" in text)
-        names += testNgClassName(fileName, text)
+        names += requireNotNull(gradleExactTestClass(fileName, text))
     }
     names.sorted().takeIf { it.isNotEmpty() }
 }.getOrNull()
+
+private fun gradleExactTestClass(fileName: String, text: String): String? = when {
+    "org.testng" in text -> testNgClassName(fileName, text)
+    "spock.lang" in text || text.contains("extends Specification") -> testNgClassName(fileName, text)
+    else -> null
+}
 
 private fun testNgClassName(fileName: String, text: String): String {
     val simple = TESTNG_CLASS.find(text)?.groupValues?.get(1)

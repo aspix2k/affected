@@ -65,6 +65,36 @@ class GradleTestNgTest {
     }
 
     @Test
+    fun `a Spock spec becomes a Gradle --tests filter`() {
+        val root = createTempDirectory("spock-alpha").toFile()
+        val spec = File(root, "lib/src/test/groovy/probe/AlphaSpec.groovy").apply {
+            parentFile.mkdirs()
+            writeText(
+                """
+                package probe
+
+                import spock.lang.Specification
+
+                class AlphaSpec extends Specification {
+                    def "value"() {
+                        expect:
+                        1 == 1
+                    }
+                }
+                """.trimIndent(),
+            )
+        }
+
+        assertEquals(
+            listOf(":lib:test", "--tests", "probe.AlphaSpec"),
+            gradleTaskNames(
+                listOf(":lib:test"),
+                BuildChanges(listOf(spec.path), setOf(spec.path), comparedToBase = true),
+            ),
+        )
+    }
+
+    @Test
     fun `a production change keeps the unfiltered Gradle task`() {
         val root = createTempDirectory("testng-src").toFile()
         val source = File(root, "lib/src/main/java/probe/Alpha.java").apply {
