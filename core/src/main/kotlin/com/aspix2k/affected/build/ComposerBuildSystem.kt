@@ -158,7 +158,7 @@ internal fun composerCommands(
             ComposerPackages.PEST -> {
                 val suites = paths.distinct().sorted()
                 val selected = changes?.let { selectPestTestFiles(root, suites, it) }
-                CliCommand("pest", pestArguments(root, selected ?: suites))
+                CliCommand("pest", pestArguments(root, selected?.first ?: suites, selected?.second))
             }
             ComposerPackages.TEST ->
                 CliCommand("phpunit", listOf("php", "vendor/bin/phpunit") + paths.distinct())
@@ -206,7 +206,7 @@ internal fun composerUsesPhpunitSelection(tasks: List<String>): Boolean =
 
 private val PEST_TASKS = setOf(ComposerPackages.PEST)
 
-internal fun pestArguments(root: String, paths: List<String>): List<String> {
+internal fun pestArguments(root: String, paths: List<String>, filter: String? = null): List<String> {
     val cache = File(root, ".affected/pest-cache")
     cache.mkdirs()
     cache.setReadable(false, false)
@@ -215,6 +215,7 @@ internal fun pestArguments(root: String, paths: List<String>): List<String> {
     cache.setReadable(true, true)
     cache.setWritable(true, true)
     cache.setExecutable(true, true)
+    val named = if (filter.isNullOrEmpty()) emptyList() else listOf("--filter", filter)
     return listOf(
         "php",
         "vendor/bin/pest",
@@ -224,7 +225,7 @@ internal fun pestArguments(root: String, paths: List<String>): List<String> {
         "--no-output",
         "--configuration",
         pestConfigurationFile(root),
-    ) + paths
+    ) + named + paths
 }
 
 internal fun pestConfigurationFile(root: String): String {

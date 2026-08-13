@@ -201,6 +201,81 @@ class ComposerPestCommandTest {
         )
 
         assertEquals(listOf("./package/tests/ServiceTest.php"), commands.single().arguments.takeLast(1))
+        assertFalse(commands.single().arguments.contains("--filter"))
+    }
+
+    @Test
+    fun `a production change filters the named Pest cases that reference the class`() {
+        val root = createTempDirectory("composer-pest-src-filter").toFile()
+        File(root, "package").mkdirs()
+        File(root, "package/composer.json").writeText(
+            """{"autoload":{"psr-4":{"App\\":"src/"}}}""",
+        )
+        File(root, "package/src").mkdirs()
+        File(root, "package/tests").mkdirs()
+        val source = File(root, "package/src/Service.php").apply {
+            writeText("<?php\nnamespace App;\nclass Service {}\n")
+        }
+        File(root, "package/tests/ServiceTest.php").writeText(
+            """
+            <?php
+            use App\Service;
+            test('creates service', function (): void {
+                expect(new Service())->not->toBeNull();
+            });
+            test('lists unrelated', function (): void {
+                expect(true)->toBeTrue();
+            });
+            """.trimIndent(),
+        )
+
+        val arguments = composerCommands(
+            root.path,
+            listOf("package:${ComposerPackages.PEST}"),
+            listOf(module(root, "package", "package", ComposerPackages.PEST)),
+            changes(source),
+        ).single().arguments
+
+        assertEquals(listOf("./package/tests/ServiceTest.php"), arguments.takeLast(1))
+        assertEquals("creates service", arguments[arguments.indexOf("--filter") + 1])
+    }
+
+    @Test
+    fun `describe hooks and dynamic Pest names keep the selected files`() {
+        val root = createTempDirectory("composer-pest-src-no-filter").toFile()
+        File(root, "package").mkdirs()
+        File(root, "package/composer.json").writeText(
+            """{"autoload":{"psr-4":{"App\\":"src/"}}}""",
+        )
+        File(root, "package/src").mkdirs()
+        File(root, "package/tests").mkdirs()
+        val source = File(root, "package/src/Service.php").apply {
+            writeText("<?php\nnamespace App;\nclass Service {}\n")
+        }
+        File(root, "package/tests/DescribeTest.php").writeText(
+            """
+            <?php
+            use App\Service;
+            describe('service', function (): void {
+                test('creates service', function (): void {
+                    expect(new Service())->not->toBeNull();
+                });
+            });
+            """.trimIndent(),
+        )
+        File(root, "package/tests/OtherTest.php").writeText(
+            "<?php\ntest('other', fn () => expect(true)->toBeTrue());\n",
+        )
+
+        val arguments = composerCommands(
+            root.path,
+            listOf("package:${ComposerPackages.PEST}"),
+            listOf(module(root, "package", "package", ComposerPackages.PEST)),
+            changes(source),
+        ).single().arguments
+
+        assertEquals(listOf("./package/tests/DescribeTest.php"), arguments.takeLast(1))
+        assertFalse(arguments.contains("--filter"))
     }
 
     @Test

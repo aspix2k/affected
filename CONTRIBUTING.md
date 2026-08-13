@@ -256,7 +256,10 @@ shortcuts disabled. When every planned suite change is a regular test file
 against a merge base, those files replace the suite directories. A named
 dataset file selects the test files that statically `->with` that name.
 A production PHP file mapped by the nearest composer.json PSR-4 prefix
-selects test files that statically `use` that class. Production files without
+selects test files that statically `use` that class. When those files contain
+only static `it()` / `test()` names and a proper subset of them references the
+class, Affected adds Pest `--filter` for those names. `describe()`, hooks,
+dynamic names and file-scope uses keep the selected files. Production files without
 a static import, boot, unused dataset, helper and unproved changes keep the package suite. Missing, nested, malformed, mirrored or unsupported Pest
 metadata produces an explicit unresolved Run and never falls through to PHPUnit
 or its exact baseline.

@@ -10,7 +10,7 @@ internal fun selectPestTestFiles(
     root: String,
     suitePaths: List<String>,
     changes: BuildChanges,
-): List<String>? = runCatching {
+): Pair<List<String>, String?>? = runCatching {
     require(changes.comparedToBase)
     require(changes.files.isNotEmpty())
     require(changes.files.toSet() == changes.exactSelectionEligible)
@@ -21,40 +21,60 @@ internal fun selectPestTestFiles(
     require(Files.isDirectory(rootPath, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(rootPath))
     val realRoot = rootPath.toRealPath(LinkOption.NOFOLLOW_LINKS)
     val suites = suitePaths.map { suite -> realSuite(rootPath, realRoot, suite) }
+    val classified = classifyPestChanges(realRoot, suites, changes.files)
+    val selected = LinkedHashSet(classified.paths)
+    if (classified.datasetNames.isNotEmpty()) {
+        val consumers = pestDatasetConsumers(realRoot, suites, classified.datasetNames)
+        require(consumers.isNotEmpty())
+        selected += consumers
+    }
+    if (classified.productionClasses.isNotEmpty()) {
+        val consumers = pestClassConsumers(realRoot, suites, classified.productionClasses)
+        require(consumers.isNotEmpty())
+        selected += consumers
+    }
+    require(selected.isNotEmpty())
+    require(suites.all { suite -> selected.any { coversSuite(realRoot, it, suite) } })
+    val paths = selected.sorted()
+    val filter = classified.namedFilter(realRoot, paths)
+    paths to filter
+}.getOrNull()
 
+private class ClassifiedPestChanges(
+    val paths: Set<String>,
+    val datasetNames: Set<String>,
+    val productionClasses: Set<String>,
+) {
+    fun namedFilter(root: Path, paths: List<String>): String? =
+        if (productionClasses.isNotEmpty() && datasetNames.isEmpty()) {
+            pestNamedFilter(root, paths, productionClasses)
+        } else {
+            null
+        }
+}
+
+private fun classifyPestChanges(root: Path, suites: List<Path>, files: List<String>): ClassifiedPestChanges {
     val selected = LinkedHashSet<String>()
     val datasetNames = LinkedHashSet<String>()
     val productionClasses = LinkedHashSet<String>()
-    for (raw in changes.files) {
+    for (raw in files) {
         val requested = Path.of(raw).toAbsolutePath().normalize()
         require(Files.isRegularFile(requested, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(requested))
         val real = requested.toRealPath(LinkOption.NOFOLLOW_LINKS)
         val suite = suites.singleOrNull { real.startsWith(it) }
-        val relative = pestRelative(realRoot, real)
+        val relative = pestRelative(root, real)
         when {
             suite != null && isPestExactTestFile(suite, real) -> selected += relative
             suite != null && isPestDatasetFile(suite, real) -> {
                 datasetNames += pestDatasetNames(real)
                 selected += relative
             }
-            suite == null -> productionClasses += pestPsr4Class(realRoot, real) ?: return@runCatching null
-            else -> return@runCatching null
+            suite == null -> productionClasses += pestPsr4Class(root, real) ?: error("unmapped production")
+            else -> error("unproved pest change")
         }
     }
-    if (datasetNames.isNotEmpty()) {
-        val consumers = pestDatasetConsumers(realRoot, suites, datasetNames)
-        require(consumers.isNotEmpty())
-        selected += consumers
-    }
-    if (productionClasses.isNotEmpty()) {
-        val consumers = pestClassConsumers(realRoot, suites, productionClasses)
-        require(consumers.isNotEmpty())
-        selected += consumers
-    }
-    require(selected.isNotEmpty())
-    require(suites.all { suite -> selected.any { coversSuite(realRoot, it, suite) } })
-    selected.sorted()
-}.getOrNull()
+    return ClassifiedPestChanges(selected, datasetNames, productionClasses)
+}
 
 private fun realSuite(root: Path, realRoot: Path, relative: String): Path {
     val requested = root.resolve(relative.removePrefix("./")).normalize()
@@ -148,6 +168,44 @@ private fun pestClassConsumers(root: Path, suites: List<Path>, classes: Set<Stri
     return consumers
 }
 
+private fun pestNamedFilter(root: Path, paths: List<String>, classes: Set<String>): String? {
+    val names = LinkedHashSet<String>()
+    var total = 0
+    for (path in paths) {
+        val file = root.resolve(path.removePrefix("./")).normalize()
+        require(file.startsWith(root))
+        val tests = pestNamedTests(file) ?: return null
+        total += tests.size
+        for ((name, body) in tests) {
+            if (classes.any { pestBodyReferences(body, it) }) names += name
+        }
+    }
+    if (names.isEmpty() || names.size == total || names.size > MAX_PEST_NAMED_FILTERS) return null
+    if (names.any { !PEST_SAFE_FILTER.matches(it) }) return null
+    return names.joinToString("|")
+}
+
+private fun pestNamedTests(file: Path): List<Pair<String, String>>? {
+    val text = readPestPhp(file) ?: return null
+    if (PEST_WIDENING.containsMatchIn(text)) return null
+    val matches = PEST_NAMED_TEST.findAll(text).toList()
+    if (matches.isEmpty()) return null
+    if (PEST_TEST_CALL.findAll(text).count() != matches.size) return null
+    return matches.mapIndexed { index, match ->
+        val name = match.groupValues[1]
+        if (name.isEmpty() || name.length > MAX_PEST_FILTER_NAME) return null
+        val start = match.range.last + 1
+        val end = matches.getOrNull(index + 1)?.range?.first ?: text.length
+        name to text.substring(start, end)
+    }
+}
+
+private fun pestBodyReferences(body: String, fqcn: String): Boolean {
+    if (body.contains(fqcn) || body.contains("\\$fqcn")) return true
+    val short = fqcn.substringAfterLast('\\')
+    return short.isNotEmpty() && pestIdentifier(short).containsMatchIn(body)
+}
+
 private fun pestImportedClasses(file: Path, classes: Set<String>): Set<String>? {
     val text = readPestPhp(file) ?: return null
     val used = LinkedHashSet<String>()
@@ -225,6 +283,18 @@ private val PEST_NON_EXACT_DIRECTORIES = setOf("Datasets", "Expectations", "Help
 private val DATASET_DECLARATION = Regex("""dataset\s*\(\s*['\"]([^'\"]+)['\"]""")
 private val WITH_DATASET = Regex("""->\s*with\s*\(\s*['\"]([^'\"]+)['\"]""")
 private val USE_CLASS = Regex("""(?:^|[\r\n])\s*use\s+([A-Za-z_][A-Za-z0-9_\\]*)""")
+private val PEST_NAMED_TEST = Regex("""(?:^|[\r\n])\s*(?:it|test)\s*\(\s*['\"]([^'\"]+)['\"]""")
+private val PEST_TEST_CALL = Regex("""(?:^|[\r\n])\s*(?:it|test)\s*\(""")
+private val PEST_WIDENING = Regex(
+    """(?:^|[\r\n])\s*(?:describe|beforeEach|afterEach|beforeAll|afterAll|uses)\s*\(""" +
+        """|(?:^|[\r\n])\s*(?:abstract\s+|final\s+)?class\s+""",
+)
+private val PEST_SAFE_FILTER = Regex("""[A-Za-z0-9][A-Za-z0-9 .:_-]*""")
+
+private fun pestIdentifier(name: String) =
+    Regex("""(?<![A-Za-z0-9_\\])${Regex.escape(name)}(?![A-Za-z0-9_])""")
 
 private const val MAX_PEST_FILTER_FILES = 256
+private const val MAX_PEST_NAMED_FILTERS = 64
+private const val MAX_PEST_FILTER_NAME = 128
 private const val MAX_PEST_PHP_BYTES = 1024 * 1024

@@ -111,9 +111,11 @@ class CliPestConformanceTest {
         ).single()
 
         assertEquals(listOf("./packages/alpha/tests/AlphaTest.php"), command.arguments.takeLast(1))
+        assertEquals("alpha package", command.arguments[command.arguments.indexOf("--filter") + 1])
         execute(root, command.arguments)
 
         assertEquals("alpha", File(root, "packages/alpha/alpha.marker").readText())
+        assertFalse(File(root, "packages/alpha/dataset.marker").exists())
         assertFalse(File(root, "packages/alpha/phpunit.marker").exists())
         assertFalse(File(root, "packages/beta/beta.marker").exists())
     }
