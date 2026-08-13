@@ -142,6 +142,7 @@ class TaskPlannerTest {
             "COMPOSER",
             "RUBY",
             "CMAKE",
+            "SBT",
         )
 
         systems.forEach { systemId ->

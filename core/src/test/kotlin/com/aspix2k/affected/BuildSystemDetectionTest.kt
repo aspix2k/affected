@@ -6,6 +6,7 @@ import com.aspix2k.affected.build.DotnetBuildSystem
 import com.aspix2k.affected.build.NodeBuildSystem
 import com.aspix2k.affected.build.PythonBuildSystem
 import com.aspix2k.affected.build.RubyBuildSystem
+import com.aspix2k.affected.build.SbtBuildSystem
 import com.intellij.openapi.project.Project
 import java.io.File
 import java.lang.reflect.Proxy
@@ -61,8 +62,17 @@ class BuildSystemDetectionTest {
             CMakeBuildSystem()::isPresent,
             NodeBuildSystem()::isPresent,
             DotnetBuildSystem()::isPresent,
+            SbtBuildSystem()::isPresent,
         ).zip(
-            listOf("Gemfile", "composer.json", "pyproject.toml", "CMakeLists.txt", "package.json", "app.csproj"),
+            listOf(
+                "Gemfile",
+                "composer.json",
+                "pyproject.toml",
+                "CMakeLists.txt",
+                "package.json",
+                "app.csproj",
+                "build.sbt",
+            ),
         )
     }
 }

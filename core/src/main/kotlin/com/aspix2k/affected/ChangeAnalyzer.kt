@@ -219,6 +219,7 @@ private val TEST_SOURCE_MATCHERS: Map<String, TestSourceMatcher> = mapOf(
         segments.any { it == "test" || it == "spec" } ||
             name.endsWith("_spec.rb") || name.endsWith("_test.rb")
     },
+    "SBT" to { segments, _ -> isJvmTestSource(segments) },
 )
 
 private fun isJvmTestSource(segments: List<String>): Boolean =

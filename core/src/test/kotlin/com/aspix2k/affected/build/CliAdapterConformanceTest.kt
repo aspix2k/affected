@@ -32,6 +32,17 @@ class CliAdapterConformanceTest {
     }
 
     @Test
+    fun `sbt runs the project test command for the affected root`() = fixture("sbt") { root ->
+        val modules = listOf(sbtRootModule(root))
+        val command = sbtCommands(modules.map { "${it.executionId}:${it.testTask}" }).single()
+        val result = executeResult(root, command.arguments, timeoutSeconds = 360)
+        assertTrue(result.completed, result.output)
+        assertTrue(result.passed, result.output)
+        assertEquals(listOf("sbt", "--batch", "test"), command.arguments)
+        assertContains(result.output, "AlphaTest")
+    }
+
+    @Test
     fun `Go commands run the selected module packages`() = fixture("go") { root ->
         val metadata = execute(root, listOf("go", "list", "-json", "./..."))
         val modules = GoPackages.parse(metadata, root.invariantSeparatorsPath)
@@ -627,6 +638,7 @@ class CliAdapterConformanceTest {
         directory: File,
         arguments: List<String>,
         environment: Map<String, String> = emptyMap(),
+        timeoutSeconds: Long = COMMAND_TIMEOUT_SECONDS,
     ): CommandResult {
         val output = File.createTempFile("affected-cli-output", ".log")
         try {
@@ -636,7 +648,7 @@ class CliAdapterConformanceTest {
                 .redirectOutput(output)
             builder.environment().putAll(environment)
             val process = builder.start()
-            val completed = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            val completed = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
             if (!completed) process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)
             val text = output.readText()
             return CommandResult(completed, completed && process.exitValue() == 0, text)
