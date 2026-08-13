@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Detect Meson roots from `meson.build` and run one `meson test` or `meson compile` session; setup runs only when no configured build directory exists. Gradle, Maven and CMake roots stay off this adapter. Subprojects and Make/Ninja stay unclaimed.
 - Detect Dart package roots from `pubspec.yaml` and run one `dart test` or `dart analyze` session; Flutter SDK packages, Gradle and Maven roots stay off this adapter. Workspace and Flutter selection stay unclaimed.
 - Select proven Bazel packages with one `bazel test //pkg:all` session; MODULE, WORKSPACE, BUILD and `.bzl` changes keep `//...`. Target-level ownership stays unclaimed.
 - Select proven Kotlin Toolchain modules with one `kotlin test -m` / `kotlin build -m` invocation; a root task or several production modules keep the unscoped project command.
