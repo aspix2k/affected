@@ -13,7 +13,6 @@ class CliPestConformanceTest {
 
     @Test
     fun `Pest 5 runs only the changed test files`() = fixture("pest") { root ->
-        assumeTrue(commandExists("php") && commandExists("composer"), "native Pest fixtures need php and composer")
         val lock = root.resolve("composer.lock")
         val locked = lock.readBytes()
         execute(root, listOf("composer", "install", "--no-interaction", "--no-progress", "--no-scripts"))
@@ -43,10 +42,7 @@ class CliPestConformanceTest {
     }
 
     private fun fixture(name: String, block: (File) -> Unit) {
-        assumeTrue(
-            "true".equals(System.getProperty("affected.cliConformance"), ignoreCase = true),
-            "Set -Paffected.cliConformance=true to run native CLI fixtures",
-        )
+        assumeTrue(System.getProperty("affected.cliConformance") == "true")
         val source = File(fixtureRoot(), name)
         assertTrue(source.isDirectory, "Missing CLI conformance fixture: $source")
         val target = createTempDirectory("affected-cli-$name").toFile()
@@ -80,10 +76,6 @@ class CliPestConformanceTest {
             output.delete()
         }
     }
-
-    private fun commandExists(name: String): Boolean = runCatching {
-        ProcessBuilder(name, "--version").redirectErrorStream(true).start().waitFor(5, TimeUnit.SECONDS)
-    }.getOrDefault(false)
 
     private companion object {
         const val COMMAND_TIMEOUT_SECONDS = 180L
