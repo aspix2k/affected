@@ -47,10 +47,12 @@ class CliBazelPackageConformanceTest {
     private fun execute(directory: File, arguments: List<String>): String {
         val output = File.createTempFile("affected-cli-output", ".log")
         try {
+            val bazelHome = File(directory, ".bazel-tmp").apply { mkdirs() }
             val process = ProcessBuilder(arguments)
                 .directory(directory)
                 .redirectErrorStream(true)
                 .redirectOutput(output)
+                .apply { environment()["TEST_TMPDIR"] = bazelHome.absolutePath }
                 .start()
             val completed = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             if (!completed) process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)
