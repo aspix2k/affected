@@ -57,10 +57,11 @@ class TaskPlannerTest {
     }
 
     @Test
-    fun `a module without tests is skipped`() {
+    fun `a changed module without tests is compiled`() {
         val plan = TaskPlanner.plan(listOf(jvm(":no-tests", tests = false)), emptyList())
-        assertTrue(plan.isEmpty, "there is no reason to run missing tests")
+        assertEquals(listOf(":no-tests:compileTestKotlin"), plan.groups.single { it.root == "/repo" }.tasks)
         assertEquals(0, plan.tested)
+        assertEquals(1, plan.compiled)
     }
 
     @Test

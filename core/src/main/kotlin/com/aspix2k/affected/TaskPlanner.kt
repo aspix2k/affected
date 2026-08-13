@@ -96,6 +96,11 @@ object TaskPlanner {
 
         val testedKeys = tested.map { it.ownerKey() }.toSet()
         val changedKeys = changedModules.map { it.ownerKey() }.toSet()
+        val compiledChanged = changedModules.filter { !it.hasTests && it.compileTask != null }
+        compiledChanged.forEach { module ->
+            val task = module.plannedCompile() ?: return@forEach
+            tasks.getOrPut(module.systemId to module.executionRoot) { mutableListOf() }.add(task)
+        }
         val compiled = consumers.distinctOwners()
             .filter { it.compileTask != null }
             .filter { it.ownerKey() !in testedKeys }
@@ -110,7 +115,7 @@ object TaskPlanner {
                 typedGroups(key.first, key.second, value)
             },
             tested = tested.size,
-            compiled = compiled.size,
+            compiled = compiledChanged.size + compiled.size,
         )
     }
 
