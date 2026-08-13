@@ -35,6 +35,7 @@ internal fun readPhpunitProjectState(
     val realAdapter = adapter.securePhpunitFile()
     val phpunitExecutable = realRoot.resolve("vendor/bin/phpunit").securePhpunitChild(realRoot)
     require(supportedPhpunitRuntime(runtime))
+    require(!pestDeclared(realRoot))
     require(phpunitConfigurationFiles(realRoot).isEmpty())
     require(Files.isRegularFile(realRoot.resolve("composer.lock"), LinkOption.NOFOLLOW_LINKS))
     val composerRuntime = phpunitComposerRuntimeFiles(realRoot)

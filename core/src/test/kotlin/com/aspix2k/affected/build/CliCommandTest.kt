@@ -243,6 +243,27 @@ class CliCommandTest {
     }
 
     @Test
+    fun `Composer Pest packages share one native pest command`() {
+        val root = createTempDirectory("composer-pest-commands").toFile()
+        File(root, "composer.json").writeText(
+            """{ "name": "acme/app", "require-dev": { "pestphp/pest": "^3.8" } }""",
+        )
+        val modules = modules(root.path, "pkg-a", "packages/a", "pkg-b", "packages/b")
+
+        val commands = composerCommands(root.path, listOf("pkg-a:test", "pkg-b:test", "pkg-a:analyse"), modules)
+
+        assertEquals("pest", commands.single { it.title == "pest" }.title)
+        assertEquals(
+            listOf("php", "vendor/bin/pest", "packages/a", "packages/b"),
+            commands.single { it.title == "pest" }.arguments,
+        )
+        assertEquals(
+            listOf("php", "vendor/bin/phpstan", "analyse", "packages/a"),
+            commands.single { it.title == "phpstan" }.arguments,
+        )
+    }
+
+    @Test
     fun `a missing planned module invalidates the whole command batch`() {
         val modules = modules("/repo", "pkg-a", "packages/a")
 
