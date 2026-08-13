@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Detect Microsoft Testing Platform from the test project as well as `global.json`, and run those projects with `dotnet test --project` instead of the VSTest path form.
 - Select changed Pest 5.1.1 test files by native path when every planned suite change is a regular test file; production, boot, dataset and unproved changes keep the package suite.
 - Run every test in affected Composer packages through Pest 5.1.1, including datasets and PHPUnit-style tests, while disabling focused and test-impact shortcuts.
 - Run affected Cargo workspace packages through repository-configured cargo-nextest 0.9.x profiles, retaining `cargo test --doc` and conservative `cargo test` fallback when exact execution cannot be proven.
@@ -24,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Keep the Python adapter Ruff pin on 0.16.3.
 - Pin `github/codeql-action` to 4.37.7.
 - Keep the Composer PHPUnit 13.3 pin and exact-selection matrix on 13.3.1.
 - Run weekly PIT on `AffectedMcpInputs` as well as `TestRootResolver`, and reject task or branch names only through the documented charset and `..` rules.
