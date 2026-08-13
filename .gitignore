@@ -26,5 +26,7 @@
 /conformance/cli-fixtures/kotlin-toolchain-multi/**/affected-*.marker
 /conformance/cli-fixtures/bazel-packages/bazel-*
 /conformance/cli-fixtures/bazel-packages/MODULE.bazel.lock
+/conformance/cli-fixtures/dart/.dart_tool/
+/conformance/cli-fixtures/dart/pubspec.lock
 /core/src/main/dotnet/**/bin/
 /core/src/main/dotnet/**/obj/
