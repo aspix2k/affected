@@ -253,7 +253,9 @@ and pass exact identities through `dotnet test --no-build --filter` in the same
 Run session. Parameterized or shared fixtures, custom settings, Microsoft
 Testing Platform, test-assembly changes and incomplete metadata keep the full
 project plan. MTP is detected from `global.json` or the test project and runs
-as `dotnet test --project`; exact VSTest filters stay off. Only a complete unchanged full run replaces the counted and
+as `dotnet test --project`. A changed test file that declares a `*Test`/`*Tests`
+class adds `-- --filter-class`; production and unproved MTP changes stay project-level.
+Exact VSTest filters stay off. Only a complete unchanged full run replaces the counted and
 checksummed baseline.
 
 Composer projects use Pest package selection only when the root manifest pins
