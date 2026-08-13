@@ -3,7 +3,7 @@ package com.aspix2k.affected.build
 import com.intellij.openapi.project.Project
 import java.io.File
 
-class KotlinToolchainBuildSystem : SuspendingBuildSystem {
+class KotlinToolchainBuildSystem : SuspendingBuildSystem, WorkspaceChangesBuildSystem {
 
     override val id: String = "KOTLIN_TOOLCHAIN"
 
@@ -13,8 +13,16 @@ class KotlinToolchainBuildSystem : SuspendingBuildSystem {
 
     override fun modules(project: Project): List<BuildModule> {
         val root = manifestOf(project)?.parentFile ?: return emptyList()
-        return listOf(kotlinToolchainRootModule(root))
+        return failClosedModules(
+            root,
+            KotlinToolchainTasks.TEST,
+            KotlinToolchainTasks.BUILD,
+            kotlinToolchainModules(root),
+        ).modules
     }
+
+    override fun requiresWorkspace(module: BuildModule, changes: BuildChanges): Boolean =
+        kotlinToolchainRequiresWorkspace(module.root, changes)
 
     override fun run(project: Project, root: String, tasks: List<String>) {
         CommandRunner.runBatch(project, root, kotlinToolchainCommands(File(root), tasks), "Affected Kotlin Toolchain")
@@ -76,6 +84,51 @@ internal fun kotlinToolchainHasTests(root: File): Boolean =
             candidate.walkTopDown().any(::kotlinToolchainSourceFile)
     }
 
+internal fun kotlinToolchainModules(root: File): List<BuildModule>? {
+    val manifest = File(root, "project.yaml")
+    if (!manifest.isRegularFileNoFollow()) return listOf(kotlinToolchainRootModule(root))
+    val text = runCatching { manifest.readText() }.getOrNull() ?: return null
+    val section = MODULES_SECTION.find(text)?.groupValues[1]
+    if (section != null && UNPROVED_TOOLCHAIN_MODULE.containsMatchIn(section)) {
+        return listOf(kotlinToolchainRootModule(root))
+    }
+    val declared = section?.let { block ->
+        TOOLCHAIN_MODULE_PATH.findAll(block).map { it.groupValues[1] }.toList()
+    }.orEmpty()
+    val modules = LinkedHashMap<String, BuildModule>()
+    if (File(root, "module.yaml").isRegularFileNoFollow()) {
+        modules["."] = kotlinToolchainRootModule(root)
+    }
+    for (directory in declared) {
+        val relative = directory.replace('\\', '/').removePrefix("./").ifEmpty { "." }
+        if (relative == "." || ".." in relative || relative.startsWith("/")) return null
+        val content = File(root, relative)
+        if (!File(content, "module.yaml").isRegularFileNoFollow()) return null
+        if (relative in modules) return null
+        modules[relative] = BuildModule(
+            id = relative,
+            root = root.invariantSeparatorsPath,
+            contentRoots = listOf(content.invariantSeparatorsPath),
+            testTask = KotlinToolchainTasks.TEST,
+            compileTask = KotlinToolchainTasks.BUILD,
+            hasTests = kotlinToolchainHasTests(content),
+            executionRoot = root.invariantSeparatorsPath,
+            executionId = relative,
+        )
+    }
+    return modules.values.toList().takeIf { it.isNotEmpty() }
+}
+
+internal fun kotlinToolchainRequiresWorkspace(root: String, changes: BuildChanges): Boolean {
+    val rootPath = File(root).toPath().toAbsolutePath().normalize()
+    return changes.files.any { raw ->
+        val file = File(raw).toPath().toAbsolutePath().normalize()
+        if (!file.startsWith(rootPath)) return@any true
+        val relative = rootPath.relativize(file).toString().replace('\\', '/')
+        relative == "project.yaml" || relative == "module.yaml" || relative == "kotlin" || relative == "kotlin.bat"
+    }
+}
+
 internal fun kotlinToolchainCommands(root: File, tasks: List<String>): List<CliCommand> {
     if (tasks.isEmpty()) return emptyList()
     val wrapper = kotlinToolchainWrapper(root) ?: return emptyList()
@@ -93,3 +146,6 @@ private fun kotlinToolchainSourceFile(file: File): Boolean =
 
 private val TOOLCHAIN_YAML = listOf("project.yaml", "module.yaml")
 private val GRADLE_SETTINGS = listOf("settings.gradle.kts", "settings.gradle")
+private val MODULES_SECTION = Regex("""(?m)^modules:\s*\n((?:[ \t]+.*\n?)*)""")
+private val UNPROVED_TOOLCHAIN_MODULE = Regex("""[*?\[]|\*\*""")
+private val TOOLCHAIN_MODULE_PATH = Regex("""(?m)^[ \t]*-[ \t]+(?:\./)?([A-Za-z0-9][A-Za-z0-9_./-]*)[ \t]*$""")

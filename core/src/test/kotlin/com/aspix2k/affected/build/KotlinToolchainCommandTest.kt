@@ -99,6 +99,68 @@ class KotlinToolchainCommandTest {
         assertNull(kotlinToolchainManifest(root))
     }
 
+    @Test
+    fun `project yaml lists explicit modules with their own content roots`() {
+        val root = toolchainRoot()
+        File(root, "project.yaml").writeText("modules:\n  - ./app\n  - ./lib\n")
+        File(root, "app/module.yaml").apply {
+            parentFile.mkdirs()
+            writeText("product: jvm/app")
+        }
+        File(root, "app/test/AppTest.kt").apply {
+            parentFile.mkdirs()
+            writeText("class AppTest")
+        }
+        File(root, "lib/module.yaml").apply {
+            parentFile.mkdirs()
+            writeText("product: jvm/lib")
+        }
+
+        val modules = requireNotNull(kotlinToolchainModules(root))
+        assertEquals(listOf(".", "app", "lib"), modules.map(BuildModule::executionId))
+        assertEquals(listOf(false, true, false), modules.map(BuildModule::hasTests))
+        assertEquals(File(root, "app").invariantSeparatorsPath, modules[1].contentRoots.single())
+        assertEquals(
+            listOf(kotlinToolchainWrapper(root), "test"),
+            kotlinToolchainCommands(root, modules.filter(BuildModule::hasTests).map { "${it.executionId}:test" })
+                .single()
+                .arguments,
+        )
+    }
+
+    @Test
+    fun `a glob in project yaml keeps the root module`() {
+        val root = toolchainRoot()
+        File(root, "project.yaml").writeText("modules:\n  - ./plugins/*\n")
+        File(root, "plugins/one/module.yaml").apply {
+            parentFile.mkdirs()
+            writeText("product: jvm/lib")
+        }
+
+        val modules = requireNotNull(kotlinToolchainModules(root))
+        assertEquals(listOf("."), modules.map(BuildModule::executionId))
+    }
+
+    @Test
+    fun `a project yaml change requires the whole workspace`() {
+        val root = toolchainRoot()
+        File(root, "project.yaml").writeText("modules:\n  - ./app\n")
+        val module = kotlinToolchainRootModule(root)
+
+        assertTrue(
+            kotlinToolchainRequiresWorkspace(
+                module.root,
+                BuildChanges(listOf(File(root, "project.yaml").path), emptySet(), comparedToBase = true),
+            ),
+        )
+        assertFalse(
+            kotlinToolchainRequiresWorkspace(
+                module.root,
+                BuildChanges(listOf(File(root, "src/Alpha.kt").path), emptySet(), comparedToBase = true),
+            ),
+        )
+    }
+
     private fun toolchainRoot(): File {
         val root = createTempDirectory("toolchain-root").toFile()
         File(root, "module.yaml").writeText("product: jvm/lib")
