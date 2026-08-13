@@ -385,7 +385,8 @@ class CliAdapterConformanceTest {
     fun `Bundler runs RSpec Minitest and Test Unit in one session`() = fixture("ruby") { root ->
         val lock = File(root, "Gemfile.lock").readBytes()
         execute(root, listOf("bundle", "config", "set", "--local", "path", "vendor/bundle"))
-        execute(root, listOf("bundle", "install", "--frozen", "--jobs", "2", "--retry", "2"))
+        execute(root, listOf("bundle", "config", "set", "--local", "frozen", "true"))
+        execute(root, listOf("bundle", "install", "--jobs", "2", "--retry", "2"))
         assertTrue(lock.contentEquals(File(root, "Gemfile.lock").readBytes()))
         val modules = RubyGems.parse(root).filter(BuildModule::hasTests)
         val commands = rubyCommands(root.path, modules.map { "${it.executionId}:${it.testTask}" }, modules)
