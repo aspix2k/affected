@@ -1,0 +1,4 @@
+sh_test(
+    name = "beta_test",
+    srcs = ["beta_test.sh"],
+)

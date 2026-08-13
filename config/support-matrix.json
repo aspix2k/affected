@@ -486,8 +486,17 @@
       "ecosystem": "Bazel",
       "languages": ["Java", "Kotlin", "C", "C++", "Python", "Go", "Rust", "Starlark"],
       "runners": ["bazel test", "bazel build"],
-      "selection": ["project"],
+      "selection": ["package", "project"],
       "selectionProofs": [
+        {
+          "units": ["package"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliBazelPackageConformanceTest.kt",
+          "marker": "bazel runs only the selected package tests",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        },
         {
           "units": ["project"],
           "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliBazelConformanceTest.kt",
@@ -498,9 +507,9 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "Bazel 8.x via Bazelisk 1.29.0; workspace-level //... until target ownership is proven",
+      "versions": "Bazel 8.x via Bazelisk 1.29.0; proven packages use //pkg:all, BUILD/MODULE changes keep //...",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/bazel"],
+      "fixtures": ["conformance/cli-fixtures/bazel", "conformance/cli-fixtures/bazel-packages"],
       "gates": [".github/workflows/conformance.yml"]
     }
   ]

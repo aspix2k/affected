@@ -7,18 +7,21 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-class CliBazelConformanceTest {
+class CliBazelPackageConformanceTest {
 
     @Test
-    fun `bazel runs the workspace test command for the affected root`() = fixture("bazel") { root ->
-        val modules = listOf(bazelRootModule(root))
-        val command = bazelCommands(modules.map { "${it.executionId}:${it.testTask}" }).single()
-        assertEquals(listOf("bazel", "test", "//..."), command.arguments)
+    fun `bazel runs only the selected package tests`() = fixture("bazel-packages") { root ->
+        val packages = requireNotNull(bazelPackages(root))
+        val alpha = packages.single { it.executionId == "alpha" }
+        val command = bazelCommands(listOf("${alpha.executionId}:${alpha.testTask}")).single()
+        assertEquals(listOf("bazel", "test", "//alpha:all"), command.arguments)
         val text = execute(root, command.arguments)
-        assertContains(text, "//:alpha_test")
+        assertContains(text, "//alpha:alpha_test")
         assertContains(text, "PASSED")
+        assertFalse("//beta:beta_test" in text)
     }
 
     private fun fixture(name: String, block: (File) -> Unit) {
@@ -28,7 +31,8 @@ class CliBazelConformanceTest {
         val target = createTempDirectory("affected-cli-$name").toFile()
         try {
             assertTrue(source.copyRecursively(target, overwrite = true), "Could not copy $source")
-            File(target, "alpha_test.sh").setExecutable(true)
+            File(target, "alpha/alpha_test.sh").setExecutable(true)
+            File(target, "beta/beta_test.sh").setExecutable(true)
             block(target)
         } finally {
             target.deleteRecursively()
