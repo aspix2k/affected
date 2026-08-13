@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Give the Gradle wrapper 120s and four retries instead of a single 10s download from services.gradle.org.
 - Seed the Gradle wrapper cache from the official GitHub `gradle-distributions` release, verify the SHA-256, and reuse `~/.gradle/wrapper/dists` so CI does not download the zip from services.gradle.org on every job.
 - Resolve Maven artifacts through the JetBrains cache-redirector before repo.maven.apache.org so a Central 403 cannot fail CI.
+- Give the ten-build Windows exact-impact Gradle fixture a 300s scenario budget and a 90s hang cutoff per invocation.
 
 ## [2.0.1] - 2026-08-12
 
