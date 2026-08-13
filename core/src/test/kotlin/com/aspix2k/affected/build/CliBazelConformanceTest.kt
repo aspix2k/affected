@@ -17,7 +17,8 @@ class CliBazelConformanceTest {
         val command = bazelCommands(modules.map { "${it.executionId}:${it.testTask}" }).single()
         assertEquals(listOf("bazel", "test", "//..."), command.arguments)
         val text = execute(root, command.arguments)
-        assertContains(text, "AlphaTest")
+        assertContains(text, "//:alpha_test")
+        assertContains(text, "PASSED")
     }
 
     private fun fixture(name: String, block: (File) -> Unit) {
