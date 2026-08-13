@@ -157,6 +157,12 @@ class PhpunitTestMetadataTest {
         assertNull(fixture.state(runtime().copy(autoPrependFile = "/tmp/bootstrap.php")))
         fixture.root.resolve("composer.lock").toFile().delete()
         assertNull(fixture.state())
+
+        val pest = fixture()
+        pest.root.resolve("composer.json").writeText(
+            """{"name":"affected/root","require-dev":{"pestphp/pest":"^3.8"}}""",
+        )
+        assertNull(pest.state())
     }
 
     private fun fixture(): Fixture {

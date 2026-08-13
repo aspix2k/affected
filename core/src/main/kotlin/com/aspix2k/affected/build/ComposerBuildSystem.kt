@@ -61,6 +61,9 @@ class ComposerBuildSystem :
         tasks: List<String>,
         changes: BuildChanges,
     ): Boolean {
+        if (pestDeclared(File(root))) {
+            return CommandRunner.runBatchAndWait(project, root, commands(project, root, tasks), "Affected Composer")
+        }
         val adapter = configuredPhpunitAdapter()
             ?: findPhpunitAdapter(Path.of(PathManager.getJarPathForClass(ComposerBuildSystem::class.java)))
             ?: return CommandRunner.runBatchAndWait(project, root, commands(project, root, tasks), "Affected Composer")
@@ -116,6 +119,8 @@ internal fun composerCommands(root: String, tasks: List<String>, modules: List<B
     return resolved.groupBy({ it.first }, { it.second }).map { (task, paths) ->
         if (task == ComposerPackages.ANALYSE) {
             CliCommand("phpstan", listOf("php", "vendor/bin/phpstan", "analyse") + paths.distinct())
+        } else if (pestDeclared(File(root))) {
+            CliCommand("pest", listOf("php", "vendor/bin/pest") + paths.distinct())
         } else {
             CliCommand("phpunit", listOf("php", "vendor/bin/phpunit") + paths.distinct())
         }
