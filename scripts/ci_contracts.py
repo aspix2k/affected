@@ -135,6 +135,12 @@ def check(root: Path = ROOT) -> None:
     submit = read(root / ".github/workflows/dependency-graph-submit.yml")
     if "push|workflow_dispatch" not in submit or "refs/heads/main" not in submit:
         raise CiContractError("Submit must accept main workflow_dispatch snapshots")
+    if (
+        "github.event.workflow_run.event == 'push'" not in submit
+        or "github.event.workflow_run.event == 'workflow_dispatch'" not in submit
+        or "refs/pull/" in submit
+    ):
+        raise CiContractError("Submit must not run for pull-request graphs")
     if 'add("intellijPlatformDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:' not in read(
         root / "mcp/build.gradle.kts"
     ):
