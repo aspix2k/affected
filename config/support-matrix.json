@@ -356,7 +356,7 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "Ruby 4; RSpec 3.13.2; direct locked Minitest 6.0.6 or Test::Unit 3.7.8",
+      "versions": "Ruby 4; lockless RSpec or rubygems.org direct locks tested at RSpec 3.13.2, Minitest 6.0.6 and Test::Unit 3.7.8",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/ruby"],
       "gates": [".github/workflows/conformance.yml"]
