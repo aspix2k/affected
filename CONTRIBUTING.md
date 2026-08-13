@@ -33,11 +33,16 @@ python3 -m unittest scripts.tests.test_release_currentness
 python3 scripts/release_currentness.py
 python3 -m unittest scripts.tests.test_support_matrix
 python3 scripts/support_matrix.py --check
-python3 -m unittest scripts.tests.test_ci_contracts scripts.tests.test_ci_scope scripts.tests.test_fetch_gradle scripts.tests.test_pitest_gate scripts.tests.test_run_gradle
+python3 -m unittest scripts.tests.test_ci_contracts scripts.tests.test_ci_scope scripts.tests.test_fetch_gradle scripts.tests.test_local_gate scripts.tests.test_pitest_gate scripts.tests.test_run_gradle
 python3 scripts/ci_contracts.py --check
 python3 -m unittest scripts.tests.test_mcp_capabilities
 python3 scripts/mcp_capabilities.py --check
+python3 scripts/local_gate.py install
+python3 scripts/local_gate.py commit
+python3 scripts/local_gate.py push
 ```
+
+After clone, run `python3 scripts/local_gate.py install` so `core.hooksPath` is `.githooks`. `pre-commit` runs detekt, script tests, CI contracts and the analyzer policy. `pre-push` adds ShellCheck. This is the cheap half of CI, not `verifyPlugin` or the full test suite. Do not use `--no-verify`.
 
 `scripts/run_gradle.sh` seeds `~/.gradle/wrapper/dists` from the official
 GitHub `gradle-distributions` release, verifies the wrapper SHA-256, then

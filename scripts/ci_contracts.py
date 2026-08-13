@@ -80,6 +80,7 @@ def check(root: Path = ROOT) -> None:
         "scripts.tests.test_ci_contracts",
         "scripts.tests.test_ci_scope",
         "scripts.tests.test_fetch_gradle",
+        "scripts.tests.test_local_gate",
         "scripts.tests.test_run_gradle",
         "changelog-section.sh",
         "SHELLCHECK_VERSION",
@@ -87,6 +88,14 @@ def check(root: Path = ROOT) -> None:
     ):
         if token not in scripts:
             raise CiContractError(f"The scripts job must keep {token}")
+
+    if "scripts/local_gate.py commit" not in read(root / ".githooks/pre-commit"):
+        raise CiContractError("pre-commit must run the local commit gate")
+    if "scripts/local_gate.py push" not in read(root / ".githooks/pre-push"):
+        raise CiContractError("pre-push must run the local push gate")
+    contributing = read(root / "CONTRIBUTING.md")
+    if "core.hooksPath" not in contributing or "scripts/local_gate.py install" not in contributing:
+        raise CiContractError("CONTRIBUTING must document hook installation")
 
     if "buildHealth" not in slice_job(ci, "health"):
         raise CiContractError("buildHealth must remain a required CI job")

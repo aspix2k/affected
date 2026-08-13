@@ -37,6 +37,7 @@ SCRIPT_ONLY_FILES = frozenset(
         "scripts/release_currentness.py",
         "scripts/support_matrix.py",
         "scripts/mcp_capabilities.py",
+        "scripts/local_gate.py",
         "config/release-currentness.json",
         "config/support-matrix.json",
         "config/mcp-capabilities.json",
@@ -113,7 +114,7 @@ def flags_for(path: str) -> dict[str, bool] | None:
     name = path.rsplit("/", 1)[-1]
     if path in DOC_FILES or path.startswith("docs/") or is_github_doc(path):
         return empty_scope()
-    if path in SCRIPT_ONLY_FILES or path.startswith("scripts/tests/"):
+    if path in SCRIPT_ONLY_FILES or path.startswith("scripts/tests/") or path.startswith(".githooks/"):
         return empty_scope()
     if path in SAFE_WORKFLOWS:
         return empty_scope()

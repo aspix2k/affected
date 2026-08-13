@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pin `github/codeql-action` to 4.37.7.
 - Keep the Composer PHPUnit 13.3 pin and exact-selection matrix on 13.3.1.
 - Run weekly PIT on `AffectedMcpInputs` as well as `TestRootResolver`, and reject task or branch names only through the documented charset and `..` rules.
+- Run detekt, script tests, CI contracts and analyzer policy on `pre-commit`, and add ShellCheck on `pre-push`, so those cheap CI gates fail locally before GitHub.
 - Fail unit tests when a plugin descriptor would block a restartless update: `require-restart`, legacy components, nameless action groups, non-dynamic extension points, or a missing optional/content descriptor.
 - Run weekly PIT on `TestRootResolver` in `:core` and fail when either the root or core report has a meaningful survivor. Compiler-generated Kotlin `Intrinsics.checkNotNull*` void-call mutants stay classified as equivalent.
 - Disable Dependabot version-update pull requests; the fail-closed release
