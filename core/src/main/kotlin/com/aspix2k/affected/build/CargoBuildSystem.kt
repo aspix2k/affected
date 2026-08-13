@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicReference
 
 class CargoBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSystem, WorkspaceChangesBuildSystem {
@@ -180,12 +181,14 @@ internal fun cargoCommands(
     unsafeCargoExecution: Boolean = false,
     nextestExecutable: String = "cargo-nextest",
     cargoExecutable: String = "cargo",
+    fileFilter: String? = null,
 ): List<CliCommand> =
     tasks.groupBy { canonicalCargoTask(it.substringAfterLast(':')) }
         .flatMap { (task, requestedTasks) ->
             val packages = requestedTasks.map { it.substringBeforeLast(':') }
             val executionTask = requestedTasks.first().substringAfterLast(':')
-            val selection = if ("." in packages) listOf("--workspace") else packages.flatMap { listOf("-p", it) }
+            val workspace = "." in packages || cargoNextestWorkspaceTask(task)
+            val selection = if (workspace) listOf("--workspace") else packages.flatMap { listOf("-p", it) }
             if (task.startsWith("nextest@") || cargoNextestWorkspaceTask(task)) {
                 if (unsafeCargoExecution) {
                     listOf(CliCommand("cargo test", listOf("cargo", "test", "--workspace")))
@@ -195,8 +198,9 @@ internal fun cargoCommands(
                         executionTask,
                         nextestExecutable,
                         cargoExecutable,
-                        if (cargoNextestWorkspaceTask(task)) listOf("--workspace") else selection,
+                        selection,
                         requestedTasks.filter(::cargoNextestHasDoctests).map { it.substringBeforeLast(':') },
+                        fileFilter.takeUnless { workspace },
                     )
                 }
             } else {
@@ -239,6 +243,25 @@ private fun verifiedCargoNextestExecutables(
         .takeUnless { identity == null || plannedIdentities.size != 1 || identity !in plannedIdentities }
 }
 
+internal fun cargoNextestFileFilter(root: String, changes: BuildChanges): String? = runCatching {
+    require(changes.comparedToBase)
+    require(changes.files.isNotEmpty() && changes.files.size <= MAX_CARGO_FILE_FILTERS)
+    require(changes.files.toSet() == changes.exactSelectionEligible)
+    val rootPath = File(root).toPath().toAbsolutePath().normalize()
+    require(Files.isDirectory(rootPath, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(rootPath))
+    val files = changes.files.map { raw ->
+        val requested = Path.of(raw).toAbsolutePath().normalize()
+        require(Files.isRegularFile(requested, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(requested))
+        val real = requested.toRealPath(LinkOption.NOFOLLOW_LINKS)
+        require(real.startsWith(rootPath))
+        val relative = rootPath.relativize(real).toString().replace('\\', '/')
+        require(relative.endsWith(".rs") && CARGO_FILTER_PATH.matches(relative))
+        relative
+    }.distinct().sorted()
+    require(files.isNotEmpty())
+    files.joinToString(" + ") { file -> "file($file)" }
+}.getOrNull()
+
 private fun cargoNextestCommands(
     root: String,
     task: String,
@@ -246,6 +269,7 @@ private fun cargoNextestCommands(
     cargo: String,
     selection: List<String>,
     doctestPackages: List<String>,
+    fileFilter: String? = null,
 ): List<CliCommand> {
     val snapshot = cargoNextestSnapshot(task)
         ?: return listOf(CliCommand("cargo test", listOf("cargo", "test", "--workspace")))
@@ -272,7 +296,7 @@ private fun cargoNextestCommands(
             "--config-file", snapshot.path,
             "--profile", profile,
             "--no-tests=pass",
-        ) + selection,
+        ) + (fileFilter?.let { listOf("-E", it) } ?: emptyList()) + selection,
         environment = mapOf("CARGO" to cargo),
         continueOnFailure = !failFast && doctest != null,
     )
@@ -305,7 +329,8 @@ internal fun cargoCommands(
     nextestExecutable: String = "cargo-nextest",
     cargoExecutable: String = "cargo",
 ): List<CliCommand> {
-    val effectiveTasks = if (changes.requireCargoWorkspace(root)) {
+    val workspace = changes.requireCargoWorkspace(root)
+    val effectiveTasks = if (workspace) {
         tasks.map { task ->
             when (val nativeTask = task.substringAfterLast(':')) {
                 CargoMetadata.TEST -> ".:${CargoMetadata.TEST}"
@@ -319,7 +344,14 @@ internal fun cargoCommands(
     } else {
         tasks
     }
-    return cargoCommands(root, effectiveTasks, unsafeCargoExecution, nextestExecutable, cargoExecutable)
+    return cargoCommands(
+        root,
+        effectiveTasks,
+        unsafeCargoExecution,
+        nextestExecutable,
+        cargoExecutable,
+        fileFilter = if (workspace) null else cargoNextestFileFilter(root, changes),
+    )
 }
 
 private fun BuildChanges.requireCargoWorkspace(root: String): Boolean {
@@ -340,3 +372,5 @@ private fun BuildChanges.requireCargoWorkspace(root: String): Boolean {
 }
 
 private val GENERATED_DIRECTORIES = setOf("generated", "gen", "out", "target")
+private val CARGO_FILTER_PATH = Regex("""[A-Za-z0-9._+\-]+(?:/[A-Za-z0-9._+\-]+)*\.rs""")
+private const val MAX_CARGO_FILE_FILTERS = 256

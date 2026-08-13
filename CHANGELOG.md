@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Select Pest 5.1.1 tests that statically `use` a changed PSR-4 production class; unmapped or unreferenced production files keep the package suite.
+- Narrow cargo-nextest to changed Rust files with a native `file()` filter when the change set stays package-selective; workspace-widening changes keep the full nextest command.
 - Detect Microsoft Testing Platform from the test project as well as `global.json`, and run those projects with `dotnet test --project` instead of the VSTest path form.
 - Select named Pest 5.1.1 dataset files together with the test files that statically `->with` them; unused, dynamic or boot datasets keep the package suite.
 - Select changed Pest 5.1.1 test files by native path when every planned suite change is a regular test file; production, boot, helper and unproved changes keep the package suite.

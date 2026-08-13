@@ -100,7 +100,8 @@ stable 0.9.x line and either the built-in/default profile or a declared profile
 selected by `NEXTEST_PROFILE`. Only its bounded `fail-fast` value is
 copied into the local execution snapshot; filters, retries, scripts, custom
 Cargo runners and other ambiguous configuration keep the existing conservative
-`cargo test` plan.
+`cargo test` plan. A compared-to-base set of regular `.rs` files that does not
+widen the workspace adds a cargo-nextest `-E 'file(path) + ...'` filter.
 
 `config/support-matrix.json` is the source of truth for supported JetBrains
 products, build systems, test runners, selection units and operating-system
