@@ -46,14 +46,9 @@ class CliBazelPackageConformanceTest {
 
     private fun execute(directory: File, arguments: List<String>): String {
         val output = File.createTempFile("affected-cli-output", ".log")
+        val bazelHome = createTempDirectory("affected-bazel-out").toFile()
         try {
-            val bazelHome = File(directory, ".bazel-tmp").apply { mkdirs() }
-            val process = ProcessBuilder(arguments)
-                .directory(directory)
-                .redirectErrorStream(true)
-                .redirectOutput(output)
-                .apply { environment()["TEST_TMPDIR"] = bazelHome.absolutePath }
-                .start()
+            val process = bazelProcess(directory, arguments, bazelHome, output).start()
             val completed = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             if (!completed) process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)
             val text = output.readText()
@@ -61,9 +56,19 @@ class CliBazelPackageConformanceTest {
             assertTrue(completed && process.exitValue() == 0, "Failed: ${arguments.joinToString(" ")}\n$text")
             return text
         } finally {
+            bazelProcess(directory, listOf("bazel", "shutdown"), bazelHome, output).start()
+                .waitFor(15, TimeUnit.SECONDS)
+            bazelHome.deleteRecursively()
             output.delete()
         }
     }
+
+    private fun bazelProcess(directory: File, arguments: List<String>, bazelHome: File, output: File): ProcessBuilder =
+        ProcessBuilder(arguments)
+            .directory(directory)
+            .redirectErrorStream(true)
+            .redirectOutput(output)
+            .apply { environment()["TEST_TMPDIR"] = bazelHome.absolutePath }
 
     private companion object {
         const val COMMAND_TIMEOUT_SECONDS = 360L
