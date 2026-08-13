@@ -4,6 +4,8 @@ import com.aspix2k.affected.build.GradleBuildSystem
 import com.aspix2k.affected.build.gradleCompositeRoot
 import com.aspix2k.affected.build.gradleExecutionCoordinates
 import com.aspix2k.affected.build.gradleExecutionMetadata
+import com.aspix2k.affected.build.gradleHoldsTests
+import com.aspix2k.affected.build.gradleIsSourceFile
 import com.aspix2k.affected.build.gradleProductionCompileTask
 import com.aspix2k.affected.build.gradleProjectPath
 import com.aspix2k.affected.build.gradleVerificationTasks
@@ -15,6 +17,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class GradleTaskPathTest {
 
@@ -156,6 +159,25 @@ class GradleTaskPathTest {
                 android = true,
             ),
         )
+    }
+
+    @Test
+    fun `Scala and Groovy files count as Gradle sources and tests`() {
+        val module = createTempDirectory("affected-scala-groovy").toFile()
+        val scala = File(module, "src/test/scala/AlphaSpec.scala").apply {
+            parentFile.mkdirs()
+            writeText("class AlphaSpec")
+        }
+        val groovy = File(module, "src/test/groovy/BetaSpec.groovy").apply {
+            parentFile.mkdirs()
+            writeText("class BetaSpec {}")
+        }
+
+        assertTrue(gradleIsSourceFile(scala))
+        assertTrue(gradleIsSourceFile(groovy))
+        assertTrue(gradleHoldsTests(module.path))
+        assertContains(GradleBuildSystem().sourceExtensions, "scala")
+        assertContains(GradleBuildSystem().sourceExtensions, "groovy")
     }
 
     @Test

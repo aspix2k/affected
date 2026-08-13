@@ -7,13 +7,15 @@ object TestRootResolver {
     private val TEST_SOURCE_DIRS = listOf(
         "src/test/kotlin",
         "src/test/java",
+        "src/test/scala",
+        "src/test/groovy",
         "src/testDebug/kotlin",
         "src/commonTest/kotlin",
         "src/jvmTest/kotlin",
         "src/test",
     )
 
-    private val SOURCE_EXTENSIONS = setOf("kt", "java")
+    private val SOURCE_EXTENSIONS = setOf("kt", "java", "scala", "groovy")
 
     fun resolve(moduleDirectory: String): String? {
         val root = TEST_SOURCE_DIRS

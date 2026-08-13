@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Detect sbt roots from `build.sbt` and run one `sbt test` or `sbt compile` session for the affected project; multi-project selection stays on the root command.
+- Attribute Scala and Groovy sources in Gradle and Maven modules so a changed `.scala` or `.groovy` file plans the owning module, including Groovy/Scala-only test trees.
 - Select named Pest 5.1.1 `it()` / `test()` cases that statically reference a changed PSR-4 class; `describe()`, hooks, dynamic names and file-scope uses keep the selected files.
 - Select changed standard-library unittest modules by native path when every planned package change is a regular `test_*.py` / `*_test.py` file; production and unproved changes keep `unittest discover`.
 - Select Microsoft Testing Platform test classes from a changed test file with `--filter-class`; production and unproved MTP changes keep the project command.
