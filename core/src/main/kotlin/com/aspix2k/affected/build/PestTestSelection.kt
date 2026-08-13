@@ -6,11 +6,16 @@ import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
 
+internal data class PestSelection(
+    val paths: List<String>,
+    val filter: String? = null,
+)
+
 internal fun selectPestTestFiles(
     root: String,
     suitePaths: List<String>,
     changes: BuildChanges,
-): List<String>? = runCatching {
+): PestSelection? = runCatching {
     require(changes.comparedToBase)
     require(changes.files.isNotEmpty())
     require(changes.files.toSet() == changes.exactSelectionEligible)
@@ -53,7 +58,13 @@ internal fun selectPestTestFiles(
     }
     require(selected.isNotEmpty())
     require(suites.all { suite -> selected.any { coversSuite(realRoot, it, suite) } })
-    selected.sorted()
+    val paths = selected.sorted()
+    val filter = if (productionClasses.isNotEmpty() && datasetNames.isEmpty()) {
+        pestNamedFilter(realRoot, paths, productionClasses)
+    } else {
+        null
+    }
+    PestSelection(paths, filter)
 }.getOrNull()
 
 private fun realSuite(root: Path, realRoot: Path, relative: String): Path {
@@ -148,6 +159,44 @@ private fun pestClassConsumers(root: Path, suites: List<Path>, classes: Set<Stri
     return consumers
 }
 
+private fun pestNamedFilter(root: Path, paths: List<String>, classes: Set<String>): String? {
+    val names = LinkedHashSet<String>()
+    var total = 0
+    for (path in paths) {
+        val file = root.resolve(path.removePrefix("./")).normalize()
+        require(file.startsWith(root))
+        val tests = pestNamedTests(file) ?: return null
+        total += tests.size
+        for ((name, body) in tests) {
+            if (classes.any { pestBodyReferences(body, it) }) names += name
+        }
+    }
+    if (names.isEmpty() || names.size == total || names.size > MAX_PEST_NAMED_FILTERS) return null
+    if (names.any { !PEST_SAFE_FILTER.matches(it) }) return null
+    return names.joinToString("|")
+}
+
+private fun pestNamedTests(file: Path): List<Pair<String, String>>? {
+    val text = readPestPhp(file) ?: return null
+    if (PEST_WIDENING.containsMatchIn(text)) return null
+    val matches = PEST_NAMED_TEST.findAll(text).toList()
+    if (matches.isEmpty()) return null
+    if (PEST_TEST_CALL.findAll(text).count() != matches.size) return null
+    return matches.mapIndexed { index, match ->
+        val name = match.groupValues[1]
+        if (name.isEmpty() || name.length > MAX_PEST_FILTER_NAME) return null
+        val start = match.range.last + 1
+        val end = matches.getOrNull(index + 1)?.range?.first ?: text.length
+        name to text.substring(start, end)
+    }
+}
+
+private fun pestBodyReferences(body: String, fqcn: String): Boolean {
+    if (body.contains(fqcn) || body.contains("\\$fqcn")) return true
+    val short = fqcn.substringAfterLast('\\')
+    return short.isNotEmpty() && pestIdentifier(short).containsMatchIn(body)
+}
+
 private fun pestImportedClasses(file: Path, classes: Set<String>): Set<String>? {
     val text = readPestPhp(file) ?: return null
     val used = LinkedHashSet<String>()
@@ -225,6 +274,17 @@ private val PEST_NON_EXACT_DIRECTORIES = setOf("Datasets", "Expectations", "Help
 private val DATASET_DECLARATION = Regex("""dataset\s*\(\s*['\"]([^'\"]+)['\"]""")
 private val WITH_DATASET = Regex("""->\s*with\s*\(\s*['\"]([^'\"]+)['\"]""")
 private val USE_CLASS = Regex("""(?:^|[\r\n])\s*use\s+([A-Za-z_][A-Za-z0-9_\\]*)""")
+private val PEST_NAMED_TEST = Regex("""(?:^|[\r\n])\s*(?:it|test)\s*\(\s*['\"]([^'\"]+)['\"]""")
+private val PEST_TEST_CALL = Regex("""(?:^|[\r\n])\s*(?:it|test)\s*\(""")
+private val PEST_WIDENING = Regex(
+    """(?:^|[\r\n])\s*(?:describe|beforeEach|afterEach|beforeAll|afterAll|uses)\s*\(|(?:^|[\r\n])\s*(?:abstract\s+|final\s+)?class\s+""",
+)
+private val PEST_SAFE_FILTER = Regex("""[A-Za-z0-9][A-Za-z0-9 .:_-]*""")
+
+private fun pestIdentifier(name: String) =
+    Regex("""(?<![A-Za-z0-9_\\])${Regex.escape(name)}(?![A-Za-z0-9_])""")
 
 private const val MAX_PEST_FILTER_FILES = 256
+private const val MAX_PEST_NAMED_FILTERS = 64
+private const val MAX_PEST_FILTER_NAME = 128
 private const val MAX_PEST_PHP_BYTES = 1024 * 1024
