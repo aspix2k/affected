@@ -224,6 +224,12 @@ generated files, symlinks and scan-limit failures keep the original package test
 script. Every exact and full package command remains in the same
 `SequentialProcessHandler` for its Node root.
 
+Python projects that import `unittest` and do not declare pytest run through
+`python -m unittest discover`. When every planned package change is a regular
+`test_*.py` or `*_test.py` file against a merge base, Affected passes those
+paths to `python -m unittest` instead. Production modules and unproved
+multi-package batches keep package discovery.
+
 Supported pytest 8–9 projects run through the packaged Python adapter. Pytest
 first completes normal collection in the original process; the adapter then
 builds a bounded current AST import graph and deselects unrelated test files.

@@ -29,7 +29,7 @@ private fun unittestUsed(root: File): Boolean =
         isPythonTestModule(file) && unittestImported(file)
     } == true
 
-private fun isPythonTestModule(file: File): Boolean {
+internal fun isPythonTestModule(file: File): Boolean {
     if (file.extension != "py") return false
     return file.name.startsWith("test_") || file.name.endsWith("_test.py")
 }
