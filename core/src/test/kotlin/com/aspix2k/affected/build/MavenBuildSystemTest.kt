@@ -3,11 +3,18 @@ package com.aspix2k.affected.build
 import org.jdom.Element
 import org.jetbrains.idea.maven.model.MavenPlugin
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class MavenBuildSystemTest {
+
+    @Test
+    fun `Scala and Groovy sources belong to Maven modules`() {
+        assertContains(MavenBuildSystem().sourceExtensions, "scala")
+        assertContains(MavenBuildSystem().sourceExtensions, "groovy")
+    }
 
     @Test
     fun `failsafe binding promotes the reactor test goal to verify`() {

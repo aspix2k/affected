@@ -30,7 +30,8 @@ class MavenBuildSystem : SuspendingBuildSystem {
 
     override val id: String = "MAVEN"
 
-    override val sourceExtensions: Set<String> = setOf("java", "kt", "xml", "properties")
+    override val sourceExtensions: Set<String> =
+        JVM_SOURCE_EXTENSIONS + setOf("xml", "properties")
 
     override fun isPresent(project: Project): Boolean =
         MavenProjectsManager.getInstanceIfCreated(project)?.isMavenizedProject == true

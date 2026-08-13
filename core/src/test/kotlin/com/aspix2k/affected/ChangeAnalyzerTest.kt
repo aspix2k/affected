@@ -1,5 +1,7 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.GradleBuildSystem
+import com.aspix2k.affected.build.MavenBuildSystem
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -202,6 +204,29 @@ class ChangeAnalyzerTest {
         val changes = analyze(dir)
         assertTrue(changes.files.isNotEmpty())
         assertTrue(changes.apiTouched.isEmpty(), "instrumented tests are not part of the module artifact")
+    }
+
+    @Test
+    fun `Gradle and Maven adapters keep Scala and Groovy sources`() = repo { dir ->
+        val scala = File(dir, "lib/src/main/scala/probe/Alpha.scala").apply {
+            parentFile.mkdirs()
+            writeText("package probe\n\nclass Alpha")
+        }
+        val groovy = File(dir, "lib/src/main/groovy/probe/Beta.groovy").apply {
+            parentFile.mkdirs()
+            writeText("package probe\n\nclass Beta {}")
+        }
+        File(dir, "notes.txt").writeText("ignored")
+
+        val gradle = analyze(dir, GradleBuildSystem().sourceExtensions)
+        assertTrue(scala in gradle.files, "a Scala production file belongs to the Gradle module")
+        assertTrue(groovy in gradle.files, "a Groovy production file belongs to the Gradle module")
+        assertTrue(gradle.files.none { it.name == "notes.txt" })
+        assertTrue(gradle.apiTouched.isEmpty(), "Scala and Groovy API shapes are not claimed yet")
+
+        val maven = analyze(dir, MavenBuildSystem().sourceExtensions)
+        assertTrue(scala in maven.files, "a Scala production file belongs to the Maven module")
+        assertTrue(groovy in maven.files, "a Groovy production file belongs to the Maven module")
     }
 
     @Test

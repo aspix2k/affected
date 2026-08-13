@@ -37,7 +37,8 @@ class GradleBuildSystem : SuspendingBuildSystem {
 
     override val id: String = GradleConstants.SYSTEM_ID.id
 
-    override val sourceExtensions: Set<String> = setOf("kt", "kts", "java", "xml", "json", "pro")
+    override val sourceExtensions: Set<String> =
+        JVM_SOURCE_EXTENSIONS + setOf("kts", "xml", "json", "pro")
 
     override fun isPresent(project: Project): Boolean =
         GradleSettings.getInstance(project).linkedProjectsSettings.isNotEmpty()
@@ -241,7 +242,7 @@ class GradleBuildSystem : SuspendingBuildSystem {
     ): BuildModule {
         val source = roots.filterNot { it.contains("/build/") || it.contains("/.gradle/") }.minByOrNull { it.length }
         val availableTasks = tasks[projectPath] ?: source?.let(tasks::get).orEmpty()
-        val hasTests = roots.any(::holdsTests)
+        val hasTests = roots.any(::gradleHoldsTests)
         val android = gradleAndroidModule(projectPath, roots, availableTasks)
         val (testTask, testCompile) = gradleVerificationTasks(projectPath, roots, availableTasks)
         val compileTask = if (hasTests) {
@@ -260,19 +261,6 @@ class GradleBuildSystem : SuspendingBuildSystem {
             executionRoot = executionRoot,
             executionId = executionId,
         )
-    }
-
-    private fun holdsTests(root: String): Boolean {
-        val normalized = root.replace('\\', '/')
-        if (TEST_SOURCE_SET_MARKERS.any { marker ->
-                normalized.endsWith("/$marker") || "/$marker/" in normalized
-            }
-        ) {
-            return File(root).walkTopDown().any(::isSource)
-        }
-        return TEST_SOURCE_DIRS.any { directory ->
-            File(root, directory).let { it.isDirectory && it.walkTopDown().any(::isSource) }
-        }
     }
 
     private fun buildRootOf(moduleDir: File, project: Project): String {
@@ -309,32 +297,50 @@ class GradleBuildSystem : SuspendingBuildSystem {
     private companion object {
         const val SOURCE_SET_TYPE = "sourceSet"
         val SETTINGS_FILES = listOf("settings.gradle.kts", "settings.gradle")
-        val TEST_SOURCE_DIRS = listOf(
-            "src/test",
-            "src/testDebug",
-            "src/commonTest",
-            "src/jvmTest",
-            "src/androidUnitTest",
-            "src/androidInstrumentedTest",
-            "src/iosTest",
-            "src/iosSimulatorTest",
-        )
-        val TEST_SOURCE_SET_MARKERS = listOf(
-            "test",
-            "testDebug",
-            "commonTest",
-            "jvmTest",
-            "androidUnitTest",
-            "androidInstrumentedTest",
-            "iosTest",
-            "iosSimulatorTest",
-            "unitTest",
-            "androidTest",
-        )
 
         const val CACHE_DIRECTORY = "affected"
+    }
+}
 
-        fun isSource(file: File) = file.isFile && (file.extension == "kt" || file.extension == "java")
+internal val JVM_SOURCE_EXTENSIONS = setOf("kt", "java", "scala", "groovy")
+
+private val GRADLE_TEST_SOURCE_DIRS = listOf(
+    "src/test",
+    "src/testDebug",
+    "src/commonTest",
+    "src/jvmTest",
+    "src/androidUnitTest",
+    "src/androidInstrumentedTest",
+    "src/iosTest",
+    "src/iosSimulatorTest",
+)
+
+private val GRADLE_TEST_SOURCE_SET_MARKERS = listOf(
+    "test",
+    "testDebug",
+    "commonTest",
+    "jvmTest",
+    "androidUnitTest",
+    "androidInstrumentedTest",
+    "iosTest",
+    "iosSimulatorTest",
+    "unitTest",
+    "androidTest",
+)
+
+internal fun gradleIsSourceFile(file: File): Boolean =
+    file.isFile && file.extension in JVM_SOURCE_EXTENSIONS
+
+internal fun gradleHoldsTests(root: String): Boolean {
+    val normalized = root.replace('\\', '/')
+    if (GRADLE_TEST_SOURCE_SET_MARKERS.any { marker ->
+            normalized.endsWith("/$marker") || "/$marker/" in normalized
+        }
+    ) {
+        return File(root).walkTopDown().any(::gradleIsSourceFile)
+    }
+    return GRADLE_TEST_SOURCE_DIRS.any { directory ->
+        File(root, directory).let { it.isDirectory && it.walkTopDown().any(::gradleIsSourceFile) }
     }
 }
 

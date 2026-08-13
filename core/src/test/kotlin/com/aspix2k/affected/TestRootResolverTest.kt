@@ -56,6 +56,30 @@ class TestRootResolverTest {
     }
 
     @Test
+    fun `Scala sources are also found`() {
+        val dir = module {
+            File(it, "src/test/scala/com/example").mkdirs()
+            File(it, "src/test/scala/com/example/AlphaSpec.scala").writeText("class AlphaSpec")
+        }
+        assertEquals(
+            File(dir, "src/test/scala/com/example").path,
+            TestRootResolver.resolve(dir.path),
+        )
+    }
+
+    @Test
+    fun `Groovy sources are also found`() {
+        val dir = module {
+            File(it, "src/test/groovy/com/example").mkdirs()
+            File(it, "src/test/groovy/com/example/BetaSpec.groovy").writeText("class BetaSpec {}")
+        }
+        assertEquals(
+            File(dir, "src/test/groovy/com/example").path,
+            TestRootResolver.resolve(dir.path),
+        )
+    }
+
+    @Test
     fun `Java sources are also found`() {
         val dir = module {
             File(it, "src/test/java/com/example").mkdirs()
