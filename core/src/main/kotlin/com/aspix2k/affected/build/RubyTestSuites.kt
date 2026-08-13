@@ -1,6 +1,10 @@
 package com.aspix2k.affected.build
 
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
+import java.util.ArrayDeque
 
 internal enum class RubyTestRunner(val command: String, val gem: String = command) {
     RSPEC("rspec"),
@@ -12,12 +16,13 @@ internal object RubyTestSuites {
 
     private const val PREFIX = "test-"
     private const val FALLBACK_PREFIX = "fallback-"
+    private const val MAX_SUITE_ENTRIES = 16_384
     private val LOCKED_SPEC = Regex("""^    (rspec|minitest|test-unit) \(([^)]+)\)$""")
     private val LOCKED_DEPENDENCY = Regex("""^  ([A-Za-z0-9][A-Za-z0-9._-]*)(?: \([^)]+\))?!?(?: \S+)?$""")
 
     fun task(directory: File, locked: Set<RubyTestRunner>?): String? {
-        val hasSpec = File(directory, "spec").isDirectory
-        val hasTest = File(directory, "test").isDirectory
+        val hasSpec = suitePresent(File(directory, "spec")) ?: return null
+        val hasTest = suitePresent(File(directory, "test")) ?: return null
         if (!hasSpec && !hasTest) return RubyGems.TEST
         val runners = linkedSetOf<RubyTestRunner>()
         if (hasSpec) runners += RubyTestRunner.RSPEC
@@ -32,8 +37,9 @@ internal object RubyTestSuites {
 
     fun fallbackTask(root: File): String {
         val lock = File(root, "Gemfile.lock")
-        if (lock.exists() && lockedRunners(root) == null) return INVALID
-        return FALLBACK_PREFIX + encode(RubyTestRunner.entries).removePrefix(PREFIX)
+        if (!lockPresent(lock)) return FALLBACK_PREFIX + RubyTestRunner.RSPEC.command
+        val runners = lockedRunners(root)?.takeIf(Set<RubyTestRunner>::isNotEmpty) ?: return INVALID
+        return FALLBACK_PREFIX + encode(runners).removePrefix(PREFIX)
     }
 
     fun lockedRunners(root: File): Set<RubyTestRunner>? {
@@ -42,7 +48,16 @@ internal object RubyTestSuites {
         val lines = text.splitToSequence('\n').map { it.removeSuffix("\r") }.toList()
         val dependencySections = lines.withIndex().filter { it.value == "DEPENDENCIES" }.map { it.index }
         if (dependencySections.size != 1) return null
-        val versions = lines.mapNotNull { line ->
+        val gemSections = lines.withIndex().filter { it.value == "GEM" }.map { it.index }
+        if (gemSections.size != 1) return null
+        val gemEnd = lines.indices.firstOrNull { it > gemSections.single() && lines[it].isNotBlank() && !lines[it].startsWith(' ') }
+            ?: lines.size
+        val specSections = lines.subList(gemSections.single() + 1, gemEnd)
+            .withIndex()
+            .filter { it.value == "  specs:" }
+            .map { it.index + gemSections.single() + 1 }
+        if (specSections.size != 1) return null
+        val versions = lines.subList(specSections.single() + 1, gemEnd).mapNotNull { line ->
             LOCKED_SPEC.matchEntire(line)?.let { it.groupValues[1] to it.groupValues[2] }
         }.groupBy({ it.first }, { it.second })
         val names = linkedSetOf<String>()
@@ -50,7 +65,10 @@ internal object RubyTestSuites {
             if (line.isBlank()) continue
             if (!line.startsWith(' ')) break
             val match = LOCKED_DEPENDENCY.matchEntire(line) ?: return null
-            match.groupValues[1].takeIf { name -> RubyTestRunner.entries.any { it.gem == name } }?.let(names::add)
+            match.groupValues[1].takeIf { name -> RubyTestRunner.entries.any { it.gem == name } }?.let { name ->
+                if ('!' in line) return null
+                names += name
+            }
         }
         return names.mapTo(linkedSetOf()) { name ->
             val runner = RubyTestRunner.entries.single { it.gem == name }
@@ -75,6 +93,39 @@ internal object RubyTestSuites {
     const val INVALID = "invalid"
 
     fun isFallback(task: String): Boolean = task.startsWith(FALLBACK_PREFIX)
+
+    fun suitePresent(directory: File): Boolean? {
+        val path = directory.toPath()
+        if (Files.isSymbolicLink(path)) return null
+        if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return false
+        if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) return null
+        return safeTree(path).takeIf { it } ?: return null
+    }
+
+    fun invalidLock(root: File, runners: Set<RubyTestRunner>?): Boolean =
+        lockPresent(File(root, "Gemfile.lock")) && runners == null
+
+    private fun lockPresent(lock: File): Boolean =
+        Files.exists(lock.toPath(), LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(lock.toPath())
+
+    private fun safeTree(root: Path): Boolean = runCatching {
+        val pending = ArrayDeque<Path>()
+        pending.add(root)
+        var entries = 0
+        while (pending.isNotEmpty()) {
+            Files.newDirectoryStream(pending.removeFirst()).use { children ->
+                for (child in children) {
+                    entries += 1
+                    if (entries > MAX_SUITE_ENTRIES || Files.isSymbolicLink(child)) return false
+                    when {
+                        Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS) -> pending.add(child)
+                        !Files.isRegularFile(child, LinkOption.NOFOLLOW_LINKS) -> return false
+                    }
+                }
+            }
+        }
+        true
+    }.getOrDefault(false)
 }
 
 private fun RubyTestRunner.supports(version: String): Boolean {

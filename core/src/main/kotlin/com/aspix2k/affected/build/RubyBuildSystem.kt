@@ -2,8 +2,6 @@ package com.aspix2k.affected.build
 
 import com.intellij.openapi.project.Project
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.LinkOption
 import java.util.concurrent.atomic.AtomicReference
 
 class RubyBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
@@ -93,18 +91,19 @@ internal fun rubyCommands(root: String, tasks: List<String>, modules: List<Build
 
 private fun suitePath(root: String, path: String, runner: RubyTestRunner, fallback: Boolean): String? {
     if (runner == RubyTestRunner.RSPEC) {
-        if (!fallback) return path
-        val directory = File(root, path).toPath()
-        if (Files.isSymbolicLink(directory) || !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) return null
+        when (RubyTestSuites.suitePresent(File(root, if (path == ".") "spec" else "$path/spec"))) {
+            null -> return null
+            false -> return if (fallback) "" else null
+            true -> Unit
+        }
         return path
     }
-    val suite = if (runner == RubyTestRunner.RSPEC) "spec" else "test"
-    val relative = if (path == ".") suite else "$path/$suite"
-    val target = File(root, relative).toPath()
-    if (!fallback) return relative
-    if (Files.isSymbolicLink(target)) return null
-    if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS)) return ""
-    if (!Files.isDirectory(target, LinkOption.NOFOLLOW_LINKS)) return null
+    val relative = if (path == ".") "test" else "$path/test"
+    when (RubyTestSuites.suitePresent(File(root, relative))) {
+        null -> return null
+        false -> return if (fallback) "" else null
+        true -> Unit
+    }
     return relative
 }
 

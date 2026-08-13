@@ -244,13 +244,16 @@ class CliCommandTest {
 
     @Test
     fun `Bundler gems share one RSpec command`() {
+        val root = createTempDirectory("ruby-rspec").toFile()
+        File(root, "gems/a/spec").mkdirs()
+        File(root, "gems/b/spec").mkdirs()
         val modules = rubyModules(
-            "/repo",
+            root.path,
             Triple("gem-a", "gems/a", "test-rspec"),
             Triple("gem-b", "gems/b", "test-rspec"),
         )
 
-        val commands = rubyCommands("/repo", listOf("gem-a:test-rspec", "gem-b:test-rspec"), modules)
+        val commands = rubyCommands(root.path, listOf("gem-a:test-rspec", "gem-b:test-rspec"), modules)
 
         assertEquals(
             listOf("bundle", "exec", "rspec", "gems/a", "gems/b"),
@@ -260,15 +263,19 @@ class CliCommandTest {
 
     @Test
     fun `Bundler runner groups stay in one ordered command batch`() {
+        val root = createTempDirectory("ruby-runners").toFile()
+        File(root, "gems/rspec/spec").mkdirs()
+        File(root, "gems/minitest/test").mkdirs()
+        File(root, "gems/test-unit/test").mkdirs()
         val modules = rubyModules(
-            "/repo",
+            root.path,
             Triple("rspec", "gems/rspec", "test-rspec"),
             Triple("minitest", "gems/minitest", "test-minitest"),
             Triple("test-unit", "gems/test-unit", "test-test-unit"),
         )
 
         val commands = rubyCommands(
-            "/repo",
+            root.path,
             listOf("rspec:test-rspec", "minitest:test-minitest", "test-unit:test-test-unit"),
             modules,
         )
@@ -285,12 +292,15 @@ class CliCommandTest {
 
     @Test
     fun `a gem with multiple supported suites runs every suite`() {
+        val root = createTempDirectory("ruby-mixed").toFile()
+        File(root, "gems/mixed/spec").mkdirs()
+        File(root, "gems/mixed/test").mkdirs()
         val modules = rubyModules(
-            "/repo",
+            root.path,
             Triple("mixed", "gems/mixed", "test-rspec+minitest"),
         )
 
-        val commands = rubyCommands("/repo", listOf("mixed:test-rspec+minitest"), modules)
+        val commands = rubyCommands(root.path, listOf("mixed:test-rspec+minitest"), modules)
 
         assertEquals(
             listOf(
@@ -311,6 +321,20 @@ class CliCommandTest {
             gem "test-unit", "3.7.8"
             """.trimIndent(),
         )
+        File(root, "Gemfile.lock").writeText(
+            """
+            GEM
+              specs:
+                minitest (6.0.6)
+                rspec (3.13.2)
+                test-unit (3.7.8)
+
+            DEPENDENCIES
+              minitest (= 6.0.6)
+              rspec (= 3.13.2)
+              test-unit (= 3.7.8)
+            """.trimIndent(),
+        )
         listOf("minitest", "test-unit").forEach { name ->
             val directory = File(root, "gems/$name").apply { mkdirs() }
             File(directory, "$name.gemspec").writeText(
@@ -318,6 +342,7 @@ class CliCommandTest {
             )
             File(directory, "test").mkdirs()
         }
+        File(root, "gems/minitest/spec").mkdirs()
         val task = RubyTestSuites.fallbackTask(root)
         val module = RubyGems.fallback(root, task)
 
@@ -326,7 +351,7 @@ class CliCommandTest {
         assertEquals("fallback-rspec+minitest+test-unit", task)
         assertEquals(
             listOf(
-                listOf("bundle", "exec", "rspec", "gems/minitest", "gems/test-unit"),
+                listOf("bundle", "exec", "rspec", "gems/minitest"),
                 listOf("bundle", "exec", "minitest", "gems/minitest/test", "gems/test-unit/test"),
                 listOf("bundle", "exec", "test-unit", "gems/minitest/test", "gems/test-unit/test"),
             ),
@@ -354,6 +379,9 @@ class CliCommandTest {
     fun `a symlink in a Bundler fallback suite invalidates the whole batch`() {
         val root = createTempDirectory("ruby-symlink").toFile()
         val gem = File(root, "gem").apply { mkdirs() }
+        File(gem, "affected.gemspec").writeText(
+            "Gem::Specification.new { |spec| spec.name = \"affected\"; spec.version = \"1.0.0\" }\n",
+        )
         val test = File(gem, "test").apply { mkdirs() }
         val target = File(root, "outside.rb").apply { writeText("puts 'outside'\n") }
         runCatching { java.nio.file.Files.createSymbolicLink(File(test, "evil_test.rb").toPath(), target.toPath()) }
@@ -363,6 +391,30 @@ class CliCommandTest {
         assertEquals(
             emptyList(),
             rubyCommands(root.path, listOf(".:$task"), listOf(RubyGems.fallback(root, task))),
+        )
+    }
+
+    @Test
+    fun `a root Minitest project runs only its locked runner`() {
+        val root = createTempDirectory("ruby-root-minitest").toFile()
+        File(root, "Gemfile.lock").writeText(
+            """
+            GEM
+              specs:
+                minitest (6.0.6)
+
+            DEPENDENCIES
+              minitest (= 6.0.6)
+            """.trimIndent(),
+        )
+        File(root, "test").mkdirs()
+        val task = RubyTestSuites.fallbackTask(root)
+
+        assertEquals("fallback-minitest", task)
+        assertEquals(
+            listOf(listOf("bundle", "exec", "minitest", "test")),
+            rubyCommands(root.path, listOf(".:$task"), listOf(RubyGems.fallback(root, task)))
+                .map(CliCommand::arguments),
         )
     }
 

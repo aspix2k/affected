@@ -14,6 +14,7 @@ object RubyGems {
         val specs = findGemspecs(root)
         if (specs.isEmpty()) return emptyList()
         val lockedRunners = RubyTestSuites.lockedRunners(root)
+        if (RubyTestSuites.invalidLock(root, lockedRunners)) return emptyList()
 
         val described = specs.map { describe(it, lockedRunners) ?: return emptyList() }
         val names = described.map { it.name }.toSet()

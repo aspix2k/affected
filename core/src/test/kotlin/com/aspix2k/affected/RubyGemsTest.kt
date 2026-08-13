@@ -242,6 +242,46 @@ class RubyGemsTest {
     }
 
     @Test
+    fun `an unsupported locked RSpec version invalidates the complete graph`() {
+        val root = monorepo()
+        lock(root, "rspec" to "4.0.0")
+        gem(root, "gems/unsupported", "acme-unsupported", specs = true)
+
+        assertEquals(emptyList(), RubyGems.parse(root))
+        assertEquals(RubyTestSuites.INVALID, RubyTestSuites.fallbackTask(root))
+    }
+
+    @Test
+    fun `a path sourced Ruby runner is not treated as a supported executable`() {
+        val root = monorepo()
+        File(root, "Gemfile.lock").writeText(
+            """
+            PATH
+              remote: vendor/minitest
+              specs:
+                minitest (6.0.6)
+
+            DEPENDENCIES
+              minitest!
+            """.trimIndent(),
+        )
+
+        assertNull(RubyTestSuites.lockedRunners(root))
+    }
+
+    @Test
+    fun `a symlinked Ruby suite invalidates the complete graph`() {
+        val root = monorepo()
+        lock(root, "minitest" to "6.0.6")
+        gem(root, "gems/linked", "acme-linked")
+        val outside = File(root, "outside").apply { mkdirs() }
+        val suite = File(root, "gems/linked/test").toPath()
+        runCatching { java.nio.file.Files.createSymbolicLink(suite, outside.toPath()) }.getOrElse { return }
+
+        assertEquals(emptyList(), RubyGems.parse(root))
+    }
+
+    @Test
     fun `transitive Ruby runners are not treated as project commands`() {
         val root = monorepo()
         File(root, "Gemfile.lock").writeText(
