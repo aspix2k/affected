@@ -76,6 +76,8 @@ dependencies {
 
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
+    kover(project(":core"))
+    kover(project(":mcp"))
 }
 
 kotlin { jvmToolchain(21) }
@@ -141,6 +143,9 @@ detekt {
 
 subprojects {
     apply(plugin = "com.autonomousapps.dependency-analysis")
+    pluginManager.withPlugin("org.jetbrains.kotlin.jvm") {
+        apply(plugin = "org.jetbrains.kotlinx.kover")
+    }
 }
 
 dependencyAnalysis {

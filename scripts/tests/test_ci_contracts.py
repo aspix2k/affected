@@ -136,6 +136,19 @@ class CiContractsTest(unittest.TestCase):
             with self.assertRaisesRegex(ci_contracts.CiContractError, "workflow_dispatch"):
                 ci_contracts.check(root)
 
+    def test_kover_must_include_core_and_mcp(self) -> None:
+        """MCP and core tests must count toward the coverage floor."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / "build.gradle.kts"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace('kover(project(":mcp"))\n', "", 1),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "Kover must verify"):
+                ci_contracts.check(root)
+
     def test_mcp_module_must_enforce_the_patched_jackson_bom(self) -> None:
         """The MCP Server plugin pulls Jackson 2.19 unless the BOM is enforced."""
         with TemporaryDirectory() as directory:
@@ -169,6 +182,7 @@ class CiContractsTest(unittest.TestCase):
             "scripts/run_gradle.sh",
             "settings.gradle.kts",
             "mcp/build.gradle.kts",
+            "build.gradle.kts",
             "gradle/wrapper/gradle-wrapper.properties",
         ):
             destination = root / relative
