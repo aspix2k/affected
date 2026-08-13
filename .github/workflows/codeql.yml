@@ -35,7 +35,7 @@ jobs:
           java-version: "21"
       - uses: gradle/actions/setup-gradle@67621b124fd2e251c5e8a0e6e3b91318f2287669 # v6.3.0
         if: steps.scope.outputs.codeql == 'true'
-      - uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+      - uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         if: steps.scope.outputs.codeql == 'true'
         with:
           languages: java-kotlin
@@ -57,7 +57,7 @@ jobs:
           scripts/run_gradle.sh --no-daemon --no-build-cache --no-parallel --max-workers=1
           clean classes :core:classes :mcp:classes :collector:classes :collector:mavenClasses
 
-      - uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+      - uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         if: steps.scope.outputs.codeql == 'true'
         with:
           upload: never
@@ -89,7 +89,7 @@ jobs:
           java-version: "21"
       - uses: gradle/actions/setup-gradle@67621b124fd2e251c5e8a0e6e3b91318f2287669 # v6.3.0
         if: steps.scope.outputs.codeql == 'true'
-      - uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+      - uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         if: steps.scope.outputs.codeql == 'true'
         with:
           languages: java-kotlin
@@ -111,7 +111,7 @@ jobs:
           scripts/run_gradle.sh --no-daemon --no-build-cache --no-parallel --max-workers=1
           clean classes :core:classes :mcp:classes :collector:classes :collector:mavenClasses
 
-      - uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+      - uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         if: steps.scope.outputs.codeql == 'true'
         with:
           upload: always

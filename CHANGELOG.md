@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Pin `github/codeql-action` to 4.37.7.
 - Keep the Composer PHPUnit 13.3 pin and exact-selection matrix on 13.3.1.
 - Run weekly PIT on `AffectedMcpInputs` as well as `TestRootResolver`, and reject task or branch names only through the documented charset and `..` rules.
 - Fail unit tests when a plugin descriptor would block a restartless update: `require-restart`, legacy components, nameless action groups, non-dynamic extension points, or a missing optional/content descriptor.
