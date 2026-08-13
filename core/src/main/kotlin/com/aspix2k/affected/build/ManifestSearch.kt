@@ -14,7 +14,6 @@ internal object ManifestSearch {
     fun findByExtension(root: File, extension: String, limit: Int = MAX_MATCHES): List<File> =
         find(root, limit) { it.extension.equals(extension, ignoreCase = true) }
 
-
     fun fingerprint(root: File, files: List<File>): String? = runCatching {
         if (files.size > MAX_FINGERPRINT_FILES) return null
         val realRoot = root.toPath().toRealPath()
