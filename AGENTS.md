@@ -60,6 +60,11 @@ Do not add `on.paths` to `ci.yml`, `codeql.yml` or `dependency-review.yml`:
 a skipped required check blocks merge. Classify with `scripts/ci_scope.py`
 and fail closed on unknown paths.
 
+After clone, `python3 scripts/local_gate.py install`. `pre-commit` runs
+detekt, script tests, CI contracts and the analyzer policy; `pre-push`
+adds ShellCheck. Do not `--no-verify`. These hooks are not `verifyPlugin`
+or the full test suite.
+
 Never merge a pull request immediately. Open it, then stop. `Queue` enables
 `gh pr merge --auto --squash` for same-repository ready PRs. If you must
 enqueue by hand, use that same command. Do not merge without `--auto`,
