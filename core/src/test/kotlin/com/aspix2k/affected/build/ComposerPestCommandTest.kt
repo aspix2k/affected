@@ -36,7 +36,7 @@ class ComposerPestCommandTest {
         assertEquals(
             listOf(
                 listOf(
-                    "php", "vendor/bin/pest", "--ci", "--no-tia",
+                    "php", "vendor/bin/pest", "--ci",
                     "./packages/pest-a/tests", "./packages/pest-b/tests",
                 ),
                 listOf("php", "vendor/bin/phpunit", "./packages/phpunit"),

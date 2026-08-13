@@ -354,7 +354,6 @@ class CliAdapterConformanceTest {
                 "php",
                 "vendor/bin/pest",
                 "--ci",
-                "--no-tia",
                 "./packages/alpha/tests",
                 "./packages/beta/tests",
             ),

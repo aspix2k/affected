@@ -146,7 +146,7 @@ internal fun composerCommands(root: String, tasks: List<String>, modules: List<B
             ComposerPackages.ANALYSE ->
                 CliCommand("phpstan", listOf("php", "vendor/bin/phpstan", "analyse") + paths.distinct())
             ComposerPackages.PEST ->
-                CliCommand("pest", listOf("php", "vendor/bin/pest", "--ci", "--no-tia") + paths.distinct())
+                CliCommand("pest", listOf("php", "vendor/bin/pest", "--ci") + paths.distinct())
             ComposerPackages.TEST ->
                 CliCommand("phpunit", listOf("php", "vendor/bin/phpunit") + paths.distinct())
             else -> return emptyList()
