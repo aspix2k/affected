@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Select proven Bazel packages with one `bazel test //pkg:all` session; MODULE, WORKSPACE, BUILD and `.bzl` changes keep `//...`. Target-level ownership stays unclaimed.
 - Select proven Kotlin Toolchain modules with one `kotlin test -m` / `kotlin build -m` invocation; a root task or several production modules keep the unscoped project command.
 - Detect Bazel roots from `MODULE.bazel` / `WORKSPACE` and run one `bazel test //...` or `bazel build //...` session; Gradle and Maven roots stay off this adapter. Target-level ownership stays unclaimed.
 - Attribute Kotlin Toolchain `project.yaml` modules to their directories so an `app` change does not own `lib`; globs and unproved lists keep the root, and one `kotlin test` session still runs for the project.
