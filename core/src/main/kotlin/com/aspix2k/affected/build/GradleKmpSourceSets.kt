@@ -8,7 +8,7 @@ internal fun gradleNarrowKmpTasks(tasks: List<String>, changes: BuildChanges?): 
     val narrowed = tasks.filter { task ->
         val name = task.substringAfterLast(':')
         val family = KMP_TASK_FAMILIES[name]
-        family == null || family in allowed
+        family == null || allowed.any { it.covers(family) }
     }
     return narrowed.takeIf { it.any { task -> task != "--tests" && !task.startsWith("--") } } ?: tasks
 }
@@ -21,7 +21,25 @@ private fun kmpFamilyForPath(raw: String): KmpFamily? {
     }?.value
 }
 
-private enum class KmpFamily { ANDROID, APPLE, JVM, JS, WASM, LINUX, MACOS, COMMON }
+private enum class KmpFamily {
+    ANDROID,
+    APPLE,
+    JVM,
+    JS,
+    WASM,
+    LINUX,
+    MACOS,
+    MINGW,
+    NATIVE,
+    COMMON,
+    ;
+
+    fun covers(task: KmpFamily): Boolean = when (this) {
+        COMMON -> true
+        NATIVE -> task == NATIVE || task == LINUX || task == MACOS || task == APPLE || task == MINGW
+        else -> this == task
+    }
+}
 
 private val KMP_SOURCE_SET_FAMILIES = listOf(
     "commonMain" to KmpFamily.COMMON,
@@ -36,8 +54,8 @@ private val KMP_SOURCE_SET_FAMILIES = listOf(
     "wasm" to KmpFamily.WASM,
     "linux" to KmpFamily.LINUX,
     "macos" to KmpFamily.MACOS,
-    "native" to KmpFamily.COMMON,
-    "mingw" to KmpFamily.COMMON,
+    "native" to KmpFamily.NATIVE,
+    "mingw" to KmpFamily.MINGW,
 ).toMap()
 
 private val KMP_TASK_FAMILIES = mapOf(
@@ -53,4 +71,5 @@ private val KMP_TASK_FAMILIES = mapOf(
     "linuxX64Test" to KmpFamily.LINUX,
     "macosArm64Test" to KmpFamily.MACOS,
     "macosX64Test" to KmpFamily.MACOS,
+    "mingwX64Test" to KmpFamily.MINGW,
 )
