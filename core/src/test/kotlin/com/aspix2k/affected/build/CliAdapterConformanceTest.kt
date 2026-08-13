@@ -340,6 +340,8 @@ class CliAdapterConformanceTest {
             root.resolve("packages/beta/beta.marker"),
         )
         execute(root, listOf("composer", "install", "--no-interaction", "--no-progress", "--no-scripts"))
+        val pestTemp = File(root, "vendor/pestphp/pest/.temp")
+        assertTrue(pestTemp.mkdirs() || pestTemp.isDirectory)
         assertTrue(locked.contentEquals(lock.readBytes()))
         val modules = ComposerPackages.parse(root).filter(BuildModule::hasTests)
         assertEquals(setOf("affected/fixture-pest-alpha", "affected/fixture-pest-beta"), modules.map { it.id }.toSet())
@@ -349,12 +351,9 @@ class CliAdapterConformanceTest {
             modules,
         ).single()
 
-        assertEquals(listOf("php", "vendor/bin/pest", "--ci", "--cache-directory"), command.arguments.take(4))
-        assertTrue(File(command.arguments[4]).isDirectory, command.arguments[4])
-        assertEquals(
-            listOf("--do-not-cache-result", "./packages/alpha/tests", "./packages/beta/tests"),
-            command.arguments.drop(5),
-        )
+        assertEquals(listOf("php", "vendor/bin/pest", "--cache-directory"), command.arguments.take(3))
+        assertTrue(File(command.arguments[3]).isDirectory, command.arguments[3])
+        assertEquals(listOf("./packages/alpha/tests", "./packages/beta/tests"), command.arguments.drop(4))
         execute(root, command.arguments)
 
         assertEquals("alpha", markers[0].readText())

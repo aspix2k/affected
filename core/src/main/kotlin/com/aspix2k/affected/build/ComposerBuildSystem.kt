@@ -196,14 +196,7 @@ private val PEST_TASKS = setOf(ComposerPackages.PEST)
 internal fun pestArguments(paths: List<String>): List<String> {
     val cache = File(System.getProperty("java.io.tmpdir"), "affected-pest-cache")
     cache.mkdirs()
-    return listOf(
-        "php",
-        "vendor/bin/pest",
-        "--ci",
-        "--cache-directory",
-        cache.invariantSeparatorsPath,
-        "--do-not-cache-result",
-    ) + paths
+    return listOf("php", "vendor/bin/pest", "--cache-directory", cache.invariantSeparatorsPath) + paths
 }
 
 internal fun composerPackagePath(root: String, directory: String): String? {
