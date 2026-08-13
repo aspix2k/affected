@@ -250,7 +250,9 @@ of all selected packages to one Pest process with focused and test-impact
 shortcuts disabled. When every planned suite change is a regular test file
 against a merge base, those files replace the suite directories. A named
 dataset file selects the test files that statically `->with` that name.
-Production, boot, unused dataset, helper and unproved changes keep the package suite. Missing, nested, malformed, mirrored or unsupported Pest
+A production PHP file mapped by the nearest composer.json PSR-4 prefix
+selects test files that statically `use` that class. Production files without
+a static import, boot, unused dataset, helper and unproved changes keep the package suite. Missing, nested, malformed, mirrored or unsupported Pest
 metadata produces an explicit unresolved Run and never falls through to PHPUnit
 or its exact baseline.
 

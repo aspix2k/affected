@@ -89,6 +89,35 @@ class CliPestConformanceTest {
         assertFalse(File(root, "packages/alpha/phpunit.marker").exists())
     }
 
+    @Test
+    fun `Pest 5 runs tests that import a changed PSR-4 class`() = fixture("pest") { root ->
+        val lock = root.resolve("composer.lock")
+        val locked = lock.readBytes()
+        execute(root, listOf("composer", "install", "--no-interaction", "--no-progress", "--no-scripts"))
+        val pestTemp = File(root, "vendor/pestphp/pest/.temp")
+        assertTrue(pestTemp.mkdirs() || pestTemp.isDirectory)
+        assertTrue(locked.contentEquals(lock.readBytes()))
+        val alpha = ComposerPackages.parse(root).single { it.id == "affected/fixture-pest-alpha" }
+        val changed = File(root, "packages/alpha/src/Alpha.php")
+        val command = composerCommands(
+            root.path,
+            listOf("${alpha.executionId}:${alpha.testTask}"),
+            listOf(alpha),
+            BuildChanges(
+                files = listOf(changed.path),
+                exactSelectionEligible = setOf(changed.path),
+                comparedToBase = true,
+            ),
+        ).single()
+
+        assertEquals(listOf("./packages/alpha/tests/AlphaTest.php"), command.arguments.takeLast(1))
+        execute(root, command.arguments)
+
+        assertEquals("alpha", File(root, "packages/alpha/alpha.marker").readText())
+        assertFalse(File(root, "packages/alpha/phpunit.marker").exists())
+        assertFalse(File(root, "packages/beta/beta.marker").exists())
+    }
+
     private fun fixture(name: String, block: (File) -> Unit) {
         assumeTrue(System.getProperty("affected.cliConformance") == "true")
         val source = File(fixtureRoot(), name)
