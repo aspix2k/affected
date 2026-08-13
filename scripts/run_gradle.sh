@@ -2,7 +2,8 @@
 
 # Seed the wrapper cache, then run the requested Gradle tasks.
 # Retry only transient repository HTTP errors. A cache-redirector 5xx
-# switches the next attempt to Maven Central first.
+# switches the next attempt to Maven Central first. A Central 429
+# switches back to the JetBrains cache-redirector.
 
 set -euo pipefail
 
@@ -32,12 +33,17 @@ log=$(mktemp)
 trap 'rm -f -- "$log"' EXIT
 
 is_transient_repository_error() {
-  grep -Eq 'Received status code (403|502|503|504) from server' "$log"
+  grep -Eq 'Received status code (403|429|502|503|504) from server' "$log"
 }
 
 should_prefer_maven_central() {
   grep -Fq 'cache-redirector.jetbrains.com' "$log" && \
     grep -Eq 'Received status code (502|503|504) from server' "$log"
+}
+
+should_prefer_cache_redirector() {
+  grep -Fq 'repo.maven.apache.org' "$log" && \
+    grep -Eq 'Received status code 429 from server' "$log"
 }
 
 attempt=1
@@ -55,6 +61,9 @@ while :; do
   if should_prefer_maven_central; then
     export AFFECTED_PREFER_MAVEN_CENTRAL=1
     echo "cache-redirector returned a server error; retrying with Maven Central first." >&2
+  elif should_prefer_cache_redirector; then
+    unset AFFECTED_PREFER_MAVEN_CENTRAL
+    echo "Maven Central returned 429; retrying with cache-redirector first." >&2
   else
     echo "Retrying Gradle after a transient repository error ($attempt/$attempts)." >&2
   fi
