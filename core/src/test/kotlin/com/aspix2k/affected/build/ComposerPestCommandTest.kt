@@ -26,8 +26,8 @@ class ComposerPestCommandTest {
         val commands = composerCommands(
             root.path,
             listOf(
-                "pest-a:${ComposerPackages.PEST}",
                 "pest-b:${ComposerPackages.PEST}",
+                "pest-a:${ComposerPackages.PEST}",
                 "phpunit:${ComposerPackages.TEST}",
             ),
             modules,
