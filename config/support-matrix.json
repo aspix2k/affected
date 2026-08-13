@@ -321,12 +321,21 @@
       "ecosystem": "Composer",
       "languages": ["PHP"],
       "runners": ["PHPUnit", "Pest", "PHPStan"],
-      "selection": ["class", "package"],
+      "selection": ["class", "file", "package"],
       "selectionProofs": [
         {
           "units": ["class"],
           "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
           "marker": "PHPUnit runs exact classes and preserves full fallback",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        },
+        {
+          "units": ["file"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliPestConformanceTest.kt",
+          "marker": "Pest 5 runs only the changed test files",
           "gate": ".github/workflows/conformance.yml",
           "gateMarker": "--tests '*Cli*ConformanceTest'",
           "gateJob": "cli-native",

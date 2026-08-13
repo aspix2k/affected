@@ -68,7 +68,12 @@ class ComposerBuildSystem :
         changes: BuildChanges,
     ): Boolean {
         if (!composerUsesPhpunitSelection(tasks)) {
-            return CommandRunner.runBatchAndWait(project, root, commands(project, root, tasks), "Affected Composer")
+            return CommandRunner.runBatchAndWait(
+                project,
+                root,
+                composerCommands(root, tasks, modules(project), changes),
+                "Affected Composer",
+            )
         }
         val adapter = configuredPhpunitAdapter()
             ?: findPhpunitAdapter(Path.of(PathManager.getJarPathForClass(ComposerBuildSystem::class.java)))
@@ -138,15 +143,23 @@ private val PEST_BOOT_FILES = setOf(
     "tests/Datasets.php",
 )
 
-internal fun composerCommands(root: String, tasks: List<String>, modules: List<BuildModule>): List<CliCommand> {
+internal fun composerCommands(
+    root: String,
+    tasks: List<String>,
+    modules: List<BuildModule>,
+    changes: BuildChanges? = null,
+): List<CliCommand> {
     val planned = resolveComposerTasks(tasks, modules) ?: return emptyList()
     val resolved = resolveComposerPaths(root, planned) ?: return emptyList()
     return resolved.groupBy({ it.first }, { it.second }).map { (task, paths) ->
         when (task) {
             ComposerPackages.ANALYSE ->
                 CliCommand("phpstan", listOf("php", "vendor/bin/phpstan", "analyse") + paths.distinct())
-            ComposerPackages.PEST ->
-                CliCommand("pest", pestArguments(root, paths.distinct().sorted()))
+            ComposerPackages.PEST -> {
+                val suites = paths.distinct().sorted()
+                val selected = changes?.let { selectPestTestFiles(root, suites, it) }
+                CliCommand("pest", pestArguments(root, selected ?: suites))
+            }
             ComposerPackages.TEST ->
                 CliCommand("phpunit", listOf("php", "vendor/bin/phpunit") + paths.distinct())
             else -> return emptyList()

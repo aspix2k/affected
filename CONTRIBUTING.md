@@ -246,7 +246,9 @@ Composer projects use Pest package selection only when the root manifest pins
 Pest 5.1.1 directly and `composer.lock` proves its official source together
 with PHPUnit 13.3.0 on PHP 8.4–8.5. Affected passes the explicit conventional test directories
 of all selected packages to one Pest process with focused and test-impact
-shortcuts disabled. Missing, nested, malformed, mirrored or unsupported Pest
+shortcuts disabled. When every planned suite change is a regular test file
+against a merge base, those files replace the suite directories. Production,
+boot, dataset, helper and unproved changes keep the package suite. Missing, nested, malformed, mirrored or unsupported Pest
 metadata produces an explicit unresolved Run and never falls through to PHPUnit
 or its exact baseline.
 
