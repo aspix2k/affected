@@ -33,7 +33,7 @@ import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 
-class GradleBuildSystem : SuspendingBuildSystem {
+class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
 
     override val id: String = GradleConstants.SYSTEM_ID.id
 
@@ -115,13 +115,22 @@ class GradleBuildSystem : SuspendingBuildSystem {
         return Snapshot(tasksByDirectory(project), withDependencies, linkedRoots)
     }
 
-    override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean {
+    override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
+        runAndWaitSuspending(project, root, tasks, BuildChanges(emptyList(), emptySet(), comparedToBase = false))
+
+    override suspend fun runAndWaitSuspending(
+        project: Project,
+        root: String,
+        tasks: List<String>,
+        changes: BuildChanges,
+    ): Boolean {
         if (project.isDisposed) return false
         val collector = withContext(Dispatchers.IO) { collectorRun(project) }
+        val taskNames = withContext(Dispatchers.IO) { gradleTaskNames(tasks, changes) }
 
         val settings = ExternalSystemTaskExecutionSettings().apply {
             externalProjectPath = root
-            taskNames = tasks
+            this.taskNames = taskNames
             externalSystemIdString = GradleConstants.SYSTEM_ID.id
             if (collector != null) scriptParameters = ParametersListUtil.join(collector.arguments)
         }
