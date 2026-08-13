@@ -31,6 +31,7 @@ internal class PhpunitSelectiveRun private constructor(
         ): PhpunitSelectiveRun? = runCatching {
             val realRoot = root.toAbsolutePath().normalize()
             require(Files.isDirectory(realRoot, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(realRoot))
+            require(composerUsesPhpunitSelection(tasks))
             val byExecutionId = modules.associateBy(BuildModule::executionId)
             require(tasks.all { it.substringBeforeLast(':') in byExecutionId })
             val cache = securePhpunitDirectory(
@@ -45,8 +46,9 @@ internal class PhpunitSelectiveRun private constructor(
                 val executionId = task.substringBeforeLast(':')
                 val verb = task.substringAfterLast(':')
                 val module = byExecutionId.getValue(executionId)
+                require(module.testTask == verb)
                 if (verb == ComposerPackages.ANALYSE) {
-                    val path = module.contentRoots.single().removePrefix("$realRoot/").ifEmpty { "." }
+                    val path = requireNotNull(composerPackagePath(realRoot.toString(), module.contentRoots.single()))
                     commands += CliCommand("phpstan $executionId", listOf("php", "vendor/bin/phpstan", "analyse", path))
                 } else {
                     require(verb == ComposerPackages.TEST)

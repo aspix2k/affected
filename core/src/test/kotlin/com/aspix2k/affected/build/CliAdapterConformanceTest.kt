@@ -329,6 +329,53 @@ class CliAdapterConformanceTest {
         return ComposerPackages.parse(root).filter(BuildModule::hasTests)
     }
 
+    @Test
+    fun `Pest 5 runs every test in the selected Composer packages`() = fixture("pest") { root ->
+        val lock = root.resolve("composer.lock")
+        val locked = lock.readBytes()
+        val markers = listOf(
+            root.resolve("packages/alpha/alpha.marker"),
+            root.resolve("packages/alpha/dataset.marker"),
+            root.resolve("packages/alpha/phpunit.marker"),
+            root.resolve("packages/beta/beta.marker"),
+        )
+        execute(root, listOf("composer", "install", "--no-interaction", "--no-progress", "--no-scripts"))
+        val pestTemp = File(root, "vendor/pestphp/pest/.temp")
+        assertTrue(pestTemp.mkdirs() || pestTemp.isDirectory)
+        assertTrue(locked.contentEquals(lock.readBytes()))
+        val modules = ComposerPackages.parse(root).filter(BuildModule::hasTests)
+        assertEquals(setOf("affected/fixture-pest-alpha", "affected/fixture-pest-beta"), modules.map { it.id }.toSet())
+        val command = composerCommands(
+            root.path,
+            modules.map { "${it.executionId}:${it.testTask}" },
+            modules,
+        ).single()
+
+        assertEquals(
+            listOf(
+                "php",
+                "vendor/bin/pest",
+                "--cache-directory",
+                File(root, ".affected/pest-cache").invariantSeparatorsPath,
+                "--do-not-cache-result",
+                "--no-output",
+                "--configuration",
+                File(root, ".affected/pest-phpunit.xml").invariantSeparatorsPath,
+                "./packages/alpha/tests",
+                "./packages/beta/tests",
+            ),
+            command.arguments,
+        )
+        assertTrue(File(command.arguments[7]).isFile)
+        assertTrue(File(command.arguments[3]).isDirectory)
+        execute(root, command.arguments)
+
+        assertEquals("alpha", markers[0].readText())
+        assertEquals(listOf("first", "second"), markers[1].readLines())
+        assertEquals("phpunit", markers[2].readText())
+        assertEquals("beta", markers[3].readText())
+    }
+
     private fun phpunitState(
         root: File,
         module: BuildModule,

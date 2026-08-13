@@ -242,6 +242,14 @@ Testing Platform, test-assembly changes and incomplete metadata keep the full
 project plan. Only a complete unchanged full run replaces the counted and
 checksummed baseline.
 
+Composer projects use Pest package selection only when the root manifest pins
+Pest 5.1.1 directly and `composer.lock` proves its official source together
+with PHPUnit 13.3.0 on PHP 8.4–8.5. Affected passes the explicit conventional test directories
+of all selected packages to one Pest process with focused and test-impact
+shortcuts disabled. Missing, nested, malformed, mirrored or unsupported Pest
+metadata produces an explicit unresolved Run and never falls through to PHPUnit
+or its exact baseline.
+
 `ChangeAnalyzer` and `TaskPlanner` have no IDE dependencies and are covered by
 unit tests. Keep them that way: return data and let the action format it. The
 `collector` module produces Java 8 agents, a JUnit listener, a Gradle init script

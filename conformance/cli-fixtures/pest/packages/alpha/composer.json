@@ -1,0 +1,9 @@
+{
+  "name": "affected/fixture-pest-alpha",
+  "version": "1.0.0",
+  "autoload": {
+    "psr-4": {
+      "Affected\\PestFixture\\Alpha\\": "src/"
+    }
+  }
+}

@@ -74,6 +74,7 @@
     {"id":"jest","local":{"type":"json-dependency","path":"conformance/cli-fixtures/node/package.json","name":"jest"},"source":{"type":"npm","name":"jest"},"policy":"latest"},
     {"id":"vitest","local":{"type":"json-dependency","path":"conformance/cli-fixtures/node/package.json","name":"vitest"},"source":{"type":"npm","name":"vitest"},"policy":"latest"},
     {"id":"phpunit","local":{"type":"json-dependency","path":"conformance/cli-fixtures/composer/composer.json","name":"phpunit/phpunit"},"source":{"type":"packagist","name":"phpunit/phpunit"},"policy":"latest"},
+    {"id":"pest","local":{"type":"json-dependency","path":"conformance/cli-fixtures/pest/composer.json","name":"pestphp/pest"},"source":{"type":"packagist","name":"pestphp/pest"},"policy":"latest"},
     {"id":"rspec","local":{"type":"gem","path":"conformance/cli-fixtures/ruby/Gemfile","name":"rspec"},"source":{"type":"rubygems","name":"rspec"},"policy":"latest"},
     {"id":"minitest","local":{"type":"gem","path":"conformance/cli-fixtures/ruby/Gemfile","name":"minitest"},"source":{"type":"rubygems","name":"minitest"},"policy":"latest"},
     {"id":"test-unit","local":{"type":"gem","path":"conformance/cli-fixtures/ruby/Gemfile","name":"test-unit"},"source":{"type":"rubygems","name":"test-unit"},"policy":"latest"},

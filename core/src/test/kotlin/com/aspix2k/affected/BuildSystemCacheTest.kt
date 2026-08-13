@@ -1,5 +1,6 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.ComposerBuildSystem
 import com.aspix2k.affected.build.PythonBuildSystem
 import com.intellij.openapi.project.Project
 import java.io.File
@@ -46,6 +47,38 @@ class BuildSystemCacheTest {
         File(root, "child/tests").mkdirs()
 
         assertTrue(system.modules(project(root)).single { it.id == "layout-child" }.hasTests)
+    }
+
+    @Test
+    fun `a new Pest test file invalidates cached module capabilities`() {
+        val source = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
+            .map { File(it, "conformance/cli-fixtures/pest") }
+            .first(File::isDirectory)
+        val root = createTempDirectory("cache-pest").toFile()
+        assertTrue(source.copyRecursively(root, overwrite = true))
+        val system = ComposerBuildSystem()
+        assertTrue(system.modules(project(root)).single { it.id == "affected/pest-fixture-root" }.hasTests.not())
+
+        File(root, "tests/RootTest.php").writeText("<?php\n")
+
+        assertTrue(system.modules(project(root)).single { it.id == "affected/pest-fixture-root" }.hasTests)
+    }
+
+    @Test
+    fun `a deep Pest test file invalidates cached module capabilities`() {
+        val source = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
+            .map { File(it, "conformance/cli-fixtures/pest") }
+            .first(File::isDirectory)
+        val root = createTempDirectory("cache-deep-pest").toFile()
+        assertTrue(source.copyRecursively(root, overwrite = true))
+        val deepSuite = (1..10).fold(File(root, "tests/deep")) { directory, depth -> File(directory, "d$depth") }
+        assertTrue(deepSuite.mkdirs())
+        val system = ComposerBuildSystem()
+        assertTrue(system.modules(project(root)).single { it.id == "affected/pest-fixture-root" }.hasTests.not())
+
+        File(deepSuite, "RootTest.php").writeText("<?php\n")
+
+        assertTrue(system.modules(project(root)).single { it.id == "affected/pest-fixture-root" }.hasTests)
     }
 
     private fun projectRoot(prefix: String): File = createTempDirectory("cache-$prefix").toFile().apply {

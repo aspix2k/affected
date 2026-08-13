@@ -320,22 +320,31 @@
       "implementation": "com.aspix2k.affected.build.ComposerBuildSystem",
       "ecosystem": "Composer",
       "languages": ["PHP"],
-      "runners": ["PHPUnit", "PHPStan"],
+      "runners": ["PHPUnit", "Pest", "PHPStan"],
       "selection": ["class", "package"],
       "selectionProofs": [
         {
-          "units": ["class", "package"],
+          "units": ["class"],
           "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
           "marker": "PHPUnit runs exact classes and preserves full fallback",
           "gate": ".github/workflows/conformance.yml",
           "gateMarker": "--tests '*Cli*ConformanceTest'",
           "gateJob": "cli-native",
           "gateStep": "Run native CLI fixtures"
+        },
+        {
+          "units": ["package"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
+          "marker": "Pest 5 runs every test in the selected Composer packages",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "PHP 8.2–8.5; PHPUnit 11.5, 12.5, 13.2 and 13.3",
+      "versions": "PHP 8.2–8.5; PHPUnit 11.5, 12.5, 13.2 and 13.3; Pest 5.1.1 with PHPUnit 13.3 on PHP 8.4–8.5",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/composer"],
+      "fixtures": ["conformance/cli-fixtures/composer", "conformance/cli-fixtures/pest"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
