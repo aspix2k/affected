@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Keep the Go CI toolchain on 1.26.6.
 - Compile a changed Gradle module that has no test sources instead of returning an empty plan; Kotlin Multiplatform `androidUnitTest` / `iosTest` count as tests, and production-only modules use `compileKotlin` / `compileDebugKotlin` rather than a missing unit-test task.
 - Keep the Python adapter Ruff pin on 0.16.3.
 - Pin `github/codeql-action` to 4.37.7.
