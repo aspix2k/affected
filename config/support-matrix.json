@@ -422,7 +422,7 @@
       ],
       "versions": "sbt 1.12.x; Scala 3.3 LTS",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/sbt"],
+      "fixtures": ["conformance/cli-fixtures/sbt", "conformance/cli-fixtures/sbt-multi"],
       "gates": [".github/workflows/conformance.yml"]
     }
   ]

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Select proven sbt `lazy val` subprojects with one `sbt --batch <project>/test` invocation; unparseable `Project(` builds and `build.sbt` / `project/` changes keep the root command.
 - Detect sbt roots from `build.sbt` and run one `sbt test` or `sbt compile` session for the affected project; multi-project selection stays on the root command.
 - Attribute Scala and Groovy sources in Gradle and Maven modules so a changed `.scala` or `.groovy` file plans the owning module, including Groovy/Scala-only test trees.
 - Select named Pest 5.1.1 `it()` / `test()` cases that statically reference a changed PSR-4 class; `describe()`, hooks, dynamic names and file-scope uses keep the selected files.
