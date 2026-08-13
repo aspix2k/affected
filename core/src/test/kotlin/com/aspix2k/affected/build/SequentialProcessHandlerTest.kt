@@ -75,6 +75,26 @@ class SequentialProcessHandlerTest {
     }
 
     @Test
+    fun `a plan-level continue runs later commands after a failure`() {
+        val output = StringBuilder()
+        val handler = SequentialProcessHandler(
+            createTempDirectory("sequential-plan-continue").toFile(),
+            listOf(
+                CliCommand("failure", listOf(java(), "--affected-invalid-option")),
+                CliCommand("remainder", listOf(java(), "-version")),
+            ),
+            continueAfterFailure = true,
+        )
+        handler.addProcessListener(listener(output))
+
+        handler.startNotify()
+
+        assertTrue(handler.waitFor(30_000))
+        assertTrue(handler.exitCode != 0)
+        assertTrue(output.contains("> remainder"), output.toString())
+    }
+
+    @Test
     fun `a non fail fast command runs the remainder and preserves failure`() {
         val output = StringBuilder()
         val handler = SequentialProcessHandler(

@@ -98,6 +98,11 @@
                 <action id="com.aspix2k.affected.CheckConsumers"
                         class="com.aspix2k.affected.CheckConsumersToggle"/>
                 <separator/>
+                <action id="com.aspix2k.affected.RunFullPlan"
+                        class="com.aspix2k.affected.RunFullPlanToggle"/>
+                <action id="com.aspix2k.affected.StopAfterFirstFailure"
+                        class="com.aspix2k.affected.StopAfterFirstFailureToggle"/>
+                <separator/>
                 <action id="com.aspix2k.affected.RunBeforeCommit"
                         class="com.aspix2k.affected.RunBeforeCommitToggle"/>
                 <action id="com.aspix2k.affected.RunBeforePush"

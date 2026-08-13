@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Detect Composer projects that declare Pest and run the full package through `vendor/bin/pest` instead of PHPUnit class selection.
 - Run standard-library unittest for Python projects that import `unittest` and do not declare pytest, keeping pytest exact selection elsewhere.
 - Run Bun workspaces through `bun test` when `bun.lock` / `bun.lockb` or `packageManager: bun` is unambiguous, keeping mixed npm/Yarn/pnpm lockfiles on their existing managers.
+- Let the Affected menu choose whether a sequential plan continues after a failure; the default still runs the full plan and reports every collected failure.
 - Run affected Ruby gems through RSpec, Minitest and Test::Unit while preserving whole-gem helper, autorun and global-state semantics in one IDE Run session.
 - Make the product, ecosystem, runner, selection and operating-system support matrix executable, evidence-backed and self-auditing.
 - Document supported security versions and private vulnerability reporting.

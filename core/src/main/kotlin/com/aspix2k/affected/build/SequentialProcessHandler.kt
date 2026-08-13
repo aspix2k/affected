@@ -50,6 +50,7 @@ internal class SequentialProcessHandler(
     private val workingDirectory: File,
     private val commands: List<CliStep>,
     private val unresolvedMessage: String = DEFAULT_UNRESOLVED_MESSAGE,
+    private val continueAfterFailure: Boolean = false,
 ) : ProcessHandler() {
 
     private val finished = AtomicBoolean(false)
@@ -169,20 +170,24 @@ internal class SequentialProcessHandler(
                 synchronized(lock) {
                     if (current === handler) current = null
                 }
-                if (event.exitCode == 0 && !stopped.get()) {
-                    AppExecutorUtil.getAppExecutorService().execute(::startNext)
-                } else if (event.exitCode != 0 && command.continueOnFailure && !stopped.get()) {
-                    synchronized(lock) {
-                        if (recordedExitCode == 0) recordedExitCode = event.exitCode
+                when {
+                    event.exitCode == 0 && !stopped.get() ->
+                        AppExecutorUtil.getAppExecutorService().execute(::startNext)
+                    shouldContinueAfterFailure(command, event.exitCode) -> {
+                        synchronized(lock) {
+                            if (recordedExitCode == 0) recordedExitCode = event.exitCode
+                        }
+                        AppExecutorUtil.getAppExecutorService().execute(::startNext)
                     }
-                    AppExecutorUtil.getAppExecutorService().execute(::startNext)
-                } else {
-                    finish(event.exitCode.takeIf { it != 0 } ?: 1)
+                    else -> finish(event.exitCode.takeIf { it != 0 } ?: 1)
                 }
             }
         })
         handler.startNotify()
     }
+
+    private fun shouldContinueAfterFailure(command: CliCommand, exitCode: Int): Boolean =
+        exitCode != 0 && !stopped.get() && (command.continueOnFailure || continueAfterFailure)
 
     private fun notifyDetached() {
         if (finished.compareAndSet(false, true)) notifyProcessDetached()

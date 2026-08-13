@@ -23,4 +23,9 @@ class AffectedSettingsTest {
     fun `animation is enabled by default`() {
         assertTrue(AffectedSettings.State().animateWhileRunning)
     }
+
+    @Test
+    fun `the full plan is the default failure strategy`() {
+        assertFalse(AffectedSettings.State().stopAfterFirstFailure)
+    }
 }
