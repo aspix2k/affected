@@ -424,6 +424,29 @@
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/sbt", "conformance/cli-fixtures/sbt-multi"],
       "gates": [".github/workflows/conformance.yml"]
+    },
+    {
+      "id": "ANT",
+      "implementation": "com.aspix2k.affected.build.AntBuildSystem",
+      "ecosystem": "Ant",
+      "languages": ["Java", "Kotlin"],
+      "runners": ["ant test", "ant compile"],
+      "selection": ["project"],
+      "selectionProofs": [
+        {
+          "units": ["project"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAntConformanceTest.kt",
+          "marker": "ant runs the project test command for the affected root",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        }
+      ],
+      "versions": "Apache Ant 1.10.x; tested with 1.10.17; project-level targets until imported graphs are proven",
+      "support": "supported",
+      "fixtures": ["conformance/cli-fixtures/ant"],
+      "gates": [".github/workflows/conformance.yml"]
     }
   ]
 }

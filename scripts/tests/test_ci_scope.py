@@ -34,9 +34,19 @@ class CiScopeTest(unittest.TestCase):
                     ".github/workflows/queue.yml",
                     ".github/dependabot.yml",
                     ".github/workflows/dependency-graph.yml",
+                    ".gitignore",
+                    ".gitattributes",
                 ]
             ),
             ci_scope.empty_scope(),
+        )
+
+    def test_gitignore_does_not_open_dependency_review(self) -> None:
+        """Ignore files do not change resolved dependencies or require a PR snapshot."""
+        self.assertEqual(ci_scope.scope_for([".gitignore"]), ci_scope.empty_scope())
+        self.assertEqual(
+            ci_scope.scope_for([".gitignore", "core/src/main/kotlin/Foo.kt"]),
+            {"plugin": True, "health": False, "codeql": True, "dependencies": False},
         )
 
     def test_kotlin_source_runs_plugin_and_codeql(self) -> None:

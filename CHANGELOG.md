@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Detect conventional Ant roots from `build.xml` and run one `ant test` or `ant compile` session; Gradle and Maven roots stay off this adapter, and a `junit` target is used when `test` is absent.
 - Narrow hierarchical Kotlin Multiplatform source sets so `nativeMain` keeps native target tests, `appleMain` keeps Apple tests, and included-build task paths stay in the same family; `commonMain` and unproved paths keep every target task.
 - Narrow Kotlin Multiplatform target tests to the source-set family of the change (`androidMain` keeps `testDebugUnitTest`, `iosMain` keeps iOS tests); `commonMain` and unproved paths keep every target task.
 - Treat public Scala and Groovy declarations as API changes so mixed Kotlin/Java/Scala/Groovy consumers are compiled; private members still do not.
@@ -60,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Keep `.gitignore` and `.gitattributes` out of the dependency-review gate so a fixture ignore edit does not require a pull-request snapshot that is never submitted.
 - Run Submit dependency graph only after a successful main `push` or `workflow_dispatch` generate job; a pull-request graph whose generate step is skipped no longer fails submit.
 - Pass Pest `--configuration` and `--no-output` before suite paths so Pest 5.1.1 cannot append those flags after them, and resolve the generated XML bootstrap from the project root.
 - Read Maven Central metadata through the JetBrains cache-redirector first so a Central 429 cannot fail Scripts; invalid metadata and 404 still fail closed.
