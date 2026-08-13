@@ -21,6 +21,8 @@ class AffectedSettings : PersistentStateComponent<AffectedSettings.State> {
         var runBeforeCommit: Boolean = false,
         @Volatile
         var runBeforePush: Boolean = false,
+        @Volatile
+        var stopAfterFirstFailure: Boolean = false,
     )
 
     @Volatile
@@ -45,6 +47,10 @@ class AffectedSettings : PersistentStateComponent<AffectedSettings.State> {
     var runBeforePush: Boolean
         get() = state.runBeforePush
         set(value) { state.runBeforePush = value }
+
+    var stopAfterFirstFailure: Boolean
+        get() = state.stopAfterFirstFailure
+        set(value) { state.stopAfterFirstFailure = value }
 
     override fun getState(): State = state
 

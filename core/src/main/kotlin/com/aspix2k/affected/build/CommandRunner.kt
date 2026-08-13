@@ -1,6 +1,7 @@
 package com.aspix2k.affected.build
 
 import com.aspix2k.affected.AffectedRunSessions
+import com.aspix2k.affected.AffectedSettings
 import com.intellij.execution.RunContentExecutor
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.ProcessEvent
@@ -46,6 +47,7 @@ object CommandRunner {
             File(workingDirectory),
             commands,
             unresolvedMessage ?: DEFAULT_UNRESOLVED_MESSAGE,
+            continueAfterFailure = planContinuesAfterFailure(),
         )
         ProcessTerminatedListener.attach(handler)
         AffectedRunSessions.getInstance(project).register(handler)
@@ -76,6 +78,7 @@ object CommandRunner {
             File(workingDirectory),
             commands,
             unresolvedMessage ?: DEFAULT_UNRESOLVED_MESSAGE,
+            continueAfterFailure = planContinuesAfterFailure(),
         )
         ProcessTerminatedListener.attach(handler)
         AffectedRunSessions.getInstance(project).register(handler)
@@ -201,6 +204,9 @@ private fun destroyProcessTree(process: Process) {
     runCatching { process.errorStream.close() }
     runCatching { process.outputStream.close() }
 }
+
+private fun planContinuesAfterFailure(): Boolean =
+    continuesAfterFailure(AffectedSettings.getInstance().stopAfterFirstFailure)
 
 private const val DEFAULT_CAPTURE_LIMIT = 16 * 1024 * 1024
 private const val CAPTURE_READER_TIMEOUT_MILLIS = 5_000L
