@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Select named Pest 5.1.1 `it()` / `test()` cases that statically reference a changed PSR-4 class; `describe()`, hooks, dynamic names and file-scope uses keep the selected files.
+- Select changed standard-library unittest modules by native path when every planned package change is a regular `test_*.py` / `*_test.py` file; production and unproved changes keep `unittest discover`.
 - Select Pest 5.1.1 tests that statically `use` a changed PSR-4 production class; unmapped or unreferenced production files keep the package suite.
 - Narrow cargo-nextest to changed Rust files with a native `file()` filter when the change set stays package-selective; workspace-widening changes keep the full nextest command.
 - Select `Test*` functions from a changed Go `*_test.go` file with `go test -run`; production and unproved Go changes keep the package test command.

@@ -78,7 +78,7 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
         val adapter = configuredPytestAdapter()
             ?: findPytestAdapter(Path.of(PathManager.getJarPathForClass(PythonBuildSystem::class.java)))
         return if (adapter == null) {
-            pythonCommands(root, tasks, modules(project))
+            pythonCommands(root, tasks, modules(project), changes)
         } else {
             pythonCommands(root, tasks, modules(project), changes, adapter)
         }
@@ -93,6 +93,13 @@ private val PYTHON_TEST_DIRECTORIES = setOf("test", "tests")
 internal fun pythonCommands(root: String, tasks: List<String>, modules: List<BuildModule>): List<CliCommand> {
     return resolvedPythonCommands(root, tasks, modules, null, null)
 }
+
+internal fun pythonCommands(
+    root: String,
+    tasks: List<String>,
+    modules: List<BuildModule>,
+    changes: BuildChanges,
+): List<CliCommand> = resolvedPythonCommands(root, tasks, modules, changes, null)
 
 internal fun pythonCommands(
     root: String,
@@ -132,11 +139,16 @@ private fun pythonTestCommands(
     adapter: Path?,
 ): List<CliCommand> {
     if (pythonTestRunner(File(root)) == PythonTestRunner.UNITTEST) {
-        return packages.map { path ->
-            CliCommand(
-                "unittest $path",
-                listOf("python", "-m", "unittest", "discover", "-s", path, "-t", "."),
-            )
+        val selected = changes?.let { selectUnittestFiles(root, packages, it) }
+        return if (selected == null) {
+            packages.map { path ->
+                CliCommand(
+                    "unittest $path",
+                    listOf("python", "-m", "unittest", "discover", "-s", path, "-t", "."),
+                )
+            }
+        } else {
+            listOf(CliCommand("unittest", listOf("python", "-m", "unittest") + selected))
         }
     }
     val context = changes?.let { pythonExactContext(root, packages, modules, it) }
@@ -146,6 +158,44 @@ private fun pythonTestCommands(
         listOf(CliCommand("pytest", listOf("python", adapter.toString(), context, "--") + packages))
     }
 }
+
+private fun selectUnittestFiles(
+    root: String,
+    packages: List<String>,
+    changes: BuildChanges,
+): List<String>? = runCatching {
+    require(changes.comparedToBase)
+    require(changes.files.isNotEmpty() && changes.files.size <= MAX_PYTHON_CONTEXT_PATHS)
+    require(changes.files.toSet() == changes.exactSelectionEligible)
+    val rootPath = Path.of(root).toAbsolutePath().normalize()
+    require(Files.isDirectory(rootPath, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(rootPath))
+    val roots = packages.map { packageName ->
+        val directory = rootPath.resolve(packageName).normalize()
+        require(directory.startsWith(rootPath))
+        require(Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(directory))
+        directory
+    }
+    val selected = changes.files.map { raw ->
+        val requested = Path.of(raw).toAbsolutePath().normalize()
+        require(Files.isRegularFile(requested, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(requested))
+        val real = requested.toRealPath(LinkOption.NOFOLLOW_LINKS)
+        require(real.startsWith(rootPath))
+        require(isPythonTestModule(real.toFile()))
+        require(roots.any { real.startsWith(it) })
+        val relative = rootPath.relativize(real).toString().replace('\\', '/')
+        require(relative.isNotEmpty() && !relative.startsWith("../"))
+        relative
+    }.distinct().sorted()
+    require(selected.isNotEmpty())
+    require(
+        packages.all { packageName ->
+            selected.any { relative ->
+                packageName == "." || relative == packageName || relative.startsWith("$packageName/")
+            }
+        },
+    )
+    selected
+}.getOrNull()
 
 private fun pythonExactContext(
     root: String,
