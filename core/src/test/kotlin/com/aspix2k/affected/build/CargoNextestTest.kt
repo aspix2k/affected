@@ -111,6 +111,14 @@ class CargoNextestTest {
     }
 
     @Test
+    fun `nextest discovery disables ambient Cargo color`() {
+        assertEquals(
+            mapOf("CARGO" to "/verified/cargo", "CARGO_TERM_COLOR" to "never"),
+            cargoNextestDiscoveryEnvironment("/verified/cargo"),
+        )
+    }
+
+    @Test
     fun `unsupported nextest settings retain cargo test`() {
         val configs = listOf(
             "nextest-version = { required = '0.9.85' }\n[script.setup]\ncommand = 'prepare'",

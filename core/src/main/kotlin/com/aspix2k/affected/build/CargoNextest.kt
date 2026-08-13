@@ -26,6 +26,11 @@ internal data class CargoNextestPlan(
     val executableIdentity: String = TEST_EXECUTABLE_IDENTITY,
 )
 
+internal fun cargoNextestDiscoveryEnvironment(cargo: String): Map<String, String> = mapOf(
+    "CARGO" to cargo,
+    "CARGO_TERM_COLOR" to "never",
+)
+
 internal fun detectCargoNextest(
     root: File,
     versionOutput: String?,
