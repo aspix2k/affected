@@ -1,8 +1,10 @@
+import info.solidsoft.gradle.pitest.PitestTask
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 
 plugins {
     kotlin("jvm")
     id("org.jetbrains.intellij.platform.module")
+    id("info.solidsoft.pitest")
 }
 
 repositories {
@@ -54,4 +56,18 @@ tasks.test {
     )
     System.getProperty("affected.phpunitVersion")?.let { systemProperty("affected.phpunitVersion", it) }
     testLogging { events("passed", "failed", "skipped") }
+}
+
+pitest {
+    targetClasses.set(listOf("com.aspix2k.affected.TestRootResolver*"))
+    targetTests.set(listOf("com.aspix2k.affected.TestRootResolverTest*"))
+    mutators.set(listOf("STRONGER"))
+    outputFormats.set(listOf("XML", "HTML"))
+    threads.set(4)
+    timestampedReports.set(false)
+    timeoutConstInMillis.set(8_000)
+}
+
+tasks.named<PitestTask>("pitest") {
+    additionalClasspath.from(configurations.named("intellijPlatformTestClasspath"))
 }

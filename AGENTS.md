@@ -102,6 +102,8 @@ a running IDE and broke four tests.
 
 Surviving mutants are triaged, not chased. Most are `RemoveConditionalMutator`
 hits on null checks the Kotlin compiler generates: no test can kill them because
-behaviour does not change. Never weaken production code or add an
-assertion-free test to raise the score. Add a test only when a survivor reveals a
+behaviour does not change. The gate may classify only
+`VoidMethodCallMutator` hits on `kotlin/jvm/internal/Intrinsics::checkNotNull*`
+as equivalent. Never weaken production code, add an assertion-free test, or
+exclude a package to raise the score. Add a test only when a survivor reveals a
 real gap in the contract.

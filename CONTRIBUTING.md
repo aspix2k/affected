@@ -22,7 +22,8 @@ environment variable.
 ./gradlew runIde        # sandbox IDE with the plugin installed
 ./gradlew buildPlugin   # zip in build/distributions
 ./gradlew verifyPlugin  # JetBrains plugin verifier
-./gradlew pitest        # mutation testing, slow
+./gradlew pitest        # root mutation testing, slow
+./gradlew :core:pitest  # core mutation slice, currently TestRootResolver
 ./gradlew :collector:spotbugsMain :collector:spotbugsMaven
 ./gradlew buildHealth
 scripts/quality.sh analyzers
@@ -63,11 +64,13 @@ Same-repository ready pull requests are enqueued with
 Required checks also listen for `merge_group` so a GitHub merge queue can be
 enabled if the repository is ever owned by an organization.
 
-PIT uses the same IntelliJ Platform runtime as the root test task. The complete
-2026-08-12 run took 2 minutes 3 seconds: 16 mutants were killed, 167 mutants in
-IDE glue had no coverage, and one Kotlin-generated non-null guard was
-equivalent. No meaningful mutant survived. Uncovered code remains visible in
-the report and is tracked in #94 rather than hidden with exclusions.
+PIT uses the same IntelliJ Platform runtime as the matching test task. The
+weekly workflow runs root `pitest` and `:core:pitest` and fails on any
+meaningful survivor in either XML report. Compiler-generated
+`Intrinsics.checkNotNull*` void-call mutants are classified as equivalent;
+uncovered mutants stay visible. The 2026-08-13 `:core` slice covers
+`TestRootResolver` (31 killed, 2 equivalent Intrinsics, 100% line coverage of
+mutated classes). Broader exact-impact mutation coverage remains in #94.
 
 The default wrapper, GitHub Actions and native conformance fixtures track the
 latest stable releases. Older versions belong only in an explicit compatibility
