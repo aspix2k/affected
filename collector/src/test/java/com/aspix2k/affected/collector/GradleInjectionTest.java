@@ -27,12 +27,18 @@ import java.util.stream.Stream;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class GradleInjectionTest {
+    private static final int COMPLETE_MAP_INVOCATIONS = 10;
+    private static final long GRADLE_HANG_BUDGET_MILLIS = 90_000L;
+    private static final long COMPLETE_MAP_SCENARIO_TIMEOUT_MILLIS =
+        COMPLETE_MAP_INVOCATIONS * 30_000L;
+
     @Rule
     public final TemporaryFolder temporary = new TemporaryFolder();
 
-    @Test(timeout = 120_000L)
+    @Test(timeout = COMPLETE_MAP_SCENARIO_TIMEOUT_MILLIS)
     public void realGradleWorkersProduceCompleteMapsAndReuseConfigurationCache() throws Exception {
         Path project = temporary.newFolder("project").toPath();
         writeFixture(project);
@@ -118,6 +124,22 @@ public class GradleInjectionTest {
         assertTrue(selected.getOutput(), readTaskManifest(selectedOutput).endsWith("all=false\n"));
         assertFallback(legacyOutput);
         assertTrue(unchanged.getOutput(), unchanged.getOutput().contains("Reusing configuration cache"));
+    }
+
+    @Test(timeout = 5_000L)
+    public void aHungGradleInvocationFailsInsideTheHangBudget() throws Exception {
+        long started = System.nanoTime();
+        try {
+            runBounded(400L, () -> {
+                Thread.sleep(10_000L);
+                return null;
+            });
+            fail("hung work must not return");
+        } catch (Exception ignored) {
+            // timeout or interrupt is the expected hang detection
+        }
+        long elapsed = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+        assertTrue("elapsed=" + elapsed, elapsed < 2_000L);
     }
 
     @Test(timeout = 120_000L)
@@ -223,7 +245,7 @@ public class GradleInjectionTest {
         return count;
     }
 
-    private BuildResult run(Path project, Path output) {
+    private BuildResult run(Path project, Path output) throws Exception {
         return run(project, output, "testDebugUnitTest", true);
     }
 
@@ -233,7 +255,7 @@ public class GradleInjectionTest {
         String task,
         boolean configurationCache,
         String... additionalArguments
-    ) {
+    ) throws Exception {
         return execute(project, output, task, configurationCache, null, additionalArguments);
     }
 
@@ -244,12 +266,11 @@ public class GradleInjectionTest {
         boolean configurationCache,
         String gradleVersion,
         String... additionalArguments
-    ) {
+    ) throws Exception {
         java.util.ArrayList<String> arguments = new java.util.ArrayList<String>();
         arguments.add(task);
         if (configurationCache) arguments.add("--configuration-cache");
         arguments.add("--max-workers=4");
-        arguments.add("--info");
         arguments.add("--init-script");
         arguments.add(required("affected.test.initScript"));
         arguments.add("-Daffected.collector.agent=" + required("affected.smoke.agent"));
@@ -262,7 +283,28 @@ public class GradleInjectionTest {
             .withProjectDir(project.toFile())
             .withArguments(arguments);
         if (gradleVersion != null) runner.withGradleVersion(gradleVersion);
-        return runner.build();
+        long started = System.nanoTime();
+        BuildResult result = runBounded(GRADLE_HANG_BUDGET_MILLIS, runner::build);
+        long elapsed = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+        System.out.println("[Affected conformance] gradle " + task + " " + elapsed + "ms");
+        return result;
+    }
+
+    private static <T> T runBounded(long budgetMillis, java.util.concurrent.Callable<T> work) throws Exception {
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "affected-gradle-budget");
+            thread.setDaemon(true);
+            return thread;
+        });
+        java.util.concurrent.Future<T> future = pool.submit(work);
+        try {
+            return future.get(budgetMillis, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException timeout) {
+            future.cancel(true);
+            throw new IllegalStateException("Gradle invocation exceeded " + budgetMillis + "ms hang budget", timeout);
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     private static void assertComplete(Path output, int tests, String buildOutput) throws Exception {
