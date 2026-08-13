@@ -259,7 +259,7 @@ private fun cargoNextestCommands(
         CliCommand(
             "cargo test --doc",
             listOf(
-                "cargo", "test", "--doc", "--manifest-path", File(root, "Cargo.toml").path,
+                cargo, "test", "--doc", "--manifest-path", File(root, "Cargo.toml").path,
             ) + if (failFast) selected else listOf("--no-fail-fast") + selected,
         )
     }

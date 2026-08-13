@@ -264,10 +264,26 @@ class CargoNextestTest {
             CargoNextestPlan(CargoNextestMode.PACKAGES, "default", "0.9.143", true, identity),
         )
 
-        val command = cargoCommandsForRun(root.path, listOf("alpha:$task"), environment).first()
+        val commands = cargoCommandsForRun(root.path, listOf("alpha:$task"), environment)
+        val command = commands.first()
 
         assertEquals(listOf(verified.canonicalPath, "nextest"), command.arguments.take(2))
         assertEquals(cargo.absolutePath, command.environment["CARGO"])
+        assertEquals(cargo.absolutePath, commands.last().arguments.first())
+    }
+
+    @Test
+    fun `cargo resolver preserves the rustup proxy invocation name`() {
+        if (isWindows()) return
+        val directory = createTempDirectory("cargo-rustup-proxy").toFile()
+        val rustup = File(directory, "rustup").apply {
+            writeText("rustup")
+            setExecutable(true)
+        }
+        val cargo = File(directory, "cargo").toPath()
+        Files.createSymbolicLink(cargo, rustup.toPath())
+
+        assertEquals(cargo.toAbsolutePath().normalize(), cargoExecutable(mapOf("PATH" to directory.path)))
     }
 
     @Test
