@@ -401,7 +401,6 @@ class CliAdapterConformanceTest {
         assertContains(result.output, "> rspec")
         assertContains(result.output, "> minitest")
         assertContains(result.output, "> test-unit")
-
     }
 
     @Test

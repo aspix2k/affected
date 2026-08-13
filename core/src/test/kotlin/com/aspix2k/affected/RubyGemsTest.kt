@@ -145,8 +145,14 @@ class RubyGemsTest {
 
         assertEquals("test-minitest+test-unit", modules.getValue("acme-minitest").testTask)
         assertEquals("test-minitest+test-unit", modules.getValue("acme-test-unit").testTask)
-        assertEquals(listOf(File(root, "gems/minitest").invariantSeparatorsPath), modules.getValue("acme-minitest").contentRoots)
-        assertEquals(listOf(File(root, "gems/test-unit").invariantSeparatorsPath), modules.getValue("acme-test-unit").contentRoots)
+        assertEquals(
+            listOf(File(root, "gems/minitest").invariantSeparatorsPath),
+            modules.getValue("acme-minitest").contentRoots,
+        )
+        assertEquals(
+            listOf(File(root, "gems/test-unit").invariantSeparatorsPath),
+            modules.getValue("acme-test-unit").contentRoots,
+        )
     }
 
     @Test

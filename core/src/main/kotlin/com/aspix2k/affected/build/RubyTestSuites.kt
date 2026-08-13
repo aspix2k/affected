@@ -17,8 +17,6 @@ internal object RubyTestSuites {
     private const val PREFIX = "test-"
     private const val FALLBACK_PREFIX = "fallback-"
     private const val MAX_SUITE_ENTRIES = 16_384
-    private val LOCKED_SPEC = Regex("""^    (rspec|minitest|test-unit) \(([^)]+)\)$""")
-    private val LOCKED_DEPENDENCY = Regex("""^  ([A-Za-z0-9][A-Za-z0-9._-]*)(?: \([^)]+\))?!?(?: \S+)?$""")
 
     fun task(directory: File, locked: Set<RubyTestRunner>?): String? {
         val hasSpec = suitePresent(File(directory, "spec")) ?: return null
@@ -42,50 +40,18 @@ internal object RubyTestSuites {
         return FALLBACK_PREFIX + encode(runners).removePrefix(PREFIX)
     }
 
-    fun lockedRunners(root: File): Set<RubyTestRunner>? {
-        val text = ManifestSearch.readText(File(root, "Gemfile.lock")) ?: return null
-        if (text.contains("<<<<<<<") || text.contains("=======") || text.contains(">>>>>>>")) return null
-        val lines = text.splitToSequence('\n').map { it.removeSuffix("\r") }.toList()
-        val dependencySections = lines.withIndex().filter { it.value == "DEPENDENCIES" }.map { it.index }
-        if (dependencySections.size != 1) return null
-        val gemSections = lines.withIndex().filter { it.value == "GEM" }.map { it.index }
-        if (gemSections.size != 1) return null
-        val gemEnd = lines.indices.firstOrNull { it > gemSections.single() && lines[it].isNotBlank() && !lines[it].startsWith(' ') }
-            ?: lines.size
-        val specSections = lines.subList(gemSections.single() + 1, gemEnd)
-            .withIndex()
-            .filter { it.value == "  specs:" }
-            .map { it.index + gemSections.single() + 1 }
-        if (specSections.size != 1) return null
-        if (lines.subList(gemSections.single() + 1, specSections.single()).filter { it.startsWith("  remote:") } !=
-            listOf("  remote: https://rubygems.org/")) return null
-        val versions = lines.subList(specSections.single() + 1, gemEnd).mapNotNull { line ->
-            LOCKED_SPEC.matchEntire(line)?.let { it.groupValues[1] to it.groupValues[2] }
-        }.groupBy({ it.first }, { it.second })
-        val names = linkedSetOf<String>()
-        for (line in lines.drop(dependencySections.single() + 1)) {
-            if (line.isBlank()) continue
-            if (!line.startsWith(' ')) break
-            val match = LOCKED_DEPENDENCY.matchEntire(line) ?: return null
-            match.groupValues[1].takeIf { name -> RubyTestRunner.entries.any { it.gem == name } }?.let { name ->
-                if ('!' in line) return null
-                names += name
-            }
-        }
-        return names.mapTo(linkedSetOf()) { name ->
-            val runner = RubyTestRunner.entries.single { it.gem == name }
-            val candidates = versions[name].orEmpty()
-            if (candidates.size != 1 || !runner.supports(candidates.single())) return null
-            runner
-        }
-    }
+    fun lockedRunners(root: File): Set<RubyTestRunner>? = RubyLockFile.runners(root)
 
     fun runners(task: String): List<RubyTestRunner>? {
         if (task == RubyGems.TEST) return listOf(RubyTestRunner.RSPEC)
         val prefix = listOf(PREFIX, FALLBACK_PREFIX).singleOrNull(task::startsWith) ?: return null
         val commands = task.removePrefix(prefix).split('+')
-        if (commands.isEmpty() || commands.any(String::isEmpty) || commands.distinct().size != commands.size) return null
-        val parsed = commands.map { command -> RubyTestRunner.entries.singleOrNull { it.command == command } ?: return null }
+        if (commands.isEmpty() || commands.any(String::isEmpty) || commands.distinct().size != commands.size) {
+            return null
+        }
+        val parsed = commands.map { command ->
+            RubyTestRunner.entries.singleOrNull { it.command == command } ?: return null
+        }
         return parsed.takeIf { it == it.sortedBy(RubyTestRunner::ordinal) }
     }
 
@@ -114,23 +80,30 @@ internal object RubyTestSuites {
         val pending = ArrayDeque<Path>()
         pending.add(root)
         var entries = 0
-        while (pending.isNotEmpty()) {
+        var valid = true
+        while (valid && pending.isNotEmpty()) {
             Files.newDirectoryStream(pending.removeFirst()).use { children ->
                 for (child in children) {
+                    if (!valid) break
                     entries += 1
-                    if (entries > MAX_SUITE_ENTRIES || Files.isSymbolicLink(child)) return false
+                    val unreadable = entries > MAX_SUITE_ENTRIES ||
+                        Files.isSymbolicLink(child) ||
+                        (
+                            !Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS) &&
+                                !Files.isRegularFile(child, LinkOption.NOFOLLOW_LINKS)
+                            )
                     when {
+                        unreadable -> valid = false
                         Files.isDirectory(child, LinkOption.NOFOLLOW_LINKS) -> pending.add(child)
-                        !Files.isRegularFile(child, LinkOption.NOFOLLOW_LINKS) -> return false
                     }
                 }
             }
         }
-        true
+        valid
     }.getOrDefault(false)
 }
 
-private fun RubyTestRunner.supports(version: String): Boolean {
+internal fun RubyTestRunner.supports(version: String): Boolean {
     val stable = Regex("""^(\d+)\.(\d+)\.(\d+)$""").matchEntire(version)?.groupValues ?: return false
     val major = stable[1].toIntOrNull() ?: return false
     val minor = stable[2].toIntOrNull() ?: return false

@@ -60,46 +60,95 @@ class RubyBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
 
 private val RUBY_TEST_DIRECTORIES = setOf("test", "spec")
 
+private data class RubySelection(
+    val runners: List<RubyTestRunner>,
+    val directories: List<String>,
+    val fallback: Boolean,
+)
+
 internal fun rubyCommands(root: String, tasks: List<String>, modules: List<BuildModule>): List<CliCommand> {
+    val selected = selectRubySuites(root, tasks, modules) ?: return emptyList()
+    val suiteState = cachedSuiteState(root)
+    if (!fallbackLayoutHolds(selected, suiteState)) return emptyList()
+    return runnerCommands(selected, suiteState)
+}
+
+private fun selectRubySuites(
+    root: String,
+    tasks: List<String>,
+    modules: List<BuildModule>,
+): List<RubySelection>? {
     val byName = modules.associateBy { it.executionId }
-    val suiteStates = mutableMapOf<String, Boolean?>()
-    fun suiteState(path: String): Boolean? {
-        if (suiteStates.containsKey(path)) return suiteStates[path]
-        return RubyTestSuites.suitePresent(File(root, path)).also { suiteStates[path] = it }
-    }
-    val selected = tasks.map { task ->
-        val name = task.substringBeforeLast(':')
+    val selected = mutableListOf<RubySelection>()
+    for (task in tasks) {
+        val module = byName[task.substringBeforeLast(':')] ?: return null
         val plannedTask = task.substringAfterLast(':')
-        val module = byName[name] ?: return emptyList()
-        if (module.testTask != plannedTask) return emptyList()
-        val directories = module.contentRoots.map { relativeRubyPath(root, it) ?: return emptyList() }
-        RubyTestSuites.runners(plannedTask)?.let { Triple(it, directories, RubyTestSuites.isFallback(plannedTask)) }
-            ?: return emptyList()
+        if (module.testTask != plannedTask) return null
+        val directories = module.contentRoots.map { relativeRubyPath(root, it) ?: return null }
+        val runners = RubyTestSuites.runners(plannedTask) ?: return null
+        selected += RubySelection(runners, directories, RubyTestSuites.isFallback(plannedTask))
     }
-    selected.filter { it.third }.forEach { (runners, roots) ->
-        roots.forEach { path ->
-            val spec = suiteState(if (path == ".") "spec" else "$path/spec") ?: return emptyList()
-            val test = suiteState(if (path == ".") "test" else "$path/test") ?: return emptyList()
-            if (spec && RubyTestRunner.RSPEC !in runners) return emptyList()
-            if (test && runners.none { it != RubyTestRunner.RSPEC }) return emptyList()
+    return selected
+}
+
+private fun cachedSuiteState(root: String): (String) -> Boolean? {
+    val suiteStates = mutableMapOf<String, Boolean?>()
+    return { path ->
+        if (suiteStates.containsKey(path)) {
+            suiteStates.getValue(path)
+        } else {
+            RubyTestSuites.suitePresent(File(root, path)).also { suiteStates[path] = it }
         }
     }
-    return RubyTestRunner.entries.mapNotNull { runner ->
-        val paths = mutableListOf<String>()
-        selected.filter { runner in it.first }.forEach { (_, roots, fallback) ->
-            roots.forEach { path ->
-                when (val suite = suitePath(path, runner, fallback, ::suiteState)) {
-                    null -> return emptyList()
-                    "" -> Unit
-                    else -> paths += suite
-                }
-            }
-        }
-        val distinctPaths = paths.distinct()
-        distinctPaths.takeIf(List<String>::isNotEmpty)?.let {
-            CliCommand(runner.command, listOf("bundle", "exec", runner.command) + it.map(::rubyRunnerPath))
+}
+
+private fun fallbackLayoutHolds(
+    selected: List<RubySelection>,
+    suiteState: (String) -> Boolean?,
+): Boolean {
+    for ((runners, roots, fallback) in selected) {
+        if (!fallback) continue
+        for (path in roots) {
+            val spec = suiteState(if (path == ".") "spec" else "$path/spec") ?: return false
+            val test = suiteState(if (path == ".") "test" else "$path/test") ?: return false
+            if (spec && RubyTestRunner.RSPEC !in runners) return false
+            if (test && runners.none { it != RubyTestRunner.RSPEC }) return false
         }
     }
+    return true
+}
+
+private fun runnerCommands(
+    selected: List<RubySelection>,
+    suiteState: (String) -> Boolean?,
+): List<CliCommand> {
+    val commands = mutableListOf<CliCommand>()
+    for (runner in RubyTestRunner.entries) {
+        val paths = pathsForRunner(runner, selected, suiteState) ?: return emptyList()
+        if (paths.isNotEmpty()) {
+            commands += CliCommand(
+                runner.command,
+                listOf("bundle", "exec", runner.command) + paths.map(::rubyRunnerPath),
+            )
+        }
+    }
+    return commands
+}
+
+private fun pathsForRunner(
+    runner: RubyTestRunner,
+    selected: List<RubySelection>,
+    suiteState: (String) -> Boolean?,
+): List<String>? {
+    val paths = mutableListOf<String>()
+    for ((runners, roots, fallback) in selected) {
+        if (runner !in runners) continue
+        for (path in roots) {
+            val suite = suitePath(path, runner, fallback, suiteState) ?: return null
+            if (suite.isNotEmpty()) paths += suite
+        }
+    }
+    return paths.distinct()
 }
 
 private fun suitePath(
