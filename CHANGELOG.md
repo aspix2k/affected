@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-08-13
+
 ### Added
 
 - Run affected Cargo workspace packages through repository-configured cargo-nextest 0.9.x profiles, retaining `cargo test --doc` and conservative `cargo test` fallback when exact execution cannot be proven.
@@ -316,7 +318,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v2.0.1...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/aspix2k/affected/compare/v2.0.1...v2.1.0
 [2.0.1]: https://github.com/aspix2k/affected/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/aspix2k/affected/compare/v1.14.1...v2.0.0
 [1.14.1]: https://github.com/aspix2k/affected/compare/v1.14.0...v1.14.1
