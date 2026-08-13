@@ -129,6 +129,8 @@ jobs:
     env:
       CARGO_NEXTEST_VERSION: "0.9.143"
       CARGO_NEXTEST_SHA256: "66786b9abe23920d022a182d1416b1bbc8130dd4872a9553d76985a1708dcd1e"
+      BAZELISK_VERSION: "1.29.0"
+      BAZELISK_SHA256: "5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -176,6 +178,26 @@ jobs:
           [[ -f "$destination/cargo-nextest" && ! -L "$destination/cargo-nextest" ]]
           chmod 0755 "$destination/cargo-nextest"
           [[ "$("$destination/cargo-nextest" --version)" == "cargo-nextest $CARGO_NEXTEST_VERSION "* ]]
+          printf '%s\n' "$destination" >> "$GITHUB_PATH"
+      - name: Install Bazelisk
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BAZELISK_VERSION" =~ ^1\.[0-9]+\.[0-9]+$ ]]
+          [[ "$BAZELISK_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          binary="$RUNNER_TEMP/bazelisk"
+          destination="$RUNNER_TEMP/bazelisk-bin"
+          url="https://github.com/bazelbuild/bazelisk/releases/download/v$BAZELISK_VERSION/bazelisk-linux-amd64"
+          curl -q --fail --show-error --silent --location \
+            --proto '=https' --tlsv1.2 \
+            --connect-timeout 10 --max-time 120 --max-filesize 33554432 \
+            --retry 3 --retry-all-errors \
+            --output "$binary" "$url"
+          printf '%s  %s\n' "$BAZELISK_SHA256" "$binary" | sha256sum --check --strict
+          install -d -m 0700 "$destination"
+          install -m 0755 "$binary" "$destination/bazelisk"
+          ln -s bazelisk "$destination/bazel"
+          [[ -x "$destination/bazelisk" && -x "$destination/bazel" ]]
           printf '%s\n' "$destination" >> "$GITHUB_PATH"
       - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # master
         with:

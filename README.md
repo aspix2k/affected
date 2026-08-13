@@ -24,7 +24,7 @@
 </p>
 
 <!-- affected-support-summary:start -->
-Built for multi-module projects and monorepos across 13 supported build ecosystems and 11 JetBrains products. See the [support matrix](SUPPORT.md) for languages, test runners, selection units and evidence.
+Built for multi-module projects and monorepos across 14 supported build ecosystems and 11 JetBrains products. See the [support matrix](SUPPORT.md) for languages, test runners, selection units and evidence.
 <!-- affected-support-summary:end -->
 
 > A change in one package no longer starts checks for every unrelated package.

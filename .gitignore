@@ -18,5 +18,7 @@
 /conformance/cli-fixtures/ant/build/
 /conformance/cli-fixtures/ant/affected-alpha.marker
 /conformance/cli-fixtures/kotlin-toolchain/build/
+/conformance/cli-fixtures/bazel/bazel-*
+/conformance/cli-fixtures/bazel/MODULE.bazel.lock
 /core/src/main/dotnet/**/bin/
 /core/src/main/dotnet/**/obj/
