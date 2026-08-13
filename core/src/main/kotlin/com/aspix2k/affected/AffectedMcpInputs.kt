@@ -49,10 +49,15 @@ object AffectedMcpInputs {
         runBeforePush: Boolean? = null,
         animateWhileRunning: Boolean? = null,
     ): AffectedMcpView {
-        val branch = baseBranch?.let(::validateBaseBranch)
-        if (branch?.error == true) return branch
+        val resolvedBranch = if (baseBranch == null) {
+            current.baseBranch
+        } else {
+            val validated = validateBaseBranch(baseBranch)
+            if (validated.error) return validated
+            baseBranch.trim()
+        }
         val next = AffectedMcpSettings(
-            baseBranch = branch?.data?.get("baseBranch") as String? ?: current.baseBranch,
+            baseBranch = resolvedBranch,
             checkConsumers = checkConsumers ?: current.checkConsumers,
             runBeforeCommit = runBeforeCommit ?: current.runBeforeCommit,
             runBeforePush = runBeforePush ?: current.runBeforePush,
@@ -72,19 +77,13 @@ object AffectedMcpInputs {
         )
     }
 
-    private fun taskName(name: String): Boolean =
-        name.isNotEmpty() && name.length <= MAX_TASK_LENGTH && TASK_NAME.matches(name)
+    private fun taskName(name: String): Boolean = TASK_NAME.matches(name)
 
     private fun branchName(name: String): Boolean =
-        name.isNotEmpty() &&
-            name.length <= MAX_BRANCH_LENGTH &&
-            !name.contains("..") &&
-            BRANCH_NAME.matches(name)
+        !name.contains("..") && BRANCH_NAME.matches(name)
 
     private fun onOff(value: Boolean): String = if (value) "on" else "off"
 
     private val TASK_NAME = Regex("[A-Za-z][A-Za-z0-9._-]{0,127}")
     private val BRANCH_NAME = Regex("[A-Za-z0-9][A-Za-z0-9._/-]{0,254}")
-    private const val MAX_TASK_LENGTH = 128
-    private const val MAX_BRANCH_LENGTH = 255
 }
