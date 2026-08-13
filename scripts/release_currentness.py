@@ -49,6 +49,11 @@ ALLOWED_HOSTS = {
     "www.php.net",
     "www.python.org",
 }
+MAVEN_CENTRAL_METADATA_BASES = (
+    "https://cache-redirector.jetbrains.com/repo1.maven.org/maven2",
+    "https://repo.maven.apache.org/maven2",
+)
+TRANSIENT_METADATA_CODES = {403, 429, 502, 503, 504}
 UNSTABLE = re.compile(
     r"(?i)(?:^|[.\-])(?:a(?=[.\-]?\d)|b(?=[.\-]?\d)|alpha|beta|rc|preview|eap|milestone|snapshot|dev|canary|m(?=\d))(?:[.\-]|\d|$)"
 )
@@ -390,6 +395,30 @@ def metadata_versions(transport: Transport, base: str, name: str) -> list[str]:
     return [node.text or "" for node in root.findall("./versioning/versions/version")]
 
 
+def is_transient_metadata_error(error: CurrentnessError) -> bool:
+    """Allow a fallback host only for transport failures, never for bad metadata."""
+    message = str(error)
+    if "Unable to read official release endpoint" not in message:
+        return False
+    match = re.search(r"HTTP Error (\d+)", message)
+    if match is None:
+        return True
+    return int(match.group(1)) in TRANSIENT_METADATA_CODES
+
+
+def maven_central_versions(transport: Transport, name: str) -> list[str]:
+    """Read Maven Central metadata from the JetBrains mirror, then official Central."""
+    last: CurrentnessError | None = None
+    for index, base in enumerate(MAVEN_CENTRAL_METADATA_BASES):
+        try:
+            return metadata_versions(transport, base, name)
+        except CurrentnessError as error:
+            last = error
+            if index == len(MAVEN_CENTRAL_METADATA_BASES) - 1 or not is_transient_metadata_error(error):
+                raise
+    raise CurrentnessError(f"Unable to read Maven metadata for {name}: {last}")
+
+
 def github_tags(transport: Transport, repository: str) -> list[dict[str, Any]]:
     """Read the bounded first page of GitHub tags for an action or tool."""
     data = transport.json(f"https://api.github.com/repos/{repository}/git/matching-refs/tags/")
@@ -511,7 +540,7 @@ def remote_version(source: dict[str, Any], policy: str, series: str | None, tran
         versions = metadata_versions(transport, "https://plugins.gradle.org/m2", f"{name}:{name}.gradle.plugin")
         return newest(versions, series), None
     if kind == "maven":
-        versions = metadata_versions(transport, "https://repo.maven.apache.org/maven2", name)
+        versions = maven_central_versions(transport, name)
         return newest(versions, series), None
     if kind == "jetbrains-maven":
         versions = metadata_versions(transport, "https://cache-redirector.jetbrains.com/intellij-dependencies", name)

@@ -149,6 +149,23 @@ class CiContractsTest(unittest.TestCase):
             with self.assertRaisesRegex(ci_contracts.CiContractError, "Kover must verify"):
                 ci_contracts.check(root)
 
+    def test_release_currentness_must_prefer_cache_redirector_metadata(self) -> None:
+        """A Central-only metadata lookup is how jackson-bom 429 failed Scripts."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / "scripts/release_currentness.py"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "https://cache-redirector.jetbrains.com/repo1.maven.org/maven2",
+                    "https://example.test/maven2",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "cache-redirector first"):
+                ci_contracts.check(root)
+
     def test_mcp_module_must_enforce_the_patched_jackson_bom(self) -> None:
         """The MCP Server plugin pulls Jackson 2.19 unless the BOM is enforced."""
         with TemporaryDirectory() as directory:
@@ -179,6 +196,7 @@ class CiContractsTest(unittest.TestCase):
             ".github/workflows/dependency-graph-submit.yml",
             ".github/workflows/queue.yml",
             "scripts/ci_scope.py",
+            "scripts/release_currentness.py",
             "scripts/run_gradle.sh",
             "settings.gradle.kts",
             "mcp/build.gradle.kts",
