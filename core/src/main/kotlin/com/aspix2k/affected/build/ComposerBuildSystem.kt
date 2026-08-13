@@ -158,7 +158,7 @@ internal fun composerCommands(
             ComposerPackages.PEST -> {
                 val suites = paths.distinct().sorted()
                 val selected = changes?.let { selectPestTestFiles(root, suites, it) }
-                CliCommand("pest", pestArguments(root, selected?.paths ?: suites, selected?.filter))
+                CliCommand("pest", pestArguments(root, selected?.first ?: suites, selected?.second))
             }
             ComposerPackages.TEST ->
                 CliCommand("phpunit", listOf("php", "vendor/bin/phpunit") + paths.distinct())

@@ -6,16 +6,11 @@ import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
 
-internal data class PestSelection(
-    val paths: List<String>,
-    val filter: String? = null,
-)
-
 internal fun selectPestTestFiles(
     root: String,
     suitePaths: List<String>,
     changes: BuildChanges,
-): PestSelection? = runCatching {
+): Pair<List<String>, String?>? = runCatching {
     require(changes.comparedToBase)
     require(changes.files.isNotEmpty())
     require(changes.files.toSet() == changes.exactSelectionEligible)
@@ -26,46 +21,60 @@ internal fun selectPestTestFiles(
     require(Files.isDirectory(rootPath, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(rootPath))
     val realRoot = rootPath.toRealPath(LinkOption.NOFOLLOW_LINKS)
     val suites = suitePaths.map { suite -> realSuite(rootPath, realRoot, suite) }
-
-    val selected = LinkedHashSet<String>()
-    val datasetNames = LinkedHashSet<String>()
-    val productionClasses = LinkedHashSet<String>()
-    for (raw in changes.files) {
-        val requested = Path.of(raw).toAbsolutePath().normalize()
-        require(Files.isRegularFile(requested, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(requested))
-        val real = requested.toRealPath(LinkOption.NOFOLLOW_LINKS)
-        val suite = suites.singleOrNull { real.startsWith(it) }
-        val relative = pestRelative(realRoot, real)
-        when {
-            suite != null && isPestExactTestFile(suite, real) -> selected += relative
-            suite != null && isPestDatasetFile(suite, real) -> {
-                datasetNames += pestDatasetNames(real)
-                selected += relative
-            }
-            suite == null -> productionClasses += pestPsr4Class(realRoot, real) ?: return@runCatching null
-            else -> return@runCatching null
-        }
-    }
-    if (datasetNames.isNotEmpty()) {
-        val consumers = pestDatasetConsumers(realRoot, suites, datasetNames)
+    val classified = classifyPestChanges(realRoot, suites, changes.files)
+    val selected = LinkedHashSet(classified.paths)
+    if (classified.datasetNames.isNotEmpty()) {
+        val consumers = pestDatasetConsumers(realRoot, suites, classified.datasetNames)
         require(consumers.isNotEmpty())
         selected += consumers
     }
-    if (productionClasses.isNotEmpty()) {
-        val consumers = pestClassConsumers(realRoot, suites, productionClasses)
+    if (classified.productionClasses.isNotEmpty()) {
+        val consumers = pestClassConsumers(realRoot, suites, classified.productionClasses)
         require(consumers.isNotEmpty())
         selected += consumers
     }
     require(selected.isNotEmpty())
     require(suites.all { suite -> selected.any { coversSuite(realRoot, it, suite) } })
     val paths = selected.sorted()
-    val filter = if (productionClasses.isNotEmpty() && datasetNames.isEmpty()) {
-        pestNamedFilter(realRoot, paths, productionClasses)
-    } else {
-        null
-    }
-    PestSelection(paths, filter)
+    val filter = classified.namedFilter(realRoot, paths)
+    paths to filter
 }.getOrNull()
+
+private class ClassifiedPestChanges(
+    val paths: Set<String>,
+    val datasetNames: Set<String>,
+    val productionClasses: Set<String>,
+) {
+    fun namedFilter(root: Path, paths: List<String>): String? =
+        if (productionClasses.isNotEmpty() && datasetNames.isEmpty()) {
+            pestNamedFilter(root, paths, productionClasses)
+        } else {
+            null
+        }
+}
+
+private fun classifyPestChanges(root: Path, suites: List<Path>, files: List<String>): ClassifiedPestChanges {
+    val selected = LinkedHashSet<String>()
+    val datasetNames = LinkedHashSet<String>()
+    val productionClasses = LinkedHashSet<String>()
+    for (raw in files) {
+        val requested = Path.of(raw).toAbsolutePath().normalize()
+        require(Files.isRegularFile(requested, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(requested))
+        val real = requested.toRealPath(LinkOption.NOFOLLOW_LINKS)
+        val suite = suites.singleOrNull { real.startsWith(it) }
+        val relative = pestRelative(root, real)
+        when {
+            suite != null && isPestExactTestFile(suite, real) -> selected += relative
+            suite != null && isPestDatasetFile(suite, real) -> {
+                datasetNames += pestDatasetNames(real)
+                selected += relative
+            }
+            suite == null -> productionClasses += pestPsr4Class(root, real) ?: error("unmapped production")
+            else -> error("unproved pest change")
+        }
+    }
+    return ClassifiedPestChanges(selected, datasetNames, productionClasses)
+}
 
 private fun realSuite(root: Path, realRoot: Path, relative: String): Path {
     val requested = root.resolve(relative.removePrefix("./")).normalize()
@@ -277,7 +286,8 @@ private val USE_CLASS = Regex("""(?:^|[\r\n])\s*use\s+([A-Za-z_][A-Za-z0-9_\\]*)
 private val PEST_NAMED_TEST = Regex("""(?:^|[\r\n])\s*(?:it|test)\s*\(\s*['\"]([^'\"]+)['\"]""")
 private val PEST_TEST_CALL = Regex("""(?:^|[\r\n])\s*(?:it|test)\s*\(""")
 private val PEST_WIDENING = Regex(
-    """(?:^|[\r\n])\s*(?:describe|beforeEach|afterEach|beforeAll|afterAll|uses)\s*\(|(?:^|[\r\n])\s*(?:abstract\s+|final\s+)?class\s+""",
+    """(?:^|[\r\n])\s*(?:describe|beforeEach|afterEach|beforeAll|afterAll|uses)\s*\(""" +
+        """|(?:^|[\r\n])\s*(?:abstract\s+|final\s+)?class\s+""",
 )
 private val PEST_SAFE_FILTER = Regex("""[A-Za-z0-9][A-Za-z0-9 .:_-]*""")
 
