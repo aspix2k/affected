@@ -16,5 +16,6 @@
 /conformance/cli-fixtures/dotnet/**/bin/
 /conformance/cli-fixtures/dotnet/**/obj/
 /conformance/cli-fixtures/ant/build/
+/conformance/cli-fixtures/ant/affected-alpha.marker
 /core/src/main/dotnet/**/bin/
 /core/src/main/dotnet/**/obj/
