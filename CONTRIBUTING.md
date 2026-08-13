@@ -190,7 +190,9 @@ on failure unless their native contract explicitly disables fail-fast; Cargo
 nextest profiles with `fail-fast=false` still run the doctest step and preserve
 the aggregate failure.
 Independent roots and different build systems stay separate. A module already
-being verified is never also compiled as a consumer.
+being verified is never also compiled as a consumer. A changed Gradle module
+without test sources is compiled with the production Kotlin/Android compile
+task so Kotlin Multiplatform libraries do not become an empty plan.
 
 A `BuildSystem` supplies source matching, module identity, task names and
 execution, and registers itself through the

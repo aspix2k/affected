@@ -4,6 +4,7 @@ import com.aspix2k.affected.build.GradleBuildSystem
 import com.aspix2k.affected.build.gradleCompositeRoot
 import com.aspix2k.affected.build.gradleExecutionCoordinates
 import com.aspix2k.affected.build.gradleExecutionMetadata
+import com.aspix2k.affected.build.gradleProductionCompileTask
 import com.aspix2k.affected.build.gradleProjectPath
 import com.aspix2k.affected.build.gradleVerificationTasks
 import com.intellij.openapi.externalSystem.model.ProjectSystemId
@@ -143,6 +144,32 @@ class GradleTaskPathTest {
         assertEquals(
             "testDebugUnitTest" to "compileDebugUnitTestKotlin",
             gradleVerificationTasks(module.path, emptyList(), emptySet()),
+        )
+    }
+
+    @Test
+    fun `a production-only Android module compiles instead of running missing unit tests`() {
+        assertEquals(
+            "compileDebugKotlin",
+            gradleProductionCompileTask(
+                setOf("compileDebugKotlin", "compileDebugUnitTestKotlin", "assembleDebug"),
+                android = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `a production-only Kotlin module compiles metadata or main Kotlin`() {
+        assertEquals(
+            "compileKotlinMetadata",
+            gradleProductionCompileTask(
+                setOf("compileKotlinMetadata", "compileDebugKotlinAndroid"),
+                android = false,
+            ),
+        )
+        assertEquals(
+            "compileKotlin",
+            gradleProductionCompileTask(setOf("compileKotlin", "jar"), android = false),
         )
     }
 

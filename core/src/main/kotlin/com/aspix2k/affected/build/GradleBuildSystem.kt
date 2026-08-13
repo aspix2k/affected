@@ -49,6 +49,14 @@ class GradleBuildSystem : SuspendingBuildSystem {
         modules(project, readAction { snapshot(project) })
 
     private fun modules(project: Project, snapshot: Snapshot): List<BuildModule> {
+        if (snapshot.modules.isEmpty() && snapshot.linkedRoots.isNotEmpty()) {
+            return snapshot.linkedRoots.map { linked ->
+                val root = File(linked)
+                val android = gradleAndroidModule(linked, listOf(linked), emptySet()) ||
+                    File(root, "androidApp/src/main/AndroidManifest.xml").isFile
+                rootFallbackModule(root, "test", gradleProductionCompileTask(emptySet(), android) ?: "compileKotlin")
+            }
+        }
         return snapshot.modules.groupBy(Described::key).values.map { descriptions ->
             val first = descriptions.first()
             val roots = descriptions.flatMap(Described::roots).distinct()
@@ -233,22 +241,38 @@ class GradleBuildSystem : SuspendingBuildSystem {
     ): BuildModule {
         val source = roots.filterNot { it.contains("/build/") || it.contains("/.gradle/") }.minByOrNull { it.length }
         val availableTasks = tasks[projectPath] ?: source?.let(tasks::get).orEmpty()
-        val (testTask, compileTask) = gradleVerificationTasks(projectPath, roots, availableTasks)
+        val hasTests = roots.any(::holdsTests)
+        val android = gradleAndroidModule(projectPath, roots, availableTasks)
+        val (testTask, testCompile) = gradleVerificationTasks(projectPath, roots, availableTasks)
+        val compileTask = if (hasTests) {
+            testCompile
+        } else {
+            gradleProductionCompileTask(availableTasks, android) ?: testCompile
+        }
         return BuildModule(
             id = path,
             root = root,
             contentRoots = roots,
             testTask = testTask,
             compileTask = compileTask,
-            hasTests = roots.any(::holdsTests),
+            hasTests = hasTests,
             extraTasks = availableTasks,
             executionRoot = executionRoot,
             executionId = executionId,
         )
     }
 
-    private fun holdsTests(root: String): Boolean = TEST_SOURCE_DIRS.any { directory ->
-        File(root, directory).let { it.isDirectory && it.walkTopDown().any(::isSource) }
+    private fun holdsTests(root: String): Boolean {
+        val normalized = root.replace('\\', '/')
+        if (TEST_SOURCE_SET_MARKERS.any { marker ->
+                normalized.endsWith("/$marker") || "/$marker/" in normalized
+            }
+        ) {
+            return File(root).walkTopDown().any(::isSource)
+        }
+        return TEST_SOURCE_DIRS.any { directory ->
+            File(root, directory).let { it.isDirectory && it.walkTopDown().any(::isSource) }
+        }
     }
 
     private fun buildRootOf(moduleDir: File, project: Project): String {
@@ -285,7 +309,28 @@ class GradleBuildSystem : SuspendingBuildSystem {
     private companion object {
         const val SOURCE_SET_TYPE = "sourceSet"
         val SETTINGS_FILES = listOf("settings.gradle.kts", "settings.gradle")
-        val TEST_SOURCE_DIRS = listOf("src/test", "src/testDebug", "src/commonTest", "src/jvmTest")
+        val TEST_SOURCE_DIRS = listOf(
+            "src/test",
+            "src/testDebug",
+            "src/commonTest",
+            "src/jvmTest",
+            "src/androidUnitTest",
+            "src/androidInstrumentedTest",
+            "src/iosTest",
+            "src/iosSimulatorTest",
+        )
+        val TEST_SOURCE_SET_MARKERS = listOf(
+            "test",
+            "testDebug",
+            "commonTest",
+            "jvmTest",
+            "androidUnitTest",
+            "androidInstrumentedTest",
+            "iosTest",
+            "iosSimulatorTest",
+            "unitTest",
+            "androidTest",
+        )
 
         const val CACHE_DIRECTORY = "affected"
 
@@ -363,22 +408,37 @@ internal fun gradleCompositeRoot(ownerRoot: String, linkedRoots: List<String>, b
     return root?.toFile()?.invariantSeparatorsPath
 }
 
-internal fun gradleVerificationTasks(
+internal fun gradleAndroidModule(
     projectPath: String,
     roots: List<String>,
     availableTasks: Set<String>,
-): Pair<String, String> {
-    val android = "testDebugUnitTest" in availableTasks ||
+): Boolean =
+    "testDebugUnitTest" in availableTasks ||
+        "compileDebugKotlin" in availableTasks ||
         File(projectPath, "src/main/AndroidManifest.xml").isFile ||
         roots.any {
             File(it, "src/main/AndroidManifest.xml").isFile ||
                 File(it, "AndroidManifest.xml").isFile
         }
-    return if (android) {
-        "testDebugUnitTest" to "compileDebugUnitTestKotlin"
+
+internal fun gradleVerificationTasks(
+    projectPath: String,
+    roots: List<String>,
+    availableTasks: Set<String>,
+): Pair<String, String> = if (gradleAndroidModule(projectPath, roots, availableTasks)) {
+    "testDebugUnitTest" to "compileDebugUnitTestKotlin"
+} else {
+    "test" to "compileTestKotlin"
+}
+
+internal fun gradleProductionCompileTask(available: Set<String>, android: Boolean): String? {
+    val preferred = if (android) {
+        listOf("compileDebugKotlin", "compileDebugKotlinAndroid", "compileDebugJavaWithJavac", "compileKotlin")
     } else {
-        "test" to "compileTestKotlin"
+        listOf("compileKotlinMetadata", "compileKotlin", "compileDebugKotlinAndroid", "compileJava")
     }
+    return preferred.firstOrNull { it in available }
+        ?: preferred.first()
 }
 
 private val SOURCE_SET_NAMES = setOf("main", "unitTest", "androidTest", "test")
