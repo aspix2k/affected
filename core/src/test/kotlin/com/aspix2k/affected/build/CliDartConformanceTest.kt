@@ -19,7 +19,7 @@ class CliDartConformanceTest {
         resolve(root)
         val text = execute(root, command.arguments)
         assertContains(text, "AlphaTest")
-        assertContains(text, "All tests passed")
+        assertContains(text, "1 test passed")
     }
 
     private fun fixture(name: String, block: (File) -> Unit) {
