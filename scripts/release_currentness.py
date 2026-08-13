@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "release-currentness.json"
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_TOTAL_BYTES = 32 * 1024 * 1024
+MAX_RELEASE_ASSET_BYTES = 32 * 1024 * 1024
 MAX_ENTRIES = 128
 ALLOWED_HOSTS = {
     "api.github.com",
@@ -49,10 +50,11 @@ ALLOWED_HOSTS = {
     "www.python.org",
 }
 UNSTABLE = re.compile(
-    r"(?i)(?:^|[.\-])(?:alpha|beta|rc|preview|eap|milestone|snapshot|dev|canary|m(?=\d))(?:[.\-]|\d|$)"
+    r"(?i)(?:^|[.\-])(?:a(?=[.\-]?\d)|b(?=[.\-]?\d)|alpha|beta|rc|preview|eap|milestone|snapshot|dev|canary|m(?=\d))(?:[.\-]|\d|$)"
 )
 VERSION = re.compile(r"^[vV]?(\d+(?:\.\d+)+(?:[-+][0-9A-Za-z.-]+)?)$")
 SHA = re.compile(r"^[0-9a-f]{40}$")
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
 class CurrentnessError(RuntimeError):
@@ -303,6 +305,29 @@ def local_version(local: dict[str, Any]) -> tuple[str, str | None]:
             f"workflow value {name}",
         )
         return one(values, f"workflow value {name}"), None
+    if kind == "github-release-asset":
+        digest_name = local.get("digestName")
+        if not isinstance(digest_name, str):
+            raise CurrentnessError("GitHub release asset pin lacks a digest variable")
+        version = one(
+            workflow_pin_values(
+                local,
+                rf"(?m)^\s*{re.escape(name)}:\s*\"?([^\"\s$]+)\"?\s*$",
+                f"workflow value {name}",
+            ),
+            f"workflow value {name}",
+        )
+        digest = one(
+            workflow_pin_values(
+                local,
+                rf"(?m)^\s*{re.escape(digest_name)}:\s*\"?([0-9a-f]+)\"?\s*$",
+                f"workflow digest {digest_name}",
+            ),
+            f"workflow digest {digest_name}",
+        )
+        if not SHA256.fullmatch(digest):
+            raise CurrentnessError(f"Invalid SHA-256 workflow digest {digest_name}")
+        return version, digest
     if kind == "workflow-tool":
         values = workflow_pin_values(
             local,
@@ -403,6 +428,73 @@ def github_latest(transport: Transport, repository: str) -> tuple[str, set[str]]
     return version, github_ref_shas(transport, repository, versions[version])
 
 
+def github_release_asset_latest(
+    transport: Transport,
+    repository: str,
+    tag_prefix: str,
+    asset_template: str,
+    series: str | None,
+) -> tuple[str, set[str]]:
+    """Resolve the latest stable GitHub release asset and its published SHA-256."""
+    if (
+        not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository)
+        or not tag_prefix
+        or asset_template.count("{version}") != 1
+        or any(character in asset_template.replace("{version}", "") for character in "{}")
+    ):
+        raise CurrentnessError(f"Invalid GitHub release asset source for {repository!r}")
+    ref_prefix = f"{tag_prefix}{series}." if series else tag_prefix
+    encoded_prefix = urllib.parse.quote(ref_prefix, safe="")
+    refs = transport.json(
+        f"https://api.github.com/repos/{repository}/git/matching-refs/tags/{encoded_prefix}"
+    )
+    if not isinstance(refs, list) or len(refs) > 1000:
+        raise CurrentnessError(f"Invalid GitHub release tag list for {repository}")
+    versions: list[str] = []
+    for ref in refs:
+        tag_ref = str(ref.get("ref", "")) if isinstance(ref, dict) else ""
+        if not tag_ref.startswith("refs/tags/"):
+            raise CurrentnessError(f"Invalid GitHub release tag for {repository}")
+        tag = tag_ref.removeprefix("refs/tags/")
+        if not tag.startswith(tag_prefix):
+            raise CurrentnessError(f"Unexpected GitHub release tag {tag}")
+        try:
+            version = normalize_version(tag.removeprefix(tag_prefix))
+        except CurrentnessError:
+            continue
+        if version in versions:
+            raise CurrentnessError(f"Duplicate stable GitHub release {tag}")
+        versions.append(version)
+    version = newest(versions, series)
+    tag = f"{tag_prefix}{version}"
+    encoded_tag = urllib.parse.quote(tag, safe="")
+    release = transport.json(
+        f"https://api.github.com/repos/{repository}/releases/tags/{encoded_tag}"
+    )
+    if (
+        not isinstance(release, dict)
+        or release.get("tag_name") != tag
+        or release.get("draft") is not False
+        or release.get("prerelease") is not False
+    ):
+        raise CurrentnessError(f"Invalid stable GitHub release {tag}")
+    assets = release.get("assets")
+    if not isinstance(assets, list) or len(assets) > 256:
+        raise CurrentnessError(f"Invalid GitHub release assets for {repository}@{version}")
+    asset_name = asset_template.format(version=version)
+    matching = [asset for asset in assets if isinstance(asset, dict) and asset.get("name") == asset_name]
+    if len(matching) != 1:
+        raise CurrentnessError(f"Expected one official GitHub release asset {asset_name}")
+    asset = matching[0]
+    size = asset.get("size")
+    if asset.get("state") != "uploaded" or not isinstance(size, int) or not 0 < size <= MAX_RELEASE_ASSET_BYTES:
+        raise CurrentnessError(f"Invalid official GitHub release asset {asset_name}")
+    digest = str(asset.get("digest", ""))
+    if not digest.startswith("sha256:") or not SHA256.fullmatch(digest.removeprefix("sha256:")):
+        raise CurrentnessError(f"Missing or invalid official SHA-256 for {asset_name}")
+    return version, {digest.removeprefix("sha256:")}
+
+
 def remote_version(source: dict[str, Any], policy: str, series: str | None, transport: Transport) -> tuple[str, set[str] | None]:
     """Resolve the official stable version for one governed source."""
     kind = source.get("type")
@@ -426,6 +518,14 @@ def remote_version(source: dict[str, Any], policy: str, series: str | None, tran
         return newest(versions, series), None
     if kind in {"github", "github-release"}:
         return github_latest(transport, name)
+    if kind == "github-release-asset":
+        return github_release_asset_latest(
+            transport,
+            str(name),
+            str(source.get("tagPrefix", "")),
+            str(source.get("asset", "")),
+            series,
+        )
     if kind == "github-branch":
         branch = source.get("branch")
         data = transport.json(f"https://api.github.com/repos/{name}/git/ref/heads/{branch}")
@@ -614,6 +714,14 @@ def inventory_keys(local: dict[str, Any]) -> set[str]:
         occurrences = local.get("occurrences")
         paths = occurrences.keys() if isinstance(occurrences, dict) else [path]
         return {f"{kind}:{workflow_path}:{name}" for workflow_path in paths if isinstance(workflow_path, str)}
+    if kind == "github-release-asset":
+        occurrences = local.get("occurrences")
+        paths = occurrences.keys() if isinstance(occurrences, dict) else [path]
+        return {
+            f"workflow-env:{workflow_path}:{name}"
+            for workflow_path in paths
+            if isinstance(workflow_path, str)
+        }
     if kind == "workflow-matrix":
         return {f"workflow-matrix:{path}:{name}:{value}"}
     if kind in {"gradle-testkit", "cmake-minimum", "go-directive"}:

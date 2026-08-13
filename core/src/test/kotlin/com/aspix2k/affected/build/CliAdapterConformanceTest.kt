@@ -561,6 +561,17 @@ class CliAdapterConformanceTest {
         arguments: List<String>,
         environment: Map<String, String> = emptyMap(),
     ): String {
+        val result = executeResult(directory, arguments, environment)
+        assertTrue(result.completed, "Timed out: ${arguments.joinToString(" ")}\n${result.output}")
+        assertTrue(result.passed, "Failed: ${arguments.joinToString(" ")}\n${result.output}")
+        return result.output
+    }
+
+    private fun executeResult(
+        directory: File,
+        arguments: List<String>,
+        environment: Map<String, String> = emptyMap(),
+    ): CommandResult {
         val output = File.createTempFile("affected-cli-output", ".log")
         try {
             val builder = ProcessBuilder(arguments)
@@ -572,13 +583,13 @@ class CliAdapterConformanceTest {
             val completed = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             if (!completed) process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)
             val text = output.readText()
-            assertTrue(completed, "Timed out: ${arguments.joinToString(" ")}\n$text")
-            assertTrue(process.exitValue() == 0, "Failed: ${arguments.joinToString(" ")}\n$text")
-            return text
+            return CommandResult(completed, completed && process.exitValue() == 0, text)
         } finally {
             output.delete()
         }
     }
+
+    private data class CommandResult(val completed: Boolean, val passed: Boolean, val output: String)
 
     private companion object {
         const val CONFORMANCE_PROPERTY = "affected.cliConformance"

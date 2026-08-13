@@ -1,0 +1,7 @@
+nextest-version = { required = "0.9.143" }
+
+[profile.default]
+fail-fast = true
+
+[profile.ci]
+fail-fast = false

@@ -1,8 +1,15 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.BuildChanges
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.BuildSystem
+import com.aspix2k.affected.build.CargoBuildSystem
+import com.aspix2k.affected.build.CargoNextestMode
+import com.aspix2k.affected.build.CargoNextestPlan
 import com.aspix2k.affected.build.TransitiveTestConsumersBuildSystem
+import com.aspix2k.affected.build.WorkspaceChangesBuildSystem
+import com.aspix2k.affected.build.cargoCommands
+import com.aspix2k.affected.build.cargoNextestTask
 import com.intellij.openapi.project.Project
 import java.io.File
 import kotlin.io.path.createTempDirectory
@@ -88,6 +95,60 @@ class ModuleGraphTest {
     }
 
     @Test
+    fun `workspace changes widen both the prepared plan and affected module snapshot`() {
+        val root = createTempDirectory("module-graph-workspace").toFile()
+        val system = workspaceSystem()
+        val graph = ModuleGraph(
+            listOf(
+                ModuleGraph.Node(module(root, "alpha", "alpha"), system),
+                ModuleGraph.Node(module(root, "beta", "beta"), system),
+            ),
+        )
+        val resource = File(root, "alpha/schema.json").apply { writeText("{}") }
+        val changes = ProjectChanges.Result(listOf(resource), emptySet(), setOf(resource), comparedToBase = true)
+        val owners = graph.ownersForChanges(changes.toBuildChanges())
+
+        assertEquals(setOf("alpha", "beta"), owners.getValue(resource).mapTo(HashSet()) { it.id })
+        assertEquals(
+            setOf("alpha", "beta"),
+            affectedModules(graph, changes).mapTo(HashSet(), AffectedModule::id),
+        )
+        assertEquals(
+            listOf("alpha:test", "beta:test"),
+            verificationPlan(graph, changes, checkConsumers = false).groups.single().tasks,
+        )
+    }
+
+    @Test
+    fun `Cargo custom build plan widens UI and execution to the same workspace`() {
+        val root = createTempDirectory("module-graph-cargo-build-script").toFile()
+        val task = cargoNextestTask(CargoNextestPlan(CargoNextestMode.WORKSPACE, "default", "0.9.143", true))
+        val system = CargoBuildSystem()
+        val graph = ModuleGraph(
+            listOf(
+                ModuleGraph.Node(module(root, "alpha", "alpha").copy(testTask = task), system),
+                ModuleGraph.Node(module(root, "beta", "beta").copy(testTask = task), system),
+            ),
+        )
+        val source = File(root, "alpha/lib.rs").apply { writeText("pub fn alpha() {}") }
+        val changes = ProjectChanges.Result(listOf(source), emptySet(), setOf(source), comparedToBase = true)
+        val plan = verificationPlan(graph, changes, checkConsumers = false)
+
+        assertEquals(setOf("alpha", "beta"), affectedModules(graph, changes).mapTo(HashSet(), AffectedModule::id))
+        assertEquals(listOf("alpha:$task", "beta:$task"), plan.groups.single().tasks)
+        assertEquals(
+            listOf("cargo-nextest", "nextest", "run", "--manifest-path", File(root, "Cargo.toml").path),
+            cargoCommands(root.path, plan.groups.single().tasks, changes.toBuildChanges(), false)
+                .first().arguments.take(5),
+        )
+        assertEquals(
+            "--workspace",
+            cargoCommands(root.path, plan.groups.single().tasks, changes.toBuildChanges(), false)
+                .first().arguments.last(),
+        )
+    }
+
+    @Test
     fun `dotnet changes reach transitive test projects`() {
         val root = createTempDirectory("module-graph-dotnet").toFile()
         val alpha = module(root, "Alpha", "Alpha").copy(testTask = "build", compileTask = "build")
@@ -164,6 +225,11 @@ class ModuleGraphTest {
     }
 
     private fun dotnetSystem(): BuildSystem = transitiveSystem("DOTNET")
+
+    private fun workspaceSystem(): BuildSystem = object : BuildSystem by system("CARGO"), WorkspaceChangesBuildSystem {
+        override fun requiresWorkspace(module: BuildModule, changes: BuildChanges): Boolean =
+            changes.files.any { !it.endsWith(".rs") }
+    }
 
     private fun transitiveSystem(systemId: String): BuildSystem = object :
         BuildSystem,

@@ -80,6 +80,15 @@ and regenerate its lock rather than inventorying transitive versions.
 The complete live gate measured 35.98 seconds and 34.3 MB maximum RSS on
 macOS arm64 on 2026-08-12.
 
+Cargo conformance installs the checksummed official cargo-nextest archive pinned
+in `.github/workflows/conformance.yml`. Selective nextest execution requires a
+repository-owned `.config/nextest.toml`, cargo-nextest 0.9.143 or newer on the
+stable 0.9.x line and either the built-in/default profile or a declared profile
+selected by `NEXTEST_PROFILE`. Only its bounded `fail-fast` value is
+copied into the local execution snapshot; filters, retries, scripts, custom
+Cargo runners and other ambiguous configuration keep the existing conservative
+`cargo test` plan.
+
 `config/support-matrix.json` is the source of truth for supported JetBrains
 products, build systems, test runners, selection units and operating-system
 evidence. Every registered build-system extension must have an entry backed by
@@ -157,8 +166,11 @@ tasks can run through the composite root.
 
 `TaskPlanner` turns that into task groups, one per build system and execution
 root. Gradle and Maven use one native IDE invocation; CLI adapters place their
-bounded native command sequence behind one fail-fast process handler, so one
-root creates one Run tab even when the native tool requires multiple commands.
+bounded native command sequence behind one process handler, so one root creates
+one Run tab even when the native tool requires multiple commands. Commands stop
+on failure unless their native contract explicitly disables fail-fast; Cargo
+nextest profiles with `fail-fast=false` still run the doctest step and preserve
+the aggregate failure.
 Independent roots and different build systems stay separate. A module already
 being verified is never also compiled as a consumer.
 

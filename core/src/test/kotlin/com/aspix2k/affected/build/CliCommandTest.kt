@@ -396,6 +396,152 @@ class CliCommandTest {
         )
     }
 
+    @Test
+    fun `Cargo nextest batches selected packages with its native package filter`() {
+        val ciTask = cargoNextestTask(CargoNextestPlan(CargoNextestMode.PACKAGES, "ci", "0.9.143", false))
+        val ciConfig = requireNotNull(cargoNextestSnapshot(ciTask))
+        assertEquals(
+            listOf(
+                listOf(
+                    "cargo-nextest", "nextest", "run",
+                    "--manifest-path", "/workspace/Cargo.toml",
+                    "--config-file", ciConfig.path,
+                    "--profile", "ci", "--no-tests=pass",
+                    "-p", "core", "-p", "ui",
+                ),
+                listOf(
+                    "cargo", "test", "--doc", "--manifest-path", "/workspace/Cargo.toml",
+                    "--no-fail-fast",
+                    "-p", "core", "-p", "ui",
+                ),
+            ),
+            cargoCommands("/workspace", listOf("core:$ciTask", "ui:$ciTask")).map(CliCommand::arguments),
+        )
+        val defaultTask = cargoNextestTask("default")
+        val defaultConfig = requireNotNull(cargoNextestSnapshot(defaultTask))
+        assertEquals(
+            listOf(
+                listOf(
+                    "cargo-nextest", "nextest", "run",
+                    "--manifest-path", "/workspace/Cargo.toml",
+                    "--config-file", defaultConfig.path,
+                    "--profile", "default", "--no-tests=pass", "--workspace",
+                ),
+                listOf(
+                    "cargo", "test", "--doc", "--manifest-path", "/workspace/Cargo.toml", "--workspace",
+                ),
+            ),
+            cargoCommands("/workspace", listOf(".:$defaultTask")).map(CliCommand::arguments),
+        )
+    }
+
+    @Test
+    fun `Cargo nextest runs doctests only for selected doctested libraries`() {
+        val plan = CargoNextestPlan(CargoNextestMode.PACKAGES, "default", "0.9.143", true)
+        val commands = cargoCommands(
+            "/workspace",
+            listOf(
+                "library:${cargoNextestTask(plan, hasDoctests = true)}",
+                "binary:${cargoNextestTask(plan, hasDoctests = false)}",
+                "no-doc-lib:${cargoNextestTask(plan, hasDoctests = false)}",
+            ),
+        )
+
+        assertEquals(2, commands.size)
+        assertEquals(
+            listOf("-p", "library", "-p", "binary", "-p", "no-doc-lib"),
+            commands.first().arguments.takeLast(6),
+        )
+        assertEquals(listOf("-p", "library"), commands.last().arguments.takeLast(2))
+    }
+
+    @Test
+    fun `Cargo widens resource and generated changes to the workspace`() {
+        val changed = listOf("schema.json", "alpha/build.rs", "alpha/src/generated/value.rs")
+        val task = cargoNextestTask("default")
+        val config = requireNotNull(cargoNextestSnapshot(task))
+
+        changed.forEach { path ->
+            assertEquals(
+                listOf(
+                    listOf(
+                        "cargo-nextest", "nextest", "run",
+                        "--manifest-path", "/workspace/Cargo.toml",
+                        "--config-file", config.path,
+                        "--profile", "default", "--no-tests=pass", "--workspace",
+                    ),
+                    listOf(
+                        "cargo", "test", "--doc", "--manifest-path", "/workspace/Cargo.toml", "--workspace",
+                    ),
+                ),
+                cargoCommands(
+                    "/workspace",
+                    listOf("alpha:$task"),
+                    BuildChanges(
+                        files = listOf("/workspace/$path"),
+                        exactSelectionEligible = emptySet(),
+                        comparedToBase = true,
+                    ),
+                    unsafeCargoExecution = false,
+                ).map(CliCommand::arguments),
+            )
+            assertEquals(
+                listOf("cargo", "test", "--workspace"),
+                cargoCommands(
+                    "/workspace",
+                    listOf("alpha:test"),
+                    BuildChanges(
+                        files = listOf("/workspace/$path"),
+                        exactSelectionEligible = emptySet(),
+                        comparedToBase = true,
+                    ),
+                    unsafeCargoExecution = false,
+                ).single().arguments,
+            )
+        }
+    }
+
+    @Test
+    fun `Cargo keeps only a proven regular Rust source package selective`() {
+        val root = createTempDirectory("cargo-change").toFile()
+        val source = File(root, "alpha/src/lib.rs").apply { parentFile.mkdirs(); writeText("pub fn value() {}") }
+        val task = cargoNextestTask("default")
+        val expected = listOf("-p", "alpha")
+
+        assertEquals(
+            expected,
+            cargoCommands(
+                root.path,
+                listOf("alpha:$task"),
+                BuildChanges(listOf(source.path), setOf(source.path), comparedToBase = true),
+                unsafeCargoExecution = false,
+            ).first().arguments.takeLast(2),
+        )
+        source.delete()
+        assertTrue(
+            cargoCommands(
+                root.path,
+                listOf("alpha:$task"),
+                BuildChanges(listOf(source.path), emptySet(), comparedToBase = true),
+                unsafeCargoExecution = false,
+            ).first().arguments.contains("--workspace"),
+        )
+    }
+
+    @Test
+    fun `Cargo config appearing after analysis retains cargo test`() {
+        val root = createTempDirectory("cargo-nextest-command").toFile()
+        File(root, "Cargo.toml").writeText("[workspace]\n")
+        val task = cargoNextestTask("default")
+        File(root, ".cargo").mkdirs()
+        File(root, ".cargo/config.toml").writeText("[target.x86_64-unknown-linux-gnu]\nrunner = 'wrapper'")
+
+        assertEquals(
+            listOf("cargo", "test", "--workspace"),
+            cargoCommands(root.path, listOf("alpha:$task"), unsafeCargoExecution = true).single().arguments,
+        )
+    }
+
     private fun modules(root: String, vararg entries: String): List<BuildModule> =
         entries.toList().chunked(2).map { (id, relative) ->
             BuildModule(

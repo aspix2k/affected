@@ -22,6 +22,7 @@ internal data class CliCommand(
     val title: String,
     val arguments: List<String>,
     val environment: Map<String, String> = emptyMap(),
+    val continueOnFailure: Boolean = false,
 ) : CliStep {
     init {
         require(title.isNotBlank())
@@ -55,6 +56,7 @@ internal class SequentialProcessHandler(
     private val stopped = AtomicBoolean(false)
     private val lock = Any()
     private var next = 0
+    private var recordedExitCode = 0
 
     @Volatile
     private var current: OSProcessHandler? = null
@@ -101,7 +103,7 @@ internal class SequentialProcessHandler(
             )
             finish(1)
         } else {
-            finish(0)
+            finish(synchronized(lock) { recordedExitCode })
         }
 
         val mayResolve = synchronized(lock) {
@@ -168,6 +170,11 @@ internal class SequentialProcessHandler(
                     if (current === handler) current = null
                 }
                 if (event.exitCode == 0 && !stopped.get()) {
+                    AppExecutorUtil.getAppExecutorService().execute(::startNext)
+                } else if (event.exitCode != 0 && command.continueOnFailure && !stopped.get()) {
+                    synchronized(lock) {
+                        if (recordedExitCode == 0) recordedExitCode = event.exitCode
+                    }
                     AppExecutorUtil.getAppExecutorService().execute(::startNext)
                 } else {
                     finish(event.exitCode.takeIf { it != 0 } ?: 1)

@@ -320,12 +320,13 @@ class AffectedState(
     private suspend fun analyze(): AffectedAnalysis = withContext(Dispatchers.Default) {
         val changes = ProjectChanges.collectSuspending(project)
         val graph = ModuleGraph.create(project)
-        val owners = changes.files.associateWith(graph::nodesFor)
+        val directOwners = changes.files.associateWith(graph::nodesFor)
+        val owners = graph.ownersForChanges(changes.toBuildChanges(), directOwners)
 
         AffectedAnalysis(
             modules = affectedModules(owners.values.flatten()),
             changes = changes,
-            plans = Verification.prepare(graph, changes, owners),
+            plans = Verification.prepare(graph, changes, directOwners),
         )
     }
 
@@ -337,6 +338,9 @@ class AffectedState(
 
 internal fun affectedModules(graph: ModuleGraph, files: List<java.io.File>): List<AffectedModule> =
     affectedModules(files.flatMap(graph::nodesFor))
+
+internal fun affectedModules(graph: ModuleGraph, changes: ProjectChanges.Result): List<AffectedModule> =
+    affectedModules(graph.ownersForChanges(changes.toBuildChanges()).values.flatten())
 
 private fun affectedModules(nodes: List<ModuleGraph.Node>): List<AffectedModule> =
     nodes

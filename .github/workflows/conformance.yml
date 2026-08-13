@@ -126,6 +126,9 @@ jobs:
     name: CLI native fixtures / Linux
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      CARGO_NEXTEST_VERSION: "0.9.143"
+      CARGO_NEXTEST_SHA256: "66786b9abe23920d022a182d1416b1bbc8130dd4872a9553d76985a1708dcd1e"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -150,6 +153,29 @@ jobs:
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
         with:
           toolchain: "1.97.1"
+      - name: Install cargo-nextest
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$CARGO_NEXTEST_VERSION" =~ ^0\.9\.[0-9]+$ ]]
+          [[ "$CARGO_NEXTEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          archive="$RUNNER_TEMP/cargo-nextest.tar.gz"
+          destination="$RUNNER_TEMP/cargo-nextest-bin"
+          url="https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-$CARGO_NEXTEST_VERSION/cargo-nextest-$CARGO_NEXTEST_VERSION-x86_64-unknown-linux-gnu.tar.gz"
+          curl -q --fail --show-error --silent --location \
+            --proto '=https' --tlsv1.2 \
+            --connect-timeout 10 --max-time 120 --max-filesize 33554432 \
+            --retry 3 --retry-all-errors \
+            --output "$archive" "$url"
+          printf '%s  %s\n' "$CARGO_NEXTEST_SHA256" "$archive" | sha256sum --check --strict
+          [[ "$(tar -tzf "$archive")" == "cargo-nextest" ]]
+          [[ "$(tar -tvzf "$archive" | cut -c1)" == "-" ]]
+          install -d -m 0700 "$destination"
+          tar -xzf "$archive" --no-same-owner --no-same-permissions -C "$destination"
+          [[ -f "$destination/cargo-nextest" && ! -L "$destination/cargo-nextest" ]]
+          chmod 0755 "$destination/cargo-nextest"
+          [[ "$("$destination/cargo-nextest" --version)" == "cargo-nextest $CARGO_NEXTEST_VERSION "* ]]
+          printf '%s\n' "$destination" >> "$GITHUB_PATH"
       - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # master
         with:
           ruby-version: "4.0.6"
