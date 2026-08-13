@@ -401,6 +401,29 @@
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/cmake"],
       "gates": [".github/workflows/conformance.yml"]
+    },
+    {
+      "id": "SBT",
+      "implementation": "com.aspix2k.affected.build.SbtBuildSystem",
+      "ecosystem": "sbt",
+      "languages": ["Scala", "Java", "Kotlin", "Groovy"],
+      "runners": ["sbt test", "sbt compile"],
+      "selection": ["project"],
+      "selectionProofs": [
+        {
+          "units": ["project"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
+          "marker": "sbt runs the project test command for the affected root",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        }
+      ],
+      "versions": "sbt 1.12.x; Scala 3.3 LTS",
+      "support": "supported",
+      "fixtures": ["conformance/cli-fixtures/sbt"],
+      "gates": [".github/workflows/conformance.yml"]
     }
   ]
 }
