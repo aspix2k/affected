@@ -466,6 +466,7 @@ private val KMP_TEST_TASKS = listOf(
     "linuxX64Test",
     "macosArm64Test",
     "macosX64Test",
+    "mingwX64Test",
 )
 
 internal fun gradleProductionCompileTask(available: Set<String>, android: Boolean): String? {
