@@ -1,0 +1,3 @@
+[workspace]
+members = ["alpha", "beta", "gamma", "delta"]
+resolver = "2"

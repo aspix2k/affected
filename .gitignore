@@ -1,0 +1,19 @@
+# Build output of the root project and of every module, without swallowing
+# the source package named "build".
+/build/
+/*/build/
+/.gradle/
+/*/.gradle/
+/.idea/
+/.kotlin/
+/*/.kotlin/
+/.intellijPlatform/
+/*/.intellijPlatform/
+*.iml
+/local.properties
+/fixtures/
+/docs/superpowers/
+/conformance/cli-fixtures/dotnet/**/bin/
+/conformance/cli-fixtures/dotnet/**/obj/
+/core/src/main/dotnet/**/bin/
+/core/src/main/dotnet/**/obj/

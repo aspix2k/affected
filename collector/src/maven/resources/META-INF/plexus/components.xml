@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component-set>
+  <components>
+    <component>
+      <role>org.apache.maven.AbstractMavenLifecycleParticipant</role>
+      <role-hint>affected</role-hint>
+      <implementation>com.aspix2k.affected.collector.maven.AffectedMavenLifecycleParticipant</implementation>
+      <description>Affected Surefire collector integration</description>
+    </component>
+  </components>
+</component-set>

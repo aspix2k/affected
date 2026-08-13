@@ -1,0 +1,98 @@
+name: Dependency review
+
+on:
+  pull_request:
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: scope
+        run: python3 scripts/ci_scope.py --github-output "$GITHUB_OUTPUT"
+
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        if: steps.scope.outputs.dependencies == 'true'
+        with:
+          fail-on-severity: low
+          fail-on-scopes: runtime, development, unknown
+          vulnerability-check: true
+          license-check: false
+          retry-on-snapshot-warnings: true
+          retry-on-snapshot-warnings-timeout: 600
+          warn-only: false
+          comment-summary-in-pr: never
+          show-openssf-scorecard: false
+
+      - name: Require a complete dependency comparison
+        if: steps.scope.outputs.dependencies == 'true'
+        env:
+          BASE_SHA: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$BASE_SHA" =~ ^[0-9a-f]{40}$ || ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The dependency comparison SHAs are invalid."
+            exit 1
+          fi
+
+          response=$RUNNER_TEMP/dependency-review.json
+          headers=$RUNNER_TEMP/dependency-review.headers
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --silent --show-error \
+              --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              --dump-header "$headers" \
+              --output "$response" \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/dependency-graph/compare/$BASE_SHA...$HEAD_SHA"; then
+              comparison_state=$(awk '
+                {
+                  line = tolower($0)
+                  if (line ~ /^http\/[0-9.]+ 200([[:space:]]|$)/) {
+                    statuses++
+                    status_ok++
+                  } else if (line ~ /^http\//) {
+                    statuses++
+                  } else if (line ~ /^content-type:[[:space:]]*application\/json([;+[:space:]]|$)/) {
+                    content_types++
+                  } else if (line ~ /^x-github-dependency-graph-snapshot-warnings:/) {
+                    warnings++
+                    sub(/^[^:]+:[[:space:]]*/, "", line)
+                    sub(/\r$/, "", line)
+                    warning = line
+                  }
+                }
+                END {
+                  if (statuses == 1 && status_ok == 1 && content_types == 1 && warnings <= 1 && warning == "") {
+                    print "complete"
+                  }
+                }
+              ' "$headers")
+              if [[ "$comparison_state" == complete ]] && jq -e 'type == "array"' "$response" > /dev/null; then
+                exit 0
+              fi
+            fi
+
+            if (( attempt < 5 )); then
+              sleep $((1 << (attempt - 1)))
+            fi
+          done
+
+          echo "::error::GitHub did not produce a complete base and pull-request dependency comparison."
+          exit 1

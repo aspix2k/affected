@@ -1,0 +1,49 @@
+# Only what this project actually cares about; the rest comes from the
+# bundled defaults through buildUponDefaultConfig.
+
+formatting:
+  active: true
+  MaximumLineLength:
+    maxLineLength: 120
+  ArgumentListWrapping:
+    active: false
+  Wrapping:
+    active: false
+
+style:
+  MaxLineLength:
+    maxLineLength: 120
+  ForbiddenComment:
+    active: true
+    comments:
+      - reason: 'unfinished work does not belong in a release'
+        value: 'TODO:'
+      - reason: 'unfinished work does not belong in a release'
+        value: 'FIXME:'
+  MagicNumber:
+    active: false
+  ReturnCount:
+    active: false
+
+complexity:
+  LongMethod:
+    threshold: 80
+  LongParameterList:
+    functionThreshold: 8
+    constructorThreshold: 10
+  TooManyFunctions:
+    thresholdInClasses: 25
+    thresholdInFiles: 25
+
+exceptions:
+  TooGenericExceptionCaught:
+    active: false
+  SwallowedException:
+    active: false
+
+naming:
+  FunctionNaming:
+    # MCP tools are addressed by name from the protocol side
+    ignoreAnnotated: ['McpTool']
+  FunctionMaxLength:
+    active: false

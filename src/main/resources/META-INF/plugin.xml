@@ -1,0 +1,109 @@
+<idea-plugin>
+    <id>com.aspix2k.affected</id>
+    <name>Affected</name>
+    <vendor url="https://github.com/aspix2k/affected">aspix</vendor>
+
+    <description><![CDATA[
+        <p><b>A JetBrains IDE plugin that finds affected projects and runs only their tests and build checks.</b></p>
+<!-- affected-support-summary:start -->
+        <p>Built for multi-module projects and monorepos across 10 supported build ecosystems and 11 JetBrains products.</p>
+        <p><a href="https://github.com/aspix2k/affected/blob/main/SUPPORT.md">Support matrix</a>: languages, test runners, selection units and evidence.</p>
+<!-- affected-support-summary:end -->
+        <p><b>What you get</b></p>
+        <ul>
+            <li>Run supported ecosystems from one action.</li>
+            <li>Keep all commands for one build-system root in one Run session.</li>
+            <li>Narrow to the smallest unit proven by the native build system or test runner.</li>
+            <li>Optionally verify direct dependents after a public API change.</li>
+            <li>No account, server, telemetry or project-specific configuration file.</li>
+        </ul>
+        <p><b>Install Affected, open a supported project and choose Run affected tests.</b></p>
+        <p>
+            <a href="https://github.com/aspix2k/affected">Documentation</a> ·
+            <a href="https://github.com/aspix2k/affected/issues">Issue tracker</a> ·
+            <a href="https://github.com/aspix2k/affected/blob/main/PRIVACY.md">Privacy</a>
+        </p>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends optional="true" config-file="affected-gradle.xml">com.intellij.gradle</depends>
+    <depends optional="true" config-file="affected-maven.xml">org.jetbrains.idea.maven</depends>
+
+    <resource-bundle>messages.AffectedBundle</resource-bundle>
+
+    <content>
+        <module name="affected.mcp" loading="optional"/>
+    </content>
+
+    <extensionPoints>
+        <extensionPoint name="buildSystem" interface="com.aspix2k.affected.build.BuildSystem" dynamic="true"/>
+    </extensionPoints>
+
+    <extensions defaultExtensionNs="com.aspix2k.affected">
+        <buildSystem implementation="com.aspix2k.affected.build.CargoBuildSystem"/>
+        <buildSystem implementation="com.aspix2k.affected.build.GoBuildSystem"/>
+        <buildSystem implementation="com.aspix2k.affected.build.NodeBuildSystem"/>
+        <buildSystem implementation="com.aspix2k.affected.build.DotnetBuildSystem"/>
+        <buildSystem implementation="com.aspix2k.affected.build.PythonBuildSystem"/>
+        <buildSystem implementation="com.aspix2k.affected.build.ComposerBuildSystem"/>
+        <buildSystem implementation="com.aspix2k.affected.build.RubyBuildSystem"/>
+        <buildSystem implementation="com.aspix2k.affected.build.CMakeBuildSystem"/>
+    </extensions>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <notificationGroup id="AffectedTests" displayType="BALLOON" bundle="messages.AffectedBundle"
+                           key="group.title"/>
+        <externalSystemTaskNotificationListener implementation="com.aspix2k.affected.ExternalSystemRefreshListener"/>
+        <postStartupActivity implementation="com.aspix2k.affected.StartupRefresh"/>
+        <checkinHandlerFactory implementation="com.aspix2k.affected.AffectedCheckinHandlerFactory"/>
+        <errorHandler implementation="com.aspix2k.affected.AffectedErrorReportSubmitter"/>
+    </extensions>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <vcs.prePushHandler implementation="com.aspix2k.affected.AffectedPrePushHandler"/>
+    </extensions>
+
+    <applicationListeners>
+        <listener class="com.aspix2k.affected.ChangeListener"
+                  topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+    </applicationListeners>
+
+    <actions>
+        <group id="com.aspix2k.affected.Group"
+               class="com.aspix2k.affected.AffectedGroup"
+               popup="true">
+            <add-to-group group-id="MainToolbarRight" anchor="before" relative-to-action="NewUiRunWidget"/>
+            <add-to-group group-id="RunMenu" anchor="first"/>
+
+            <action id="com.aspix2k.affected.Run"
+                    class="com.aspix2k.affected.RunAffectedTestsAction"
+                    icon="AllIcons.Actions.Execute">
+                <keyboard-shortcut keymap="$default" first-keystroke="control alt shift T"/>
+            </action>
+            <action id="com.aspix2k.affected.Detekt"
+                    class="com.aspix2k.affected.RunDetektAction"/>
+            <action id="com.aspix2k.affected.Lint"
+                    class="com.aspix2k.affected.RunLintAction"/>
+            <action id="com.aspix2k.affected.Coverage"
+                    class="com.aspix2k.affected.RunCoverageAction"/>
+            <separator/>
+            <group id="com.aspix2k.affected.Modules"
+                   class="com.aspix2k.affected.AffectedModulesGroup"
+                   popup="true"/>
+            <separator/>
+            <group id="com.aspix2k.affected.Settings"
+                   popup="true">
+                <action id="com.aspix2k.affected.CheckConsumers"
+                        class="com.aspix2k.affected.CheckConsumersToggle"/>
+                <separator/>
+                <action id="com.aspix2k.affected.RunBeforeCommit"
+                        class="com.aspix2k.affected.RunBeforeCommitToggle"/>
+                <action id="com.aspix2k.affected.RunBeforePush"
+                        class="com.aspix2k.affected.RunBeforePushToggle"/>
+                <separator/>
+                <action id="com.aspix2k.affected.AnimateWhileRunning"
+                        class="com.aspix2k.affected.AnimateWhileRunningToggle"/>
+            </group>
+        </group>
+    </actions>
+</idea-plugin>

@@ -1,0 +1,11 @@
+{
+  "name": "@affected/beta",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@affected/alpha": "*"
+  },
+  "scripts": {
+    "test": "vitest"
+  }
+}
