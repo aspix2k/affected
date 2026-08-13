@@ -9,8 +9,14 @@ import java.util.zip.ZipFile
 
 buildscript {
     repositories {
-        maven("https://cache-redirector.jetbrains.com/repo1.maven.org/maven2")
-        mavenCentral()
+        val mavenCentralMirror = "https://cache-redirector.jetbrains.com/repo1.maven.org/maven2"
+        if (System.getenv("AFFECTED_PREFER_MAVEN_CENTRAL") == "1") {
+            mavenCentral()
+            maven(mavenCentralMirror)
+        } else {
+            maven(mavenCentralMirror)
+            mavenCentral()
+        }
         maven("https://cache-redirector.jetbrains.com/plugins.gradle.org")
         gradlePluginPortal()
     }
@@ -36,8 +42,14 @@ group = "com.aspix2k"
 version = "2.0.1"
 
 repositories {
-    maven("https://cache-redirector.jetbrains.com/repo1.maven.org/maven2")
-    mavenCentral()
+    val mavenCentralMirror = "https://cache-redirector.jetbrains.com/repo1.maven.org/maven2"
+    if (System.getenv("AFFECTED_PREFER_MAVEN_CENTRAL") == "1") {
+        mavenCentral()
+        maven(mavenCentralMirror)
+    } else {
+        maven(mavenCentralMirror)
+        mavenCentral()
+    }
     intellijPlatform { defaultRepositories() }
 }
 
@@ -64,6 +76,8 @@ dependencies {
 
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
+    kover(project(":core"))
+    kover(project(":mcp"))
 }
 
 kotlin { jvmToolchain(21) }
@@ -129,6 +143,9 @@ detekt {
 
 subprojects {
     apply(plugin = "com.autonomousapps.dependency-analysis")
+    pluginManager.withPlugin("org.jetbrains.kotlin.jvm") {
+        apply(plugin = "org.jetbrains.kotlinx.kover")
+    }
 }
 
 dependencyAnalysis {

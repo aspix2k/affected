@@ -74,6 +74,8 @@ def check(root: Path = ROOT) -> None:
         "scripts/release_currentness.py",
         "scripts.tests.test_support_matrix",
         "scripts/support_matrix.py --check",
+        "scripts.tests.test_mcp_capabilities",
+        "scripts/mcp_capabilities.py --check",
         "scripts.tests.test_ci_contracts",
         "scripts.tests.test_ci_scope",
         "scripts.tests.test_fetch_gradle",
@@ -107,8 +109,20 @@ def check(root: Path = ROOT) -> None:
         raise CiContractError("Weekly mutation must fail on surviving mutants")
     if "cache-redirector.jetbrains.com/repo1.maven.org/maven2" not in read(root / "settings.gradle.kts"):
         raise CiContractError("Plugin resolution must prefer the JetBrains Maven Central mirror")
+    if "AFFECTED_PREFER_MAVEN_CENTRAL" not in read(root / "settings.gradle.kts"):
+        raise CiContractError("Gradle must be able to prefer Maven Central after a cache-redirector 5xx")
     if "actions/cache@" not in read(root / ".github/workflows/dependency-graph.yml"):
         raise CiContractError("Dependency graph must cache the Gradle wrapper distribution")
+    submit = read(root / ".github/workflows/dependency-graph-submit.yml")
+    if "push|workflow_dispatch" not in submit or "refs/heads/main" not in submit:
+        raise CiContractError("Submit must accept main workflow_dispatch snapshots")
+    if 'add("intellijPlatformDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:' not in read(
+        root / "mcp/build.gradle.kts"
+    ):
+        raise CiContractError("The MCP module must enforce the patched Jackson BOM")
+    root_build = read(root / "build.gradle.kts")
+    if 'kover(project(":core"))' not in root_build or 'kover(project(":mcp"))' not in root_build:
+        raise CiContractError("Kover must verify :core and :mcp, not only the root plugin sources")
 
     check_merge_queue(root, ci, codeql)
     check_wrapper(root)
@@ -189,6 +203,8 @@ def check_wrapper(root: Path) -> None:
     runner = read(root / "scripts/run_gradle.sh")
     if "scripts/fetch_gradle.py" not in runner and "fetch_gradle.py" not in runner:
         raise CiContractError("run_gradle.sh must seed the wrapper cache before starting Gradle")
+    if "Received status code" not in runner or "AFFECTED_PREFER_MAVEN_CENTRAL" not in runner:
+        raise CiContractError("run_gradle.sh must retry cache-redirector 5xx with Maven Central first")
 
 
 def wrapper_int(text: str, name: str) -> int:

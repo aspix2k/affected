@@ -1,24 +1,39 @@
 package com.aspix2k.affected.mcp
 
+import com.aspix2k.affected.AffectedMcpInputs
+import com.aspix2k.affected.AffectedMcpSettings
+import com.aspix2k.affected.AffectedMcpView
+import com.aspix2k.affected.AffectedMcpViews
 import com.aspix2k.affected.AffectedModule
+import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.AffectedState
-import com.aspix2k.affected.ProjectChanges
-import com.aspix2k.affected.TaskGroup
 import com.aspix2k.affected.TaskPlanner
 import com.aspix2k.affected.Verification
 import com.aspix2k.affected.build.BuildSystems
-import com.intellij.execution.ui.RunContentManager
+import com.aspix2k.affected.projectBusy
+import com.intellij.mcpserver.McpToolCallResult
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
+import com.intellij.mcpserver.annotations.McpToolHintValue
+import com.intellij.mcpserver.annotations.McpToolHints
 import com.intellij.mcpserver.project
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.service
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
-import java.io.File
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.coroutines.coroutineContext
 
 class AffectedToolset : McpToolset {
@@ -26,184 +41,160 @@ class AffectedToolset : McpToolset {
     override fun isEnabled(): Boolean = true
 
     @McpTool
+    @McpToolHints(readOnlyHint = McpToolHintValue.TRUE)
     @McpDescription(
-        "Lists the modules affected by the current changes: modules whose files changed, " +
-            "and whether their public API changed. Use before running tests to know the minimal scope."
+        "Lists the modules affected by the current changes from the same analysis snapshot as the toolbar."
     )
-    suspend fun affected_modules(): String {
+    suspend fun affected_modules(): McpToolCallResult =
+        AffectedMcpViews.modules(snapshot(coroutineContext.project)).toResult()
+
+    @McpTool
+    @McpToolHints(readOnlyHint = McpToolHintValue.TRUE)
+    @McpDescription(
+        "Returns the prepared verification tasks from the current analysis snapshot without recomputing it."
+    )
+    suspend fun affected_verification_plan(): McpToolCallResult {
         val project = coroutineContext.project
+        if (project.basePath == null) return noBasePath()
+        return AffectedMcpViews.plan(snapshot(project), settings().checkConsumers).toResult()
+    }
+
+    @McpTool
+    @McpToolHints(readOnlyHint = McpToolHintValue.TRUE)
+    @McpDescription(
+        "Lists files from the current analysis snapshot, marking those that change public API."
+    )
+    suspend fun affected_changed_files(): McpToolCallResult {
+        val project = coroutineContext.project
+        val basePath = project.basePath ?: return noBasePath()
+        return AffectedMcpViews.changedFiles(snapshot(project), basePath).toResult()
+    }
+
+    @McpTool
+    @McpToolHints(readOnlyHint = McpToolHintValue.FALSE, destructiveHint = McpToolHintValue.FALSE)
+    @McpDescription(
+        "Runs the prepared verification through the same exclusive lease as the toolbar, commit and push guards."
+    )
+    suspend fun affected_run_verification(): McpToolCallResult {
+        val project = coroutineContext.project
+        if (project.basePath == null) return noBasePath()
+        saveDocuments()
+        if (projectBusy(project)) return busy()
         val state = project.service<AffectedState>()
-        val modules = state.modules
-
-        if (modules.isEmpty()) return "No affected modules."
-
-        return buildString {
-            appendLine("Affected modules: ${modules.size}")
-            modules.sortedBy { it.id }.forEach { module ->
-                append("  ${module.id}")
-                if (!module.hasTests) append("  (no tests)")
-                appendLine()
-            }
+        val preview = AffectedMcpViews.plan(state.snapshot(), settings().checkConsumers)
+        if (preview.error) return preview.toResult()
+        val claim = state.tryClaimReadyRun() ?: return cannotClaim()
+        val prepared = claim.prepared ?: run {
+            claim.close()
+            return unavailablePlan()
         }
+        if (prepared.plan.isEmpty) {
+            claim.close()
+            return preview.toResult()
+        }
+        if (projectBusy(project)) {
+            claim.close()
+            return busy()
+        }
+        val outcome = Verification.runClaimedAndWait(project, prepared, claim)
+        return preview.copy(
+            text = "${if (outcome.passed) "Passed" else "Failed"}. ${preview.text}",
+            data = preview.data + ("passed" to outcome.passed),
+        ).toResult()
     }
 
     @McpTool
+    @McpToolHints(readOnlyHint = McpToolHintValue.FALSE, destructiveHint = McpToolHintValue.FALSE)
     @McpDescription(
-        "Returns the exact build tasks that verify the current changes: tests of changed " +
-            "modules plus compilation of modules consuming a changed public API."
-    )
-    suspend fun affected_verification_plan(): String {
-        val project = coroutineContext.project
-        if (project.basePath == null) return "Project has no base path."
-
-        val plan = Verification.plan(project)
-
-        if (plan.isEmpty) return "Nothing to verify."
-
-        return buildString {
-            appendLine("Modules to test: ${plan.tested}, consumers to compile: ${plan.compiled}")
-            plan.groups.forEach { (_, root, tasks) ->
-                appendLine("In $root:")
-                tasks.forEach { appendLine("  $it") }
-            }
-        }
-    }
-
-    @McpTool
-    @McpDescription(
-        "Lists files changed against the base branch, marking those that change public API. " +
-            "A public API change is what can break other modules."
-    )
-    suspend fun affected_changed_files(): String {
-        val project = coroutineContext.project
-        val projectDir = project.basePath?.let(::File) ?: return "Project has no base path."
-
-        val changes = ProjectChanges.collectSuspending(project)
-        if (changes.files.isEmpty()) return "No source changes."
-
-        return buildString {
-            appendLine("Changed files: ${changes.files.size}, of them API-changing: ${changes.apiTouched.size}")
-            changes.files.sortedBy { it.path }.forEach { file ->
-                val relative = file.relativeTo(projectDir).invariantSeparatorsPath
-                appendLine(if (file in changes.apiTouched) "  [API] $relative" else "  $relative")
-            }
-        }
-    }
-
-    @McpTool
-    @McpDescription(
-        "Runs the verification for current changes: unit tests of changed modules and, when their " +
-            "public API changed, compilation of the modules consuming them. Tasks run through each " +
-            "build system's IDE integration and results appear in the Run tool window."
-    )
-    suspend fun affected_run_verification(): String {
-        val project = coroutineContext.project
-        if (project.basePath == null) return "Project has no base path."
-
-        val prepared = Verification.prepare(project)
-        val plan = prepared.plan
-        if (plan.isEmpty) return "Nothing to run."
-
-        val outcome = Verification.runAndWait(project, prepared)
-
-        return buildString {
-            val result = if (outcome.passed) "Passed" else "Failed"
-            appendLine("$result. Modules tested: ${plan.tested}, consumers compiled: ${plan.compiled}")
-            plan.groups.forEach { (_, root, tasks) -> appendLine("$root: ${tasks.joinToString(" ")}") }
-        }
-    }
-
-    @McpTool
-    @McpDescription(
-        "Runs a named task on every affected module that declares it, for example " +
-            "detekt, lint or koverHtmlReport. Modules without the task are skipped."
+        "Runs a named task on every affected module that declares it, using the same exclusive lease as the toolbar."
     )
     suspend fun affected_run_task(
         @McpDescription("Gradle task name without module path, for example detekt")
         task: String,
-    ): String {
+    ): McpToolCallResult {
         val project = coroutineContext.project
-        val modules = project.service<AffectedState>().modules.filter { it.supports(task) }
-        if (modules.isEmpty()) return "No affected module declares task '$task'."
-
-        TaskPlanner.groups(modules.map(AffectedModule::info), task).forEach { group ->
-            runTasks(project, group)
+        if (project.basePath == null) return noBasePath()
+        val state = project.service<AffectedState>()
+        val validation = AffectedMcpInputs.validateNamedTask(state.snapshot(), task)
+        if (validation.error) return validation.toResult()
+        saveDocuments()
+        if (projectBusy(project)) return busy()
+        val claim = state.tryClaimReadyRun() ?: return cannotClaim()
+        val name = validation.data["task"] as String
+        val modules = claim.snapshot.modules.filter { it.supports(name) }
+        if (modules.isEmpty()) {
+            claim.close()
+            return AffectedMcpInputs.validateNamedTask(claim.snapshot, name).toResult()
         }
-        return "Started '$task' on ${modules.size} module(s)."
-    }
-
-    private suspend fun runTasks(project: Project, group: TaskGroup) {
-        withContext(Dispatchers.EDT) {
-            BuildSystems.byId(group.systemId)?.run(project, group.root, group.tasks)
+        if (projectBusy(project)) {
+            claim.close()
+            return busy()
+        }
+        if (!claim.markRunning()) {
+            claim.close()
+            return cannotClaim()
+        }
+        return try {
+            val groups = TaskPlanner.groups(modules.map(AffectedModule::info), name)
+            val passed = coroutineScope {
+                groups.map { group ->
+                    async(Dispatchers.IO) {
+                        BuildSystems.byId(group.systemId)?.runAndWait(project, group.root, group.tasks) ?: true
+                    }
+                }.awaitAll().all { it }
+            }
+            validation.copy(
+                text = "${if (passed) "Passed" else "Failed"}. ${validation.text}",
+                data = validation.data + ("passed" to passed),
+            ).toResult()
+        } finally {
+            claim.close()
         }
     }
 
     @McpTool
+    @McpToolHints(readOnlyHint = McpToolHintValue.FALSE, destructiveHint = McpToolHintValue.TRUE)
     @McpDescription(
-        "Stops build runs started from the IDE, including verification started by this toolset. " +
-            "Returns how many were stopped."
+        "Stops only Affected-owned verification and named-task sessions. Unrelated IDE Run processes are left running."
     )
-    suspend fun affected_stop(): String {
+    suspend fun affected_stop(): McpToolCallResult {
         val project = coroutineContext.project
         val stopped = withContext(Dispatchers.EDT) {
-            val running = runningProcessHandlers(project)
-            running.forEach { it.destroyProcess() }
-            running.size
+            AffectedRunSessions.getInstance(project).stopOwned()
         }
-        return if (stopped == 0) "Nothing is running." else "Stopped $stopped run(s)."
+        val view = AffectedMcpView(
+            text = if (stopped == 0) "Nothing owned by Affected is running." else "Stopped $stopped Affected run(s).",
+            data = mapOf("stopped" to stopped),
+        )
+        return view.toResult()
     }
 
     @McpTool
+    @McpToolHints(readOnlyHint = McpToolHintValue.TRUE)
     @McpDescription(
-        "Reports whether a verification run is currently in progress and how many modules are affected."
+        "Reports the current analysis snapshot, settings and the number of Affected-owned running sessions."
     )
-    suspend fun affected_status(): String {
+    suspend fun affected_status(): McpToolCallResult {
         val project = coroutineContext.project
-        val state = project.service<AffectedState>()
-        val settings = AffectedSettings.getInstance()
-        val running = withContext(Dispatchers.EDT) {
-            runningProcessHandlers(project).size
-        }
-
-        return buildString {
-            appendLine("Affected modules: ${state.affectedModules}")
-            appendLine("Base branch: ${settings.baseBranch}")
-            appendLine("Consumer check: ${if (settings.checkConsumers) "on" else "off"}")
-            appendLine("Commit guard: ${if (settings.runBeforeCommit) "on" else "off"}")
-            appendLine("Push guard: ${if (settings.runBeforePush) "on" else "off"}")
-            appendLine("Animation: ${if (settings.animateWhileRunning) "on" else "off"}")
-            appendLine("Verification status: ${state.verificationStatus.name.lowercase()}")
-            appendLine("Running sessions: $running")
-        }
+        return AffectedMcpViews.status(
+            snapshot = snapshot(project),
+            settings = settings(),
+            ownedRunning = AffectedRunSessions.getInstance(project).activeCount(),
+        ).toResult()
     }
 
     @McpTool
+    @McpToolHints(readOnlyHint = McpToolHintValue.TRUE)
     @McpDescription(
-        "Lists Gradle tasks that exist on the affected modules, so you know what can be run with " +
-            "affected_run_task. Useful to discover whether the project has detekt, lint, coverage and so on."
+        "Lists tasks declared by the current affected modules so they can be passed to affected_run_task."
     )
-    suspend fun affected_available_tasks(): String {
-        val project = coroutineContext.project
-        val modules = project.service<AffectedState>().modules
-        if (modules.isEmpty()) return "No affected modules."
-
-        val counts = modules
-            .flatMap { it.tasks }
-            .groupingBy { it }
-            .eachCount()
-            .toList()
-            .sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first })
-
-        return buildString {
-            appendLine("Tasks available on affected modules:")
-            counts.forEach { (task, count) -> appendLine("  $task  (in $count module(s))") }
-        }
-    }
+    suspend fun affected_available_tasks(): McpToolCallResult =
+        AffectedMcpViews.availableTasks(snapshot(coroutineContext.project)).toResult()
 
     @McpTool
+    @McpToolHints(readOnlyHint = McpToolHintValue.FALSE, destructiveHint = McpToolHintValue.FALSE)
     @McpDescription(
-        "Changes plugin settings: the base branch changes are compared against, consumer compilation, " +
-            "commit and push guards, and running animation. Pass only what you want to change."
+        "Changes plugin settings: the base branch, consumer compilation, commit and push guards, and running animation."
     )
     suspend fun affected_configure(
         @McpDescription("Base branch, for example develop, main or master")
@@ -216,26 +207,86 @@ class AffectedToolset : McpToolset {
         runBeforePush: Boolean? = null,
         @McpDescription("Whether to animate the toolbar icon while verification is running")
         animateWhileRunning: Boolean? = null,
-    ): String {
-        val settings = AffectedSettings.getInstance()
-        baseBranch?.takeIf { it.isNotBlank() }?.let { settings.baseBranch = it }
-        checkConsumers?.let { settings.checkConsumers = it }
-        runBeforeCommit?.let { settings.runBeforeCommit = it }
-        runBeforePush?.let { settings.runBeforePush = it }
-        animateWhileRunning?.let { settings.animateWhileRunning = it }
-
-        val project = coroutineContext.project
-        project.service<AffectedState>().invalidate()
-
-        return "Base branch: ${settings.baseBranch}, consumer check: " +
-            "${if (settings.checkConsumers) "on" else "off"}, commit guard: " +
-            "${if (settings.runBeforeCommit) "on" else "off"}, push guard: " +
-            "${if (settings.runBeforePush) "on" else "off"}, animation: " +
-            "${if (settings.animateWhileRunning) "on" else "off"}."
+    ): McpToolCallResult {
+        val view = AffectedMcpInputs.applySettings(
+            current = settings(),
+            baseBranch = baseBranch,
+            checkConsumers = checkConsumers,
+            runBeforeCommit = runBeforeCommit,
+            runBeforePush = runBeforePush,
+            animateWhileRunning = animateWhileRunning,
+        )
+        if (view.error) return view.toResult()
+        val next = AffectedSettings.getInstance()
+        next.baseBranch = view.data["baseBranch"] as String
+        next.checkConsumers = view.data["checkConsumers"] as Boolean
+        next.runBeforeCommit = view.data["runBeforeCommit"] as Boolean
+        next.runBeforePush = view.data["runBeforePush"] as Boolean
+        next.animateWhileRunning = view.data["animateWhileRunning"] as Boolean
+        coroutineContext.project.service<AffectedState>().invalidate()
+        return view.toResult()
     }
 
-    private fun runningProcessHandlers(project: Project) =
-        RunContentManager.getInstance(project).allDescriptors
-            .mapNotNull { it.processHandler }
-            .filterNot { it.isProcessTerminated || it.isProcessTerminating }
+    private fun snapshot(project: Project) = project.service<AffectedState>().snapshot()
+
+    private fun settings(): AffectedMcpSettings {
+        val current = AffectedSettings.getInstance()
+        return AffectedMcpSettings(
+            baseBranch = current.baseBranch,
+            checkConsumers = current.checkConsumers,
+            runBeforeCommit = current.runBeforeCommit,
+            runBeforePush = current.runBeforePush,
+            animateWhileRunning = current.animateWhileRunning,
+        )
+    }
+
+    private fun saveDocuments() {
+        val application = ApplicationManager.getApplication()
+        if (application.isDispatchThread) {
+            FileDocumentManager.getInstance().saveAllDocuments()
+        } else {
+            application.invokeAndWait { FileDocumentManager.getInstance().saveAllDocuments() }
+        }
+    }
+}
+
+internal fun AffectedMcpView.toResult(): McpToolCallResult {
+    val structured = data.toJsonObject()
+    return if (error) McpToolCallResult.error(text, structured) else McpToolCallResult.text(text, structured)
+}
+
+private fun noBasePath() = AffectedMcpView(
+    text = "Project has no base path.",
+    data = mapOf("reason" to "no-base-path"),
+    error = true,
+).toResult()
+
+private fun busy() = AffectedMcpView(
+    text = "The IDE is busy and cannot start Affected work.",
+    data = mapOf("reason" to "busy"),
+    error = true,
+).toResult()
+
+private fun cannotClaim() = AffectedMcpView(
+    text = "Affected cannot start another run until the current exclusive session finishes.",
+    data = mapOf("reason" to "busy"),
+    error = true,
+).toResult()
+
+private fun unavailablePlan() = AffectedMcpView(
+    text = "Prepared verification data is not available.",
+    data = mapOf("reason" to "unavailable"),
+    error = true,
+).toResult()
+
+private fun Map<String, Any?>.toJsonObject(): JsonObject = JsonObject(mapValues { (_, value) -> value.toJsonElement() })
+
+private fun Any?.toJsonElement(): JsonElement = when (this) {
+    null -> JsonNull
+    is Boolean -> JsonPrimitive(this)
+    is Number -> JsonPrimitive(this)
+    is String -> JsonPrimitive(this)
+    is Map<*, *> -> JsonObject(this.entries.associate { (key, value) -> key.toString() to value.toJsonElement() })
+    is Iterable<*> -> JsonArray(this.map { it.toJsonElement() })
+    else -> JsonPrimitive(toString())
 }

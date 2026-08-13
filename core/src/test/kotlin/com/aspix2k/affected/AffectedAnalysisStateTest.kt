@@ -158,6 +158,19 @@ class AffectedAnalysisStateTest {
     }
 
     @Test
+    fun `a completed snapshot keeps the same changes and prepared plans as the analysis`() {
+        val state = AffectedStateStore()
+        val revision = state.invalidate()
+        val completed = analysis(":ready", "/repo/ready.kt")
+
+        assertTrue(state.complete(revision, completed))
+
+        val snapshot = state.snapshot()
+        assertEquals(completed.changes.files, snapshot.changes?.files)
+        assertSame(completed.plans, snapshot.plans)
+    }
+
+    @Test
     fun `completed snapshot does not retain a mutable module list`() {
         val state = AffectedStateStore()
         val revision = state.invalidate()

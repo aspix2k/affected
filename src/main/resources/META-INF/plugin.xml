@@ -16,6 +16,7 @@
             <li>Narrow to the smallest unit proven by the native build system or test runner.</li>
             <li>Optionally verify direct dependents after a public API change.</li>
             <li>No account, server, telemetry or project-specific configuration file.</li>
+            <li>Optional JetBrains MCP Server tools use the same analysis snapshot and run lease.</li>
         </ul>
         <p><b>Install Affected, open a supported project and choose Run affected tests.</b></p>
         <p>
@@ -54,6 +55,7 @@
         <notificationGroup id="AffectedTests" displayType="BALLOON" bundle="messages.AffectedBundle"
                            key="group.title"/>
         <externalSystemTaskNotificationListener implementation="com.aspix2k.affected.ExternalSystemRefreshListener"/>
+        <externalSystemTaskNotificationListener implementation="com.aspix2k.affected.AffectedExecuteTaskListener"/>
         <postStartupActivity implementation="com.aspix2k.affected.StartupRefresh"/>
         <checkinHandlerFactory implementation="com.aspix2k.affected.AffectedCheckinHandlerFactory"/>
         <errorHandler implementation="com.aspix2k.affected.AffectedErrorReportSubmitter"/>

@@ -47,7 +47,7 @@ jobs:
               fi
               expected_ref="refs/pull/$PULL_NUMBER/merge"
               ;;
-            push)
+            push|workflow_dispatch)
               if [ "$HEAD_BRANCH" != "main" ]; then
                 echo "::error::Only main push snapshots can be submitted."
                 exit 1

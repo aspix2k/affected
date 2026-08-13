@@ -28,6 +28,18 @@ class ExternalSystemRefreshListenerTest {
     }
 
     @Test
+    fun `plugin descriptor registers the execute-task listener beside refresh invalidation`() {
+        val descriptor = javaClass.classLoader
+            .getResourceAsStream("META-INF/plugin.xml")
+            ?.bufferedReader()
+            ?.readText()
+            ?: error("plugin.xml is missing")
+
+        assertEquals(true, descriptor.contains("com.aspix2k.affected.ExternalSystemRefreshListener"))
+        assertEquals(true, descriptor.contains("com.aspix2k.affected.AffectedExecuteTaskListener"))
+    }
+
+    @Test
     fun `only model-changing external tasks require a new plan`() {
         assertEquals(true, externalTaskRefreshesModel(ExternalSystemTaskType.RESOLVE_PROJECT))
         assertEquals(true, externalTaskRefreshesModel(ExternalSystemTaskType.REFRESH_TASKS_LIST))

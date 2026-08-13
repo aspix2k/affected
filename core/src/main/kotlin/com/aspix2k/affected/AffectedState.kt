@@ -37,6 +37,8 @@ data class AffectedStateSnapshot(
     val analysisStatus: AnalysisStatus,
     val modules: List<AffectedModule>,
     val verificationStatus: VerificationStatus,
+    val changes: ProjectChanges.Result? = null,
+    val plans: Verification.PreparedPlans? = null,
 ) {
     val affectedModules: Int get() = modules.size
 }
@@ -70,6 +72,8 @@ internal class AffectedStateStore {
             analysisStatus = current.analysisStatus,
             modules = current.analysis?.modules.orEmpty(),
             verificationStatus = current.verificationStatus,
+            changes = current.analysis?.changes,
+            plans = current.analysis?.plans,
         )
     }
 
@@ -171,6 +175,8 @@ internal class AffectedStateStore {
         analysisStatus = analysisStatus,
         modules = analysis?.modules.orEmpty(),
         verificationStatus = verificationStatus,
+        changes = analysis?.changes,
+        plans = analysis?.plans,
     )
 
     private fun AffectedAnalysis.snapshot() = AffectedAnalysis(

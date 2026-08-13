@@ -14,6 +14,8 @@ from typing import Any
 from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 MATRIX_PATH = Path("config/support-matrix.json")
 SUPPORT_PATH = Path("SUPPORT.md")
 README_PATH = Path("README.md")
@@ -622,7 +624,7 @@ def links(paths: list[str]) -> str:
     return " · ".join(f"[{Path(path).name}]({path})" for path in paths)
 
 
-def render(matrix: dict[str, Any]) -> str:
+def render(matrix: dict[str, Any], mcp_section: str = "") -> str:
     """Render the complete human-facing support page deterministically."""
     products = matrix["products"]
     systems = matrix["operatingSystems"]
@@ -722,6 +724,8 @@ def render(matrix: dict[str, Any]) -> str:
             lines.append(
                 f"| {markdown(product['name'])} | {markdown(product['reason'])} | {product['reviewed']} |"
             )
+    if mcp_section:
+        lines += ["", mcp_section.strip(), ""]
     lines += [
         "",
         "## Keep the matrix current",
@@ -778,7 +782,18 @@ def expected_outputs(root: Path, matrix: dict[str, Any]) -> dict[Path, str]:
     plugin = replace_summary(
         read_file(root, PLUGIN_PATH), plugin_summary(matrix), PLUGIN_PATH
     )
-    return {SUPPORT_PATH: render(matrix), README_PATH: readme, PLUGIN_PATH: plugin}
+    mcp_section = ""
+    if secure_path(root, Path("config/mcp-capabilities.json")).is_file():
+        from scripts.mcp_capabilities import load_matrix as load_mcp
+        from scripts.mcp_capabilities import render_section
+        from scripts.mcp_capabilities import validated as validate_mcp
+
+        mcp_section = render_section(validate_mcp(root, load_mcp(root)))
+    return {
+        SUPPORT_PATH: render(matrix, mcp_section),
+        README_PATH: readme,
+        PLUGIN_PATH: plugin,
+    }
 
 
 def write_atomic(path: Path, content: str) -> None:

@@ -36,8 +36,10 @@ SCRIPT_ONLY_FILES = frozenset(
         "scripts/quality.sh",
         "scripts/release_currentness.py",
         "scripts/support_matrix.py",
+        "scripts/mcp_capabilities.py",
         "config/release-currentness.json",
         "config/support-matrix.json",
+        "config/mcp-capabilities.json",
     }
 )
 SAFE_WORKFLOWS = frozenset(

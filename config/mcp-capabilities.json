@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "serverPlugin": "com.intellij.mcpServer",
+  "versionPin": "affected.mcp.version",
+  "module": "affected.mcp",
+  "toolset": "com.aspix2k.affected.mcp.AffectedToolset",
+  "operations": [
+    {
+      "id": "inspect-modules",
+      "mcp": "affected_modules",
+      "kind": "read",
+      "ui": ["com.aspix2k.affected.Modules"]
+    },
+    {
+      "id": "verification-plan",
+      "mcp": "affected_verification_plan",
+      "kind": "read",
+      "mcpOnly": true
+    },
+    {
+      "id": "changed-files",
+      "mcp": "affected_changed_files",
+      "kind": "read",
+      "mcpOnly": true
+    },
+    {
+      "id": "run-verification",
+      "mcp": "affected_run_verification",
+      "kind": "mutating",
+      "ui": [
+        "com.aspix2k.affected.Run",
+        "com.aspix2k.affected.RunBeforeCommit",
+        "com.aspix2k.affected.RunBeforePush"
+      ]
+    },
+    {
+      "id": "run-named-task",
+      "mcp": "affected_run_task",
+      "kind": "mutating",
+      "ui": [
+        "com.aspix2k.affected.Detekt",
+        "com.aspix2k.affected.Lint",
+        "com.aspix2k.affected.Coverage"
+      ]
+    },
+    {
+      "id": "stop-owned",
+      "mcp": "affected_stop",
+      "kind": "mutating",
+      "mcpOnly": true
+    },
+    {
+      "id": "status",
+      "mcp": "affected_status",
+      "kind": "read",
+      "mcpOnly": true
+    },
+    {
+      "id": "available-tasks",
+      "mcp": "affected_available_tasks",
+      "kind": "read",
+      "mcpOnly": true
+    },
+    {
+      "id": "configure",
+      "mcp": "affected_configure",
+      "kind": "mutating",
+      "ui": [
+        "com.aspix2k.affected.CheckConsumers",
+        "com.aspix2k.affected.RunBeforeCommit",
+        "com.aspix2k.affected.RunBeforePush",
+        "com.aspix2k.affected.AnimateWhileRunning"
+      ],
+      "mcpOnlyFields": ["baseBranch"]
+    }
+  ]
+}

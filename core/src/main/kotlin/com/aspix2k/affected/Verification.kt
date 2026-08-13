@@ -21,7 +21,7 @@ object Verification {
         internal val changes: BuildChanges,
     )
 
-    internal data class PreparedPlans(
+    data class PreparedPlans(
         val testsOnly: Prepared,
         val withConsumers: Prepared,
     ) {

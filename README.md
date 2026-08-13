@@ -39,6 +39,8 @@ Built for multi-module projects and monorepos across 10 supported build ecosyste
 - **Consumer checks.** Optionally verify direct dependents after a public API
   change.
 - **Local by design.** No account, server, telemetry or project-specific config file.
+- **Optional MCP tools.** The same analysis snapshot and run actions when the
+  JetBrains MCP Server plugin is installed.
 
 ## Get started
 
