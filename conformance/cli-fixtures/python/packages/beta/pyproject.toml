@@ -1,4 +1,0 @@
-[project]
-name = "affected-python-beta"
-version = "0.1.0"
-dependencies = ["affected-python-alpha"]

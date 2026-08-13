@@ -1,7 +1,0 @@
-{
-  "name": "@affected/alpha",
-  "private": true,
-  "scripts": {
-    "test": "jest"
-  }
-}

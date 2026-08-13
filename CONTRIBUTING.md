@@ -77,7 +77,9 @@ or carry a tested compatibility reason in its issue and changelog entry.
 toolchain and GitHub Action pins. The live command reads only bounded official
 release endpoints and fails on stale, missing, malformed or unverifiable data.
 Compatibility entries require an exact approved value, a reason and
-repository-owned test evidence.
+repository-owned test evidence. A temporary security preview must also be
+published by its official source, declare its patched lower bound and expire as
+soon as the corresponding stable release appears.
 Transitive lockfile entries are resolver output: update the direct manifest pin
 and regenerate its lock rather than inventorying transitive versions.
 The complete live gate measured 35.98 seconds and 34.3 MB maximum RSS on

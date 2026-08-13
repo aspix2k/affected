@@ -195,6 +195,15 @@ def version_key(value: str) -> tuple[tuple[int, Any], ...]:
     return tuple((0, int(part)) if part.isdigit() else (1, part.lower()) for part in parts)
 
 
+def security_preview_key(value: str) -> tuple[int, int, int, int, int]:
+    """Order the bounded Alpha, Beta, and RC versions allowed by a security exception."""
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)-(Alpha|Beta|RC)(\d+)", value, re.IGNORECASE)
+    if not match:
+        raise CurrentnessError(f"Expected a bounded security preview version, found {value!r}")
+    stage = {"alpha": 0, "beta": 1, "rc": 2}[match.group(4).lower()]
+    return tuple(int(match.group(index)) for index in range(1, 4)) + (stage, int(match.group(5)))
+
+
 def newest(values: list[str], series: str | None = None) -> str:
     """Return the newest stable version, optionally within a declared series."""
     stable: list[str] = []
@@ -627,11 +636,11 @@ def validate_entry(entry: dict[str, Any], transport: Transport) -> str:
         raise CurrentnessError(f"Invalid currentness entry id: {identifier!r}")
     local, local_sha = local_version(entry.get("local", {}))
     policy = entry.get("policy")
-    if policy not in {"latest", "series", "compatibility", "branch"}:
+    if policy not in {"latest", "series", "compatibility", "security-preview", "branch"}:
         raise CurrentnessError(f"Currentness entry {identifier} has an invalid policy: {policy!r}")
     if policy == "series" and not isinstance(entry.get("series"), str):
         raise CurrentnessError(f"Series pin {identifier} lacks a declared series")
-    if policy in {"compatibility", "series"}:
+    if policy in {"compatibility", "security-preview", "series"}:
         reason = entry.get("reason")
         evidence = entry.get("evidence")
         if not isinstance(reason, str) or len(reason.strip()) < 20 or not isinstance(evidence, list) or not evidence:
@@ -645,6 +654,44 @@ def validate_entry(entry: dict[str, Any], transport: Transport) -> str:
         if local != expected:
             raise CurrentnessError(f"Compatibility pin {identifier} drifted: local {local}, approved {expected}")
         return f"{identifier}: {local} (compatibility: {reason})"
+    if policy == "security-preview":
+        expected = entry.get("expected")
+        minimum = entry.get("minimumPatched")
+        replacement = entry.get("stableReplacement")
+        source = entry.get("source")
+        if not all(isinstance(value, str) and value for value in (expected, minimum, replacement)):
+            raise CurrentnessError(f"Security preview {identifier} lacks bounded version thresholds")
+        if not isinstance(source, dict) or source.get("type") != "gradle-plugin" or not isinstance(source.get("name"), str):
+            raise CurrentnessError(f"Security preview {identifier} requires an official Gradle Plugin source")
+        if local != expected:
+            raise CurrentnessError(f"Security preview {identifier} drifted: local {local}, approved {expected}")
+        expected_key = security_preview_key(expected)
+        minimum_key = security_preview_key(minimum)
+        replacement_key_parts = tuple(int(part) for part in replacement.split(".")) if re.fullmatch(
+            r"\d+\.\d+\.\d+", replacement
+        ) else ()
+        if expected_key[:3] != minimum_key[:3] or expected_key[:3] != replacement_key_parts:
+            raise CurrentnessError(f"Security preview {identifier} thresholds must share the same release line")
+        if expected_key < minimum_key:
+            raise CurrentnessError(f"Security preview {identifier} is below the patched minimum {minimum}")
+        replacement_key = version_key(normalize_version(replacement))
+        versions = metadata_versions(
+            transport,
+            "https://plugins.gradle.org/m2",
+            f"{source['name']}:{source['name']}.gradle.plugin",
+        )
+        published = {value.strip() for value in versions}
+        if expected not in published or minimum not in published:
+            raise CurrentnessError(f"Security preview {identifier} is not published by its official source")
+        stable = []
+        for version in versions:
+            try:
+                stable.append(normalize_version(version))
+            except CurrentnessError:
+                continue
+        if any(version_key(version) >= replacement_key for version in stable):
+            raise CurrentnessError(f"Security preview {identifier} has an official stable replacement")
+        return f"{identifier}: {local} (security preview: {reason})"
     source = entry.get("source")
     if not isinstance(source, dict):
         raise CurrentnessError(f"Currentness entry {identifier} has no official source")

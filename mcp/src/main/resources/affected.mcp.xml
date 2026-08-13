@@ -1,9 +1,0 @@
-<idea-plugin package="com.aspix2k.affected.mcp">
-    <dependencies>
-        <plugin id="com.intellij.mcpServer"/>
-    </dependencies>
-
-    <extensions defaultExtensionNs="com.intellij">
-        <mcpServer.mcpToolset implementation="com.aspix2k.affected.mcp.AffectedToolset"/>
-    </extensions>
-</idea-plugin>

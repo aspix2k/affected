@@ -488,6 +488,55 @@ class ReleaseCurrentnessTest(unittest.TestCase):
         """Keep the independent direct-pin scan and typed inventory in lockstep."""
         currentness.validate_inventory_coverage(currentness.load_config())
 
+    def test_kotlin_pin_contains_the_build_cache_security_fix(self) -> None:
+        """Keep the Kotlin compiler beyond the unsafe build-cache deserialization range."""
+        entry = next(item for item in currentness.load_config() if item["id"] == "kotlin")
+
+        self.assertEqual("security-preview", entry["policy"])
+        self.assertEqual("2.4.20-Beta2", entry["expected"])
+        self.assertEqual("2.4.20-Beta1", entry["minimumPatched"])
+        self.assertEqual("2.4.20", entry["stableReplacement"])
+        self.assertIn("GHSA-r937-wjx7-w2jp", entry["reason"])
+        self.assertEqual((entry["expected"], None), currentness.local_version(entry["local"]))
+
+    def test_security_preview_requires_official_patch_and_expires_on_stable(self) -> None:
+        """Accept only a published patched preview while no patched stable release exists."""
+        endpoint = (
+            "https://plugins.gradle.org/m2/org/jetbrains/kotlin/jvm/"
+            "org.jetbrains.kotlin.jvm.gradle.plugin/maven-metadata.xml"
+        )
+        entry = {
+            "id": "kotlin",
+            "local": {"type": "gradle-plugin"},
+            "source": {"type": "gradle-plugin", "name": "org.jetbrains.kotlin.jvm"},
+            "policy": "security-preview",
+            "expected": "2.4.20-Beta2",
+            "minimumPatched": "2.4.20-Beta1",
+            "stableReplacement": "2.4.20",
+            "reason": "The security advisory requires a patched compiler before the next stable release.",
+            "evidence": ["build.gradle.kts"],
+        }
+
+        def validate(versions: list[str], local: str = "2.4.20-Beta2") -> str:
+            metadata = "<metadata><versioning><versions>" + "".join(
+                f"<version>{version}</version>" for version in versions
+            ) + "</versions></versioning></metadata>"
+            with patch.object(currentness, "local_version", return_value=(local, None)):
+                return currentness.validate_entry(entry, FakeTransport({endpoint: metadata.encode()}))
+
+        self.assertIn("security preview", validate(["2.4.10", "2.4.20-Beta1", "2.4.20-Beta2"]))
+        with self.assertRaisesRegex(currentness.CurrentnessError, "not published"):
+            validate(["2.4.10", "2.4.20-Beta1"])
+        with self.assertRaisesRegex(currentness.CurrentnessError, "below the patched minimum"):
+            entry["expected"] = "2.4.20-Beta0"
+            validate(["2.4.10", "2.4.20-Beta0", "2.4.20-Beta1"], "2.4.20-Beta0")
+        entry["expected"] = "2.4.20-Beta2"
+        with self.assertRaisesRegex(currentness.CurrentnessError, "stable replacement"):
+            validate(["2.4.10", "2.4.20-Beta1", "2.4.20-Beta2", "2.4.20"])
+        entry["stableReplacement"] = "9.0.0"
+        with self.assertRaisesRegex(currentness.CurrentnessError, "same release line"):
+            validate(["2.4.10", "2.4.20-Beta1", "2.4.20-Beta2"])
+
     def test_unpinned_action_fails_discovery(self) -> None:
         """Reject a new Action reference before inventory comparison."""
         with TemporaryDirectory() as temporary:

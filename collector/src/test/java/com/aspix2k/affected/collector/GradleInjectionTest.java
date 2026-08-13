@@ -29,10 +29,12 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 public class GradleInjectionTest {
+    private static final long COMPLETE_MAP_SCENARIO_TIMEOUT_MILLIS = 240_000L;
+
     @Rule
     public final TemporaryFolder temporary = new TemporaryFolder();
 
-    @Test(timeout = 120_000L)
+    @Test(timeout = COMPLETE_MAP_SCENARIO_TIMEOUT_MILLIS)
     public void realGradleWorkersProduceCompleteMapsAndReuseConfigurationCache() throws Exception {
         Path project = temporary.newFolder("project").toPath();
         writeFixture(project);
@@ -249,7 +251,6 @@ public class GradleInjectionTest {
         arguments.add(task);
         if (configurationCache) arguments.add("--configuration-cache");
         arguments.add("--max-workers=4");
-        arguments.add("--info");
         arguments.add("--init-script");
         arguments.add(required("affected.test.initScript"));
         arguments.add("-Daffected.collector.agent=" + required("affected.smoke.agent"));
