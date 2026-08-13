@@ -132,8 +132,8 @@ model: untrusted code can only generate an artifact, while a trusted workflow
 submits it without checking out or executing pull-request code. Dependency
 review rejects every newly introduced vulnerability from low severity upward
 across runtime, development and unknown scopes, and independently rejects an
-incomplete base or pull-request snapshot. Dependabot remains responsible for
-update discovery.
+incomplete base or pull-request snapshot. The fail-closed release currentness
+gate remains responsible for update discovery from bounded official sources.
 
 The first zero-finding CodeQL pull-request job took 5 minutes 30 seconds. Its
 clean one-worker build took 3 minutes 36 seconds and measured 189,664 KB maximum

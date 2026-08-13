@@ -109,6 +109,20 @@ class CiContractsTest(unittest.TestCase):
             with self.assertRaisesRegex(ci_contracts.CiContractError, "--auto"):
                 ci_contracts.check(root)
 
+    def test_dependabot_version_update_prs_are_rejected(self) -> None:
+        """Keep dependency discovery read-only instead of opening bot pull requests."""
+        for filename in ("dependabot.yml", "dependabot.yaml"):
+            with self.subTest(filename=filename), TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.copy_workflows(root)
+                dependabot = root / ".github" / filename
+                dependabot.write_text(
+                    "version: 2\nupdates:\n  - package-ecosystem: gradle\n    directory: /\n",
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(ci_contracts.CiContractError, "Dependabot version-update pull requests"):
+                    ci_contracts.check(root)
+
     def copy_workflows(self, root: Path) -> None:
         """Copy the production workflow set into a temporary repository."""
         production = Path(__file__).resolve().parents[2]
