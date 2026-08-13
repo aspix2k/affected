@@ -115,18 +115,35 @@ private fun resolvedPythonCommands(
         val directory = byName[name]?.contentRoots?.singleOrNull() ?: return emptyList()
         task.substringAfterLast(':') to directory.removePrefix("$root/").ifEmpty { "." }
     }
-    return resolved.groupBy({ it.first }, { it.second }).map { (task, paths) ->
+    return resolved.groupBy({ it.first }, { it.second }).flatMap { (task, paths) ->
         if (task == PythonProjects.TYPECHECK) {
-            CliCommand("mypy", listOf("python", "-m", "mypy") + paths.distinct())
+            listOf(CliCommand("mypy", listOf("python", "-m", "mypy") + paths.distinct()))
         } else {
-            val packages = paths.distinct()
-            val context = changes?.let { pythonExactContext(root, packages, modules, it) }
-            if (context == null || adapter == null || !adapter.isReadableRegularFile()) {
-                CliCommand("pytest", listOf("python", "-m", "pytest") + packages)
-            } else {
-                CliCommand("pytest", listOf("python", adapter.toString(), context, "--") + packages)
-            }
+            pythonTestCommands(root, paths.distinct(), modules, changes, adapter)
         }
+    }
+}
+
+private fun pythonTestCommands(
+    root: String,
+    packages: List<String>,
+    modules: List<BuildModule>,
+    changes: BuildChanges?,
+    adapter: Path?,
+): List<CliCommand> {
+    if (pythonTestRunner(File(root)) == PythonTestRunner.UNITTEST) {
+        return packages.map { path ->
+            CliCommand(
+                "unittest $path",
+                listOf("python", "-m", "unittest", "discover", "-s", path, "-t", "."),
+            )
+        }
+    }
+    val context = changes?.let { pythonExactContext(root, packages, modules, it) }
+    return if (context == null || adapter == null || !adapter.isReadableRegularFile()) {
+        listOf(CliCommand("pytest", listOf("python", "-m", "pytest") + packages))
+    } else {
+        listOf(CliCommand("pytest", listOf("python", adapter.toString(), context, "--") + packages))
     }
 }
 

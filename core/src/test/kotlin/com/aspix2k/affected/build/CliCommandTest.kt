@@ -165,6 +165,32 @@ class CliCommandTest {
     }
 
     @Test
+    fun `Python unittest packages discover from each package root`() {
+        val root = createTempDirectory("python-unittest-commands").toFile()
+        File(root, "pyproject.toml").writeText("[project]\nname = \"app\"\n")
+        File(root, "packages/a/test_alpha.py").apply {
+            parentFile.mkdirs()
+            writeText("import unittest\nclass AlphaTest(unittest.TestCase):\n    pass\n")
+        }
+        val modules = modules(root.path, "pkg-a", "packages/a", "pkg-b", "packages/b")
+
+        val commands = pythonCommands(root.path, listOf("pkg-a:test", "pkg-b:test", "pkg-a:typecheck"), modules)
+
+        assertEquals(
+            listOf("python", "-m", "unittest", "discover", "-s", "packages/a", "-t", "."),
+            commands.single { it.title == "unittest packages/a" }.arguments,
+        )
+        assertEquals(
+            listOf("python", "-m", "unittest", "discover", "-s", "packages/b", "-t", "."),
+            commands.single { it.title == "unittest packages/b" }.arguments,
+        )
+        assertEquals(
+            listOf("python", "-m", "mypy", "packages/a"),
+            commands.single { it.title == "mypy" }.arguments,
+        )
+    }
+
+    @Test
     fun `pytest exact context contains only bounded relative paths`() {
         val root = createTempDirectory("pytest-context").toFile()
         val first = File(root, "packages/a").apply { mkdirs() }
