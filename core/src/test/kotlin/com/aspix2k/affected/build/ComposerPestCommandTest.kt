@@ -196,7 +196,10 @@ class ComposerPestCommandTest {
             changes(dataset),
         )
 
-        assertEquals(listOf("./package/tests/UsersTest.php"), commands.single().arguments.takeLast(1))
+        assertEquals(
+            listOf("./package/tests/Datasets/users.php", "./package/tests/UsersTest.php"),
+            commands.single().arguments.takeLast(2),
+        )
     }
 
     @Test

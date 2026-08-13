@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Detect Microsoft Testing Platform from the test project as well as `global.json`, and run those projects with `dotnet test --project` instead of the VSTest path form.
-- Select named Pest 5.1.1 dataset files by the test files that statically `->with` them; unused, dynamic or boot datasets keep the package suite.
+- Select named Pest 5.1.1 dataset files together with the test files that statically `->with` them; unused, dynamic or boot datasets keep the package suite.
 - Select changed Pest 5.1.1 test files by native path when every planned suite change is a regular test file; production, boot, helper and unproved changes keep the package suite.
 - Run every test in affected Composer packages through Pest 5.1.1, including datasets and PHPUnit-style tests, while disabling focused and test-impact shortcuts.
 - Run affected Cargo workspace packages through repository-configured cargo-nextest 0.9.x profiles, retaining `cargo test --doc` and conservative `cargo test` fallback when exact execution cannot be proven.

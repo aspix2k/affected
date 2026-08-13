@@ -56,6 +56,7 @@ class CliPestConformanceTest {
         File(root, "packages/alpha/tests/ExtraTest.php").writeText(
             """
             <?php
+            require_once __DIR__ . '/Datasets/extra.php';
             test('extra dataset', function (string ${'$'}color): void {
                 expect(${'$'}color)->not->toBeEmpty();
                 file_put_contents(__DIR__ . '/../extra.marker', ${'$'}color);
@@ -74,7 +75,13 @@ class CliPestConformanceTest {
             ),
         ).single()
 
-        assertEquals(listOf("./packages/alpha/tests/ExtraTest.php"), command.arguments.takeLast(1))
+        assertEquals(
+            listOf(
+                "./packages/alpha/tests/Datasets/extra.php",
+                "./packages/alpha/tests/ExtraTest.php",
+            ),
+            command.arguments.takeLast(2),
+        )
         execute(root, command.arguments)
 
         assertEquals("red", File(root, "packages/alpha/extra.marker").readText())

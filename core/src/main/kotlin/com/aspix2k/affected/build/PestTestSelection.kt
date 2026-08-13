@@ -31,7 +31,10 @@ internal fun selectPestTestFiles(
         val relative = pestRelative(realRoot, real)
         when {
             isPestExactTestFile(suite, real) -> selected += relative
-            isPestDatasetFile(suite, real) -> datasetNames += pestDatasetNames(real)
+            isPestDatasetFile(suite, real) -> {
+                datasetNames += pestDatasetNames(real)
+                selected += relative
+            }
             else -> return@runCatching null
         }
     }
