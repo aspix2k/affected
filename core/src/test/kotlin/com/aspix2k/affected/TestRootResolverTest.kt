@@ -1,5 +1,6 @@
 package com.aspix2k.affected
 
+import org.junit.Assume.assumeTrue
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -96,5 +97,57 @@ class TestRootResolverTest {
     @Test
     fun `a missing module does not crash the resolver`() {
         assertNull(TestRootResolver.resolve("/no/such/module/anywhere"))
+    }
+
+    @Test
+    fun `a non-source file does not stop descent through a single package`() {
+        val dir = module {
+            File(it, "src/test/kotlin/com/example").mkdirs()
+            File(it, "src/test/kotlin/README.md").writeText("# tests")
+            File(it, "src/test/kotlin/com/example/SomeTest.kt").writeText("class SomeTest")
+        }
+        assertEquals(
+            File(dir, "src/test/kotlin/com/example").path,
+            TestRootResolver.resolve(dir.path),
+            "markdown next to a single package is not a test source",
+        )
+    }
+
+    @Test
+    fun `a directory named like a source file is still descended`() {
+        val dir = module {
+            File(it, "src/test/kotlin/Suite.kt").mkdirs()
+            File(it, "src/test/kotlin/Suite.kt/NestedTest.kt").writeText("class NestedTest")
+        }
+        assertEquals(
+            File(dir, "src/test/kotlin/Suite.kt").path,
+            TestRootResolver.resolve(dir.path),
+            "a package directory is not a Kotlin file",
+        )
+    }
+
+    @Test
+    fun `a lone non-source file is not treated as a package`() {
+        val dir = module {
+            File(it, "src/test/kotlin").mkdirs()
+            File(it, "src/test/kotlin/notes.txt").writeText("not a test")
+        }
+        assertEquals(
+            File(dir, "src/test/kotlin").path,
+            TestRootResolver.resolve(dir.path),
+            "an unlistable-looking file must not become the test root",
+        )
+    }
+
+    @Test
+    fun `an unlistable test directory returns itself`() {
+        val dir = module { File(it, "src/test/kotlin").mkdirs() }
+        val locked = File(dir, "src/test/kotlin")
+        assumeTrue(locked.setReadable(false, false) && locked.listFiles() == null)
+        try {
+            assertEquals(locked.path, TestRootResolver.resolve(dir.path))
+        } finally {
+            locked.setReadable(true, false)
+        }
     }
 }

@@ -107,6 +107,8 @@ def check(root: Path = ROOT) -> None:
 
     if "scripts/pitest_gate.py" not in mutation:
         raise CiContractError("Weekly mutation must fail on surviving mutants")
+    if ":core:pitest" not in mutation or "core/build/reports/pitest/mutations.xml" not in mutation:
+        raise CiContractError("Weekly mutation must run and gate the core PIT report")
     if "cache-redirector.jetbrains.com/repo1.maven.org/maven2" not in read(root / "settings.gradle.kts"):
         raise CiContractError("Plugin resolution must prefer the JetBrains Maven Central mirror")
     if "AFFECTED_PREFER_MAVEN_CENTRAL" not in read(root / "settings.gradle.kts"):
