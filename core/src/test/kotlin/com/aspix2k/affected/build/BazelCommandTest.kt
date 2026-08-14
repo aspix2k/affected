@@ -71,6 +71,24 @@ class BazelCommandTest {
     }
 
     @Test
+    fun `a single first-level nested Bazel workspace is the root`() {
+        val base = createTempDirectory("bazel-nested").toFile()
+        val nested = File(base, "backend")
+        bazelRoot("MODULE.bazel").copyRecursively(nested)
+
+        assertEquals(nested.canonicalFile, bazelProjectRoot(base)?.canonicalFile)
+    }
+
+    @Test
+    fun `several first-level nested Bazel workspaces stay off`() {
+        val base = createTempDirectory("bazel-many").toFile()
+        bazelRoot("MODULE.bazel").copyRecursively(File(base, "backend"))
+        bazelRoot("WORKSPACE").copyRecursively(File(base, "tools"))
+
+        assertNull(bazelProjectRoot(base))
+    }
+
+    @Test
     fun `BUILD files become packages with their own content roots`() {
         val root = bazelRoot("MODULE.bazel")
         File(root, "alpha/BUILD.bazel").apply {

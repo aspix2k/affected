@@ -31,13 +31,16 @@ class BazelBuildSystem : SuspendingBuildSystem, WorkspaceChangesBuildSystem, Nam
         CommandRunner.runBatchAndWait(project, root, bazelCommands(tasks), "Affected Bazel")
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { bazelManifest(File(it)) }
+        project.basePath?.let(::File)?.let(::bazelProjectRoot)?.let(::bazelManifest)
 }
 
 internal object BazelTasks {
     const val TEST = "test"
     const val BUILD = "build"
 }
+
+internal fun bazelProjectRoot(base: File): File? =
+    nestedBuildRoot(base) { bazelManifest(it) != null }
 
 internal fun bazelManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null
