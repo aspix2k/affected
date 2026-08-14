@@ -28,5 +28,7 @@
 /conformance/cli-fixtures/bazel-packages/MODULE.bazel.lock
 /conformance/cli-fixtures/dart/.dart_tool/
 /conformance/cli-fixtures/dart/pubspec.lock
+/conformance/cli-fixtures/meson/build/
+/conformance/cli-fixtures/meson/builddir/
 /core/src/main/dotnet/**/bin/
 /core/src/main/dotnet/**/obj/
