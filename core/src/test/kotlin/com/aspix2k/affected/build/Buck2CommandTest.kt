@@ -100,6 +100,24 @@ class Buck2CommandTest {
         assertNull(buck2Manifest(root))
     }
 
+    @Test
+    fun `a single first-level nested Buck2 manifest is the root`() {
+        val base = createTempDirectory("buck2-nested").toFile()
+        val nested = File(base, "native")
+        buck2Root().copyRecursively(nested)
+
+        assertEquals(nested.canonicalFile, buck2ProjectRoot(base)?.canonicalFile)
+    }
+
+    @Test
+    fun `several first-level nested Buck2 projects stay off`() {
+        val base = createTempDirectory("buck2-many").toFile()
+        buck2Root().copyRecursively(File(base, "native"))
+        buck2Root().copyRecursively(File(base, "tools"))
+
+        assertNull(buck2ProjectRoot(base))
+    }
+
     private fun buck2Root(config: String = "[cells]\n"): File {
         val root = createTempDirectory("buck2-root").toFile()
         File(root, ".buckconfig").writeText(config)
