@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Fail dynamic-plugin descriptor tests when a descriptor declares `<nativelib>`; a native library blocks a restartless update.
 - Skip VFS refresh on a proven JetBrains Client frontend so analysis stays on the IDE backend; Gateway install and update stay unclaimed.
 - Detect local sqlc roots from `sqlc.yaml` / `sqlc.yml` / `sqlc.json` and run one `sqlc compile` session; database URIs, managed/cloud databases, process plugins and interpolated manifests stay off this adapter. Native sqlc execution and plain SQL files stay unclaimed.
 - Fail dynamic-plugin descriptor tests when a content module is not `loading="optional"` or a `config-file` dependency is required.

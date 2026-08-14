@@ -19,6 +19,20 @@ class DynamicPluginDescriptorsTest {
     }
 
     @Test
+    fun `a native library blocks a dynamic update`() {
+        val problems = DynamicPluginDescriptors.problems(
+            mapOf(
+                "plugin.xml" to """
+                    <idea-plugin>
+                      <nativelib>libfoo</nativelib>
+                    </idea-plugin>
+                """.trimIndent(),
+            ),
+        )
+        assertTrue(problems.any { it.contains("nativelib") }, problems.toString())
+    }
+
+    @Test
     fun `legacy components block a dynamic update`() {
         val problems = DynamicPluginDescriptors.problems(
             mapOf(
@@ -156,6 +170,7 @@ object DynamicPluginDescriptors {
         "application-components",
         "project-components",
         "module-components",
+        "nativelib",
     )
 
     fun repository(root: File = File(".")): Map<String, String> {
