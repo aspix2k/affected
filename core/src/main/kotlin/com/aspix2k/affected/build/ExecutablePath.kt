@@ -9,22 +9,24 @@ internal fun resolveExecutable(
     separator: String = File.pathSeparator,
 ): String {
     if (name.isBlank()) return name
-    if (name.contains('/') || name.contains('\\')) {
-        val file = File(name)
-        return if (isRunnable(file)) file.canonicalFile.invariantSeparatorsPath else name
-    }
-    val suffixes = linkedSetOf("")
-    pathExt.orEmpty().split(';').map { it.trim() }.filter { it.startsWith('.') }.forEach { suffixes += it }
-    for (directory in path.orEmpty().split(separator)) {
-        if (directory.isBlank()) continue
-        val folder = File(directory)
-        if (!folder.isDirectory || !folder.canRead()) continue
-        for (suffix in suffixes) {
-            val candidate = File(folder, name + suffix)
-            if (isRunnable(candidate)) return candidate.canonicalFile.invariantSeparatorsPath
-        }
-    }
-    return name
+    if (name.contains('/') || name.contains('\\')) return runnablePath(File(name)) ?: name
+    return firstRunnableOnPath(name, path.orEmpty(), pathExt, separator) ?: name
 }
 
-private fun isRunnable(file: File): Boolean = file.isFile && file.canExecute()
+private fun firstRunnableOnPath(name: String, path: String, pathExt: String?, separator: String): String? {
+    val suffixes = pathSuffixes(pathExt)
+    return path.split(separator)
+        .asSequence()
+        .map(::File)
+        .filter(File::isReadableDirectory)
+        .flatMap { folder -> suffixes.asSequence().map { File(folder, name + it) } }
+        .firstNotNullOfOrNull(::runnablePath)
+}
+
+private fun pathSuffixes(pathExt: String?): List<String> =
+    listOf("") + pathExt.orEmpty().split(';').map { it.trim() }.filter { it.startsWith('.') }
+
+private fun runnablePath(file: File): String? =
+    file.takeIf { it.isFile && it.canExecute() }?.canonicalFile?.invariantSeparatorsPath
+
+private fun File.isReadableDirectory(): Boolean = isDirectory && canRead()
