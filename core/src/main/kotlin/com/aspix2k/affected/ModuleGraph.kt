@@ -55,10 +55,17 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
         }
 
         val path = file.toPath().toAbsolutePath().normalize()
-        val owners = nodes.filter { node ->
+        val rooted = nodes.filter { node ->
             runCatching { path.startsWith(File(node.module.root).toPath().toAbsolutePath().normalize()) }
                 .getOrDefault(false)
         }
+        val scoped = rooted.filter { node ->
+            node.module.contentRoots.any { root ->
+                runCatching { path.startsWith(File(root).toPath().toAbsolutePath().normalize()) }
+                    .getOrDefault(false)
+            }
+        }
+        val owners = scoped.ifEmpty { rooted }
         val deepest = owners.maxOfOrNull { File(it.module.root).toPath().nameCount } ?: return emptyList()
         return owners.filter { File(it.module.root).toPath().nameCount == deepest }.distinct()
     }
