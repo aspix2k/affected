@@ -17,11 +17,11 @@ class AntBuildSystem : SuspendingBuildSystem {
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {
-        CommandRunner.runBatch(project, root, antCommands(tasks), "Affected Ant")
+        CommandRunner.runBatch(project, root, antCommands(File(root), tasks), "Affected Ant")
     }
 
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
-        CommandRunner.runBatchAndWait(project, root, antCommands(tasks), "Affected Ant")
+        CommandRunner.runBatchAndWait(project, root, antCommands(File(root), tasks), "Affected Ant")
 
     private fun manifestOf(project: Project): File? =
         project.basePath?.let { antManifest(File(it)) }
@@ -30,6 +30,7 @@ class AntBuildSystem : SuspendingBuildSystem {
 internal object AntTasks {
     const val TEST = "test"
     const val JUNIT = "junit"
+    const val TESTNG = "testng"
     const val COMPILE = "compile"
 }
 
@@ -44,6 +45,8 @@ internal fun antRootModule(root: File): BuildModule {
     val testTask = when {
         AntTasks.TEST in discovery.targets -> AntTasks.TEST
         AntTasks.JUNIT in discovery.targets -> AntTasks.JUNIT
+        AntTasks.TESTNG in discovery.targets -> AntTasks.TESTNG
+        discovery.taskTargets.isNotEmpty() -> discovery.taskTargets.first()
         else -> AntTasks.TEST
     }
     return BuildModule(
@@ -57,18 +60,27 @@ internal fun antRootModule(root: File): BuildModule {
     )
 }
 
-internal fun antCommands(tasks: List<String>): List<CliCommand> {
+internal fun antCommands(tasks: List<String>): List<CliCommand> = antCommands(File("."), tasks)
+
+internal fun antCommands(root: File, tasks: List<String>): List<CliCommand> {
     if (tasks.isEmpty()) return emptyList()
     val verbs = tasks.map { it.substringAfterLast(':') }.toSet()
+    val testTask = antRootModule(root).testTask
     val verb = when {
         verbs == setOf(AntTasks.COMPILE) -> AntTasks.COMPILE
-        AntTasks.JUNIT in verbs && AntTasks.TEST !in verbs -> AntTasks.JUNIT
+        AntTasks.TEST in verbs -> AntTasks.TEST
+        AntTasks.JUNIT in verbs -> AntTasks.JUNIT
+        testTask in verbs -> testTask
         else -> AntTasks.TEST
     }
     return listOf(CliCommand("ant $verb", listOf("ant", verb)))
 }
 
-internal data class AntDiscovery(val targets: Set<String>, val complete: Boolean)
+internal data class AntDiscovery(
+    val targets: Set<String>,
+    val taskTargets: Set<String> = emptySet(),
+    val complete: Boolean,
+)
 
 internal fun antTargets(root: File): Set<String> = antDiscovery(root).targets
 
@@ -77,18 +89,21 @@ internal fun antDiscovery(root: File): AntDiscovery {
     val pending = ArrayDeque(listOf(start))
     val seen = HashSet<String>()
     val targets = LinkedHashSet<String>()
+    val taskTargets = LinkedHashSet<String>()
     var complete = true
     while (pending.isNotEmpty()) {
         val parsed = parseAntFile(pending.removeFirst(), seen)
         targets += parsed.targets
+        taskTargets += parsed.taskTargets
         complete = complete && parsed.complete
         pending.addAll(parsed.imports)
     }
-    return AntDiscovery(targets, complete)
+    return AntDiscovery(targets, taskTargets, complete)
 }
 
 private data class AntFileParse(
     val targets: Set<String> = emptySet(),
+    val taskTargets: Set<String> = emptySet(),
     val imports: List<File> = emptyList(),
     val complete: Boolean = true,
 )
@@ -103,8 +118,14 @@ private fun parseAntFile(file: File, seen: MutableSet<String>): AntFileParse {
     val complete = ANT_IMPORT.findAll(text)
         .map { it.groupValues[1] }
         .fold(true) { ok, attributes -> enqueueAntImport(file, attributes, imports) && ok }
-    return AntFileParse(targets, imports, complete)
+    return AntFileParse(targets, antTaskTargets(text), imports, complete)
 }
+
+private fun antTaskTargets(text: String): Set<String> =
+    ANT_TARGET_BLOCK.findAll(text).mapNotNull { match ->
+        val name = ANT_TARGET_NAME.find(match.groupValues[1])?.groupValues?.get(1) ?: return@mapNotNull null
+        name.takeIf { ANT_TEST_TASK.containsMatchIn(match.groupValues[2]) }
+    }.toCollection(LinkedHashSet())
 
 private fun enqueueAntImport(file: File, attributes: String, pending: MutableList<File>): Boolean {
     if (UNPROVED_ANT_IMPORT.containsMatchIn(attributes)) return false
@@ -120,6 +141,12 @@ private fun enqueueAntImport(file: File, attributes: String, pending: MutableLis
 }
 
 private val ANT_TARGET = Regex("""<target\b[^>]*\bname\s*=\s*"([^"]+)"""")
+private val ANT_TARGET_BLOCK = Regex(
+    """<target\b([^>]*)>(.*?)</target>""",
+    setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+)
+private val ANT_TARGET_NAME = Regex("""\bname\s*=\s*"([^"]+)"""")
+private val ANT_TEST_TASK = Regex("""<(?:junit|testng)\b""", RegexOption.IGNORE_CASE)
 private val ANT_IMPORT = Regex("""<(?:import|include)\b([^>]*)/?>""", RegexOption.IGNORE_CASE)
 private val ANT_IMPORT_FILE = Regex("""\bfile\s*=\s*"([^"]+)"""")
 private val ANT_IMPORT_PATH = Regex("""[A-Za-z0-9._][A-Za-z0-9._/\-]*""")

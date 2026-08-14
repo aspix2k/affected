@@ -1,0 +1,5 @@
+<project name="affected-ant-junit-task" default="run-tests">
+    <target name="run-tests">
+        <echo>AlphaTest<![CDATA[ <junit/> ]]></echo>
+    </target>
+</project>

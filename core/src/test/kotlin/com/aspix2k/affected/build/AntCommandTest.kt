@@ -113,6 +113,78 @@ class AntCommandTest {
     }
 
     @Test
+    fun `a documented junit token in the target body keeps the task runnable`() {
+        val root = antRoot(
+            """
+            <project>
+              <target name="run-tests">
+                <echo>AlphaTest<![CDATA[ <junit/> ]]></echo>
+              </target>
+            </project>
+            """.trimIndent(),
+        )
+        val module = antRootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals("run-tests", module.testTask)
+    }
+
+    @Test
+    fun `a junit task target is treated as the Ant test task`() {
+        val root = antRoot(
+            """
+            <project>
+              <target name="run-tests">
+                <junit fork="true"/>
+              </target>
+            </project>
+            """.trimIndent(),
+        )
+        val module = antRootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals("run-tests", module.testTask)
+        assertEquals(
+            listOf("ant", "run-tests"),
+            antCommands(root, listOf(".:${module.testTask}")).single().arguments,
+        )
+    }
+
+    @Test
+    fun `a testng task target is treated as the Ant test task`() {
+        val root = antRoot(
+            """
+            <project>
+              <target name="verify">
+                <testng/>
+              </target>
+            </project>
+            """.trimIndent(),
+        )
+        val module = antRootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals("verify", module.testTask)
+        assertEquals(listOf("ant", "verify"), antCommands(root, listOf(".:verify")).single().arguments)
+    }
+
+    @Test
+    fun `a named test target still wins over a junit task`() {
+        val root = antRoot(
+            """
+            <project>
+              <target name="test"/>
+              <target name="run-tests">
+                <junit/>
+              </target>
+            </project>
+            """.trimIndent(),
+        )
+
+        assertEquals("test", antRootModule(root).testTask)
+    }
+
+    @Test
     fun `an optional missing import does not invent tests`() {
         val root = antRoot(
             "<project><import file=\"missing.xml\" optional=\"true\"/><target name=\"compile\"/></project>",
