@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Keep README, LICENSE and changelog files out of all-file change collection so a docs edit cannot fan out to every CMake, .NET or Python adapter.
 - Select `connectedDebugAndroidTest` for an instrumentation-only Android change when that task exists; mixed or unit-test changes keep `testDebugUnitTest`.
 - Keep the requested name when a PATH program is a rustup-style proxy, so `cargo test --doc` is not rewritten to `rustup test --doc`.
 - Run ChangeAnalyzer against the in-repo CMake fixture as a required gate so a clean clone stays empty and a source edit is found without network fixtures.

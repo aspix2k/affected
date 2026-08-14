@@ -74,9 +74,7 @@ class ChangeAnalyzer(
     private fun keepSources(paths: Collection<String>): List<File> {
         return paths
             .filter { path ->
-                includeAllFiles ||
-                    path.substringAfterLast('.', "").lowercase() in sourceExtensions ||
-                    path.substringAfterLast('/').substringAfterLast('\\') in sourceFileNames
+                isCollectedSource(path, includeAllFiles, sourceExtensions, sourceFileNames)
             }
             .map { File(projectDir, it) }
             .distinct()
@@ -229,3 +227,35 @@ private fun isJvmTestSource(segments: List<String>): Boolean =
         segments.any { it == "androidTest" || it == "androidUnitTest" }
 
 private val NODE_TEST_DIRECTORIES = setOf("test", "tests", "spec", "specs", "__tests__")
+
+internal fun isProjectDocumentation(path: String): Boolean {
+    val name = path.substringAfterLast('/').substringAfterLast('\\').lowercase()
+    return name in PROJECT_DOCUMENTATION_NAMES
+}
+
+internal fun isCollectedSource(
+    path: String,
+    includeAllFiles: Boolean,
+    extensions: Set<String>,
+    names: Set<String>,
+): Boolean {
+    if (isProjectDocumentation(path)) return false
+    val fileName = path.substringAfterLast('/').substringAfterLast('\\')
+    return includeAllFiles ||
+        path.substringAfterLast('.', "").lowercase() in extensions ||
+        fileName in names
+}
+
+private val PROJECT_DOCUMENTATION_NAMES = setOf(
+    "readme.md",
+    "license",
+    "license.md",
+    "licence",
+    "licence.md",
+    "changelog.md",
+    "contributing.md",
+    "security.md",
+    "code_of_conduct.md",
+    "support.md",
+    "privacy.md",
+)
