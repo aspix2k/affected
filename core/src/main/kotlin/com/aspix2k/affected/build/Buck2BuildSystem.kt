@@ -28,13 +28,16 @@ class Buck2BuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
         CommandRunner.runBatchAndWait(project, root, buck2Commands(tasks), "Affected Buck2")
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { buck2Manifest(File(it)) }
+        project.basePath?.let(::File)?.let(::buck2ProjectRoot)?.let(::buck2Manifest)
 }
 
 internal object Buck2Tasks {
     const val TEST = "test"
     const val BUILD = "build"
 }
+
+internal fun buck2ProjectRoot(base: File): File? =
+    nestedBuildRoot(base) { buck2Manifest(it) != null }
 
 internal fun buck2Manifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null

@@ -1,0 +1,1 @@
+- A lone first-level `native/` Buck2 project is now the Buck2 root when the repository base has no marker.
