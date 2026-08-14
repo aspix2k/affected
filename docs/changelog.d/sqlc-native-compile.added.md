@@ -1,0 +1,1 @@
+- Run native `sqlc compile` on the in-repo Linux fixture so local schema and query files compile without a network database; database URIs and cloud stay off.
