@@ -1,0 +1,1 @@
+- A lone first-level `migrations/` Atlas project is now the Atlas root when the repository base has no marker.

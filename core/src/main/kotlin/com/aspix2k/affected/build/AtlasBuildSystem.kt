@@ -26,12 +26,15 @@ class AtlasBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
         CommandRunner.runBatchAndWait(project, root, atlasCommands(tasks), "Affected Atlas")
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { atlasManifest(File(it)) }
+        project.basePath?.let(::File)?.let(::atlasProjectRoot)?.let(::atlasManifest)
 }
 
 internal object AtlasTasks {
     const val VALIDATE = "validate"
 }
+
+internal fun atlasProjectRoot(base: File): File? =
+    nestedBuildRoot(base) { atlasManifest(it) != null }
 
 internal fun atlasManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null
