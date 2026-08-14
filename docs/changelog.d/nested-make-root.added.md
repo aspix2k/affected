@@ -1,0 +1,1 @@
+- A lone first-level `native/` Make project is now the Make root when the repository base has no marker.

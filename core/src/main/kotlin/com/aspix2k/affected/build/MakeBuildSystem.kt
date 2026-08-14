@@ -26,7 +26,7 @@ class MakeBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
         CommandRunner.runBatchAndWait(project, root, makeCommands(File(root), tasks), "Affected Make")
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { makeManifest(File(it)) }
+        project.basePath?.let(::File)?.let(::makeProjectRoot)?.let(::makeManifest)
 }
 
 internal object MakeTasks {
@@ -34,6 +34,9 @@ internal object MakeTasks {
     const val CHECK = "check"
     const val ALL = "all"
 }
+
+internal fun makeProjectRoot(base: File): File? =
+    nestedBuildRoot(base) { makeManifest(it) != null }
 
 internal fun makeManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null
