@@ -212,6 +212,10 @@ jobs:
       - uses: dart-lang/setup-dart@7654d458321ee25acccccfdb86cd48bd95768ff1 # v1.8.0
         with:
           sdk: "3.13.0"
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: "3.47.0"
+          channel: stable
 
       - name: Install native fixture tools
         run: |
