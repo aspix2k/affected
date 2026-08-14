@@ -429,18 +429,6 @@ internal fun gradleCompositeRoot(ownerRoot: String, linkedRoots: List<String>, b
     return root?.toFile()?.invariantSeparatorsPath
 }
 
-internal fun gradleAndroidModule(
-    projectPath: String,
-    roots: List<String>,
-    availableTasks: Set<String>,
-): Boolean =
-    availableTasks.any(::isGradleAndroidTask) ||
-        File(projectPath, "src/main/AndroidManifest.xml").isFile ||
-        roots.any {
-            File(it, "src/main/AndroidManifest.xml").isFile ||
-                File(it, "AndroidManifest.xml").isFile
-        }
-
 internal fun gradleVerificationTasks(availableTasks: Set<String>): Pair<String?, String?> {
     val testTask = gradleTestTask(availableTasks)
     val testCompile = testTask?.let { gradleTestCompileTask(it, availableTasks) }
@@ -527,12 +515,6 @@ internal fun gradleKmpAdditionalTestTasks(available: Set<String>, primary: Strin
 internal fun gradleProductionCompileTask(available: Set<String>): String? {
     if (available.isEmpty()) return null
     return existingCompileTask(available, matching = "", testish = false)
-}
-
-private fun isGradleAndroidTask(name: String): Boolean {
-    val n = name.lowercase()
-    if ("android" !in n) return false
-    return n.startsWith("test") || n.startsWith("compile") || n.startsWith("connected")
 }
 
 private val UNIT_TEST_EXCLUDED_PREFIXES = listOf(
