@@ -8,7 +8,7 @@ import com.intellij.openapi.externalSystem.service.internal.ExternalSystemProces
 class AffectedExecuteTaskListener : ExternalSystemTaskNotificationListener {
 
     override fun onStart(projectPath: String, id: ExternalSystemTaskId) {
-        if (id.type != ExternalSystemTaskType.EXECUTE_TASK) return
+        if (!shouldClaimExternalExecute(id.type, remoteFrontendProven())) return
         val project = id.findProject() ?: return
         if (project.isDisposed) return
         val sessions = AffectedRunSessions.getInstance(project)
@@ -26,3 +26,6 @@ class AffectedExecuteTaskListener : ExternalSystemTaskNotificationListener {
         })
     }
 }
+
+internal fun shouldClaimExternalExecute(type: ExternalSystemTaskType, frontend: Boolean): Boolean =
+    !frontend && type == ExternalSystemTaskType.EXECUTE_TASK
