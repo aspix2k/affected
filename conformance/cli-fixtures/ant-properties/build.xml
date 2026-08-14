@@ -1,0 +1,4 @@
+<project name="affected-ant-properties" default="test">
+    <property name="defs" value="testdefs.xml"/>
+    <import file="${defs}"/>
+</project>
