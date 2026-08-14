@@ -1,0 +1,1 @@
+- Bound manifest scans to a shared time and size budget so a tree that exceeds it fails closed instead of scanning forever.
