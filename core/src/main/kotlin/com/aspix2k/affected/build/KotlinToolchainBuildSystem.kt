@@ -139,7 +139,9 @@ internal fun kotlinToolchainCommands(root: File, tasks: List<String>): List<CliC
         KotlinToolchainTasks.TEST
     }
     val modules = tasks.map { it.substringBeforeLast(':') }.distinct()
-    val scoped = modules.none { it == "." } && modules.all { MODULE_NAME.matches(it) }
+    val scoped = kotlinToolchainVersionProven(root) &&
+        modules.none { it == "." } &&
+        modules.all { MODULE_NAME.matches(it) }
     val arguments = when {
         !scoped -> listOf(wrapper, verb)
         verb == KotlinToolchainTasks.BUILD && modules.size == 1 -> listOf(wrapper, verb, "-m", modules.single())
@@ -147,6 +149,15 @@ internal fun kotlinToolchainCommands(root: File, tasks: List<String>): List<CliC
         else -> listOf(wrapper, verb)
     }
     return listOf(CliCommand("kotlin $verb", arguments))
+}
+
+internal fun kotlinToolchainVersionProven(root: File): Boolean {
+    val wrapper = File(root, "kotlin").takeIf(File::isRegularFileNoFollow)
+        ?: File(root, "kotlin.bat").takeIf(File::isRegularFileNoFollow)
+        ?: return false
+    val text = runCatching { wrapper.readText() }.getOrNull() ?: return false
+    val version = TOOLCHAIN_VERSION.find(text)?.groupValues?.get(1) ?: return false
+    return PROVEN_TOOLCHAIN_VERSION.matches(version)
 }
 
 private fun kotlinToolchainSourceFile(file: File): Boolean =
@@ -158,3 +169,5 @@ private val MODULES_SECTION = Regex("""(?m)^modules:\s*\n((?:[ \t]+.*\n?)*)""")
 private val UNPROVED_TOOLCHAIN_MODULE = Regex("""[*?\[]|\*\*""")
 private val TOOLCHAIN_MODULE_PATH = Regex("""(?m)^[ \t]*-[ \t]+(?:\./)?([A-Za-z0-9][A-Za-z0-9_./-]*)[ \t]*$""")
 private val MODULE_NAME = Regex("""[A-Za-z0-9][A-Za-z0-9_./-]*""")
+private val TOOLCHAIN_VERSION = Regex("""(?im)(?:^|\n)\s*(?:set\s+)?kotlin_cli_version=([0-9]+\.[0-9]+\.[0-9]+)""")
+private val PROVEN_TOOLCHAIN_VERSION = Regex("""0\.11\.[0-9]+""")

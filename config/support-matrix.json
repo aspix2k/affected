@@ -475,7 +475,7 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "Kotlin Toolchain 0.11.x Alpha; named modules use -m, unproved lists keep the project command",
+      "versions": "Kotlin Toolchain 0.11.x Alpha; named modules use -m only when the wrapper pins 0.11.x, unproved versions and lists keep the project command",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/kotlin-toolchain", "conformance/cli-fixtures/kotlin-toolchain-multi"],
       "gates": [".github/workflows/conformance.yml"]
