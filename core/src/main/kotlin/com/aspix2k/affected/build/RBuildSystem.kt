@@ -26,13 +26,16 @@ class RBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
         CommandRunner.runBatchAndWait(project, root, rCommands(File(root), tasks), "Affected R")
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { rManifest(File(it)) }
+        project.basePath?.let(::File)?.let(::rProjectRoot)?.let(::rManifest)
 }
 
 internal object RTasks {
     const val TEST = "test"
     const val CHECK = "check"
 }
+
+internal fun rProjectRoot(base: File): File? =
+    nestedBuildRoot(base) { rManifest(it) != null }
 
 internal fun rManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null
