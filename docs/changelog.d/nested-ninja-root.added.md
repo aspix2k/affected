@@ -1,0 +1,1 @@
+- A lone first-level `native/` Ninja project is now the Ninja root when the repository base has no marker.

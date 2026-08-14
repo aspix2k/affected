@@ -104,6 +104,24 @@ class NinjaCommandTest {
         assertNull(ninjaManifest(root))
     }
 
+    @Test
+    fun `a single first-level nested Ninja project is the root`() {
+        val base = createTempDirectory("ninja-nested").toFile()
+        val nested = File(base, "native")
+        ninjaRoot("build test: phony\n").copyRecursively(nested)
+
+        assertEquals(nested.canonicalFile, ninjaProjectRoot(base)?.canonicalFile)
+    }
+
+    @Test
+    fun `several first-level nested Ninja projects stay off`() {
+        val base = createTempDirectory("ninja-many").toFile()
+        ninjaRoot("build test: phony\n").copyRecursively(File(base, "native"))
+        ninjaRoot("build test: phony\n").copyRecursively(File(base, "tools"))
+
+        assertNull(ninjaProjectRoot(base))
+    }
+
     private fun ninjaRoot(manifest: String): File {
         val root = createTempDirectory("ninja-root").toFile()
         File(root, "build.ninja").writeText(manifest)

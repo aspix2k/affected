@@ -26,7 +26,7 @@ class NinjaBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem, AllFileC
         CommandRunner.runBatchAndWait(project, root, ninjaCommands(File(root), tasks), "Affected Ninja")
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { ninjaManifest(File(it)) }
+        project.basePath?.let(::File)?.let(::ninjaProjectRoot)?.let(::ninjaManifest)
 }
 
 internal object NinjaTasks {
@@ -34,6 +34,9 @@ internal object NinjaTasks {
     const val CHECK = "check"
     const val DEFAULT = "default"
 }
+
+internal fun ninjaProjectRoot(base: File): File? =
+    nestedBuildRoot(base) { ninjaManifest(it) != null }
 
 internal fun ninjaManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null
