@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Run `dart run build_runner build --delete-conflicting-outputs` before Dart or Flutter `test` / `analyze` when `build.yaml` exists or `pubspec.yaml` declares `build_runner`; unreadable manifests keep generate. Assets and generated-file ownership stay unclaimed.
+- Keep Dart workspace commands when `.dart_tool`, `build.yaml` or a generated `*.g.dart` / `*.freezed.dart` file sits outside a member package; generated files and `assets/` inside a member stay scoped.
+- Run `dart run build_runner build --delete-conflicting-outputs` before Dart or Flutter `test` / `analyze` when `build.yaml` exists or `pubspec.yaml` declares `build_runner`; unreadable manifests keep generate.
 - Detect R package roots from `DESCRIPTION` / `renv.lock` and run one `testthat::test_dir` or `read.dcf` session; Gradle and Maven roots stay off this adapter. testthat file selection, renv libraries and R Markdown stay unclaimed.
 - Keep Ant on `ant test` when the graph is dynamic (`antcall`, nested `ant`, unproved target names, `if` / `unless`); static JUnit/TestNG task targets still win when the graph is complete.
 - Expand static Ant `${property}` imports from `name`/`value` and `property file` so `file="${defs}"` can contribute `test`; unresolved properties keep `ant test`.

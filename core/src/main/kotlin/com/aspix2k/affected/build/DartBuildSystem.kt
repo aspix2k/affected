@@ -111,13 +111,30 @@ private fun addDartWorkspaceMember(
 }
 
 internal fun dartRequiresWorkspace(root: String, changes: BuildChanges): Boolean {
-    val rootPath = File(root).toPath().toAbsolutePath().normalize()
+    val rootDir = File(root)
+    val rootPath = rootDir.toPath().toAbsolutePath().normalize()
     return changes.files.any { raw ->
         val file = File(raw).toPath().toAbsolutePath().normalize()
         if (!file.startsWith(rootPath)) return@any true
-        val name = rootPath.relativize(file).toString().replace('\\', '/').substringAfterLast('/')
-        name == "pubspec.yaml" || name == "pubspec.lock"
+        dartWorkspaceWideChange(rootDir, rootPath.relativize(file).toString().replace('\\', '/'))
     }
+}
+
+internal fun dartWorkspaceWideChange(root: File, relative: String): Boolean {
+    val name = relative.substringAfterLast('/')
+    if (name == "pubspec.yaml" || name == "pubspec.lock" || name == "build.yaml") return true
+    if (relative == ".dart_tool" || relative.startsWith(".dart_tool/")) return true
+    val generatedOrAsset = GENERATED_DART.matches(name) || ASSET_PATH.containsMatchIn(relative)
+    return generatedOrAsset && !dartUnderMemberPackage(root, relative)
+}
+
+private fun dartUnderMemberPackage(root: File, relative: String): Boolean {
+    var dir = root
+    for (part in relative.replace('\\', '/').split('/').dropLast(1)) {
+        dir = File(dir, part)
+        if (dir != root && File(dir, "pubspec.yaml").isRegularFileNoFollow()) return true
+    }
+    return false
 }
 
 internal fun dartCommands(tasks: List<String>): List<CliCommand> = dartCommands(File("."), tasks)
@@ -167,6 +184,8 @@ private val WORKSPACE_PATH = Regex("""(?m)^[ \t]*-[ \t]+(?:\./)?([A-Za-z0-9][A-Z
 private val UNPROVED_WORKSPACE = Regex("""[*?\[]|\*\*""")
 private val PACKAGE_PATH = Regex("""[A-Za-z0-9._\-]+(?:/[A-Za-z0-9._\-]+)*""")
 private val BUILD_RUNNER_DEPENDENCY = Regex("""(?m)^[ \t]*build_runner\s*:""")
+private val GENERATED_DART = Regex(""".+\.(?:g|freezed|gen)\.dart""")
+private val ASSET_PATH = Regex("""(?:^|/)assets(?:/|$)""")
 internal val BUILD_RUNNER_COMMAND = CliCommand(
     "dart run build_runner build",
     listOf("dart", "run", "build_runner", "build", "--delete-conflicting-outputs"),

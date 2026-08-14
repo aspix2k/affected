@@ -127,6 +127,54 @@ class DartCommandTest {
     }
 
     @Test
+    fun `a dart_tool change keeps the workspace command`() {
+        val root = dartWorkspace()
+
+        assertTrue(
+            dartRequiresWorkspace(
+                root.path,
+                BuildChanges(listOf(File(root, ".dart_tool/package_config.json").path), emptySet(), false),
+            ),
+        )
+    }
+
+    @Test
+    fun `a generated file in a package stays scoped`() {
+        val root = dartWorkspace()
+
+        assertFalse(
+            dartRequiresWorkspace(
+                root.path,
+                BuildChanges(listOf(File(root, "packages/alpha/lib/alpha.g.dart").path), emptySet(), false),
+            ),
+        )
+    }
+
+    @Test
+    fun `an asset in a package stays scoped`() {
+        val root = dartWorkspace()
+
+        assertFalse(
+            dartRequiresWorkspace(
+                root.path,
+                BuildChanges(listOf(File(root, "packages/alpha/assets/logo.png").path), emptySet(), false),
+            ),
+        )
+    }
+
+    @Test
+    fun `a generated file at the workspace root keeps the workspace command`() {
+        val root = dartWorkspace()
+
+        assertTrue(
+            dartRequiresWorkspace(
+                root.path,
+                BuildChanges(listOf(File(root, "lib/app.g.dart").path), emptySet(), false),
+            ),
+        )
+    }
+
+    @Test
     fun `a build_runner dependency runs generate before dart test`() {
         val root = dartRoot(
             """
