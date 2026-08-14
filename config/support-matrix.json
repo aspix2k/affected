@@ -704,6 +704,29 @@
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/buck2"],
       "gates": [".github/workflows/ci.yml"]
+    },
+    {
+      "id": "SWIFT",
+      "implementation": "com.aspix2k.affected.build.SwiftBuildSystem",
+      "ecosystem": "Swift",
+      "languages": ["Swift", "Objective-C"],
+      "runners": ["swift test", "swift build"],
+      "selection": ["project"],
+      "selectionProofs": [
+        {
+          "units": ["project"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/SwiftCommandTest.kt",
+          "marker": "a Swift package runs one project test command",
+          "gate": ".github/workflows/ci.yml",
+          "gateMarker": "koverVerify",
+          "gateJob": "plugin",
+          "gateStep": "Analyze, test, package and verify"
+        }
+      ],
+      "versions": "SwiftPM; project-level until Xcode schemes, target selection and native Swift execution are proven",
+      "support": "supported",
+      "fixtures": ["conformance/cli-fixtures/swift"],
+      "gates": [".github/workflows/ci.yml"]
     }
   ]
 }

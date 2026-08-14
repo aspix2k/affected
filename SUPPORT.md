@@ -55,6 +55,7 @@ dedicated product lifecycle fixture.
 | R | R | testthat::test_dir, read.dcf | project | R 4.x with testthat; project-level until file selection, renv and R Markdown contracts are proven | [r](conformance/cli-fixtures/r) · [CliRConformanceTest.kt](core/src/test/kotlin/com/aspix2k/affected/build/CliRConformanceTest.kt) · [conformance.yml](.github/workflows/conformance.yml) |
 | Pants | Python, Rust, Go, Java, Kotlin | pants test, pants check | project | Pants 2.x; project-level until target selection and native pants execution are proven | [pants](conformance/cli-fixtures/pants) · [PantsCommandTest.kt](core/src/test/kotlin/com/aspix2k/affected/build/PantsCommandTest.kt) · [ci.yml](.github/workflows/ci.yml) |
 | Buck2 | Starlark, Python, Rust, Go, Java, Kotlin | buck2 test, buck2 build | project | Buck2; project-level until cells, aliases and native buck2 execution are proven | [buck2](conformance/cli-fixtures/buck2) · [Buck2CommandTest.kt](core/src/test/kotlin/com/aspix2k/affected/build/Buck2CommandTest.kt) · [ci.yml](.github/workflows/ci.yml) |
+| Swift | Swift, Objective-C | swift test, swift build | project | SwiftPM; project-level until Xcode schemes, target selection and native Swift execution are proven | [swift](conformance/cli-fixtures/swift) · [SwiftCommandTest.kt](core/src/test/kotlin/com/aspix2k/affected/build/SwiftCommandTest.kt) · [ci.yml](.github/workflows/ci.yml) |
 
 The smaller selection unit is used only when the adapter proves a complete
 relationship. Otherwise **Affected** keeps the larger unit shown in the same row.
