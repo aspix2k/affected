@@ -1,0 +1,1 @@
+- Run native CMake and .NET commands on one in-repo mixed fixture so a CMake plan cannot invoke `dotnet` and a .NET plan cannot invoke `cmake` / `ctest`.

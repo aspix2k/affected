@@ -22,6 +22,21 @@ def is_equivalent_kotlin_intrinsic(mutation: ElementTree.Element) -> bool:
     return mutator.endswith("VoidMethodCallMutator") and KOTLIN_INTRINSICS_NULL_CHECK in description
 
 
+def is_equivalent_non_directory_path_entry(mutation: ElementTree.Element) -> bool:
+    """A non-directory PATH entry cannot contain a child executable."""
+    if mutation.findtext("mutatedClass", default="") != "com.aspix2k.affected.build.ExecutablePathKt":
+        return False
+    if mutation.findtext("mutatedMethod", default="") != "isReadableDirectory":
+        return False
+    description = mutation.findtext("description", default="")
+    mutator = mutation.findtext("mutator", default="")
+    if mutation.findtext("lineNumber") != "54":
+        return False
+    if "replaced boolean return with true" in description:
+        return True
+    return mutator.endswith("RemoveConditionalMutator_EQUAL_ELSE") and "replaced equality check with false" in description
+
+
 def check_all(reports: list[Path]) -> int:
     """Reject an empty report list or any meaningful surviving mutant in any report."""
     if not reports:
@@ -45,7 +60,11 @@ def check(report: Path) -> int:
         if mutation.get("status") == "SURVIVED"
         or (mutation.get("detected") == "false" and mutation.get("status") not in {"NO_COVERAGE", "TIMED_OUT"})
     ]
-    equivalent = [mutation for mutation in candidates if is_equivalent_kotlin_intrinsic(mutation)]
+    equivalent = [
+        mutation
+        for mutation in candidates
+        if is_equivalent_kotlin_intrinsic(mutation) or is_equivalent_non_directory_path_entry(mutation)
+    ]
     survivors = [mutation for mutation in candidates if mutation not in equivalent]
     if survivors:
         details = []
@@ -72,7 +91,7 @@ def main(arguments: list[str] | None = None) -> int:
     if equivalent:
         print(
             f"PIT reports have no surviving mutants. "
-            f"Classified {equivalent} compiler-generated Kotlin Intrinsics mutant(s) as equivalent."
+            f"Classified {equivalent} equivalent mutant(s)."
         )
     else:
         print("PIT reports have no surviving mutants.")

@@ -60,6 +60,24 @@ class PantsCommandTest {
         assertNull(pantsManifest(root))
     }
 
+    @Test
+    fun `a single first-level nested Pants manifest is the root`() {
+        val base = createTempDirectory("pants-nested").toFile()
+        val nested = File(base, "backend")
+        pantsRoot().copyRecursively(nested)
+
+        assertEquals(nested.canonicalFile, pantsProjectRoot(base)?.canonicalFile)
+    }
+
+    @Test
+    fun `several first-level nested Pants projects stay off`() {
+        val base = createTempDirectory("pants-many").toFile()
+        pantsRoot().copyRecursively(File(base, "backend"))
+        pantsRoot().copyRecursively(File(base, "services"))
+
+        assertNull(pantsProjectRoot(base))
+    }
+
     private fun pantsRoot(): File {
         val root = createTempDirectory("pants-root").toFile()
         File(root, "pants.toml").writeText("[GLOBAL]\npants_version = \"2.27.0\"\n")

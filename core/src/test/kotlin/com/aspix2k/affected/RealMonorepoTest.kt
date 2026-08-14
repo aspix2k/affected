@@ -2,6 +2,7 @@ package com.aspix2k.affected
 
 import com.aspix2k.affected.build.CMakeTargets
 import com.aspix2k.affected.build.ComposerPackages
+import com.aspix2k.affected.build.PerformanceBudgets
 import com.aspix2k.affected.build.RubyGems
 import org.junit.Assume.assumeTrue
 import java.io.File
@@ -96,6 +97,9 @@ class RealMonorepoTest {
         ComposerPackages.parse(root!!)
         val took = (System.nanoTime() - started) / 1_000_000
 
-        assertTrue(took < 10_000, "parsing 194 packages took $took ms and is user-visible")
+        assertTrue(
+            took < PerformanceBudgets.EDIT_TO_READY_PARSE_MS,
+            "parsing 194 packages took $took ms and is user-visible",
+        )
     }
 }

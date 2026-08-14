@@ -68,7 +68,7 @@ class CargoBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSy
             it.absoluteFile.normalize().invariantSeparatorsPath
         }
         if (inputStamp != null && discovery.complete && fingerprintedManifests.containsAll(discoveredManifests)) {
-            cache.set(Snapshot(root, inputStamp, discovery.modules))
+            cache.retainBuildSnapshot(Snapshot(root, inputStamp, discovery.modules), discovery.modules.size)
         }
         return discovery.modules
     }

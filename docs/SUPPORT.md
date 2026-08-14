@@ -9,8 +9,8 @@ is tied to public repository evidence and an executable CI gate.
 |---|---|---:|---|
 | IntelliJ IDEA | Product-verified | 2025.3 | [build.gradle.kts](../build.gradle.kts) · [ci.yml](../.github/workflows/ci.yml) |
 | Android Studio | Product-verified | 2025.3 | [build.gradle.kts](../build.gradle.kts) · [ci.yml](../.github/workflows/ci.yml) |
-| Rider | Platform-compatible | 2025.3 | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
-| GoLand | Platform-compatible | 2025.3 | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
+| Rider | Platform-compatible | 2025.3 | [build.gradle.kts](../build.gradle.kts) · [ci.yml](../.github/workflows/ci.yml) |
+| GoLand | Platform-compatible | 2025.3 | [build.gradle.kts](../build.gradle.kts) · [ci.yml](../.github/workflows/ci.yml) |
 | CLion | Platform-compatible | 2025.3 | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
 | PyCharm | Platform-compatible | 2025.3 | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
 | WebStorm | Platform-compatible | 2025.3 | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |

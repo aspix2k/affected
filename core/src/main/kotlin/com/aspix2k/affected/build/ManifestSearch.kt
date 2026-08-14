@@ -8,14 +8,24 @@ import java.security.MessageDigest
 
 internal object ManifestSearch {
 
-    fun find(root: File, name: String, limit: Int = MAX_MATCHES): List<File> =
-        find(root, limit) { it.name == name }
+    fun find(
+        root: File,
+        name: String,
+        limit: Int = PerformanceBudgets.MAX_MATCHES,
+        budgetNanos: Long = PerformanceBudgets.SCAN_TIME_NS,
+    ): List<File> =
+        find(root, limit, budgetNanos) { it.name == name }
 
-    fun findByExtension(root: File, extension: String, limit: Int = MAX_MATCHES): List<File> =
-        find(root, limit) { it.extension.equals(extension, ignoreCase = true) }
+    fun findByExtension(
+        root: File,
+        extension: String,
+        limit: Int = PerformanceBudgets.MAX_MATCHES,
+        budgetNanos: Long = PerformanceBudgets.SCAN_TIME_NS,
+    ): List<File> =
+        find(root, limit, budgetNanos) { it.extension.equals(extension, ignoreCase = true) }
 
     fun fingerprint(root: File, files: List<File>): String? = runCatching {
-        if (files.size > MAX_FINGERPRINT_FILES) return null
+        if (files.size > PerformanceBudgets.MAX_FINGERPRINT_FILES) return null
         val realRoot = root.toPath().toRealPath()
         val digest = MessageDigest.getInstance("SHA-256")
         var total = 0L
@@ -31,7 +41,7 @@ internal object ManifestSearch {
             if (!real.startsWith(realRoot)) return null
             val size = Files.size(real)
             total += size
-            if (size > MAX_MANIFEST_BYTES || total > MAX_TOTAL_BYTES) return null
+            if (size > PerformanceBudgets.MAX_MANIFEST_BYTES || total > PerformanceBudgets.MAX_TOTAL_BYTES) return null
             digest.update(realRoot.relativize(real).toString().replace('\\', '/').toByteArray(StandardCharsets.UTF_8))
             digest.update(0.toByte())
             Files.newInputStream(real).use { input ->
@@ -62,7 +72,7 @@ internal object ManifestSearch {
         queue += root to 0
         var visited = 0
         while (queue.isNotEmpty()) {
-            if (visited++ >= MAX_DIRECTORIES) return null
+            if (visited++ >= PerformanceBudgets.MAX_DIRECTORIES) return null
             val (directory, depth) = queue.removeFirst()
             when (scanAny(directory, depth, excludedRoots, matches, queue)) {
                 true -> return true
@@ -75,7 +85,7 @@ internal object ManifestSearch {
 
     fun layoutFingerprint(
         root: File,
-        maxDepth: Int = MAX_DEPTH,
+        maxDepth: Int = PerformanceBudgets.MAX_DEPTH,
         matches: (File) -> Boolean,
     ): String? = runCatching {
         val realRoot = root.toPath().toRealPath()
@@ -95,7 +105,7 @@ internal object ManifestSearch {
         queue += root to 0
         var visited = 0
         while (queue.isNotEmpty()) {
-            if (visited++ >= MAX_DIRECTORIES) return null
+            if (visited++ >= PerformanceBudgets.MAX_DIRECTORIES) return null
             val (directory, depth) = queue.removeFirst()
             if (!scanLayout(directory, depth, realRoot, maxDepth, matches, markers, queue)) return null
         }
@@ -110,28 +120,35 @@ internal object ManifestSearch {
         queue: ArrayDeque<Pair<File, Int>>,
     ): Boolean? {
         val children = directory.listFiles() ?: return null
-        if (children.size > MAX_DIRECTORIES) return null
+        if (children.size > PerformanceBudgets.MAX_DIRECTORIES) return null
         for (child in children) {
             if (child.toPath().toAbsolutePath().normalize() in excludedRoots) continue
-            if (unsafeTraversalSymlink(child, depth, MAX_DEPTH, matches)) return null
+            if (unsafeTraversalSymlink(child, depth, PerformanceBudgets.MAX_DEPTH, matches)) return null
             if (Files.isRegularFile(child.toPath(), LinkOption.NOFOLLOW_LINKS) && matches(child)) return true
             if (canEnter(child, depth)) {
-                if (queue.size >= MAX_DIRECTORIES) return null
+                if (queue.size >= PerformanceBudgets.MAX_DIRECTORIES) return null
                 queue += child to depth + 1
             }
         }
         return false
     }
 
-    private fun find(root: File, limit: Int, matches: (File) -> Boolean): List<File> {
-        if (limit <= 0) return emptyList()
+    private fun find(
+        root: File,
+        limit: Int,
+        budgetNanos: Long,
+        matches: (File) -> Boolean,
+    ): List<File> {
+        if (limit <= 0 || budgetNanos <= 0) return emptyList()
         val found = ArrayList<File>()
         val queue = ArrayDeque<Pair<File, Int>>()
         queue += root to 0
         var visited = 0
+        val started = System.nanoTime()
 
         while (queue.isNotEmpty()) {
-            if (visited++ >= MAX_DIRECTORIES) return emptyList()
+            if (System.nanoTime() - started >= budgetNanos) return emptyList()
+            if (visited++ >= PerformanceBudgets.MAX_DIRECTORIES) return emptyList()
             val (directory, depth) = queue.removeFirst()
             if (!scan(directory, depth, limit, matches, found, queue)) return emptyList()
             if (found.size >= limit) return emptyList()
@@ -148,24 +165,21 @@ internal object ManifestSearch {
         queue: ArrayDeque<Pair<File, Int>>,
     ): Boolean {
         val children = directory.listFiles() ?: return false
-        if (children.size > MAX_DIRECTORIES) return false
+        if (children.size > PerformanceBudgets.MAX_DIRECTORIES) return false
 
         for (child in children) {
             if (found.size >= limit) return true
-            if (unsafeTraversalSymlink(child, depth, MAX_DEPTH, matches)) return false
+            if (unsafeTraversalSymlink(child, depth, PerformanceBudgets.MAX_DEPTH, matches)) return false
             when {
                 Files.isRegularFile(child.toPath(), LinkOption.NOFOLLOW_LINKS) && matches(child) -> found += child
                 canEnter(child, depth) -> {
-                    if (queue.size >= MAX_DIRECTORIES) return false
+                    if (queue.size >= PerformanceBudgets.MAX_DIRECTORIES) return false
                     queue += child to depth + 1
                 }
             }
         }
         return true
     }
-
-    private const val MAX_TOTAL_BYTES = 64L * 1024L * 1024L
-    private const val MAX_MATCHES = 4097
 }
 
 private fun scanLayout(
@@ -178,18 +192,18 @@ private fun scanLayout(
     queue: ArrayDeque<Pair<File, Int>>,
 ): Boolean {
     val children = directory.listFiles() ?: return false
-    if (children.size > MAX_DIRECTORIES) return false
+    if (children.size > PerformanceBudgets.MAX_DIRECTORIES) return false
     for (child in children) {
         if (!addLayoutMarker(child, depth, maxDepth, realRoot, matches, markers)) return false
         if (canEnter(child, depth, maxDepth)) {
-            if (queue.size >= MAX_DIRECTORIES) return false
+            if (queue.size >= PerformanceBudgets.MAX_DIRECTORIES) return false
             queue += child to depth + 1
         }
     }
     return true
 }
 
-private fun canEnter(file: File, depth: Int, maxDepth: Int = MAX_DEPTH): Boolean =
+private fun canEnter(file: File, depth: Int, maxDepth: Int = PerformanceBudgets.MAX_DEPTH): Boolean =
     depth < maxDepth &&
         Files.isDirectory(file.toPath(), LinkOption.NOFOLLOW_LINKS) &&
         !Files.isSymbolicLink(file.toPath()) &&
@@ -209,7 +223,7 @@ private fun addLayoutMarker(
     val isDirectory = Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)
     val isFile = Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
     if ((!isDirectory && !isFile) || !matches(child)) return true
-    if (markers.size >= MAX_FINGERPRINT_FILES) return false
+    if (markers.size >= PerformanceBudgets.MAX_FINGERPRINT_FILES) return false
     val real = path.toRealPath()
     if (!real.startsWith(realRoot)) return false
     markers += "${if (isDirectory) 'd' else 'f'}:${realRoot.relativize(real)}"
@@ -225,16 +239,11 @@ private fun hashMarkers(markers: List<String>): String {
     return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
 }
 
-private const val MAX_FINGERPRINT_FILES = 4096
-private const val MAX_DIRECTORIES = 16_384
-private const val MAX_DEPTH = 7
-private const val MAX_MANIFEST_BYTES = 8L * 1024L * 1024L
-
 private fun isReadableManifest(path: java.nio.file.Path): Boolean =
     !Files.isSymbolicLink(path) &&
         Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) &&
         Files.isReadable(path) &&
-        Files.size(path) <= MAX_MANIFEST_BYTES
+        Files.size(path) <= PerformanceBudgets.MAX_MANIFEST_BYTES
 
 private fun unsafeTraversalSymlink(
     file: File,

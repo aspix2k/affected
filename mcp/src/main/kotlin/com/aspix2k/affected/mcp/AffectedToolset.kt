@@ -12,6 +12,7 @@ import com.aspix2k.affected.TaskPlanner
 import com.aspix2k.affected.Verification
 import com.aspix2k.affected.build.BuildSystems
 import com.aspix2k.affected.projectBusy
+import com.aspix2k.affected.runWithRequiredAdapter
 import com.intellij.mcpserver.McpToolCallResult
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
@@ -139,7 +140,9 @@ class AffectedToolset : McpToolset {
             val passed = coroutineScope {
                 groups.map { group ->
                     async(Dispatchers.IO) {
-                        BuildSystems.byId(group.systemId)?.runAndWait(project, group.root, group.tasks) ?: true
+                        runWithRequiredAdapter(BuildSystems.byId(group.systemId)) {
+                            it.runAndWait(project, group.root, group.tasks)
+                        }
                     }
                 }.awaitAll().all { it }
             }

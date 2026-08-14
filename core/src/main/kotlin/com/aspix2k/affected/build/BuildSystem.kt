@@ -7,6 +7,7 @@ import kotlinx.coroutines.runInterruptible
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.util.concurrent.atomic.AtomicReference
 
 data class BuildModule(
     val id: String,
@@ -147,4 +148,18 @@ internal fun failClosedModules(
     ModuleDiscovery(listOf(rootFallbackModule(root, testTask, compileTask)), complete = false)
 } else {
     ModuleDiscovery(discovered, complete = true)
+}
+
+internal const val MAX_CACHED_MODULES = 4096
+
+internal fun shouldRetainBuildSnapshot(moduleCount: Int): Boolean =
+    moduleCount in 0..MAX_CACHED_MODULES
+
+internal fun <T> AtomicReference<T?>.retainBuildSnapshot(value: T, moduleCount: Int): Boolean {
+    if (!shouldRetainBuildSnapshot(moduleCount)) {
+        set(null)
+        return false
+    }
+    set(value)
+    return true
 }

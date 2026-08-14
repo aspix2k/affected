@@ -26,12 +26,15 @@ class SqlcBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
         CommandRunner.runBatchAndWait(project, root, sqlcCommands(tasks), "Affected sqlc")
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { sqlcManifest(File(it)) }
+        project.basePath?.let(::File)?.let(::sqlcProjectRoot)?.let(::sqlcManifest)
 }
 
 internal object SqlcTasks {
     const val COMPILE = "compile"
 }
+
+internal fun sqlcProjectRoot(base: File): File? =
+    nestedBuildRoot(base) { sqlcManifest(it) != null }
 
 internal fun sqlcManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null

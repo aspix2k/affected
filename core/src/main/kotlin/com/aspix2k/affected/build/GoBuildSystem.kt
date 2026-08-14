@@ -47,7 +47,7 @@ class GoBuildSystem : ChangeAwareSuspendingBuildSystem {
             module.contentRoots.singleOrNull() in fingerprintedPackages
         }
         if (stamp != null && discovery.complete && completeFingerprint) {
-            cache.set(Snapshot(root, stamp, discovery.modules))
+            cache.retainBuildSnapshot(Snapshot(root, stamp, discovery.modules), discovery.modules.size)
         }
         return discovery.modules
     }

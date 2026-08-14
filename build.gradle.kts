@@ -116,6 +116,8 @@ intellijPlatform {
             create(IntelliJPlatformType.IntellijIdea, "2025.3")
             create(IntelliJPlatformType.IntellijIdea, "2026.2")
             create(IntelliJPlatformType.AndroidStudio, providers.gradleProperty("affected.studio.version"))
+            create(IntelliJPlatformType.Rider, "2025.3.5")
+            create(IntelliJPlatformType.GoLand, "2025.3.5.1")
         }
     }
 }
@@ -126,7 +128,7 @@ kover {
             xml { onCheck = true }
             verify {
                 rule {
-                    minBound(19)
+                    minBound(60)
                 }
             }
         }

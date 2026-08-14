@@ -40,7 +40,9 @@ class NodeBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSys
 
         val discovered = runCatching { NodeWorkspaces.parse(root) }.getOrNull()
         val discovery = failClosedModules(root, NodeWorkspaces.TEST, null, discovered)
-        if (stamp != null && discovery.complete) cache.set(Snapshot(rootPath, stamp, discovery.modules))
+        if (stamp != null && discovery.complete) {
+            cache.retainBuildSnapshot(Snapshot(rootPath, stamp, discovery.modules), discovery.modules.size)
+        }
         return discovery.modules
     }
 

@@ -83,6 +83,7 @@ def check(root: Path = ROOT) -> None:
         "scripts.tests.test_docs_layout",
         "scripts.tests.test_fetch_gradle",
         "scripts.tests.test_local_gate",
+        "scripts.tests.test_product_claims",
         "scripts.tests.test_run_gradle",
         "changelog_fragments.py check",
         "changelog-section.sh",
@@ -124,6 +125,9 @@ def check(root: Path = ROOT) -> None:
         raise CiContractError("Weekly mutation must fail on surviving mutants")
     if ":core:pitest" not in mutation or "core/build/reports/pitest/mutations.xml" not in mutation:
         raise CiContractError("Weekly mutation must run and gate the core PIT report")
+    core_build = read(root / "core/build.gradle.kts")
+    if "ExecutablePathKt*" not in core_build:
+        raise CiContractError("Weekly mutation must keep ExecutablePath in the core PIT target")
     currentness = read(root / "scripts/release_currentness.py")
     if "cache-redirector.jetbrains.com/repo1.maven.org/maven2" not in currentness:
         raise CiContractError("release_currentness must read Maven metadata through cache-redirector first")
@@ -153,6 +157,9 @@ def check(root: Path = ROOT) -> None:
     root_build = read(root / "build.gradle.kts")
     if 'kover(project(":core"))' not in root_build or 'kover(project(":mcp"))' not in root_build:
         raise CiContractError("Kover must verify :core and :mcp, not only the root plugin sources")
+    bound = re.search(r"minBound\((\d+)\)", root_build)
+    if bound is None or int(bound.group(1)) < 60:
+        raise CiContractError("Kover line floor must stay at least 60")
 
     check_merge_queue(root, ci, codeql)
     check_wrapper(root)
