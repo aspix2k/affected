@@ -31,3 +31,8 @@ class DocsLayoutTest(unittest.TestCase):
         for name in DOC_FILES:
             path = ROOT / "docs" / name
             self.assertTrue(path.is_file(), f"missing {path.relative_to(ROOT)}")
+
+    def test_changelog_plugin_reads_docs_changelog(self) -> None:
+        """patchPluginXml must not look for a root CHANGELOG.md."""
+        build = (ROOT / "build.gradle.kts").read_text(encoding="utf-8")
+        self.assertIn('path = "docs/CHANGELOG.md"', build)
