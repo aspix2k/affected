@@ -2,6 +2,8 @@ package com.aspix2k.affected.build
 
 import com.intellij.openapi.project.Project
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.LinkOption
 
 class AntBuildSystem : SuspendingBuildSystem {
 
@@ -38,8 +40,26 @@ internal object AntTasks {
 
 internal fun antManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null
+    if (mpsProject(root)) return null
     return File(root, "build.xml").takeIf(File::isRegularFileNoFollow)
 }
+
+internal fun mpsProject(root: File): Boolean {
+    if (Files.isDirectory(File(root, ".mps").toPath(), LinkOption.NOFOLLOW_LINKS)) return true
+    if (root.listFiles().orEmpty().any(::mpsModuleFile)) return true
+    return MPS_LAYOUT_DIRS.any { name ->
+        File(root, name).listFiles().orEmpty().any(::mpsLayoutModule)
+    }
+}
+
+private fun mpsLayoutModule(child: File): Boolean {
+    if (!child.isDirectory || Files.isSymbolicLink(child.toPath())) return false
+    return File(child, "${child.name}.mpl").isRegularFileNoFollow() ||
+        File(child, "${child.name}.msd").isRegularFileNoFollow()
+}
+
+private fun mpsModuleFile(file: File): Boolean =
+    file.isRegularFileNoFollow() && MPS_MODULE.matches(file.name)
 
 internal fun antRootModule(root: File): BuildModule {
     val rootPath = root.invariantSeparatorsPath
@@ -292,4 +312,6 @@ private val ANT_PROPERTY_REF = Regex("""\$\{([A-Za-z0-9._-]+)\}""")
 private val ANT_PROPERTY_ID = Regex("""[A-Za-z0-9._-]+""")
 private val UNPROVED_ANT_IMPORT = Regex("""[$*?]""")
 private val UNPROVED_ANT_WILDCARD = Regex("""[*?]""")
+private val MPS_MODULE = Regex(""".+\.(?:mpl|msd)""")
+private val MPS_LAYOUT_DIRS = listOf("languages", "solutions")
 private val FOREIGN_ROOTS = listOf("settings.gradle.kts", "settings.gradle", "pom.xml")

@@ -110,6 +110,13 @@
       "support": "excluded",
       "reason": "JetBrains discontinued the product before the supported platform range.",
       "reviewed": "2026-08-12"
+    },
+    {
+      "id": "mps",
+      "name": "MPS",
+      "support": "excluded",
+      "reason": "No zero-config public MPS test CLI; generated Ant build.xml stays off this adapter.",
+      "reviewed": "2026-08-14"
     }
   ],
   "operatingSystems": [

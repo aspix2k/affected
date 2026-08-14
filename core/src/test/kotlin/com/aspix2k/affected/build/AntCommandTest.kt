@@ -84,6 +84,36 @@ class AntCommandTest {
     }
 
     @Test
+    fun `an MPS project directory keeps the root off the Ant adapter`() {
+        val root = antRoot("<project><target name=\"test\"/></project>")
+        File(root, ".mps").mkdirs()
+
+        assertNull(antManifest(root))
+    }
+
+    @Test
+    fun `an MPS language module keeps the root off the Ant adapter`() {
+        val root = antRoot("<project><target name=\"test\"/></project>")
+        File(root, "languages/foo/foo.mpl").apply {
+            parentFile.mkdirs()
+            writeText("<language/>")
+        }
+
+        assertNull(antManifest(root))
+    }
+
+    @Test
+    fun `an MPS solution module keeps the root off the Ant adapter`() {
+        val root = antRoot("<project><target name=\"test\"/></project>")
+        File(root, "solutions/bar/bar.msd").apply {
+            parentFile.mkdirs()
+            writeText("<solution/>")
+        }
+
+        assertNull(antManifest(root))
+    }
+
+    @Test
     fun `an imported file contributes its test target`() {
         val root = antRoot("<project><import file=\"testdefs.xml\"/></project>")
         File(root, "testdefs.xml").writeText("<project><target name=\"test\"/></project>")

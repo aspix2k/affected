@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Keep Ant off JetBrains MPS projects that generate `build.xml` (`.mps`, `*.mpl`, `*.msd`); MPS stays unsupported without a public test CLI.
 - Detect local dbt roots from `dbt_project.yml` plus an in-repo DuckDB `profiles.yml` and run one `dbt test` / `dbt compile` session with `--profiles-dir .`; warehouse, MotherDuck and interpolated profiles stay off this adapter.
 - Scope Kotlin Toolchain `-p` when every changed file sits in a proven `src@platform` / `test@platform` family; common sources, aliases and unproved versions keep every platform.
 - Merge static Buck2 `[cells]` directories into the project content roots; unproved or missing cell paths keep the project root. Aliases and native buck2 execution stay unclaimed.

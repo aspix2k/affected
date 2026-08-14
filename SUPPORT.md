@@ -76,6 +76,7 @@ relationship. Otherwise **Affected** keeps the larger unit shown in the same row
 |---|---|---:|
 | Aqua | JetBrains discontinued the standalone product before the supported platform range. | 2026-08-12 |
 | AppCode | JetBrains discontinued the product before the supported platform range. | 2026-08-12 |
+| MPS | No zero-config public MPS test CLI; generated Ant build.xml stays off this adapter. | 2026-08-14 |
 
 ## JetBrains MCP Server
 
