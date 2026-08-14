@@ -1,0 +1,1 @@
+- A lone first-level Dart package is now the Dart root when the repository base has no marker.

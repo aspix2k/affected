@@ -27,13 +27,16 @@ class DartBuildSystem : SuspendingBuildSystem, WorkspaceChangesBuildSystem {
         CommandRunner.runBatchAndWait(project, root, dartCommands(File(root), tasks), "Affected Dart")
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { dartManifest(File(it)) }
+        project.basePath?.let(::File)?.let(::dartProjectRoot)?.let(::dartManifest)
 }
 
 internal object DartTasks {
     const val TEST = "test"
     const val ANALYZE = "analyze"
 }
+
+internal fun dartProjectRoot(base: File): File? =
+    nestedBuildRoot(base) { dartManifest(it) != null }
 
 internal fun dartManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null

@@ -251,6 +251,59 @@ class DartCommandTest {
         return root
     }
 
+    @Test
+    fun `a single first-level nested Dart package is the root`() {
+        val base = createTempDirectory("dart-nested").toFile()
+        val nested = File(base, "pkg")
+        dartRoot().copyRecursively(nested)
+
+        assertEquals(nested.canonicalFile, dartProjectRoot(base)?.canonicalFile)
+    }
+
+    @Test
+    fun `a Dart marker on the project base wins`() {
+        val base = dartRoot()
+        dartRoot().copyRecursively(File(base, "pkg"))
+
+        assertEquals(base.canonicalFile, dartProjectRoot(base)?.canonicalFile)
+    }
+
+    @Test
+    fun `several first-level nested Dart packages stay off`() {
+        val base = createTempDirectory("dart-many").toFile()
+        dartRoot().copyRecursively(File(base, "pkg"))
+        dartRoot().copyRecursively(File(base, "cli"))
+
+        assertNull(dartProjectRoot(base))
+    }
+
+    @Test
+    fun `a deeper nested Dart package stays off`() {
+        val base = createTempDirectory("dart-deep").toFile()
+        dartRoot().copyRecursively(File(base, "src/pkg"))
+
+        assertNull(dartProjectRoot(base))
+    }
+
+    @Test
+    fun `a nested Flutter app is not a Dart root`() {
+        val base = createTempDirectory("dart-flutter").toFile()
+        val nested = File(base, "app")
+        nested.mkdirs()
+        File(nested, "pubspec.yaml").writeText(
+            """
+            name: probe
+            environment:
+              sdk: ^3.13.0
+            dependencies:
+              flutter:
+                sdk: flutter
+            """.trimIndent(),
+        )
+
+        assertNull(dartProjectRoot(base))
+    }
+
     private fun dartRoot(
         pubspec: String = """
             name: probe
