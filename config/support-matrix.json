@@ -557,6 +557,29 @@
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/meson"],
       "gates": [".github/workflows/conformance.yml"]
+    },
+    {
+      "id": "MAKE",
+      "implementation": "com.aspix2k.affected.build.MakeBuildSystem",
+      "ecosystem": "Make",
+      "languages": ["C", "C++"],
+      "runners": ["make test", "make check", "make"],
+      "selection": ["project"],
+      "selectionProofs": [
+        {
+          "units": ["project"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliMakeConformanceTest.kt",
+          "marker": "make runs the project test command for the affected root",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        }
+      ],
+      "versions": "GNU Make; project-level test/check/default targets until includes are proven",
+      "support": "supported",
+      "fixtures": ["conformance/cli-fixtures/make"],
+      "gates": [".github/workflows/conformance.yml"]
     }
   ]
 }
