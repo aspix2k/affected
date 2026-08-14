@@ -545,6 +545,29 @@
       "gates": [".github/workflows/conformance.yml"]
     },
     {
+      "id": "FLUTTER",
+      "implementation": "com.aspix2k.affected.build.FlutterBuildSystem",
+      "ecosystem": "Flutter",
+      "languages": ["Dart"],
+      "runners": ["flutter test", "flutter analyze"],
+      "selection": ["project"],
+      "selectionProofs": [
+        {
+          "units": ["project"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliFlutterConformanceTest.kt",
+          "marker": "flutter runs the project test command for the affected root",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        }
+      ],
+      "versions": "Flutter 3.47.x; project-level until generated sources and build_runner contracts are proven",
+      "support": "supported",
+      "fixtures": ["conformance/cli-fixtures/flutter"],
+      "gates": [".github/workflows/conformance.yml"]
+    },
+    {
       "id": "MESON",
       "implementation": "com.aspix2k.affected.build.MesonBuildSystem",
       "ecosystem": "Meson",

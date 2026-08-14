@@ -52,6 +52,8 @@
     {"id":"ruby-setup-action","local":{"type":"github-action","name":"ruby/setup-ruby"},"source":{"type":"github-branch","name":"ruby/setup-ruby","branch":"master"},"policy":"branch"},
     {"id":"php-setup-action","local":{"type":"github-action","name":"shivammathur/setup-php"},"source":{"type":"github","name":"shivammathur/setup-php"},"policy":"latest"},
     {"id":"dart-setup-action","local":{"type":"github-action","name":"dart-lang/setup-dart"},"source":{"type":"github","name":"dart-lang/setup-dart"},"policy":"latest"},
+    {"id":"flutter-setup-action","local":{"type":"github-action","name":"subosito/flutter-action"},"source":{"type":"github","name":"subosito/flutter-action"},"policy":"latest"},
+    {"id":"flutter","local":{"type":"workflow-value","name":"flutter-version","occurrences":{".github/workflows/conformance.yml":1}},"policy":"compatibility","expected":"3.47.0","reason":"Flutter 3.47 is the current stable line used by the native Flutter fixture.","evidence":["conformance/cli-fixtures/flutter/pubspec.yaml",".github/workflows/conformance.yml"]},
     {"id":"sbt-setup-action","local":{"type":"github-action","name":"sbt/setup-sbt"},"source":{"type":"github","name":"sbt/setup-sbt"},"policy":"latest"},
     {"id":"codeql-action","local":{"type":"github-action","name":"github/codeql-action"},"source":{"type":"github","name":"github/codeql-action"},"policy":"latest"},
     {"id":"dependency-review-action","local":{"type":"github-action","name":"actions/dependency-review-action"},"source":{"type":"github","name":"actions/dependency-review-action"},"policy":"latest"},
