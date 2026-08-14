@@ -681,6 +681,29 @@
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/pants"],
       "gates": [".github/workflows/ci.yml"]
+    },
+    {
+      "id": "BUCK2",
+      "implementation": "com.aspix2k.affected.build.Buck2BuildSystem",
+      "ecosystem": "Buck2",
+      "languages": ["Starlark", "Python", "Rust", "Go", "Java", "Kotlin"],
+      "runners": ["buck2 test", "buck2 build"],
+      "selection": ["project"],
+      "selectionProofs": [
+        {
+          "units": ["project"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/Buck2CommandTest.kt",
+          "marker": "a Buck2 root runs one project test command",
+          "gate": ".github/workflows/ci.yml",
+          "gateMarker": "koverVerify",
+          "gateJob": "plugin",
+          "gateStep": "Analyze, test, package and verify"
+        }
+      ],
+      "versions": "Buck2; project-level until cells, aliases and native buck2 execution are proven",
+      "support": "supported",
+      "fixtures": ["conformance/cli-fixtures/buck2"],
+      "gates": [".github/workflows/ci.yml"]
     }
   ]
 }
