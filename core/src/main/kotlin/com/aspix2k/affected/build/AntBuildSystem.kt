@@ -48,7 +48,7 @@ internal fun antRootModule(root: File): BuildModule {
         AntTasks.TEST in discovery.targets -> AntTasks.TEST
         AntTasks.JUNIT in discovery.targets -> AntTasks.JUNIT
         AntTasks.TESTNG in discovery.targets -> AntTasks.TESTNG
-        discovery.taskTargets.isNotEmpty() -> discovery.taskTargets.first()
+        discovery.complete && discovery.taskTargets.isNotEmpty() -> discovery.taskTargets.first()
         else -> AntTasks.TEST
     }
     return BuildModule(
@@ -155,7 +155,12 @@ private fun parseAntFile(
     complete = ANT_IMPORT.findAll(text)
         .map { it.groupValues[1] }
         .fold(complete) { ok, attributes -> enqueueAntImport(file, attributes, imports, properties) && ok }
-    return AntFileParse(targets, antTaskTargets(text), depends, imports, complete)
+    return AntFileParse(targets, antTaskTargets(text), depends, imports, complete && antGraphComplete(text, targets))
+}
+
+private fun antGraphComplete(text: String, targets: Set<String>): Boolean {
+    if (ANT_DYNAMIC_TASK.containsMatchIn(text) || ANT_TARGET_CONDITION.containsMatchIn(text)) return false
+    return targets.all { ANT_TARGET_ID.matches(it) && !UNPROVED_ANT_IMPORT.containsMatchIn(it) }
 }
 
 private data class AntDependsParse(val name: String?, val depends: Set<String>)
@@ -270,6 +275,8 @@ private val ANT_TARGET_NAME = Regex("""\bname\s*=\s*"([^"]+)"""")
 private val ANT_TEST_TASK = Regex("""<(?:junit|testng)\b""", RegexOption.IGNORE_CASE)
 private val ANT_DEPENDS = Regex("""\bdepends\s*=\s*"([^"]+)"""")
 private val ANT_TARGET_ID = Regex("""[A-Za-z0-9._][A-Za-z0-9._-]*""")
+private val ANT_DYNAMIC_TASK = Regex("""<(?:ant|subant|antcall|macrodef|presetdef)\b""", RegexOption.IGNORE_CASE)
+private val ANT_TARGET_CONDITION = Regex("""<target\b[^>]*\b(?:if|unless)\s*=""", RegexOption.IGNORE_CASE)
 private val GENERATE_TARGETS = listOf(AntTasks.GENERATE, AntTasks.CODEGEN)
 private val ANT_IMPORT = Regex("""<(?:import|include)\b([^>]*)/?>""", RegexOption.IGNORE_CASE)
 private val ANT_IMPORT_FILE = Regex("""\bfile\s*=\s*"([^"]+)"""")
