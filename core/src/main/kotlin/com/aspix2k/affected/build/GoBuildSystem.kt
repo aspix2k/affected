@@ -72,12 +72,18 @@ class GoBuildSystem : ChangeAwareSuspendingBuildSystem {
     )
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { File(it, "go.mod") }?.takeIf(File::isRegularFileNoFollow)
+        project.basePath?.let(::File)?.let(::goProjectRoot)?.let(::goManifest)
 
     private companion object {
         val LIST = listOf("go", "list", "-json", "./...")
     }
 }
+
+internal fun goProjectRoot(base: File): File? =
+    nestedBuildRoot(base) { goManifest(it) != null }
+
+internal fun goManifest(root: File): File? =
+    File(root, "go.mod").takeIf(File::isRegularFileNoFollow)
 
 internal fun goCommands(
     tasks: List<String>,

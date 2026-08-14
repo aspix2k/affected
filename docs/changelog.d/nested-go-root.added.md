@@ -1,0 +1,1 @@
+- A lone first-level `backend/` Go module is now the Go root when the repository base has no marker.
