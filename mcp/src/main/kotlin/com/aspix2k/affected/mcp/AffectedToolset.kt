@@ -10,9 +10,9 @@ import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.AffectedState
 import com.aspix2k.affected.TaskPlanner
 import com.aspix2k.affected.Verification
-import com.aspix2k.affected.runWithRequiredAdapter
 import com.aspix2k.affected.build.BuildSystems
 import com.aspix2k.affected.projectBusy
+import com.aspix2k.affected.runWithRequiredAdapter
 import com.intellij.mcpserver.McpToolCallResult
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
