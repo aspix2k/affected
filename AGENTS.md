@@ -68,7 +68,9 @@ or the full test suite.
 Never merge a pull request immediately. Open it, then stop. `Queue` enables
 `gh pr merge --auto --squash` for same-repository ready PRs. If you must
 enqueue by hand, use that same command. Do not merge without `--auto`,
-and do not squash from the GitHub UI.
+and do not squash from the GitHub UI. Keep GitHub "Automatically delete head
+branches" on. After a squash lands, delete any leftover head branch and its
+worktree; do not keep merged feature branches.
 
 Node exact selection is runner-native and static-graph only. Unknown Jest or
 Vitest versions, custom config or transforms, dynamic dependencies, resources,
