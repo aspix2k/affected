@@ -113,6 +113,23 @@ class AntCommandTest {
     }
 
     @Test
+    fun `a documented junit token in the target body keeps the task runnable`() {
+        val root = antRoot(
+            """
+            <project>
+              <target name="run-tests">
+                <echo>AlphaTest<![CDATA[ <junit/> ]]></echo>
+              </target>
+            </project>
+            """.trimIndent(),
+        )
+        val module = antRootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals("run-tests", module.testTask)
+    }
+
+    @Test
     fun `a junit task target is treated as the Ant test task`() {
         val root = antRoot(
             """
