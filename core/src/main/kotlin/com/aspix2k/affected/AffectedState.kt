@@ -49,6 +49,8 @@ internal data class AffectedAnalysis(
     val plans: Verification.PreparedPlans,
 )
 
+internal const val MAX_PUBLISHED_MODULES = 4096
+
 internal class AffectedStateStore {
     private data class StoredState(
         val revision: Long,
@@ -89,6 +91,10 @@ internal class AffectedStateStore {
     }
 
     fun complete(expectedRevision: Long, analysis: AffectedAnalysis): Boolean {
+        if (analysis.modules.size > MAX_PUBLISHED_MODULES) {
+            fail(expectedRevision)
+            return false
+        }
         val completed = analysis.snapshot()
         while (true) {
             val current = state.get()

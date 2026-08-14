@@ -17,6 +17,28 @@ import kotlin.test.assertEquals
 class AffectedStateTest {
 
     @Test
+    fun `an oversized published snapshot fails closed`() {
+        val state = AffectedStateStore()
+        val revision = state.invalidate()
+        val modules = List(MAX_PUBLISHED_MODULES + 1) { index -> module(":$index") }
+
+        assertEquals(false, state.complete(revision, modules))
+        assertEquals(AnalysisStatus.UNAVAILABLE, state.snapshot().analysisStatus)
+        assertEquals(emptyList(), state.snapshot().modules)
+    }
+
+    @Test
+    fun `a snapshot at the published module budget stays ready`() {
+        val state = AffectedStateStore()
+        val revision = state.invalidate()
+        val modules = List(MAX_PUBLISHED_MODULES) { index -> module(":$index") }
+
+        assertEquals(true, state.complete(revision, modules))
+        assertEquals(AnalysisStatus.READY, state.snapshot().analysisStatus)
+        assertEquals(MAX_PUBLISHED_MODULES, state.snapshot().modules.size)
+    }
+
+    @Test
     fun `verification claims are exclusive`() {
         val state = AffectedStateStore()
         val revision = state.invalidate()
@@ -79,8 +101,8 @@ class AffectedStateTest {
         }
     }
 
-    private fun module() = AffectedModule(
-        id = ":ready",
+    private fun module(id: String = ":ready") = AffectedModule(
+        id = id,
         systemId = "GRADLE",
         buildRoot = "/repo",
         directory = "/repo/ready",
