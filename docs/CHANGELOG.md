@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.4.1] - 2026-08-14
+
+### Fixed
+
+- Plan exact Kotlin Multiplatform Android test tasks (`testAndroidHostTest`, `testAndroid`) instead of a bare `test` that Gradle treats as ambiguous.
+
+### Changed
+
+- The toolbar count is modules that will run tests. Compile-only affected modules stay in the menu and plan, but no longer inflate the badge.
+
 ## [3.4.0] - 2026-08-14
 
 ### Added
@@ -407,7 +417,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.4.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.4.1...HEAD
+[3.4.1]: https://github.com/aspix2k/affected/compare/v3.4.0...v3.4.1
 [3.4.0]: https://github.com/aspix2k/affected/compare/v3.3.0...v3.4.0
 [3.3.0]: https://github.com/aspix2k/affected/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/aspix2k/affected/compare/v3.1.0...v3.2.0
