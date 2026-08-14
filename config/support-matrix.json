@@ -700,7 +700,7 @@
           "gateStep": "Analyze, test, package and verify"
         }
       ],
-      "versions": "Buck2; project-level until cells, aliases and native buck2 execution are proven",
+      "versions": "Buck2; static cells merge content roots, unproved or missing keep the project root",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/buck2"],
       "gates": [".github/workflows/ci.yml"]

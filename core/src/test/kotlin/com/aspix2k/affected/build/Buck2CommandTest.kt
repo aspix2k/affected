@@ -45,6 +45,38 @@ class Buck2CommandTest {
     }
 
     @Test
+    fun `a static cell directory is a content root`() {
+        val root = buck2Root("[cells]\n  extra = extra\n")
+        File(root, "extra").mkdirs()
+        val module = buck2RootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals(
+            listOf(root.invariantSeparatorsPath, File(root, "extra").invariantSeparatorsPath),
+            module.contentRoots,
+        )
+    }
+
+    @Test
+    fun `an unproved cell keeps the project content root`() {
+        val root = buck2Root("[cells]\n  extra = \${cell}\n")
+        File(root, "extra").mkdirs()
+        val module = buck2RootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals(listOf(root.invariantSeparatorsPath), module.contentRoots)
+    }
+
+    @Test
+    fun `a missing cell directory keeps the project content root`() {
+        val root = buck2Root("[cells]\n  extra = missing\n")
+        val module = buck2RootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals(listOf(root.invariantSeparatorsPath), module.contentRoots)
+    }
+
+    @Test
     fun `a BUCK file without buckconfig stays off the Buck2 adapter`() {
         val root = createTempDirectory("buck1-root").toFile()
         File(root, "BUCK").writeText("export_file(name = \"readme\")\n")
@@ -68,9 +100,9 @@ class Buck2CommandTest {
         assertNull(buck2Manifest(root))
     }
 
-    private fun buck2Root(): File {
+    private fun buck2Root(config: String = "[cells]\n"): File {
         val root = createTempDirectory("buck2-root").toFile()
-        File(root, ".buckconfig").writeText("[cells]\n")
+        File(root, ".buckconfig").writeText(config)
         return root
     }
 }
