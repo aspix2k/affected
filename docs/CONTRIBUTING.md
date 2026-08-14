@@ -117,11 +117,14 @@ the last two items:
 1. `version` in `build.gradle.kts`.
 2. A section for that version in `docs/CHANGELOG.md`. CI fails without it; the same
    text is the GitHub release notes and Marketplace What's New. Pull requests do
-   not edit `docs/CHANGELOG.md`. A product change adds one
+   not edit `docs/CHANGELOG.md` except the release pull request that also sets
+   `version`. A product change adds one
    `docs/changelog.d/<slug>.<added|fixed|changed|removed|deprecated|security>.md`
    file with a single Marketplace-facing bullet. Infrastructure changes add no
-   fragment. `python3 scripts/changelog_fragments.py render` folds pending
-   fragments into Unreleased before `./gradlew patchChangelog`.
+   fragment and never land in a version section. `python3 scripts/changelog_fragments.py render`
+   folds pending fragments into Unreleased before `./gradlew patchChangelog`.
+   After the cut, leave Unreleased empty of plumbing so the next small release
+   cannot pick it up.
 3. `README.md` when the change affects what the plugin does or needs.
 4. The `<description>` in `plugin.xml` when supported systems change.
 5. Getting Started on the Marketplace page — edited in the web form, goes stale

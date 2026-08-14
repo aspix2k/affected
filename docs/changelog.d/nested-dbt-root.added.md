@@ -1,1 +1,0 @@
-- A lone first-level `analytics/` dbt + DuckDB project is now the dbt root when the repository base has no marker.

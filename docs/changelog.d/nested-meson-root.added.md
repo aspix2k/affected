@@ -1,1 +1,0 @@
-- A lone first-level `native/` Meson project is now the Meson root when the repository base has no marker.

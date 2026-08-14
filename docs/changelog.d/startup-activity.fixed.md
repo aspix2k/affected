@@ -1,1 +1,0 @@
-- Fail descriptor checks when the plugin registers a blocking `<startupActivity>`; startup stays on one `ProjectActivity`.

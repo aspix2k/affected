@@ -1,1 +1,0 @@
-- A lone first-level `queries/` sqlc project is now the sqlc root when the repository base has no marker.
