@@ -518,7 +518,7 @@
       "ecosystem": "Dart",
       "languages": ["Dart"],
       "runners": ["dart test", "dart analyze"],
-      "selection": ["project"],
+      "selection": ["package", "project"],
       "selectionProofs": [
         {
           "units": ["project"],
@@ -528,11 +528,20 @@
           "gateMarker": "--tests '*Cli*ConformanceTest'",
           "gateJob": "cli-native",
           "gateStep": "Run native CLI fixtures"
+        },
+        {
+          "units": ["package"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliDartWorkspaceConformanceTest.kt",
+          "marker": "dart runs only the selected workspace package tests",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "Dart 3.13.x; package-level until pub workspaces and Flutter contracts are proven",
+      "versions": "Dart 3.13.x; proven workspace packages use dart test <pkg>/test, pubspec changes keep the workspace command",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/dart"],
+      "fixtures": ["conformance/cli-fixtures/dart", "conformance/cli-fixtures/dart-workspace"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
