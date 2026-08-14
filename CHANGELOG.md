@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Detect Pants roots from `pants.toml` and run one `pants test` or `pants check` session; Gradle and Maven roots stay off this adapter. Target selection and native pants execution stay unclaimed.
 - Scope Kotlin Toolchain `-m` only when the wrapper pins a proven `0.11.x` CLI; missing or other versions keep the unscoped `kotlin test` / `kotlin build` command.
 - Keep Dart workspace commands when `.dart_tool`, `build.yaml` or a generated `*.g.dart` / `*.freezed.dart` file sits outside a member package; generated files and `assets/` inside a member stay scoped.
 - Run `dart run build_runner build --delete-conflicting-outputs` before Dart or Flutter `test` / `analyze` when `build.yaml` exists or `pubspec.yaml` declares `build_runner`; unreadable manifests keep generate.
