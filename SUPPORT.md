@@ -50,6 +50,7 @@ dedicated product lifecycle fixture.
 | Dart | Dart | dart test, dart analyze | project | Dart 3.13.x; package-level until pub workspaces and Flutter contracts are proven | [dart](conformance/cli-fixtures/dart) · [CliDartConformanceTest.kt](core/src/test/kotlin/com/aspix2k/affected/build/CliDartConformanceTest.kt) · [conformance.yml](.github/workflows/conformance.yml) |
 | Meson | C, C++ | meson test, meson compile | project | Meson 1.x with Ninja; project-level until subprojects and Make/Ninja contracts are proven | [meson](conformance/cli-fixtures/meson) · [CliMesonConformanceTest.kt](core/src/test/kotlin/com/aspix2k/affected/build/CliMesonConformanceTest.kt) · [conformance.yml](.github/workflows/conformance.yml) |
 | Make | C, C++ | make test, make check, make | project | GNU Make; project-level test/check/default targets until includes are proven | [make](conformance/cli-fixtures/make) · [CliMakeConformanceTest.kt](core/src/test/kotlin/com/aspix2k/affected/build/CliMakeConformanceTest.kt) · [conformance.yml](.github/workflows/conformance.yml) |
+| Ninja | C, C++ | ninja test, ninja check, ninja | project | Ninja as an execution backend; project-level only, no inferred source graph | [ninja](conformance/cli-fixtures/ninja) · [CliNinjaConformanceTest.kt](core/src/test/kotlin/com/aspix2k/affected/build/CliNinjaConformanceTest.kt) · [conformance.yml](.github/workflows/conformance.yml) |
 
 The smaller selection unit is used only when the adapter proves a complete
 relationship. Otherwise **Affected** keeps the larger unit shown in the same row.

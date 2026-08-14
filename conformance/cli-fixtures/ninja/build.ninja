@@ -1,0 +1,5 @@
+rule echo
+  command = echo AlphaTest
+
+build test: echo
+default test
