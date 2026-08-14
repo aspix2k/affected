@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Keep the requested name when a PATH program is a rustup-style proxy, so `cargo test --doc` is not rewritten to `rustup test --doc`.
 - Run ChangeAnalyzer against the in-repo CMake fixture as a required gate so a clean clone stays empty and a source edit is found without network fixtures.
 - Include the build-system id in a module key so same-named CMake and .NET modules in one root cannot form a false consumer edge.
 - Fail a prepared Run group when its build adapter is gone, instead of counting a missing adapter as success.

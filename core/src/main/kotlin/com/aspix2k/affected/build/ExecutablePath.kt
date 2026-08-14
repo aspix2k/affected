@@ -33,6 +33,6 @@ private fun pathSuffixes(pathExt: String?): List<String> {
 }
 
 private fun runnablePath(file: File): String? =
-    file.takeIf { it.isFile && it.canExecute() }?.canonicalFile?.invariantSeparatorsPath
+    file.takeIf { it.isFile && it.canExecute() }?.absoluteFile?.normalize()?.invariantSeparatorsPath
 
 private fun File.isReadableDirectory(): Boolean = isDirectory && canRead()
