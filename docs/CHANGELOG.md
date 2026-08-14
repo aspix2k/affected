@@ -1,40 +1,24 @@
 # Changelog
 
 All notable changes to this project are documented in this file.
-
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Fixed
-
-- Keep README, LICENSE and changelog files out of all-file change collection so a docs edit cannot fan out to every CMake, .NET or Python adapter.
-- Select `connectedDebugAndroidTest` for an instrumentation-only Android change when that task exists; mixed or unit-test changes keep `testDebugUnitTest`.
-- Keep the requested name when a PATH program is a rustup-style proxy, so `cargo test --doc` is not rewritten to `rustup test --doc`.
-- Run ChangeAnalyzer against the in-repo CMake fixture as a required gate so a clean clone stays empty and a source edit is found without network fixtures.
-- Include the build-system id in a module key so same-named CMake and .NET modules in one root cannot form a false consumer edge.
-- Fail a prepared Run group when its build adapter is gone, instead of counting a missing adapter as success.
-- Discover a single first-level nested CLI root (`cpp/`, `backend-dotnet/`) when the project base has no marker; several or deeper nested markers stay off.
-- Resolve CLI programs through `PATH` and Windows `PATHEXT`, so a proven `name.exe` is chosen and a missing program keeps the original name.
-- Treat Windows path separators like `/` when deciding whether a VFS event is a source change, so spaces, non-ASCII names and `.git` / `build` paths stay classified the same on every OS.
-- Stop failing pull-request `review` on a missing PR-head snapshot. Submit still publishes snapshots only from `main`; generate still requires a complete snapshot artifact; `fail-on-severity: low` stays.
-- Point Kotlin Toolchain native fixtures at `JAVA_HOME/bin` and drop a leftover `TEST_TMPDIR`, so the CLI can find `java` after other native tools run.
-
-### Removed
-
-- Stop tracking `AGENTS.md`. Agent-facing process stays in `docs/CONTRIBUTING.md`.
-
-### Changed
-
-- Record already implemented TestNG, Spock, unittest and Microsoft Testing Platform runners in the public support matrix.
-- Keep public .NET fixtures on Microsoft.NET.Test.Sdk 18.9.0.
-- Keep `docs/CONTRIBUTING.md` to building, architecture, conventions and release. Adapter selection rules stay in tests and `docs/SUPPORT.md`.
-- Move community and generated markdown into `docs/` so the repository root keeps `README.md` and `LICENSE`.
+## [3.0.0] - 2026-08-14
 
 ### Added
 
-- Fail Scripts CI when a tracked markdown page points at a missing repository path, so docs moves cannot leave stale relative links.
+- Run native CMake and .NET commands on one in-repo mixed fixture so a CMake plan cannot invoke `dotnet` and a .NET plan cannot invoke `cmake` / `ctest`.
+- A lone first-level `backend/` Bazel workspace is now the Bazel root when the repository base has no marker.
+- A lone first-level `native/` Buck2 project is now the Buck2 root when the repository base has no marker.
+- A lone first-level `analytics/` dbt + DuckDB project is now the dbt root when the repository base has no marker.
+- A lone first-level `native/` Meson project is now the Meson root when the repository base has no marker.
+- A lone first-level `backend/` Pants project is now the Pants root when the repository base has no marker.
+- A lone first-level `queries/` sqlc project is now the sqlc root when the repository base has no marker.
+- Verify the plugin ZIP against Rider 2025.3.5 and GoLand 2025.3.5.1 as their own Plugin Verifier product types. UI lifecycle stays on #105; DataGrip stays planned.
+- Run native `sqlc compile` on the in-repo Linux fixture so local schema and query files compile without a network database; database URIs and cloud stay off.
 - Skip startup analysis, VFS refresh, external-system invalidation and external execute-task claims on a proven JetBrains Client frontend so analysis stays on the IDE backend; Gateway install and update stay unclaimed.
 - Detect local Atlas roots from `atlas.hcl` and run one `atlas migrate validate` session; database URLs, `dev` databases, cloud directories and interpolated manifests stay off this adapter. Native atlas execution and plain SQL files stay unclaimed.
 - Fail dynamic-plugin descriptor tests when a descriptor declares `<nativelib>`; a native library blocks a restartless update.
@@ -102,42 +86,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Keep the Go CI toolchain on 1.26.6.
+- Record already implemented TestNG, Spock, unittest and Microsoft Testing Platform runners in the public support matrix.
 - Run every available Kotlin Multiplatform target test task (`testDebugUnitTest`, `iosSimulatorArm64Test`, `jvmTest`, …) for a changed module that has tests, instead of a single JVM `test`.
 - Compile a changed Gradle module that has no test sources instead of returning an empty plan; Kotlin Multiplatform `androidUnitTest` / `iosTest` count as tests, and production-only modules use `compileKotlin` / `compileDebugKotlin` rather than a missing unit-test task.
-- Keep the Python adapter Ruff pin on 0.16.3.
-- Pin `github/codeql-action` to 4.37.7.
-- Keep the Composer PHPUnit 13.3 pin and exact-selection matrix on 13.3.1.
-- Run weekly PIT on `AffectedMcpInputs` as well as `TestRootResolver`, and reject task or branch names only through the documented charset and `..` rules.
-- Run detekt, script tests, CI contracts and analyzer policy on `pre-commit`, and add ShellCheck on `pre-push`, so those cheap CI gates fail locally before GitHub.
 - Fail unit tests when a plugin descriptor would block a restartless update: `require-restart`, legacy components, nameless action groups, non-dynamic extension points, or a missing optional/content descriptor.
-- Run weekly PIT on `TestRootResolver` in `:core` and fail when either the root or core report has a meaningful survivor. Compiler-generated Kotlin `Intrinsics.checkNotNull*` void-call mutants stay classified as equivalent.
-- Disable Dependabot version-update pull requests; the fail-closed release
-  currentness gate continues to discover stale governed pins from official
-  sources.
 - Move the detailed support matrix to its own generated page and keep the README and Marketplace description concise.
-- Collapse pull-request CI into one required `verify` aggregator: one Gradle graph for analysis, tests, coverage, packaging and SpotBugs, with `buildHealth` in parallel.
-- Enqueue ready same-repository pull requests with squash auto-merge so agents do not merge `main` by hand. Required checks also listen for `merge_group`.
-- Run Plugin Verifier, `buildHealth`, CodeQL and dependency review only when the pull-request diff can affect them. Documentation-only changes keep the required check names and the cheap scripts job.
 
 ### Fixed
 
-- Keep `.gitignore` and `.gitattributes` out of the dependency-review gate so a fixture ignore edit does not require a pull-request snapshot that is never submitted.
-- Run Submit dependency graph only after a successful main `push` or `workflow_dispatch` generate job; a pull-request graph whose generate step is skipped no longer fails submit.
+- Drop a build-system snapshot when it exceeds 4096 modules, so Python, Node, Cargo and the other cached adapters cannot retain an unbounded graph.
+- Bound click-to-Run planning to a 250ms budget so a large module set stays under the declared limit.
+- Bound manifest scans to a shared time and size budget so a tree that exceeds it fails closed instead of scanning forever.
+- Prefer content-root ownership so a mixed CMake and .NET repository does not plan the other system for a file that already has a scoped owner.
+- A named task or toolbar check now fails when its build adapter is gone instead of reporting success.
+- Fail a published snapshot when it exceeds 4096 modules, so the UI cannot retain an unbounded analysis result.
+- Fail descriptor checks when the plugin registers a blocking `<startupActivity>`; startup stays on one `ProjectActivity`.
+- Keep README, LICENSE and changelog files out of all-file change collection so a docs edit cannot fan out to every CMake, .NET or Python adapter.
+- Select `connectedDebugAndroidTest` for an instrumentation-only Android change when that task exists; mixed or unit-test changes keep `testDebugUnitTest`.
+- Keep the requested name when a PATH program is a rustup-style proxy, so `cargo test --doc` is not rewritten to `rustup test --doc`.
+- Include the build-system id in a module key so same-named CMake and .NET modules in one root cannot form a false consumer edge.
+- Fail a prepared Run group when its build adapter is gone, instead of counting a missing adapter as success.
+- Discover a single first-level nested CLI root (`cpp/`, `backend-dotnet/`) when the project base has no marker; several or deeper nested markers stay off.
+- Resolve CLI programs through `PATH` and Windows `PATHEXT`, so a proven `name.exe` is chosen and a missing program keeps the original name.
+- Treat Windows path separators like `/` when deciding whether a VFS event is a source change, so spaces, non-ASCII names and `.git` / `build` paths stay classified the same on every OS.
 - Pass Pest `--configuration` and `--no-output` before suite paths so Pest 5.1.1 cannot append those flags after them, and resolve the generated XML bootstrap from the project root.
-- Read Maven Central metadata through the JetBrains cache-redirector first so a Central 429 cannot fail Scripts; invalid metadata and 404 still fail closed.
-- Authenticate the live release-currentness GitHub lookups so a public API 403 cannot fail Scripts and analyzers.
-- Retry Gradle after a Maven Central 429 and put the JetBrains cache-redirector first again; compilation and test failures still run once.
-- Stop launching the exact-impact matrix from README-only edits, and stop rerunning the full core test suite as skipped CLI contracts.
-- Retry Gradle itself after a cache-redirector 502/503/504 and fall through to Maven Central; compilation and test failures still run once.
-- Submit main dependency snapshots from `workflow_dispatch` so a GITHUB_TOKEN merge can backfill the review baseline.
 - Enforce Jackson BOM 2.22.1 on the MCP module so the optional MCP Server plugin cannot reintroduce Jackson 2.19.
-- Count `:core` and `:mcp` in the Kover floor so MCP tests cannot hide behind the root plugin sources.
 - Keep cargo-nextest discovery deterministic when the environment forces colored Cargo output.
-- Give the Gradle wrapper 120s and four retries instead of a single 10s download from services.gradle.org.
-- Seed the Gradle wrapper cache from the official GitHub `gradle-distributions` release, verify the SHA-256, and reuse `~/.gradle/wrapper/dists` so CI does not download the zip from services.gradle.org on every job.
-- Resolve Maven artifacts through the JetBrains cache-redirector before repo.maven.apache.org so a Central 403 cannot fail CI.
-- Give the ten-build Windows exact-impact Gradle fixture a 300s scenario budget and a 90s hang cutoff per invocation.
 
 ## [2.0.1] - 2026-08-12
 
@@ -413,7 +387,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v2.0.1...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/aspix2k/affected/compare/v2.0.1...v3.0.0
 [2.0.1]: https://github.com/aspix2k/affected/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/aspix2k/affected/compare/v1.14.1...v2.0.0
 [1.14.1]: https://github.com/aspix2k/affected/compare/v1.14.0...v1.14.1

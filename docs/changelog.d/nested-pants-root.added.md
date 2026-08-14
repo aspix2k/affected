@@ -1,1 +1,0 @@
-- A lone first-level `backend/` Pants project is now the Pants root when the repository base has no marker.

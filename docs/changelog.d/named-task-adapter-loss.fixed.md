@@ -1,1 +1,0 @@
-- A named task or toolbar check now fails when its build adapter is gone instead of reporting success.

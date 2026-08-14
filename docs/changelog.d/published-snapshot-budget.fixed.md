@@ -1,1 +1,0 @@
-- Fail a published snapshot when it exceeds 4096 modules, so the UI cannot retain an unbounded analysis result.

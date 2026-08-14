@@ -1,1 +1,0 @@
-- Prefer content-root ownership so a mixed CMake and .NET repository does not plan the other system for a file that already has a scoped owner.

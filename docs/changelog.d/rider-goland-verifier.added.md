@@ -1,1 +1,0 @@
-- Verify the plugin ZIP against Rider 2025.3.5 and GoLand 2025.3.5.1 as their own Plugin Verifier product types. UI lifecycle stays on #105; DataGrip stays planned.

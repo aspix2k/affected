@@ -31,6 +31,7 @@ FILENAME = re.compile(
     r"^([a-z0-9]+(?:-[a-z0-9]+)*)\.(" + "|".join(TYPES) + r")\.md$"
 )
 UNRELEASED = re.compile(r"(?ms)^## \[Unreleased\]\n(.*?)(?=^## |\Z)")
+VERSION_LINE = re.compile(r'(?m)^version = "([^"]+)"')
 INFRASTRUCTURE = re.compile(
     r"(?i)\b("
     r"kover|pitest|codeql|rebase|auto-?merge|minBound|"
@@ -59,10 +60,12 @@ def check_paths(paths: list[str], root: Path = ROOT) -> None:
     """Reject assembled changelog edits and validate any product fragments."""
     normalized = [ci_scope.normalize(path) for path in paths]
     if str(CHANGELOG) in normalized:
-        raise ChangelogError(
-            "Pull requests must not edit docs/CHANGELOG.md. "
-            "Add docs/changelog.d/<slug>.<type>.md for a product change."
-        )
+        if not is_release_cut(normalized):
+            raise ChangelogError(
+                "Pull requests must not edit docs/CHANGELOG.md. "
+                "Add docs/changelog.d/<slug>.<type>.md for a product change."
+            )
+        check_release_notes(root)
     for path in normalized:
         relative = Path(path)
         if relative.parent != FRAGMENT_DIR:
@@ -104,6 +107,60 @@ def list_fragments(root: Path) -> list[Fragment]:
             raise ChangelogError(f"{FRAGMENT_DIR / path.name} must be a regular fragment file")
         fragments.append(parse_fragment(path))
     return fragments
+
+
+def is_release_cut(paths: list[str]) -> bool:
+    """A release PR may assemble CHANGELOG.md only when it also cuts version."""
+    return str(CHANGELOG) in paths and "build.gradle.kts" in paths
+
+
+def project_version(root: Path) -> str:
+    """Read the plugin version that Marketplace What's New must describe."""
+    path = root / "build.gradle.kts"
+    if not path.is_file() or path.is_symlink():
+        raise ChangelogError("build.gradle.kts is missing")
+    match = VERSION_LINE.search(path.read_text(encoding="utf-8"))
+    if match is None:
+        raise ChangelogError("build.gradle.kts has no version")
+    return match.group(1)
+
+
+def section_body(changelog: str, version: str) -> str:
+    """Return the Keep a Changelog body for one version heading."""
+    heading = f"## [{version}]"
+    match = re.search(
+        rf"(?ms)^{re.escape(heading)}(?: - [^\n]+)?\n(.*?)(?=^## |\Z)",
+        changelog,
+    )
+    if match is None:
+        raise ChangelogError(f"docs/CHANGELOG.md has no {version} section")
+    return match.group(1)
+
+
+def check_product_notes(body: str, label: str) -> None:
+    """Reject infrastructure wording in Marketplace-facing changelog text."""
+    if not body.strip():
+        raise ChangelogError(f"The {label} section in docs/CHANGELOG.md is empty")
+    banned = INFRASTRUCTURE.search(body)
+    if banned is not None:
+        raise ChangelogError(
+            f"{label} is infrastructure, not Marketplace product news: {banned.group(0)}"
+        )
+
+
+def check_release_notes(root: Path) -> None:
+    """A cut version must exist and stay product-only for Marketplace What's New."""
+    path = root / CHANGELOG
+    if not path.is_file() or path.is_symlink():
+        raise ChangelogError("docs/CHANGELOG.md is missing")
+    changelog = path.read_text(encoding="utf-8")
+    version = project_version(root)
+    check_product_notes(section_body(changelog, version), version)
+    unreleased = UNRELEASED.search(changelog)
+    if unreleased is None:
+        raise ChangelogError("docs/CHANGELOG.md has no Unreleased section")
+    if unreleased.group(1).strip():
+        check_product_notes(unreleased.group(1), "Unreleased")
 
 
 def parse_fragment(path: Path) -> Fragment:
