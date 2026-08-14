@@ -39,7 +39,9 @@ class RubyBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
         } else {
             ModuleDiscovery(discovered, complete = true)
         }
-        if (stamp != null && discovery.complete) cache.set(Snapshot(rootPath, stamp, discovery.modules))
+        if (stamp != null && discovery.complete) {
+            cache.retainBuildSnapshot(Snapshot(rootPath, stamp, discovery.modules), discovery.modules.size)
+        }
         return discovery.modules
     }
 

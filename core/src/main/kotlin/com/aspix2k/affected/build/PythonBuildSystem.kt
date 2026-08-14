@@ -44,7 +44,9 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
 
         val discovered = runCatching { PythonProjects.parse(root) }.getOrNull()
         val discovery = failClosedModules(root, PythonProjects.TEST, null, discovered)
-        if (stamp != null && discovery.complete) cache.set(Snapshot(rootPath, stamp, discovery.modules))
+        if (stamp != null && discovery.complete) {
+            cache.retainBuildSnapshot(Snapshot(rootPath, stamp, discovery.modules), discovery.modules.size)
+        }
         return discovery.modules
     }
 
