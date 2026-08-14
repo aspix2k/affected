@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import unittest
 from pathlib import Path
@@ -15,6 +16,8 @@ DOC_FILES = (
     "SECURITY.md",
     "SUPPORT.md",
 )
+
+MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 
 
 class DocsLayoutTest(unittest.TestCase):
@@ -36,3 +39,27 @@ class DocsLayoutTest(unittest.TestCase):
         """patchPluginXml must not look for a root CHANGELOG.md."""
         build = (ROOT / "build.gradle.kts").read_text(encoding="utf-8")
         self.assertIn('path = "docs/CHANGELOG.md"', build)
+
+    def test_tracked_markdown_relative_links_resolve(self) -> None:
+        """Fail when a public markdown page points at a missing repository path."""
+        tracked = subprocess.check_output(["git", "ls-files", "*.md"], cwd=ROOT, text=True)
+        missing: list[str] = []
+        for relative in tracked.splitlines():
+            source = ROOT / relative
+            text = source.read_text(encoding="utf-8")
+            for href in MARKDOWN_LINK.findall(text):
+                target = href.split()[0].strip("<>")
+                if target.startswith(("http://", "https://", "mailto:", "#")):
+                    continue
+                path = target.split("#", 1)[0]
+                if not path:
+                    continue
+                resolved = (source.parent / path).resolve()
+                try:
+                    resolved.relative_to(ROOT.resolve())
+                except ValueError:
+                    missing.append(f"{relative} -> {target}")
+                    continue
+                if not resolved.exists():
+                    missing.append(f"{relative} -> {target}")
+        self.assertEqual(missing, [])
