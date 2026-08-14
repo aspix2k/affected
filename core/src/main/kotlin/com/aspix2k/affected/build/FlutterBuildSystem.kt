@@ -17,11 +17,11 @@ class FlutterBuildSystem : SuspendingBuildSystem {
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {
-        CommandRunner.runBatch(project, root, flutterCommands(tasks), "Affected Flutter")
+        CommandRunner.runBatch(project, root, flutterCommands(File(root), tasks), "Affected Flutter")
     }
 
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
-        CommandRunner.runBatchAndWait(project, root, flutterCommands(tasks), "Affected Flutter")
+        CommandRunner.runBatchAndWait(project, root, flutterCommands(File(root), tasks), "Affected Flutter")
 
     private fun manifestOf(project: Project): File? =
         project.basePath?.let { flutterManifest(File(it)) }
@@ -58,11 +58,18 @@ internal fun flutterHasTests(root: File): Boolean {
     return tests.isDirectory && tests.walkTopDown().any(::flutterTestFile)
 }
 
-internal fun flutterCommands(tasks: List<String>): List<CliCommand> {
+internal fun flutterCommands(tasks: List<String>): List<CliCommand> = flutterCommands(File("."), tasks)
+
+internal fun flutterCommands(root: File, tasks: List<String>): List<CliCommand> {
     if (tasks.isEmpty()) return emptyList()
     val verbs = tasks.map { it.substringAfterLast(':') }.toSet()
     val verb = if (verbs == setOf(FlutterTasks.ANALYZE)) FlutterTasks.ANALYZE else FlutterTasks.TEST
-    return listOf(CliCommand("flutter $verb", listOf("flutter", verb)))
+    val commands = mutableListOf<CliCommand>()
+    if (pubNeedsCodegen(root)) {
+        commands += BUILD_RUNNER_COMMAND
+    }
+    commands += CliCommand("flutter $verb", listOf("flutter", verb))
+    return commands
 }
 
 private fun flutterTestFile(file: File): Boolean =

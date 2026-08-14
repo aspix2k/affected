@@ -127,6 +127,41 @@ class DartCommandTest {
     }
 
     @Test
+    fun `a build_runner dependency runs generate before dart test`() {
+        val root = dartRoot(
+            """
+            name: probe
+            environment:
+              sdk: ^3.13.0
+            dev_dependencies:
+              build_runner: ^2.4.0
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            listOf(
+                listOf("dart", "run", "build_runner", "build", "--delete-conflicting-outputs"),
+                listOf("dart", "test"),
+            ),
+            dartCommands(root, listOf(".:test")).map(CliCommand::arguments),
+        )
+    }
+
+    @Test
+    fun `a build yaml runs generate before dart analyze`() {
+        val root = dartRoot()
+        File(root, "build.yaml").writeText("targets:\n  \$default:\n    sources: []\n")
+
+        assertEquals(
+            listOf(
+                listOf("dart", "run", "build_runner", "build", "--delete-conflicting-outputs"),
+                listOf("dart", "analyze"),
+            ),
+            dartCommands(root, listOf(".:analyze")).map(CliCommand::arguments),
+        )
+    }
+
+    @Test
     fun `a missing workspace member keeps the root command`() {
         val root = dartRoot(
             """

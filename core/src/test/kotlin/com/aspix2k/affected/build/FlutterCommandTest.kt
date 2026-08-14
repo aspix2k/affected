@@ -89,6 +89,30 @@ class FlutterCommandTest {
     }
 
     @Test
+    fun `a build_runner dependency runs generate before flutter test`() {
+        val root = flutterRoot(
+            """
+            name: probe
+            environment:
+              sdk: ^3.13.0
+            dependencies:
+              flutter:
+                sdk: flutter
+            dev_dependencies:
+              build_runner: ^2.4.0
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            listOf(
+                listOf("dart", "run", "build_runner", "build", "--delete-conflicting-outputs"),
+                listOf("flutter", "test"),
+            ),
+            flutterCommands(root, listOf(".:test")).map(CliCommand::arguments),
+        )
+    }
+
+    @Test
     fun `a Maven pom keeps the root off the Flutter adapter`() {
         val root = flutterRoot()
         File(root, "pom.xml").writeText("<project/>")

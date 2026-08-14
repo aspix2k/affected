@@ -20,11 +20,11 @@ class DartBuildSystem : SuspendingBuildSystem, WorkspaceChangesBuildSystem {
         dartRequiresWorkspace(module.root, changes)
 
     override fun run(project: Project, root: String, tasks: List<String>) {
-        CommandRunner.runBatch(project, root, dartCommands(tasks), "Affected Dart")
+        CommandRunner.runBatch(project, root, dartCommands(File(root), tasks), "Affected Dart")
     }
 
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
-        CommandRunner.runBatchAndWait(project, root, dartCommands(tasks), "Affected Dart")
+        CommandRunner.runBatchAndWait(project, root, dartCommands(File(root), tasks), "Affected Dart")
 
     private fun manifestOf(project: Project): File? =
         project.basePath?.let { dartManifest(File(it)) }
@@ -120,7 +120,9 @@ internal fun dartRequiresWorkspace(root: String, changes: BuildChanges): Boolean
     }
 }
 
-internal fun dartCommands(tasks: List<String>): List<CliCommand> {
+internal fun dartCommands(tasks: List<String>): List<CliCommand> = dartCommands(File("."), tasks)
+
+internal fun dartCommands(root: File, tasks: List<String>): List<CliCommand> {
     if (tasks.isEmpty()) return emptyList()
     val verbs = tasks.map { it.substringAfterLast(':') }.toSet()
     val verb = if (verbs == setOf(DartTasks.ANALYZE)) DartTasks.ANALYZE else DartTasks.TEST
@@ -132,7 +134,19 @@ internal fun dartCommands(tasks: List<String>): List<CliCommand> {
         val paths = packages.sorted().map { packagePath(it, verb) }
         listOf("dart", verb) + paths
     }
-    return listOf(CliCommand("dart $verb", arguments))
+    val commands = mutableListOf<CliCommand>()
+    if (pubNeedsCodegen(root)) {
+        commands += BUILD_RUNNER_COMMAND
+    }
+    commands += CliCommand("dart $verb", arguments)
+    return commands
+}
+
+internal fun pubNeedsCodegen(root: File): Boolean {
+    if (File(root, "build.yaml").isRegularFileNoFollow()) return true
+    val manifest = File(root, "pubspec.yaml").takeIf(File::isRegularFileNoFollow) ?: return false
+    val text = runCatching { manifest.readText() }.getOrNull() ?: return true
+    return BUILD_RUNNER_DEPENDENCY.containsMatchIn(text)
 }
 
 private fun dartWorkspacePath(directory: String): String? {
@@ -152,4 +166,9 @@ private val WORKSPACE_SECTION = Regex("""(?m)^workspace:\s*\n((?:[ \t]+.*\n?)*)"
 private val WORKSPACE_PATH = Regex("""(?m)^[ \t]*-[ \t]+(?:\./)?([A-Za-z0-9][A-Za-z0-9_./-]*)[ \t]*$""")
 private val UNPROVED_WORKSPACE = Regex("""[*?\[]|\*\*""")
 private val PACKAGE_PATH = Regex("""[A-Za-z0-9._\-]+(?:/[A-Za-z0-9._\-]+)*""")
+private val BUILD_RUNNER_DEPENDENCY = Regex("""(?m)^[ \t]*build_runner\s*:""")
+internal val BUILD_RUNNER_COMMAND = CliCommand(
+    "dart run build_runner build",
+    listOf("dart", "run", "build_runner", "build", "--delete-conflicting-outputs"),
+)
 private val FOREIGN_ROOTS = listOf("settings.gradle.kts", "settings.gradle", "pom.xml")
