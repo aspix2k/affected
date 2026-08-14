@@ -76,4 +76,18 @@ class CrossPlatformPathTest {
         assertFalse('\\' in nested.invariantSeparatorsPath, "a normalized path contains no backslashes")
         assertTrue(nested.invariantSeparatorsPath.endsWith("module/src/Main.kt"))
     }
+
+    @Test
+    fun `spaces and non-ASCII names stay in the normalized path`() {
+        val directory = File(System.getProperty("java.io.tmpdir"), "affected path проверка").apply { mkdirs() }
+        val nested = File(directory, "модуль/src/Главный.kt").apply {
+            parentFile.mkdirs()
+            writeText("fun main() {}")
+        }
+
+        val normalized = nested.invariantSeparatorsPath
+        assertFalse('\\' in normalized)
+        assertTrue("affected path проверка" in normalized)
+        assertTrue(normalized.endsWith("модуль/src/Главный.kt"))
+    }
 }
