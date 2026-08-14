@@ -1,3 +1,8 @@
+# Local agent instruction files. Project process lives in CONTRIBUTING.md.
+/AGENTS.md
+/CLAUDE.md
+/GROK.md
+
 # Build output of the root project and of every module, without swallowing
 # the source package named "build".
 /build/
