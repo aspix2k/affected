@@ -443,9 +443,9 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "Apache Ant 1.10.x; tested with 1.10.17; project-level targets until imported graphs are proven",
+      "versions": "Apache Ant 1.10.x; tested with 1.10.17; static import files merge targets, unproved imports keep ant test",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/ant"],
+      "fixtures": ["conformance/cli-fixtures/ant", "conformance/cli-fixtures/ant-imports"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {

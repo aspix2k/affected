@@ -83,6 +83,46 @@ class AntCommandTest {
         assertNull(antManifest(root))
     }
 
+    @Test
+    fun `an imported file contributes its test target`() {
+        val root = antRoot("<project><import file=\"testdefs.xml\"/></project>")
+        File(root, "testdefs.xml").writeText("<project><target name=\"test\"/></project>")
+        val module = antRootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals("test", module.testTask)
+        assertEquals(listOf("ant", "test"), antCommands(listOf(".:test")).single().arguments)
+    }
+
+    @Test
+    fun `an unproved import keeps the test command`() {
+        val root = antRoot("<project><import file=\"\${defs}\"/><target name=\"compile\"/></project>")
+        val module = antRootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals(listOf("ant", "test"), antCommands(listOf(".:test")).single().arguments)
+    }
+
+    @Test
+    fun `a missing import keeps the test command`() {
+        val root = antRoot("<project><import file=\"missing.xml\"/><target name=\"compile\"/></project>")
+        val module = antRootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals(listOf("ant", "test"), antCommands(listOf(".:test")).single().arguments)
+    }
+
+    @Test
+    fun `an optional missing import does not invent tests`() {
+        val root = antRoot(
+            "<project><import file=\"missing.xml\" optional=\"true\"/><target name=\"compile\"/></project>",
+        )
+        val module = antRootModule(root)
+
+        assertFalse(module.hasTests)
+        assertEquals("compile", module.compileTask)
+    }
+
     private fun antRoot(buildXml: String): File {
         val root = createTempDirectory("ant-root").toFile()
         File(root, "build.xml").writeText(buildXml)

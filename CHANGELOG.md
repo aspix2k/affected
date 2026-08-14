@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Merge static Ant `import` files into the target set so a `test` declared in `testdefs.xml` is runnable; property, prefixed `include` and missing imports keep `ant test`.
 - Merge in-tree Meson `subprojects` and `meson-info` tests into the project so a test declared only in a subproject is runnable; unreadable introspection keeps `meson test`.
 - Merge static Make `include` files into the target set so a `test` declared in `testdefs.mk` is runnable; variable, glob and missing includes keep `make test`.
 - Detect standalone Ninja roots from `build.ninja` and run one `ninja test` or `ninja check` session; production-only changes run the default target. The Ninja file is not parsed as a source graph. CMake, Meson, Make, Gradle and Maven roots stay off this adapter.
