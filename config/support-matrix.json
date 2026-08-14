@@ -539,7 +539,7 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "Dart 3.13.x; proven workspace packages use dart test <pkg>/test, pubspec changes keep the workspace command",
+      "versions": "Dart 3.13.x; proven workspace packages use dart test <pkg>/test, pubspec changes keep the workspace command; build.yaml or build_runner prepends dart run build_runner build",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/dart", "conformance/cli-fixtures/dart-workspace"],
       "gates": [".github/workflows/conformance.yml"]
@@ -562,7 +562,7 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "Flutter 3.47.x; project-level until generated sources and build_runner contracts are proven",
+      "versions": "Flutter 3.47.x; build.yaml or build_runner prepends dart run build_runner build; generated-file ownership stays unclaimed",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/flutter"],
       "gates": [".github/workflows/conformance.yml"]
