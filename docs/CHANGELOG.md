@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Raise the required Kover line floor for `:core` and `:mcp` from 19 to 60 after a measured 77% combined line report.
 - Record already implemented TestNG, Spock, unittest and Microsoft Testing Platform runners in the public support matrix.
 - Keep public .NET fixtures on Microsoft.NET.Test.Sdk 18.9.0.
 - Keep `docs/CONTRIBUTING.md` to building, architecture, conventions and release. Adapter selection rules stay in tests and `docs/SUPPORT.md`.
