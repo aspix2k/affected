@@ -272,6 +272,74 @@ class AntCommandTest {
     }
 
     @Test
+    fun `an antcall keeps the test command`() {
+        val root = antRoot(
+            """
+            <project>
+              <target name="compile"/>
+              <target name="run"><antcall target="hidden-test"/></target>
+            </project>
+            """.trimIndent(),
+        )
+        val module = antRootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals(listOf("ant", "test"), antCommands(root, listOf(".:test")).single().arguments)
+    }
+
+    @Test
+    fun `a nested ant task keeps the test command`() {
+        val root = antRoot(
+            """
+            <project>
+              <target name="compile"/>
+              <target name="run"><ant antfile="more.xml"/></target>
+            </project>
+            """.trimIndent(),
+        )
+        val module = antRootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals(listOf("ant", "test"), antCommands(root, listOf(".:test")).single().arguments)
+    }
+
+    @Test
+    fun `an unproved target name keeps the test command`() {
+        val root = antRoot(
+            """
+            <project>
+              <target name="compile"/>
+              <target name="&dollar;{suite}"/>
+            </project>
+            """.trimIndent().replace("&dollar;", "$"),
+        )
+        val module = antRootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals(listOf("ant", "test"), antCommands(root, listOf(".:test")).single().arguments)
+    }
+
+    @Test
+    fun `a target condition keeps the test command`() {
+        val root = antRoot(
+            """
+            <project>
+              <target name="compile"/>
+              <target name="maybe" if="run.tests"><junit/></target>
+            </project>
+            """.trimIndent(),
+        )
+        val module = antRootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals("test", module.testTask)
+        assertEquals(
+            listOf("ant", "test"),
+            antCommands(root, listOf(".:${module.testTask}")).single().arguments,
+        )
+    }
+
+    @Test
     fun `an optional missing import does not invent tests`() {
         val root = antRoot(
             "<project><import file=\"missing.xml\" optional=\"true\"/><target name=\"compile\"/></project>",

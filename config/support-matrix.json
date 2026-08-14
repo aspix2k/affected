@@ -443,7 +443,7 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "Apache Ant 1.10.x; tested with 1.10.17; JUnit/TestNG task targets run when test/junit names are absent; generate/codegen runs before test unless depends proves it; static properties expand imports, unresolved properties keep ant test",
+      "versions": "Apache Ant 1.10.x; tested with 1.10.17; JUnit/TestNG task targets run when test/junit names are absent; generate/codegen runs before test unless depends proves it; static properties expand imports, unresolved properties keep ant test; dynamic antcall/ant/if/unless keep ant test",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/ant", "conformance/cli-fixtures/ant-imports", "conformance/cli-fixtures/ant-junit-task", "conformance/cli-fixtures/ant-generated", "conformance/cli-fixtures/ant-properties"],
       "gates": [".github/workflows/conformance.yml"]
