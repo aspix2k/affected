@@ -553,9 +553,9 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "Meson 1.x with Ninja; project-level until subprojects and Make/Ninja contracts are proven",
+      "versions": "Meson 1.x with Ninja; in-tree subprojects and meson-info tests merge, unreadable introspection keeps meson test",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/meson"],
+      "fixtures": ["conformance/cli-fixtures/meson", "conformance/cli-fixtures/meson-subprojects"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
