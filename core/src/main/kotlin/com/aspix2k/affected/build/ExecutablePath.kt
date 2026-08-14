@@ -23,8 +23,14 @@ private fun firstRunnableOnPath(name: String, path: String, pathExt: String?, se
         .firstNotNullOfOrNull(::runnablePath)
 }
 
-private fun pathSuffixes(pathExt: String?): List<String> =
-    listOf("") + pathExt.orEmpty().split(';').map { it.trim() }.filter { it.startsWith('.') }
+private fun pathSuffixes(pathExt: String?): List<String> {
+    val suffixes = linkedSetOf("")
+    pathExt.orEmpty().split(';').map { it.trim() }.filter { it.startsWith('.') }.forEach { suffix ->
+        suffixes += suffix
+        suffixes += suffix.lowercase()
+    }
+    return suffixes.toList()
+}
 
 private fun runnablePath(file: File): String? =
     file.takeIf { it.isFile && it.canExecute() }?.canonicalFile?.invariantSeparatorsPath
