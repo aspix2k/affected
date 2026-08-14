@@ -49,6 +49,7 @@ class CliKotlinToolchainModuleConformanceTest {
                 .directory(directory)
                 .redirectErrorStream(true)
                 .redirectOutput(output)
+                .apply { kotlinToolchainNativeEnvironment(environment()) }
                 .start()
             val completed = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             if (!completed) process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)

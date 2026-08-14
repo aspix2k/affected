@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Point Kotlin Toolchain native fixtures at `JAVA_HOME/bin` and drop a leftover `TEST_TMPDIR`, so the CLI can find `java` after other native tools run.
+
 ### Added
 
 - Detect Meson roots from `meson.build` and run one `meson test` or `meson compile` session; setup runs only when no configured build directory exists. Gradle, Maven and CMake roots stay off this adapter. Subprojects and Make/Ninja stay unclaimed.
