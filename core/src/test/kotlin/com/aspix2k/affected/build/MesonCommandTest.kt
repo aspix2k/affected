@@ -116,6 +116,71 @@ class MesonCommandTest {
         assertNull(mesonManifest(root))
     }
 
+    @Test
+    fun `a subproject test keeps the project runnable`() {
+        val root = mesonRoot("project('probe', 'c')\nsubproject('alpha')\n")
+        File(root, "subprojects/alpha").mkdirs()
+        File(root, "subprojects/alpha/meson.build").writeText(
+            "project('alpha', 'c')\ntest('alpha', executable('alpha', 'alpha.c'))\n",
+        )
+        val module = mesonRootModule(root)
+
+        assertTrue(module.hasTests)
+        assertTrue(module.contentRoots.any { it.endsWith("subprojects/alpha") })
+        assertEquals(
+            listOf(
+                listOf("meson", "setup", "build"),
+                listOf("meson", "test", "-C", "build"),
+            ),
+            mesonCommands(root, listOf(".:test")).map(CliCommand::arguments),
+        )
+    }
+
+    @Test
+    fun `a wrap-only subprojects directory does not invent tests`() {
+        val root = mesonRoot("project('probe', 'c')\nexecutable('app', 'app.c')\n")
+        File(root, "subprojects").mkdirs()
+        File(root, "subprojects/alpha.wrap").writeText("[wrap-file]\ndirectory = alpha\n")
+        File(root, "subprojects/packagecache/alpha").mkdirs()
+        File(root, "subprojects/packagecache/alpha/meson.build").writeText(
+            "project('cached', 'c')\ntest('cached', executable('cached', 'cached.c'))\n",
+        )
+
+        val module = mesonRootModule(root)
+        assertFalse(module.hasTests)
+        assertEquals(listOf(root.invariantSeparatorsPath), module.contentRoots)
+    }
+
+    @Test
+    fun `meson-info tests keep the project runnable`() {
+        val root = mesonRoot("project('probe', 'c')\nexecutable('app', 'app.c')\n")
+        File(root, "subprojects/alpha").mkdirs()
+        File(root, "subprojects/alpha/meson.build").writeText("project('alpha', 'c')\n")
+        File(root, "build/meson-info").mkdirs()
+        File(root, "build/meson-info/intro-projectinfo.json").writeText(
+            """{"descriptive_name":"probe","subproject_dir":"subprojects","subprojects":["alpha"]}""",
+        )
+        File(root, "build/meson-info/intro-tests.json").writeText("""[{"name":"alpha","suite":["alpha"]}]""")
+
+        val module = mesonRootModule(root)
+        assertTrue(module.hasTests)
+        assertTrue(module.contentRoots.any { it.endsWith("subprojects/alpha") })
+    }
+
+    @Test
+    fun `unreadable meson-info keeps the test command`() {
+        val root = mesonRoot("project('probe', 'c')\nexecutable('app', 'app.c')\n")
+        File(root, "build/meson-info").mkdirs()
+        File(root, "build/meson-info/intro-tests.json").writeText("{")
+
+        val module = mesonRootModule(root)
+        assertTrue(module.hasTests)
+        assertEquals(
+            listOf(listOf("meson", "test", "-C", "build")),
+            mesonCommands(root, listOf(".:test")).map(CliCommand::arguments),
+        )
+    }
+
     private fun mesonRoot(manifest: String = "project('probe', 'c')\n"): File {
         val root = createTempDirectory("meson-root").toFile()
         File(root, "meson.build").writeText(manifest)
