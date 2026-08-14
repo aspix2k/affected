@@ -1,0 +1,1 @@
+- A lone first-level `pkg/` R package is now the R root when the repository base has no marker.

@@ -94,6 +94,32 @@ class RCommandTest {
         assertNull(rManifest(root))
     }
 
+    @Test
+    fun `a single first-level nested R package is the root`() {
+        val base = createTempDirectory("r-nested").toFile()
+        val nested = File(base, "pkg")
+        rRoot().copyRecursively(nested)
+
+        assertEquals(nested.canonicalFile, rProjectRoot(base)?.canonicalFile)
+    }
+
+    @Test
+    fun `several first-level nested R packages stay off`() {
+        val base = createTempDirectory("r-many").toFile()
+        rRoot().copyRecursively(File(base, "pkg"))
+        rRoot().copyRecursively(File(base, "tools"))
+
+        assertNull(rProjectRoot(base))
+    }
+
+    @Test
+    fun `a deeper nested R package stays off`() {
+        val base = createTempDirectory("r-deep").toFile()
+        rRoot().copyRecursively(File(base, "src/pkg"))
+
+        assertNull(rProjectRoot(base))
+    }
+
     private fun rRoot(
         description: String = """
             Package: probe
