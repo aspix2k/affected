@@ -71,6 +71,8 @@ internal data class TypedPlan(
 
 object TaskPlanner {
 
+    internal const val CLICK_TO_RUN_PLAN_MS = 250L
+
     fun groups(modules: List<ModuleInfo>, task: String): List<TaskGroup> =
         modules.distinctOwners()
             .groupBy { it.systemId to it.executionRoot }

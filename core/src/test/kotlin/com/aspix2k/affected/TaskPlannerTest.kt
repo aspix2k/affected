@@ -37,6 +37,20 @@ class TaskPlannerTest {
         )
 
     @Test
+    fun `planning a large module set stays within the click-to-run budget`() {
+        val modules = (1..2_000).map { jvm(":$it") }
+        val started = System.nanoTime()
+        val plan = TaskPlanner.plan(modules, emptyList())
+        val took = (System.nanoTime() - started) / 1_000_000
+
+        assertEquals(2_000, plan.tested)
+        assertTrue(
+            took < TaskPlanner.CLICK_TO_RUN_PLAN_MS,
+            "planning 2000 modules took $took ms and is user-visible",
+        )
+    }
+
+    @Test
     fun `empty input yields an empty plan`() {
         val plan = TaskPlanner.plan(emptyList(), emptyList())
         assertTrue(plan.isEmpty)
