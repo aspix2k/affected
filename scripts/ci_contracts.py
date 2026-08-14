@@ -154,6 +154,9 @@ def check(root: Path = ROOT) -> None:
     root_build = read(root / "build.gradle.kts")
     if 'kover(project(":core"))' not in root_build or 'kover(project(":mcp"))' not in root_build:
         raise CiContractError("Kover must verify :core and :mcp, not only the root plugin sources")
+    bound = re.search(r"minBound\((\d+)\)", root_build)
+    if bound is None or int(bound.group(1)) < 60:
+        raise CiContractError("Kover line floor must stay at least 60")
 
     check_merge_queue(root, ci, codeql)
     check_wrapper(root)

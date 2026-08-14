@@ -128,7 +128,7 @@ kover {
             xml { onCheck = true }
             verify {
                 rule {
-                    minBound(19)
+                    minBound(60)
                 }
             }
         }
