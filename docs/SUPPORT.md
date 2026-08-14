@@ -27,7 +27,7 @@ dedicated product lifecycle fixture.
 
 | Product | Goal | Tracking issue | Last reviewed |
 |---|---|---|---:|
-| DataGrip | Local contracts are in-repo dbt + DuckDB and sqlc compile; DataGrip UI lifecycle and warehouse SQL stay unclaimed. | [Issue #120](https://github.com/aspix2k/affected/issues/120) | 2026-08-14 |
+| DataGrip | Local contracts are in-repo dbt + DuckDB, sqlc compile and Atlas migrate validate; DataGrip UI lifecycle and warehouse SQL stay unclaimed. | [Issue #120](https://github.com/aspix2k/affected/issues/120) | 2026-08-14 |
 | JetBrains Gateway | Analysis and build stay on the IDE backend; a proven JetBrains Client frontend skips VFS refresh. Gateway install and update stay unclaimed. | [Issue #127](https://github.com/aspix2k/affected/issues/127) | 2026-08-14 |
 
 ## Build systems and test runners
@@ -60,6 +60,7 @@ dedicated product lifecycle fixture.
 | Xcode | Swift, Objective-C | xcodebuild test, xcodebuild build | project | Xcode; a single shared scheme is selected, several schemes keep xcodebuild test; native xcodebuild stays unclaimed | [xcode](../conformance/cli-fixtures/xcode) · [XcodeCommandTest.kt](../core/src/test/kotlin/com/aspix2k/affected/build/XcodeCommandTest.kt) · [ci.yml](../.github/workflows/ci.yml) |
 | dbt | SQL, YAML | dbt test, dbt compile | project | dbt; in-repo DuckDB profiles only, warehouse and MotherDuck stay off, native dbt execution stays unclaimed | [dbt](../conformance/cli-fixtures/dbt) · [DbtCommandTest.kt](../core/src/test/kotlin/com/aspix2k/affected/build/DbtCommandTest.kt) · [ci.yml](../.github/workflows/ci.yml) |
 | sqlc | SQL, YAML, JSON | sqlc compile | project | sqlc; local schema and query files only, database URIs and cloud stay off, native sqlc execution stays unclaimed | [sqlc](../conformance/cli-fixtures/sqlc) · [SqlcCommandTest.kt](../core/src/test/kotlin/com/aspix2k/affected/build/SqlcCommandTest.kt) · [ci.yml](../.github/workflows/ci.yml) |
+| Atlas | SQL, HCL | atlas migrate validate | project | Atlas; local atlas.hcl without database URLs, native atlas execution stays unclaimed | [atlas](../conformance/cli-fixtures/atlas) · [AtlasCommandTest.kt](../core/src/test/kotlin/com/aspix2k/affected/build/AtlasCommandTest.kt) · [ci.yml](../.github/workflows/ci.yml) |
 
 The smaller selection unit is used only when the adapter proves a complete
 relationship. Otherwise **Affected** keeps the larger unit shown in the same row.

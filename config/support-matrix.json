@@ -93,7 +93,7 @@
       "id": "datagrip",
       "name": "DataGrip",
       "support": "planned",
-      "reason": "Local contracts are in-repo dbt + DuckDB and sqlc compile; DataGrip UI lifecycle and warehouse SQL stay unclaimed.",
+      "reason": "Local contracts are in-repo dbt + DuckDB, sqlc compile and Atlas migrate validate; DataGrip UI lifecycle and warehouse SQL stay unclaimed.",
       "issue": "https://github.com/aspix2k/affected/issues/120",
       "reviewed": "2026-08-14"
     },
@@ -810,6 +810,29 @@
       "versions": "sqlc; local schema and query files only, database URIs and cloud stay off, native sqlc execution stays unclaimed",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/sqlc"],
+      "gates": [".github/workflows/ci.yml"]
+    },
+    {
+      "id": "ATLAS",
+      "implementation": "com.aspix2k.affected.build.AtlasBuildSystem",
+      "ecosystem": "Atlas",
+      "languages": ["SQL", "HCL"],
+      "runners": ["atlas migrate validate"],
+      "selection": ["project"],
+      "selectionProofs": [
+        {
+          "units": ["project"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/AtlasCommandTest.kt",
+          "marker": "a local Atlas root runs one migrate validate command",
+          "gate": ".github/workflows/ci.yml",
+          "gateMarker": "koverVerify",
+          "gateJob": "plugin",
+          "gateStep": "Analyze, test, package and verify"
+        }
+      ],
+      "versions": "Atlas; local atlas.hcl without database URLs, native atlas execution stays unclaimed",
+      "support": "supported",
+      "fixtures": ["conformance/cli-fixtures/atlas"],
       "gates": [".github/workflows/ci.yml"]
     }
   ]

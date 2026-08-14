@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Detect local Atlas roots from `atlas.hcl` and run one `atlas migrate validate` session; database URLs, `dev` databases, cloud directories and interpolated manifests stay off this adapter. Native atlas execution and plain SQL files stay unclaimed.
 - Skip startup analysis and VFS refresh on a proven JetBrains Client frontend so analysis stays on the IDE backend; Gateway install and update stay unclaimed.
 - Fail dynamic-plugin descriptor tests when a descriptor declares `<nativelib>`; a native library blocks a restartless update.
 - Detect local sqlc roots from `sqlc.yaml` / `sqlc.yml` / `sqlc.json` and run one `sqlc compile` session; database URIs, managed/cloud databases, process plugins and interpolated manifests stay off this adapter. Native sqlc execution and plain SQL files stay unclaimed.
