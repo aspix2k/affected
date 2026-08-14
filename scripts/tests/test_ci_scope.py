@@ -28,6 +28,7 @@ class CiScopeTest(unittest.TestCase):
                     "docs/superpowers/plans/x.md",
                     ".github/ISSUE_TEMPLATE/bug.md",
                     "scripts/ci_scope.py",
+                    "scripts/changelog_fragments.py",
                     "scripts/local_gate.py",
                     "scripts/tests/test_ci_scope.py",
                     ".githooks/pre-commit",

@@ -104,8 +104,12 @@ jobs:
 
       - name: Test pull-request CI contracts
         run: |
-          python3 -m unittest scripts.tests.test_ci_contracts scripts.tests.test_ci_scope scripts.tests.test_docs_layout scripts.tests.test_fetch_gradle scripts.tests.test_local_gate scripts.tests.test_run_gradle
+          python3 -m unittest scripts.tests.test_changelog_fragments scripts.tests.test_ci_contracts scripts.tests.test_ci_scope scripts.tests.test_docs_layout scripts.tests.test_fetch_gradle scripts.tests.test_local_gate scripts.tests.test_run_gradle
           python3 scripts/ci_contracts.py --check
+
+      - name: Pull requests must not edit the assembled changelog
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        run: python3 scripts/changelog_fragments.py check
 
       - name: Test the PIT survivor gate
         run: python3 -m unittest scripts.tests.test_pitest_gate

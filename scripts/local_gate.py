@@ -11,6 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_TESTS = (
+    "scripts.tests.test_changelog_fragments",
     "scripts.tests.test_ci_contracts",
     "scripts.tests.test_ci_scope",
     "scripts.tests.test_fetch_gradle",
