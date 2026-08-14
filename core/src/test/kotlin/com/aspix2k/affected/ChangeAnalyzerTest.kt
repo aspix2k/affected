@@ -143,6 +143,28 @@ class ChangeAnalyzerTest {
     }
 
     @Test
+    fun `windows separators still drop project documentation from all-file collection`() {
+        assertTrue(isProjectDocumentation("C:\\repo\\README.md"))
+        assertTrue(isProjectDocumentation("C:\\repo\\docs\\CHANGELOG.md"))
+        assertFalse(
+            isCollectedSource(
+                "C:\\repo\\README.md",
+                includeAllFiles = true,
+                extensions = setOf("kt"),
+                names = emptySet(),
+            ),
+        )
+        assertTrue(
+            isCollectedSource(
+                "C:\\repo\\NOTICE",
+                includeAllFiles = true,
+                extensions = emptySet(),
+                names = emptySet(),
+            ),
+        )
+    }
+
+    @Test
     fun `complete change collection includes extensionless and resource files`() = repo { dir ->
         val extensionless = File(dir, "lib/src/main/resources/NOTICE").apply {
             parentFile.mkdirs()
