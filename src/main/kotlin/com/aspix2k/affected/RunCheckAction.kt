@@ -50,7 +50,9 @@ abstract class RunCheckAction(
             coroutineScope {
                 groups.map { group ->
                     async(Dispatchers.IO) {
-                        BuildSystems.byId(group.systemId)?.runAndWait(project, group.root, group.tasks) ?: true
+                        runWithRequiredAdapter(BuildSystems.byId(group.systemId)) {
+                            it.runAndWait(project, group.root, group.tasks)
+                        }
                     }
                 }.awaitAll()
             }

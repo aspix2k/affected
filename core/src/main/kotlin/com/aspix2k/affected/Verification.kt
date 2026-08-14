@@ -113,6 +113,14 @@ object Verification {
 
 internal fun preparedGroupPasses(adapterFound: Boolean): Boolean = adapterFound
 
+fun <T> runWithRequiredAdapter(
+    adapter: T?,
+    run: (T) -> Boolean,
+): Boolean {
+    if (adapter == null) return preparedGroupPasses(adapterFound = false)
+    return run(adapter)
+}
+
 internal fun verificationPlan(
     graph: ModuleGraph,
     changes: ProjectChanges.Result,
