@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-08-14
+
+### Added
+
+- A lone first-level `native/` Make project is now the Make root when the repository base has no marker.
+
 ## [3.1.0] - 2026-08-14
 
 ### Added
@@ -389,7 +395,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.2.0...HEAD
+[3.2.0]: https://github.com/aspix2k/affected/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/aspix2k/affected/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/aspix2k/affected/compare/v2.0.1...v3.0.0
 [2.0.1]: https://github.com/aspix2k/affected/compare/v2.0.0...v2.0.1
