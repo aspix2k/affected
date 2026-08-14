@@ -1,0 +1,5 @@
+Package: probe
+Title: Probe
+Version: 0.0.1
+License: MIT
+Suggests: testthat

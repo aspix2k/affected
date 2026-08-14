@@ -221,7 +221,7 @@ jobs:
         run: |
           python -m pip install cmake==4.4.2 pytest==9.1.1 ruff==0.16.3
           sudo apt-get update
-          sudo apt-get install -y ant ant-optional meson ninja-build gcc make
+          sudo apt-get install -y ant ant-optional meson ninja-build gcc make r-base r-cran-testthat
 
       - name: Check Python adapter
         run: |
