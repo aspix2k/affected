@@ -5,6 +5,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CargoFileFilterTest {
@@ -53,5 +54,37 @@ class CargoFileFilterTest {
 
         assertFalse(command.arguments.contains("-E"))
         assertTrue(command.arguments.contains("--workspace"))
+    }
+
+    @Test
+    fun `a single first-level nested Cargo project is the root`() {
+        val base = createTempDirectory("cargo-nested").toFile()
+        val nested = File(base, "backend")
+        cargoToml().copyRecursively(nested)
+
+        assertEquals(nested.canonicalFile, cargoProjectRoot(base)?.canonicalFile)
+    }
+
+    @Test
+    fun `several first-level nested Cargo projects stay off`() {
+        val base = createTempDirectory("cargo-many").toFile()
+        cargoToml().copyRecursively(File(base, "backend"))
+        cargoToml().copyRecursively(File(base, "tools"))
+
+        assertNull(cargoProjectRoot(base))
+    }
+
+    @Test
+    fun `a deeper nested Cargo project stays off`() {
+        val base = createTempDirectory("cargo-deep").toFile()
+        cargoToml().copyRecursively(File(base, "src/backend"))
+
+        assertNull(cargoProjectRoot(base))
+    }
+
+    private fun cargoToml(): File {
+        val root = createTempDirectory("cargo-toml").toFile()
+        File(root, "Cargo.toml").writeText("[package]\nname = \"probe\"\nversion = \"0.1.0\"\nedition = \"2021\"\n")
+        return root
     }
 }

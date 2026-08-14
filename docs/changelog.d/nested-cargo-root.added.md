@@ -1,0 +1,1 @@
+- A lone first-level `backend/` Cargo project is now the Cargo root when the repository base has no marker.
