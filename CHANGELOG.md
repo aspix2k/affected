@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Detect Xcode roots from `.xcodeproj` / `.xcworkspace` and run one `xcodebuild test` or `xcodebuild build` session; a single shared scheme is selected, several schemes keep the unscoped command. SwiftPM, Gradle and Maven roots stay off this adapter.
 - Detect SwiftPM roots from `Package.swift` and run one `swift test` or `swift build` session; Gradle and Maven roots stay off this adapter. Xcode schemes, target selection and native Swift execution stay unclaimed.
 - Detect Buck2 roots from `.buckconfig` and run one `buck2 test` or `buck2 build` session; a lone `BUCK` file and Gradle/Maven roots stay off this adapter. Cells, aliases and native buck2 execution stay unclaimed.
 - Detect Pants roots from `pants.toml` and run one `pants test` or `pants check` session; Gradle and Maven roots stay off this adapter. Target selection and native pants execution stay unclaimed.

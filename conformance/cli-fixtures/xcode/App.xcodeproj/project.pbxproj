@@ -1,0 +1,7 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	objectVersion = 56;
+	objects = {};
+	rootObject = 000000000000000000000001;
+}
