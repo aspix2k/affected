@@ -51,6 +51,7 @@ class MavenBuildSystem : SuspendingBuildSystem {
                 testTask = data.testTask,
                 compileTask = COMPILE_GOAL,
                 hasTests = File(data.directory, "src/test").isDirectory,
+                systemId = id,
             )
         }
         return described.map { data ->

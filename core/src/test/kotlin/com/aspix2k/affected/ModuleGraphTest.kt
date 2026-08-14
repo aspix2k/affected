@@ -17,6 +17,7 @@ import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class ModuleGraphTest {
 
@@ -235,6 +236,29 @@ class ModuleGraphTest {
             listOf("affected/alpha:${ComposerPackages.PEST}", "affected/beta:${ComposerPackages.PEST}"),
             verificationPlan(graph, changes, checkConsumers = false).groups.single().tasks,
         )
+    }
+
+    @Test
+    fun `a cmake consumer does not follow a same-named dotnet module`() {
+        val root = createTempDirectory("module-graph-identity").toFile()
+        val cmakeLib = module(root, "lib", "cpp").copy(systemId = "CMAKE")
+        val dotnetLib = module(root, "lib", "dotnet").copy(systemId = "DOTNET")
+        val cmakeApp = module(root, "app", "cpp-app").copy(
+            systemId = "CMAKE",
+            dependencies = setOf(cmakeLib.key),
+        )
+        val graph = ModuleGraph(
+            listOf(
+                ModuleGraph.Node(cmakeLib, system("CMAKE")),
+                ModuleGraph.Node(dotnetLib, system("DOTNET")),
+                ModuleGraph.Node(cmakeApp, system("CMAKE")),
+            ),
+        )
+        val cmakeNode = graph.all().single { it.system.id == "CMAKE" && it.id == "lib" }
+        val dotnetNode = graph.all().single { it.system.id == "DOTNET" && it.id == "lib" }
+
+        assertEquals(listOf("app"), graph.directDependents(setOf(cmakeNode)).map(ModuleGraph.Node::id))
+        assertTrue(graph.directDependents(setOf(dotnetNode)).isEmpty())
     }
 
     private fun graph(vararg modules: BuildModule): ModuleGraph =

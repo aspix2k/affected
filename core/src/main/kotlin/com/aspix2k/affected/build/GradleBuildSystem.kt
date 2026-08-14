@@ -212,7 +212,7 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
         )
 
         return Described(
-            key = "$projectPath|$path",
+            key = moduleDependencyKey(id, projectPath, path),
             path = path,
             projectPath = projectPath,
             roots = roots,
@@ -274,6 +274,7 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
             } else {
                 emptySet()
             },
+            systemId = id,
         )
     }
 

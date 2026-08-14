@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Include the build-system id in a module key so same-named CMake and .NET modules in one root cannot form a false consumer edge.
 - Fail a prepared Run group when its build adapter is gone, instead of counting a missing adapter as success.
 - Discover a single first-level nested CLI root (`cpp/`, `backend-dotnet/`) when the project base has no marker; several or deeper nested markers stay off.
 - Resolve CLI programs through `PATH` and Windows `PATHEXT`, so a proven `name.exe` is chosen and a missing program keeps the original name.
