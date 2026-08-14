@@ -1,0 +1,1 @@
+- Drop a build-system snapshot when it exceeds 4096 modules, so Python, Node, Cargo and the other cached adapters cannot retain an unbounded graph.
