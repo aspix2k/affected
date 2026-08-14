@@ -163,6 +163,24 @@ class SqlcCommandTest {
         manifest.setReadable(true)
     }
 
+    @Test
+    fun `a single first-level nested sqlc project is the root`() {
+        val base = createTempDirectory("sqlc-nested").toFile()
+        val nested = File(base, "queries")
+        sqlcRoot().copyRecursively(nested)
+
+        assertEquals(nested.canonicalFile, sqlcProjectRoot(base)?.canonicalFile)
+    }
+
+    @Test
+    fun `several first-level nested sqlc projects stay off`() {
+        val base = createTempDirectory("sqlc-many").toFile()
+        sqlcRoot().copyRecursively(File(base, "queries"))
+        sqlcRoot().copyRecursively(File(base, "analytics"))
+
+        assertNull(sqlcProjectRoot(base))
+    }
+
     private fun sqlcRoot(config: String = LOCAL_CONFIG): File {
         val root = createTempDirectory("sqlc-root").toFile()
         File(root, "sqlc.yaml").writeText(config)
