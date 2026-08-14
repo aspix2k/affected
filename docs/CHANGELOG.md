@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.6.2] - 2026-08-15
+
+### Fixed
+
+- Plan a Kotlin Multiplatform compile task that exists in the module instead of an ambiguous `compileTestKotlin`.
+- Plan only Gradle test and compile tasks that exist in the imported project. Missing task lists stay empty instead of guessing `test` or `compileTestKotlin`.
+- Select a lone user Xcode scheme so `xcodebuild test` is not unscoped.
+
 ## [3.6.1] - 2026-08-15
 
 ### Fixed
@@ -435,7 +443,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.6.1...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.6.2...HEAD
+[3.6.2]: https://github.com/aspix2k/affected/compare/v3.6.1...v3.6.2
 [3.6.1]: https://github.com/aspix2k/affected/compare/v3.6.0...v3.6.1
 [3.6.0]: https://github.com/aspix2k/affected/compare/v3.5.0...v3.6.0
 [3.5.0]: https://github.com/aspix2k/affected/compare/v3.4.1...v3.5.0
