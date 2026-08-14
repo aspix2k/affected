@@ -380,6 +380,32 @@ class AntCommandTest {
         assertEquals("compile", module.compileTask)
     }
 
+    @Test
+    fun `a single first-level nested Ant project is the root`() {
+        val base = createTempDirectory("ant-nested").toFile()
+        val nested = File(base, "legacy")
+        antRoot("<project><target name=\"test\"/></project>").copyRecursively(nested)
+
+        assertEquals(nested.canonicalFile, antProjectRoot(base)?.canonicalFile)
+    }
+
+    @Test
+    fun `several first-level nested Ant projects stay off`() {
+        val base = createTempDirectory("ant-many").toFile()
+        antRoot("<project><target name=\"test\"/></project>").copyRecursively(File(base, "legacy"))
+        antRoot("<project><target name=\"test\"/></project>").copyRecursively(File(base, "tools"))
+
+        assertNull(antProjectRoot(base))
+    }
+
+    @Test
+    fun `a deeper nested Ant project stays off`() {
+        val base = createTempDirectory("ant-deep").toFile()
+        antRoot("<project><target name=\"test\"/></project>").copyRecursively(File(base, "src/legacy"))
+
+        assertNull(antProjectRoot(base))
+    }
+
     private fun antRoot(buildXml: String): File {
         val root = createTempDirectory("ant-root").toFile()
         File(root, "build.xml").writeText(buildXml)
