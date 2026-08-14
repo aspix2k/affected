@@ -80,36 +80,46 @@ internal fun makeDiscovery(root: File): MakeDiscovery {
     val targets = LinkedHashSet<String>()
     var complete = true
     while (pending.isNotEmpty()) {
-        val file = pending.removeFirst()
-        if (!file.isRegularFileNoFollow()) {
-            complete = false
-            continue
-        }
-        val key = file.canonicalFile.invariantSeparatorsPath
-        if (!seen.add(key)) continue
-        val text = runCatching { file.readText() }.getOrNull()
-        if (text == null) {
-            complete = false
-            continue
-        }
-        MAKE_TARGET.findAll(text).mapNotNullTo(targets) { match ->
-            match.groupValues[1].takeUnless { it.startsWith(".") }
-        }
-        for (includeLine in MAKE_INCLUDE.findAll(text).map { it.groupValues[1].trim() }) {
-            if (UNPROVED_MAKE_INCLUDE.containsMatchIn(includeLine)) {
-                complete = false
-                continue
-            }
-            for (include in includeLine.split(Regex("""\s+"""))) {
-                if (!MAKE_INCLUDE_PATH.matches(include)) {
-                    complete = false
-                    continue
-                }
-                pending.add(File(file.parentFile, include.replace('/', File.separatorChar)))
-            }
-        }
+        val parsed = parseMakeFile(pending.removeFirst(), seen)
+        targets += parsed.targets
+        complete = complete && parsed.complete
+        pending.addAll(parsed.includes)
     }
     return MakeDiscovery(targets, complete)
+}
+
+private data class MakeFileParse(
+    val targets: Set<String> = emptySet(),
+    val includes: List<File> = emptyList(),
+    val complete: Boolean = true,
+)
+
+private fun parseMakeFile(file: File, seen: MutableSet<String>): MakeFileParse {
+    if (!file.isRegularFileNoFollow()) return MakeFileParse(complete = false)
+    val key = file.canonicalFile.invariantSeparatorsPath
+    if (!seen.add(key)) return MakeFileParse()
+    val text = runCatching { file.readText() }.getOrNull() ?: return MakeFileParse(complete = false)
+    val targets = MAKE_TARGET.findAll(text).mapNotNull { match ->
+        match.groupValues[1].takeUnless { it.startsWith(".") }
+    }.toSet()
+    val includes = mutableListOf<File>()
+    val complete = MAKE_INCLUDE.findAll(text)
+        .map { it.groupValues[1].trim() }
+        .fold(true) { ok, line -> enqueueMakeIncludes(file, line, includes) && ok }
+    return MakeFileParse(targets, includes, complete)
+}
+
+private fun enqueueMakeIncludes(file: File, includeLine: String, pending: MutableList<File>): Boolean {
+    if (UNPROVED_MAKE_INCLUDE.containsMatchIn(includeLine)) return false
+    var complete = true
+    for (include in includeLine.split(Regex("""\s+"""))) {
+        if (MAKE_INCLUDE_PATH.matches(include)) {
+            pending.add(File(file.parentFile, include.replace('/', File.separatorChar)))
+        } else {
+            complete = false
+        }
+    }
+    return complete
 }
 
 internal fun makeTargets(root: File): Set<String> = makeDiscovery(root).targets
