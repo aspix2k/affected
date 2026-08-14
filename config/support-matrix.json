@@ -22,7 +22,7 @@
       "name": "Rider",
       "support": "platform",
       "since": "2025.3",
-      "fixtures": ["src/main/resources/META-INF/plugin.xml"],
+      "fixtures": ["build.gradle.kts"],
       "gates": [".github/workflows/ci.yml"]
     },
     {
@@ -30,7 +30,7 @@
       "name": "GoLand",
       "support": "platform",
       "since": "2025.3",
-      "fixtures": ["src/main/resources/META-INF/plugin.xml"],
+      "fixtures": ["build.gradle.kts"],
       "gates": [".github/workflows/ci.yml"]
     },
     {
