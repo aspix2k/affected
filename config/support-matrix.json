@@ -799,18 +799,18 @@
       "selectionProofs": [
         {
           "units": ["project"],
-          "path": "core/src/test/kotlin/com/aspix2k/affected/build/SqlcCommandTest.kt",
-          "marker": "a local sqlc root runs one project compile command",
-          "gate": ".github/workflows/ci.yml",
-          "gateMarker": "koverVerify",
-          "gateJob": "plugin",
-          "gateStep": "Analyze, test, package and verify"
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliSqlcConformanceTest.kt",
+          "marker": "sqlc compiles the local schema and queries for the affected root",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "sqlc; local schema and query files only, database URIs and cloud stay off, native sqlc execution stays unclaimed",
+      "versions": "sqlc 1.31.1; local schema and query files only, database URIs and cloud stay off",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/sqlc"],
-      "gates": [".github/workflows/ci.yml"]
+      "gates": [".github/workflows/conformance.yml"]
     },
     {
       "id": "ATLAS",
