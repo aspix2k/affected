@@ -236,6 +236,42 @@ class AntCommandTest {
     }
 
     @Test
+    fun `a static property expands an imported test target`() {
+        val root = antRoot(
+            """
+            <project>
+              <property name="defs" value="testdefs.xml"/>
+              <import file="&dollar;{defs}"/>
+            </project>
+            """.trimIndent().replace("&dollar;", "$"),
+        )
+        File(root, "testdefs.xml").writeText("<project><target name=\"test\"/></project>")
+        val module = antRootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals("test", module.testTask)
+        assertEquals(listOf("ant", "test"), antCommands(listOf(".:test")).single().arguments)
+    }
+
+    @Test
+    fun `a property file expands an imported test target`() {
+        val root = antRoot(
+            """
+            <project>
+              <property file="build.properties"/>
+              <import file="&dollar;{defs}"/>
+            </project>
+            """.trimIndent().replace("&dollar;", "$"),
+        )
+        File(root, "build.properties").writeText("defs=testdefs.xml\n")
+        File(root, "testdefs.xml").writeText("<project><target name=\"test\"/></project>")
+        val module = antRootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals("test", module.testTask)
+    }
+
+    @Test
     fun `an optional missing import does not invent tests`() {
         val root = antRoot(
             "<project><import file=\"missing.xml\" optional=\"true\"/><target name=\"compile\"/></project>",

@@ -100,9 +100,10 @@ internal fun antDiscovery(root: File): AntDiscovery {
     val targets = LinkedHashSet<String>()
     val taskTargets = LinkedHashSet<String>()
     val depends = LinkedHashMap<String, MutableSet<String>>()
+    val properties = LinkedHashMap<String, String>()
     var complete = true
     while (pending.isNotEmpty()) {
-        val parsed = parseAntFile(pending.removeFirst(), seen)
+        val parsed = parseAntFile(pending.removeFirst(), seen, properties)
         targets += parsed.targets
         taskTargets += parsed.taskTargets
         parsed.depends.forEach { (name, edges) ->
@@ -131,14 +132,18 @@ private data class AntFileParse(
     val complete: Boolean = true,
 )
 
-private fun parseAntFile(file: File, seen: MutableSet<String>): AntFileParse {
+private fun parseAntFile(
+    file: File,
+    seen: MutableSet<String>,
+    properties: MutableMap<String, String>,
+): AntFileParse {
     if (!file.isRegularFileNoFollow()) return AntFileParse(complete = false)
     val key = file.canonicalFile.invariantSeparatorsPath
     if (!seen.add(key)) return AntFileParse()
     val text = runCatching { file.readText() }.getOrNull() ?: return AntFileParse(complete = false)
     val targets = ANT_TARGET.findAll(text).mapTo(LinkedHashSet()) { it.groupValues[1] }
     val depends = LinkedHashMap<String, Set<String>>()
-    var complete = true
+    var complete = collectAntProperties(file, text, properties)
     for (attrs in ANT_TARGET_OPEN.findAll(text).map { it.groupValues[1] }) {
         val parsed = parseAntDepends(attrs) ?: run {
             complete = false
@@ -149,7 +154,7 @@ private fun parseAntFile(file: File, seen: MutableSet<String>): AntFileParse {
     val imports = mutableListOf<File>()
     complete = ANT_IMPORT.findAll(text)
         .map { it.groupValues[1] }
-        .fold(complete) { ok, attributes -> enqueueAntImport(file, attributes, imports) && ok }
+        .fold(complete) { ok, attributes -> enqueueAntImport(file, attributes, imports, properties) && ok }
     return AntFileParse(targets, antTaskTargets(text), depends, imports, complete)
 }
 
@@ -183,10 +188,69 @@ private fun antTaskTargets(text: String): Set<String> =
         name.takeIf { ANT_TEST_TASK.containsMatchIn(match.groupValues[2]) }
     }.toCollection(LinkedHashSet())
 
-private fun enqueueAntImport(file: File, attributes: String, pending: MutableList<File>): Boolean {
-    if (UNPROVED_ANT_IMPORT.containsMatchIn(attributes)) return false
+private fun collectAntProperties(file: File, text: String, properties: MutableMap<String, String>): Boolean {
+    var complete = true
+    for (attrs in ANT_PROPERTY.findAll(text).map { it.groupValues[1] }) {
+        complete = addAntProperty(file, attrs, properties) && complete
+    }
+    return complete
+}
+
+private fun addAntProperty(file: File, attributes: String, properties: MutableMap<String, String>): Boolean {
+    val filePath = ANT_PROPERTY_FILE.find(attributes)?.groupValues?.get(1)
+    if (filePath != null) {
+        val resolved = expandAntProperties(filePath, properties) ?: return false
+        if (!ANT_IMPORT_PATH.matches(resolved)) return false
+        return loadAntPropertyFile(File(file.parentFile, resolved.replace('/', File.separatorChar)), properties)
+    }
+    val name = ANT_PROPERTY_NAME.find(attributes)?.groupValues?.get(1) ?: return true
+    val value = ANT_PROPERTY_VALUE.find(attributes)?.groupValues?.get(1)
+        ?: ANT_PROPERTY_LOCATION.find(attributes)?.groupValues?.get(1)
+        ?: return true
+    val expanded = expandAntProperties(value, properties) ?: return false
+    properties.putIfAbsent(name, expanded)
+    return true
+}
+
+private fun loadAntPropertyFile(file: File, properties: MutableMap<String, String>): Boolean {
+    if (!file.isRegularFileNoFollow()) return false
+    val text = runCatching { file.readText() }.getOrNull() ?: return false
+    for (line in text.lineSequence()) {
+        val trimmed = line.trim()
+        if (trimmed.isEmpty() || trimmed.startsWith('#') || trimmed.startsWith('!')) continue
+        val split = trimmed.indexOf('=')
+        if (split <= 0) return false
+        val name = trimmed.substring(0, split).trim()
+        val value = trimmed.substring(split + 1).trim()
+        if (!ANT_PROPERTY_ID.matches(name) || UNPROVED_ANT_IMPORT.containsMatchIn(value)) return false
+        properties.putIfAbsent(name, value)
+    }
+    return true
+}
+
+private fun expandAntProperties(raw: String, properties: Map<String, String>): String? {
+    if (UNPROVED_ANT_WILDCARD.containsMatchIn(raw)) return null
+    val refs = ANT_PROPERTY_REF.findAll(raw).map { it.groupValues[1] }.toList()
+    if (refs.isEmpty()) {
+        return raw.takeUnless { '$' in it }
+    }
+    var expanded = raw
+    for (name in refs) {
+        val value = properties[name] ?: return null
+        expanded = expanded.replace("\${$name}", value)
+    }
+    return expanded.takeUnless { UNPROVED_ANT_IMPORT.containsMatchIn(it) }
+}
+
+private fun enqueueAntImport(
+    file: File,
+    attributes: String,
+    pending: MutableList<File>,
+    properties: Map<String, String>,
+): Boolean {
     if (ANT_INCLUDE_AS.containsMatchIn(attributes)) return false
-    val path = ANT_IMPORT_FILE.find(attributes)?.groupValues?.get(1) ?: return false
+    val raw = ANT_IMPORT_FILE.find(attributes)?.groupValues?.get(1) ?: return false
+    val path = expandAntProperties(raw, properties) ?: return false
     if (!ANT_IMPORT_PATH.matches(path)) return false
     val imported = File(file.parentFile, path.replace('/', File.separatorChar))
     if (imported.isRegularFileNoFollow()) {
@@ -212,5 +276,13 @@ private val ANT_IMPORT_FILE = Regex("""\bfile\s*=\s*"([^"]+)"""")
 private val ANT_IMPORT_PATH = Regex("""[A-Za-z0-9._][A-Za-z0-9._/\-]*""")
 private val ANT_OPTIONAL = Regex("""\boptional\s*=\s*"true"""")
 private val ANT_INCLUDE_AS = Regex("""\bas\s*=\s*["']""")
+private val ANT_PROPERTY = Regex("""<property\b([^>]*)/?>""", RegexOption.IGNORE_CASE)
+private val ANT_PROPERTY_NAME = Regex("""\bname\s*=\s*"([^"]+)"""")
+private val ANT_PROPERTY_VALUE = Regex("""\bvalue\s*=\s*"([^"]+)"""")
+private val ANT_PROPERTY_LOCATION = Regex("""\blocation\s*=\s*"([^"]+)"""")
+private val ANT_PROPERTY_FILE = Regex("""\bfile\s*=\s*"([^"]+)"""")
+private val ANT_PROPERTY_REF = Regex("""\$\{([A-Za-z0-9._-]+)\}""")
+private val ANT_PROPERTY_ID = Regex("""[A-Za-z0-9._-]+""")
 private val UNPROVED_ANT_IMPORT = Regex("""[$*?]""")
+private val UNPROVED_ANT_WILDCARD = Regex("""[*?]""")
 private val FOREIGN_ROOTS = listOf("settings.gradle.kts", "settings.gradle", "pom.xml")

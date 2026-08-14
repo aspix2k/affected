@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Expand static Ant `${property}` imports from `name`/`value` and `property file` so `file="${defs}"` can contribute `test`; unresolved properties keep `ant test`.
 - Detect Flutter package roots from `pubspec.yaml` with `sdk: flutter` and run one `flutter test` or `flutter analyze` session; root Gradle and Maven stay off this adapter. Nested `android/` Gradle files keep the Flutter root. Generated sources and build_runner stay unclaimed.
 - Run Ant `generate` / `codegen` before `test` when the test target does not depend on it; proved `depends` skip the extra command, unproved depends keep generate.
 - Select an Ant target that contains a `junit` or `testng` task when `test` / `junit` names are absent; a named `test` target still wins.
