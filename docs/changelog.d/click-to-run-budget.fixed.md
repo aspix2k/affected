@@ -1,0 +1,1 @@
+- Bound click-to-Run planning to a 250ms budget so a large module set stays under the declared limit.
