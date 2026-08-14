@@ -1,0 +1,6 @@
+<project name="affected-ant-junit-task" default="run-tests">
+    <target name="run-tests">
+        <junit if="never.set"/>
+        <echo message="AlphaTest"/>
+    </target>
+</project>
