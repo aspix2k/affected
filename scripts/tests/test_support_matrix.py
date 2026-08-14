@@ -395,6 +395,20 @@ class SupportMatrixTest(unittest.TestCase):
         """Validate the real production registrations and generated support page."""
         support_matrix.check(Path(__file__).resolve().parents[2])
 
+    def test_rider_and_goland_use_their_own_verifier_product_types(self) -> None:
+        """Keep the first product-specific verifier cells bound to claimed IDEs."""
+        root = Path(__file__).resolve().parents[2]
+        gradle = (root / "build.gradle.kts").read_text(encoding="utf-8")
+        self.assertIn('create(IntelliJPlatformType.Rider, "2025.3.5")', gradle)
+        self.assertIn('create(IntelliJPlatformType.GoLand, "2025.3.5.1")', gradle)
+        matrix = json.loads((root / "config/support-matrix.json").read_text(encoding="utf-8"))
+        products = {product["id"]: product for product in matrix["products"]}
+        self.assertEqual(["build.gradle.kts"], products["rider"]["fixtures"])
+        self.assertEqual(["build.gradle.kts"], products["goland"]["fixtures"])
+        self.assertEqual("platform", products["rider"]["support"])
+        self.assertEqual("platform", products["goland"]["support"])
+        self.assertEqual("planned", products["datagrip"]["support"])
+
     def test_conformance_workflow_runs_for_support_claim_changes(self) -> None:
         """Keep support claims inside the pull-request conformance trigger."""
         workflow = (
