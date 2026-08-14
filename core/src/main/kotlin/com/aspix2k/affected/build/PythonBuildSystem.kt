@@ -85,7 +85,9 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
     }
 
     private fun rootOf(project: Project): File? =
-        project.basePath?.let(::File)?.let { nestedBuildRoot(it) { File(it, "pyproject.toml").isRegularFileNoFollow() } }
+        project.basePath?.let(::File)?.let { base ->
+            nestedBuildRoot(base) { File(it, "pyproject.toml").isRegularFileNoFollow() }
+        }
 }
 
 private val PYTHON_TEST_DIRECTORIES = setOf("test", "tests")
