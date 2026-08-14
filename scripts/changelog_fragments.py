@@ -163,7 +163,10 @@ def resolve_changed_paths(
     if paths is not None:
         return paths
     if base is not None:
-        return ci_scope.git_changed_files(root, rev_parse(root, base), rev_parse(root, "HEAD"))
+        try:
+            return ci_scope.git_changed_files(root, rev_parse(root, base), rev_parse(root, "HEAD"))
+        except ci_scope.CiScopeError as error:
+            raise ChangelogError(str(error)) from error
     event_name = os.environ.get("GITHUB_EVENT_NAME", "")
     event_path = os.environ.get("GITHUB_EVENT_PATH", "")
     if not event_name or not event_path:
@@ -177,7 +180,10 @@ def resolve_changed_paths(
     rang = ci_scope.event_range(event_name, event)
     if rang is None:
         raise ChangelogError("Cannot resolve the pull-request file range")
-    return ci_scope.git_changed_files(root, *rang)
+    try:
+        return ci_scope.git_changed_files(root, *rang)
+    except ci_scope.CiScopeError as error:
+        raise ChangelogError(str(error)) from error
 
 
 def rev_parse(root: Path, revision: str) -> str:
