@@ -83,6 +83,7 @@ def check(root: Path = ROOT) -> None:
         "scripts.tests.test_docs_layout",
         "scripts.tests.test_fetch_gradle",
         "scripts.tests.test_local_gate",
+        "scripts.tests.test_product_claims",
         "scripts.tests.test_run_gradle",
         "changelog_fragments.py check",
         "changelog-section.sh",
