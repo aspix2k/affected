@@ -1,0 +1,1 @@
+- A lone first-level `backend/` Bazel workspace is now the Bazel root when the repository base has no marker.
