@@ -125,6 +125,9 @@ def check(root: Path = ROOT) -> None:
         raise CiContractError("Weekly mutation must fail on surviving mutants")
     if ":core:pitest" not in mutation or "core/build/reports/pitest/mutations.xml" not in mutation:
         raise CiContractError("Weekly mutation must run and gate the core PIT report")
+    core_build = read(root / "core/build.gradle.kts")
+    if "ExecutablePathKt*" not in core_build:
+        raise CiContractError("Weekly mutation must keep ExecutablePath in the core PIT target")
     currentness = read(root / "scripts/release_currentness.py")
     if "cache-redirector.jetbrains.com/repo1.maven.org/maven2" not in currentness:
         raise CiContractError("release_currentness must read Maven metadata through cache-redirector first")

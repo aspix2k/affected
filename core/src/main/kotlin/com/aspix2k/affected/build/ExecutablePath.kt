@@ -9,8 +9,20 @@ internal fun resolveExecutable(
     separator: String = File.pathSeparator,
 ): String {
     if (name.isBlank()) return name
-    if (name.contains('/') || name.contains('\\')) return runnablePath(File(name)) ?: name
-    return firstRunnableOnPath(name, path.orEmpty(), pathExt, separator) ?: name
+    if (hasDirectorySeparator(name)) {
+        return existingExecutable(File(name)) ?: name
+    }
+    return firstRunnableOnPath(name, path ?: "", pathExt, separator) ?: name
+}
+
+private fun hasDirectorySeparator(name: String): Boolean {
+    var index = 0
+    while (index < name.length) {
+        val char = name[index]
+        if (char == '/' || char == '\\') return true
+        index += 1
+    }
+    return false
 }
 
 private fun firstRunnableOnPath(name: String, path: String, pathExt: String?, separator: String): String? {
@@ -20,7 +32,7 @@ private fun firstRunnableOnPath(name: String, path: String, pathExt: String?, se
         .map(::File)
         .filter(File::isReadableDirectory)
         .flatMap { folder -> suffixes.asSequence().map { File(folder, name + it) } }
-        .firstNotNullOfOrNull(::runnablePath)
+        .firstNotNullOfOrNull(::existingExecutable)
 }
 
 private fun pathSuffixes(pathExt: String?): List<String> {
@@ -32,7 +44,13 @@ private fun pathSuffixes(pathExt: String?): List<String> {
     return suffixes.toList()
 }
 
-private fun runnablePath(file: File): String? =
-    file.takeIf { it.isFile && it.canExecute() }?.absoluteFile?.normalize()?.invariantSeparatorsPath
+private fun existingExecutable(file: File): String? {
+    if (!file.isFile) return null
+    if (!file.canExecute()) return null
+    return file.absoluteFile.normalize().invariantSeparatorsPath
+}
 
-private fun File.isReadableDirectory(): Boolean = isDirectory && canRead()
+private fun File.isReadableDirectory(): Boolean {
+    if (!isDirectory) return false
+    return canRead()
+}
