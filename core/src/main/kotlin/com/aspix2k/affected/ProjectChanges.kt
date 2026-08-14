@@ -64,7 +64,9 @@ object ProjectChanges {
         val untracked = manager.unversionedFilesPaths.map { it.ioFile }.filter { it.isFile }
 
         return (tracked + untracked)
-            .filter { includeAllFiles || it.extension.lowercase() in extensions || it.name in names }
+            .filter { file ->
+                isCollectedSource(file.invariantSeparatorsPath, includeAllFiles, extensions, names)
+            }
             .distinct()
     }
 }

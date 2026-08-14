@@ -127,6 +127,22 @@ class ChangeAnalyzerTest {
     }
 
     @Test
+    fun `all-file collection still ignores project documentation`() = repo { dir ->
+        File(dir, "README.md").writeText("# doc")
+        File(dir, "LICENSE").writeText("license")
+        File(dir, "docs/CHANGELOG.md").apply {
+            parentFile.mkdirs()
+            writeText("## Unreleased")
+        }
+
+        val changes = ChangeAnalyzer(dir, "main", includeAllFiles = true).collect().files
+
+        assertTrue(changes.none { it.name.equals("README.md", ignoreCase = true) }, changes.toString())
+        assertTrue(changes.none { it.name.equals("LICENSE", ignoreCase = true) }, changes.toString())
+        assertTrue(changes.none { it.name.equals("CHANGELOG.md", ignoreCase = true) }, changes.toString())
+    }
+
+    @Test
     fun `complete change collection includes extensionless and resource files`() = repo { dir ->
         val extensionless = File(dir, "lib/src/main/resources/NOTICE").apply {
             parentFile.mkdirs()
