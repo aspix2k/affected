@@ -727,6 +727,29 @@
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/swift"],
       "gates": [".github/workflows/ci.yml"]
+    },
+    {
+      "id": "XCODE",
+      "implementation": "com.aspix2k.affected.build.XcodeBuildSystem",
+      "ecosystem": "Xcode",
+      "languages": ["Swift", "Objective-C"],
+      "runners": ["xcodebuild test", "xcodebuild build"],
+      "selection": ["project"],
+      "selectionProofs": [
+        {
+          "units": ["project"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/XcodeCommandTest.kt",
+          "marker": "an Xcode root runs one project test command",
+          "gate": ".github/workflows/ci.yml",
+          "gateMarker": "koverVerify",
+          "gateJob": "plugin",
+          "gateStep": "Analyze, test, package and verify"
+        }
+      ],
+      "versions": "Xcode; a single shared scheme is selected, several schemes keep xcodebuild test; native xcodebuild stays unclaimed",
+      "support": "supported",
+      "fixtures": ["conformance/cli-fixtures/xcode"],
+      "gates": [".github/workflows/ci.yml"]
     }
   ]
 }
