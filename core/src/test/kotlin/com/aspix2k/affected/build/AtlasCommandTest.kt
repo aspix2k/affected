@@ -119,6 +119,32 @@ class AtlasCommandTest {
         assertNull(atlasManifest(root))
     }
 
+    @Test
+    fun `a single first-level nested Atlas project is the root`() {
+        val base = createTempDirectory("atlas-nested").toFile()
+        val nested = File(base, "migrations")
+        atlasRoot().copyRecursively(nested)
+
+        assertEquals(nested.canonicalFile, atlasProjectRoot(base)?.canonicalFile)
+    }
+
+    @Test
+    fun `several first-level nested Atlas projects stay off`() {
+        val base = createTempDirectory("atlas-many").toFile()
+        atlasRoot().copyRecursively(File(base, "shop"))
+        atlasRoot().copyRecursively(File(base, "billing"))
+
+        assertNull(atlasProjectRoot(base))
+    }
+
+    @Test
+    fun `a deeper nested Atlas project stays off`() {
+        val base = createTempDirectory("atlas-deep").toFile()
+        atlasRoot().copyRecursively(File(base, "db/migrations"))
+
+        assertNull(atlasProjectRoot(base))
+    }
+
     private fun atlasRoot(config: String = LOCAL_CONFIG): File {
         val root = createTempDirectory("atlas-root").toFile()
         File(root, "atlas.hcl").writeText(config)
