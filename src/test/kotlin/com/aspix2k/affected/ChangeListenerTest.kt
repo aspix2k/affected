@@ -68,4 +68,23 @@ class ChangeListenerTest {
             ),
         )
     }
+
+    @Test
+    fun `Windows separators still ignore generated and VCS files`() {
+        assertFalse(isRelevantPath("C:\\project\\.git\\worktrees\\main.go", extensions))
+        assertFalse(isRelevantPath("C:\\project\\.gradle\\cache\\lib.rs", extensions))
+        assertFalse(isRelevantPath("C:\\project\\build\\generated\\Main.kt", extensions))
+    }
+
+    @Test
+    fun `a path with spaces stays relevant`() {
+        assertTrue(isRelevantPath("/Users/me/my project/src/Main.kt", extensions))
+        assertTrue(isRelevantPath("C:\\Users\\me\\my project\\src\\Main.kt", extensions))
+    }
+
+    @Test
+    fun `a non-ASCII path stays relevant`() {
+        assertTrue(isRelevantPath("/Users/я/проект/src/Главный.kt", extensions))
+        assertTrue(isRelevantPath("C:\\Users\\я\\проект\\src\\Главный.kt", extensions))
+    }
 }

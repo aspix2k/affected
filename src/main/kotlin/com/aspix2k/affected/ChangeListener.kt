@@ -35,8 +35,10 @@ internal fun shouldRefreshFromVfs(
 ): Boolean = !frontend && paths.any { isRelevantPath(it, extensions, names) }
 
 internal fun isRelevantPath(path: String, extensions: Set<String>, names: Set<String> = emptySet()): Boolean {
-    if (IGNORED_DIRECTORIES.any(path::contains)) return false
-    return path.substringAfterLast('.', "").lowercase() in extensions || path.substringAfterLast('/') in names
+    val normalized = path.replace('\\', '/')
+    if (IGNORED_DIRECTORIES.any(normalized::contains)) return false
+    return normalized.substringAfterLast('.', "").lowercase() in extensions ||
+        normalized.substringAfterLast('/') in names
 }
 
 private val IGNORED_DIRECTORIES = listOf(
