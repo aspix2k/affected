@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Record already implemented TestNG, Spock, unittest and Microsoft Testing Platform runners in the public support matrix.
 - Keep public .NET fixtures on Microsoft.NET.Test.Sdk 18.9.0.
 - Keep `docs/CONTRIBUTING.md` to building, architecture, conventions and release. Adapter selection rules stay in tests and `docs/SUPPORT.md`.
 - Move community and generated markdown into `docs/` so the repository root keeps `README.md` and `LICENSE`.

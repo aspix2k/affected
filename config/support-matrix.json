@@ -155,8 +155,8 @@
       "id": "GRADLE",
       "implementation": "com.aspix2k.affected.build.GradleBuildSystem",
       "ecosystem": "Gradle JVM and Android",
-      "languages": ["Kotlin", "Java"],
-      "runners": ["JUnit", "consumer test compilation"],
+      "languages": ["Kotlin", "Java", "Scala", "Groovy"],
+      "runners": ["JUnit", "TestNG", "Spock", "consumer test compilation"],
       "selection": ["class", "module"],
       "selectionProofs": [
         {
@@ -289,7 +289,7 @@
       "implementation": "com.aspix2k.affected.build.DotnetBuildSystem",
       "ecosystem": ".NET",
       "languages": ["C#", "F#", "Visual Basic", "Razor"],
-      "runners": ["VSTest with xUnit", "NUnit", "MSTest", "dotnet build"],
+      "runners": ["VSTest with xUnit", "NUnit", "MSTest", "Microsoft Testing Platform", "dotnet build"],
       "selection": ["test", "project"],
       "selectionProofs": [
         {
@@ -312,7 +312,7 @@
       "implementation": "com.aspix2k.affected.build.PythonBuildSystem",
       "ecosystem": "Python projects",
       "languages": ["Python"],
-      "runners": ["pytest", "mypy"],
+      "runners": ["pytest", "unittest", "mypy"],
       "selection": ["file", "package"],
       "selectionProofs": [
         {
@@ -325,7 +325,7 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "Current stable Python; pytest 8–9",
+      "versions": "Current stable Python; pytest 8–9; standard-library unittest",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/python"],
       "gates": [".github/workflows/conformance.yml"]
