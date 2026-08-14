@@ -28,6 +28,7 @@ dedicated product lifecycle fixture.
 | Product | Goal | Tracking issue | Last reviewed |
 |---|---|---|---:|
 | DataGrip | Local contracts are in-repo dbt + DuckDB and sqlc compile; DataGrip UI lifecycle and warehouse SQL stay unclaimed. | [Issue #120](https://github.com/aspix2k/affected/issues/120) | 2026-08-14 |
+| JetBrains Gateway | Analysis and build stay on the IDE backend; a proven JetBrains Client frontend skips VFS refresh. Gateway install and update stay unclaimed. | [Issue #127](https://github.com/aspix2k/affected/issues/127) | 2026-08-14 |
 
 ## Build systems and test runners
 
