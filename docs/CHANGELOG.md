@@ -34,12 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Run native `sqlc compile` on the in-repo Linux fixture so local schema and query files are a required gate; database URIs and cloud stay off.
 - Fail Scripts CI when a tracked markdown page points at a missing repository path, so docs moves cannot leave stale relative links.
 - Skip startup analysis, VFS refresh, external-system invalidation and external execute-task claims on a proven JetBrains Client frontend so analysis stays on the IDE backend; Gateway install and update stay unclaimed.
 - Detect local Atlas roots from `atlas.hcl` and run one `atlas migrate validate` session; database URLs, `dev` databases, cloud directories and interpolated manifests stay off this adapter. Native atlas execution and plain SQL files stay unclaimed.
 - Fail dynamic-plugin descriptor tests when a descriptor declares `<nativelib>`; a native library blocks a restartless update.
-- Detect local sqlc roots from `sqlc.yaml` / `sqlc.yml` / `sqlc.json` and run one `sqlc compile` session; database URIs, managed/cloud databases, process plugins and interpolated manifests stay off this adapter. Native `sqlc compile` is required on Linux. Plain SQL files without a sqlc manifest stay unclaimed.
+- Detect local sqlc roots from `sqlc.yaml` / `sqlc.yml` / `sqlc.json` and run one `sqlc compile` session; database URIs, managed/cloud databases, process plugins and interpolated manifests stay off this adapter. Native sqlc execution and plain SQL files stay unclaimed.
 - Fail dynamic-plugin descriptor tests when a content module is not `loading="optional"` or a `config-file` dependency is required.
 - Keep Ant off JetBrains MPS projects that generate `build.xml` (`.mps`, `*.mpl`, `*.msd`); MPS stays unsupported without a public test CLI.
 - Detect local dbt roots from `dbt_project.yml` plus an in-repo DuckDB `profiles.yml` and run one `dbt test` / `dbt compile` session with `--profiles-dir .`; warehouse, MotherDuck and interpolated profiles stay off this adapter.
