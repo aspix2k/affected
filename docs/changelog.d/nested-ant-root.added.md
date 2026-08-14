@@ -1,1 +1,0 @@
-- A lone first-level `legacy/` Ant project is now the Ant root when the repository base has no marker.
