@@ -89,7 +89,9 @@ class CMakeBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSy
     }
 
     private fun rootOf(project: Project): File? =
-        project.basePath?.let(::File)?.takeIf { File(it, "CMakeLists.txt").isRegularFileNoFollow() }
+        project.basePath?.let(::File)?.let { base ->
+            nestedBuildRoot(base) { File(it, "CMakeLists.txt").isRegularFileNoFollow() }
+        }
 }
 
 private class CMakeSelectiveRun private constructor(

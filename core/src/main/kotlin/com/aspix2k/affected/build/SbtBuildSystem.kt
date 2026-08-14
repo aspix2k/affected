@@ -29,7 +29,8 @@ class SbtBuildSystem : SuspendingBuildSystem, WorkspaceChangesBuildSystem {
         CommandRunner.runBatchAndWait(project, root, sbtCommands(tasks), "Affected sbt")
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { File(it, "build.sbt") }?.takeIf(File::isRegularFileNoFollow)
+        project.basePath?.let(::File)?.let { nestedBuildRoot(it) { File(it, "build.sbt").isRegularFileNoFollow() } }
+            ?.let { File(it, "build.sbt") }
 }
 
 internal object SbtTasks {

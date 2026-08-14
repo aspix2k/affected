@@ -26,7 +26,8 @@ class XcodeBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
         CommandRunner.runBatchAndWait(project, root, xcodeCommands(File(root), tasks), "Affected Xcode")
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { xcodeManifest(File(it)) }
+        project.basePath?.let(::File)?.let { nestedBuildRoot(it) { xcodeManifest(it) != null } }
+            ?.let(::xcodeManifest)
 }
 
 internal object XcodeTasks {

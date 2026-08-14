@@ -98,7 +98,9 @@ class ComposerBuildSystem :
     }
 
     private fun rootOf(project: Project): File? =
-        project.basePath?.let(::File)?.takeIf { File(it, "composer.json").isRegularFileNoFollow() }
+        project.basePath?.let(::File)?.let { base ->
+            nestedBuildRoot(base) { File(it, "composer.json").isRegularFileNoFollow() }
+        }
 }
 
 private fun configuredPhpunitAdapter(): Path? = System.getProperty(PHPUNIT_ADAPTER_PROPERTY)

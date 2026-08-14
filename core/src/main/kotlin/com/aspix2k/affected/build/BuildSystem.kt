@@ -76,6 +76,31 @@ internal interface ChangeAwareSuspendingBuildSystem : SuspendingBuildSystem {
     ): Boolean
 }
 
+internal fun nestedBuildRoot(base: File, hasMarker: (File) -> Boolean): File? {
+    if (hasMarker(base)) return base
+    val children = base.listFiles().orEmpty().filter { child ->
+        child.isDirectory && child.canRead() && child.name !in NESTED_ROOT_SKIP
+    }
+    return children.singleOrNull(hasMarker)
+}
+
+private val NESTED_ROOT_SKIP = setOf(
+    ".git",
+    ".gradle",
+    ".idea",
+    ".venv",
+    ".cache",
+    ".tox",
+    "build",
+    "coverage",
+    "DerivedData",
+    "dist",
+    "node_modules",
+    "obj",
+    "out",
+    "target",
+)
+
 internal fun rootFallbackModule(
     root: File,
     testTask: String,

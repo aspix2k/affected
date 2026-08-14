@@ -80,15 +80,15 @@ class DotnetBuildSystem :
         }
     }
 
-    private fun rootOf(project: Project): File? {
-        val base = project.basePath?.let(::File) ?: return null
-        val children = base.listFiles() ?: return null
-        return base.takeIf { _ ->
-            children.any {
-                it.extension.lowercase() in SOLUTION_EXTENSIONS && it.isRegularFileNoFollow() ||
-                    it.name == "global.json" && it.isRegularFileNoFollow() ||
-                    DotnetProjects.isProjectFile(it)
-            }
+    private fun rootOf(project: Project): File? =
+        project.basePath?.let(::File)?.let { nestedBuildRoot(it, ::dotnetRootMarker) }
+
+    private fun dotnetRootMarker(directory: File): Boolean {
+        val children = directory.listFiles() ?: return false
+        return children.any { child ->
+            child.extension.lowercase() in SOLUTION_EXTENSIONS && child.isRegularFileNoFollow() ||
+                child.name == "global.json" && child.isRegularFileNoFollow() ||
+                DotnetProjects.isProjectFile(child)
         }
     }
 

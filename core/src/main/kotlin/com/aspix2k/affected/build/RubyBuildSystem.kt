@@ -55,7 +55,7 @@ class RubyBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
     }
 
     private fun rootOf(project: Project): File? =
-        project.basePath?.let(::File)?.takeIf { File(it, "Gemfile").isRegularFileNoFollow() }
+        project.basePath?.let(::File)?.let { nestedBuildRoot(it) { File(it, "Gemfile").isRegularFileNoFollow() } }
 }
 
 private val RUBY_TEST_DIRECTORIES = setOf("test", "spec")
