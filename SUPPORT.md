@@ -27,7 +27,7 @@ dedicated product lifecycle fixture.
 
 | Product | Goal | Tracking issue | Last reviewed |
 |---|---|---|---:|
-| DataGrip | SQL and database-project impact selection is tracked but not implemented yet. | [Issue #120](https://github.com/aspix2k/affected/issues/120) | 2026-08-12 |
+| DataGrip | The first local contract is in-repo dbt + DuckDB; DataGrip UI lifecycle and warehouse SQL stay unclaimed. | [Issue #120](https://github.com/aspix2k/affected/issues/120) | 2026-08-14 |
 
 ## Build systems and test runners
 
@@ -57,6 +57,7 @@ dedicated product lifecycle fixture.
 | Buck2 | Starlark, Python, Rust, Go, Java, Kotlin | buck2 test, buck2 build | project | Buck2; static cells merge content roots, unproved or missing keep the project root | [buck2](conformance/cli-fixtures/buck2) · [Buck2CommandTest.kt](core/src/test/kotlin/com/aspix2k/affected/build/Buck2CommandTest.kt) · [ci.yml](.github/workflows/ci.yml) |
 | Swift | Swift, Objective-C | swift test, swift build | project | SwiftPM; project-level until Xcode schemes, target selection and native Swift execution are proven | [swift](conformance/cli-fixtures/swift) · [SwiftCommandTest.kt](core/src/test/kotlin/com/aspix2k/affected/build/SwiftCommandTest.kt) · [ci.yml](.github/workflows/ci.yml) |
 | Xcode | Swift, Objective-C | xcodebuild test, xcodebuild build | project | Xcode; a single shared scheme is selected, several schemes keep xcodebuild test; native xcodebuild stays unclaimed | [xcode](conformance/cli-fixtures/xcode) · [XcodeCommandTest.kt](core/src/test/kotlin/com/aspix2k/affected/build/XcodeCommandTest.kt) · [ci.yml](.github/workflows/ci.yml) |
+| dbt | SQL, YAML | dbt test, dbt compile | project | dbt; in-repo DuckDB profiles only, warehouse and MotherDuck stay off, native dbt execution stays unclaimed | [dbt](conformance/cli-fixtures/dbt) · [DbtCommandTest.kt](core/src/test/kotlin/com/aspix2k/affected/build/DbtCommandTest.kt) · [ci.yml](.github/workflows/ci.yml) |
 
 The smaller selection unit is used only when the adapter proves a complete
 relationship. Otherwise **Affected** keeps the larger unit shown in the same row.
