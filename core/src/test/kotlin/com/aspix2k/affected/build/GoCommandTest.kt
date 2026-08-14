@@ -4,6 +4,7 @@ import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class GoCommandTest {
 
@@ -78,5 +79,37 @@ class GoCommandTest {
         ).single()
 
         assertEquals(listOf("go", "test", "example.com/alpha"), command.arguments)
+    }
+
+    @Test
+    fun `a single first-level nested Go module is the root`() {
+        val base = createTempDirectory("go-nested").toFile()
+        val nested = File(base, "backend")
+        goMod().copyRecursively(nested)
+
+        assertEquals(nested.canonicalFile, goProjectRoot(base)?.canonicalFile)
+    }
+
+    @Test
+    fun `several first-level nested Go modules stay off`() {
+        val base = createTempDirectory("go-many").toFile()
+        goMod().copyRecursively(File(base, "backend"))
+        goMod().copyRecursively(File(base, "tools"))
+
+        assertNull(goProjectRoot(base))
+    }
+
+    @Test
+    fun `a deeper nested Go module stays off`() {
+        val base = createTempDirectory("go-deep").toFile()
+        goMod().copyRecursively(File(base, "src/backend"))
+
+        assertNull(goProjectRoot(base))
+    }
+
+    private fun goMod(): File {
+        val root = createTempDirectory("go-mod").toFile()
+        File(root, "go.mod").writeText("module example.com/probe\n\ngo 1.26\n")
+        return root
     }
 }
