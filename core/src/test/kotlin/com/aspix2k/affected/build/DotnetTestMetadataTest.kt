@@ -326,7 +326,7 @@ class DotnetTestMetadataTest {
     private fun assets(vararg libraries: Library) = createTempFile("dotnet-assets", ".json").apply {
         writeText(
             buildString {
-                append("{\"libraries\":{\"Microsoft.NET.Test.Sdk/18.8.1\":{}")
+                append("{\"libraries\":{\"Microsoft.NET.Test.Sdk/18.9.0\":{}")
                 libraries.forEach { library ->
                     append(",\"").append(library.name).append("\":{\"files\":[")
                     library.files.forEachIndexed { index, file ->
