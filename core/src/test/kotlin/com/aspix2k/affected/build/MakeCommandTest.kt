@@ -95,6 +95,41 @@ class MakeCommandTest {
         assertNull(makeManifest(root))
     }
 
+    @Test
+    fun `a static include contributes its test target`() {
+        val root = makeRoot("include testdefs.mk\nall:\n\t@echo built\n")
+        File(root, "testdefs.mk").writeText("test:\n\t@echo ok\n")
+        val module = makeRootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals("test", module.testTask)
+        assertEquals(
+            listOf("make", "test"),
+            makeCommands(root, listOf(".:test")).single().arguments,
+        )
+    }
+
+    @Test
+    fun `an unproved include keeps the test command`() {
+        val root = makeRoot("include \$(wildcard *.mk)\nall:\n\t@echo built\n")
+        val module = makeRootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals(
+            listOf("make", "test"),
+            makeCommands(root, listOf(".:test")).single().arguments,
+        )
+    }
+
+    @Test
+    fun `a missing include keeps the test command`() {
+        val root = makeRoot("include missing.mk\nall:\n\t@echo built\n")
+        val module = makeRootModule(root)
+
+        assertTrue(module.hasTests)
+        assertEquals(listOf("make", "test"), makeCommands(root, listOf(".:test")).single().arguments)
+    }
+
     private fun makeRoot(manifest: String): File {
         val root = createTempDirectory("make-root").toFile()
         File(root, "Makefile").writeText(manifest)

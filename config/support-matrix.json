@@ -576,9 +576,9 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "GNU Make; project-level test/check/default targets until includes are proven",
+      "versions": "GNU Make; static include files merge targets, unproved includes keep make test",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/make"],
+      "fixtures": ["conformance/cli-fixtures/make", "conformance/cli-fixtures/make-includes"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
