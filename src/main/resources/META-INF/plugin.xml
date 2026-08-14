@@ -6,7 +6,7 @@
     <description><![CDATA[
         <p><b>A JetBrains IDE plugin that finds affected projects and runs only their tests and build checks.</b></p>
 <!-- affected-support-summary:start -->
-        <p>Built for multi-module projects and monorepos across 20 supported build ecosystems and 11 JetBrains products.</p>
+        <p>Built for multi-module projects and monorepos across 21 supported build ecosystems and 11 JetBrains products.</p>
         <p><a href="https://github.com/aspix2k/affected/blob/main/SUPPORT.md">Support matrix</a>: languages, test runners, selection units and evidence.</p>
 <!-- affected-support-summary:end -->
         <p><b>What you get</b></p>
@@ -59,6 +59,7 @@
         <buildSystem implementation="com.aspix2k.affected.build.MesonBuildSystem"/>
         <buildSystem implementation="com.aspix2k.affected.build.MakeBuildSystem"/>
         <buildSystem implementation="com.aspix2k.affected.build.NinjaBuildSystem"/>
+        <buildSystem implementation="com.aspix2k.affected.build.PantsBuildSystem"/>
     </extensions>
 
     <extensions defaultExtensionNs="com.intellij">
