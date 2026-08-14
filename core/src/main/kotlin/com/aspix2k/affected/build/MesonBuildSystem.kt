@@ -28,13 +28,16 @@ class MesonBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
         CommandRunner.runBatchAndWait(project, root, mesonCommands(File(root), tasks), "Affected Meson")
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { mesonManifest(File(it)) }
+        project.basePath?.let(::File)?.let(::mesonProjectRoot)?.let(::mesonManifest)
 }
 
 internal object MesonTasks {
     const val TEST = "test"
     const val COMPILE = "compile"
 }
+
+internal fun mesonProjectRoot(base: File): File? =
+    nestedBuildRoot(base) { mesonManifest(it) != null }
 
 internal fun mesonManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null

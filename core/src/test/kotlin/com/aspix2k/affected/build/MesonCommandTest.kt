@@ -117,6 +117,24 @@ class MesonCommandTest {
     }
 
     @Test
+    fun `a single first-level nested Meson project is the root`() {
+        val base = createTempDirectory("meson-nested").toFile()
+        val nested = File(base, "native")
+        mesonRoot().copyRecursively(nested)
+
+        assertEquals(nested.canonicalFile, mesonProjectRoot(base)?.canonicalFile)
+    }
+
+    @Test
+    fun `several first-level nested Meson projects stay off`() {
+        val base = createTempDirectory("meson-many").toFile()
+        mesonRoot().copyRecursively(File(base, "native"))
+        mesonRoot().copyRecursively(File(base, "tools"))
+
+        assertNull(mesonProjectRoot(base))
+    }
+
+    @Test
     fun `a subproject test keeps the project runnable`() {
         val root = mesonRoot("project('probe', 'c')\nsubproject('alpha')\n")
         File(root, "subprojects/alpha").mkdirs()
