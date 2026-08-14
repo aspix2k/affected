@@ -26,7 +26,7 @@ class AntBuildSystem : SuspendingBuildSystem {
         CommandRunner.runBatchAndWait(project, root, antCommands(File(root), tasks), "Affected Ant")
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { antManifest(File(it)) }
+        project.basePath?.let(::File)?.let(::antProjectRoot)?.let(::antManifest)
 }
 
 internal object AntTasks {
@@ -37,6 +37,9 @@ internal object AntTasks {
     const val GENERATE = "generate"
     const val CODEGEN = "codegen"
 }
+
+internal fun antProjectRoot(base: File): File? =
+    nestedBuildRoot(base) { antManifest(it) != null }
 
 internal fun antManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null
