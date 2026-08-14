@@ -1,9 +1,12 @@
 package com.aspix2k.affected.build
 
+import org.junit.Assume.assumeTrue
 import java.io.File
+import java.nio.file.Files
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 class ExecutablePathTest {
 
@@ -15,7 +18,8 @@ class ExecutablePathTest {
             check(setExecutable(true))
         }
 
-        assertEquals(exe.canonicalFile.invariantSeparatorsPath, resolveExecutable("sqlc", dir.path, ".EXE;.CMD"))
+        val resolved = File(resolveExecutable("sqlc", dir.path, ".EXE;.CMD"))
+        assertEquals(exe.canonicalFile, resolved.canonicalFile)
     }
 
     @Test
@@ -40,7 +44,26 @@ class ExecutablePathTest {
             check(setExecutable(true))
         }
 
-        assertEquals(file.canonicalFile.invariantSeparatorsPath, resolveExecutable(file.path, "/nope", null))
+        assertEquals(file.absoluteFile.normalize().invariantSeparatorsPath, resolveExecutable(file.path, "/nope", null))
+    }
+
+    @Test
+    fun `a rustup proxy keeps the requested program name`() {
+        val dir = createTempDirectory("exe-proxy").toFile()
+        val rustup = File(dir, "rustup").apply {
+            writeText("x")
+            check(setExecutable(true))
+        }
+        val cargo = File(dir, "cargo")
+        assumeTrue(runCatching { Files.createSymbolicLink(cargo.toPath(), rustup.toPath()) }.isSuccess)
+
+        val resolved = resolveExecutable("cargo", dir.path, null)
+        assertEquals(cargo.absoluteFile.normalize().invariantSeparatorsPath, resolved)
+        assertFalse(resolved.endsWith("rustup"))
+        assertEquals(
+            cargo.absoluteFile.normalize().invariantSeparatorsPath,
+            resolveExecutable(cargo.path, "/nope", null),
+        )
     }
 
     @Test
