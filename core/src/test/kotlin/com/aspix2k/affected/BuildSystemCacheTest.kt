@@ -1,16 +1,43 @@
 package com.aspix2k.affected
 
 import com.aspix2k.affected.build.ComposerBuildSystem
+import com.aspix2k.affected.build.MAX_CACHED_MODULES
 import com.aspix2k.affected.build.PythonBuildSystem
+import com.aspix2k.affected.build.retainBuildSnapshot
+import com.aspix2k.affected.build.shouldRetainBuildSnapshot
 import com.intellij.openapi.project.Project
 import java.io.File
 import java.lang.reflect.Proxy
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class BuildSystemCacheTest {
+
+    @Test
+    fun `an oversized module snapshot is not retained`() {
+        val cache = AtomicReference<String?>("previous")
+        assertTrue(shouldRetainBuildSnapshot(0))
+        assertTrue(shouldRetainBuildSnapshot(MAX_CACHED_MODULES))
+        assertFalse(shouldRetainBuildSnapshot(MAX_CACHED_MODULES + 1))
+        assertFalse(shouldRetainBuildSnapshot(-1))
+        assertFalse(cache.retainBuildSnapshot("huge", MAX_CACHED_MODULES + 1))
+        assertNull(cache.get())
+        assertTrue(cache.retainBuildSnapshot("ok", 2))
+        assertEquals("ok", cache.get())
+    }
+
+    @Test
+    fun `python keeps a snapshot that fits the cache budget`() {
+        val system = PythonBuildSystem()
+        val first = system.modules(project(projectRoot("fits")))
+        assertEquals(setOf("fits-root", "fits-child"), first.map { it.id }.toSet())
+        assertEquals(2, cachedModuleCount(system))
+    }
 
     @Test
     fun `cache entries never cross project roots`() {
@@ -85,6 +112,15 @@ class BuildSystemCacheTest {
         File(this, "pyproject.toml").writeText("[project]\nname = \"$prefix-root\"\n")
         File(this, "child").mkdirs()
         File(this, "child/pyproject.toml").writeText("[project]\nname = \"$prefix-child\"\n")
+    }
+
+    private fun cachedModuleCount(system: Any): Int {
+        val field = system.javaClass.getDeclaredField("cache")
+        field.isAccessible = true
+        val snapshot = (field.get(system) as AtomicReference<*>).get()
+        val modules = snapshot.javaClass.getDeclaredField("modules")
+        modules.isAccessible = true
+        return (modules.get(snapshot) as List<*>).size
     }
 
     private fun project(root: File): Project = Proxy.newProxyInstance(

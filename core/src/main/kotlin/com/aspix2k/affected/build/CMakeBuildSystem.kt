@@ -40,7 +40,9 @@ class CMakeBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSy
 
         val discovered = runCatching { CMakeTargets.parse(root) }.getOrNull()
         val discovery = failClosedModules(root, CMakeTargets.TEST, CMakeTargets.BUILD, discovered)
-        if (stamp != null && discovery.complete) cache.set(Snapshot(rootPath, stamp, discovery.modules))
+        if (stamp != null && discovery.complete) {
+            cache.retainBuildSnapshot(Snapshot(rootPath, stamp, discovery.modules), discovery.modules.size)
+        }
         return discovery.modules
     }
 
