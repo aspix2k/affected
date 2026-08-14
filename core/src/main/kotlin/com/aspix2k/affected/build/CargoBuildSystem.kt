@@ -94,7 +94,7 @@ class CargoBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSy
         cargoNextestWorkspaceTask(module.testTask) || changes.requireCargoWorkspace(module.root)
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { File(it, "Cargo.toml") }?.takeIf(File::isRegularFileNoFollow)
+        project.basePath?.let(::File)?.let(::cargoProjectRoot)?.let(::cargoManifest)
 
     private fun discoverCargoNextest(
         root: File,
@@ -156,6 +156,12 @@ private fun cargoManifestFingerprint(root: File, manifests: List<File>): String?
     val inputs = manifests + listOf(File(root, "Cargo.lock"), config).filter(File::exists)
     return ManifestSearch.fingerprint(root, inputs)
 }
+
+internal fun cargoProjectRoot(base: File): File? =
+    nestedBuildRoot(base) { cargoManifest(it) != null }
+
+internal fun cargoManifest(root: File): File? =
+    File(root, "Cargo.toml").takeIf(File::isRegularFileNoFollow)
 
 internal fun cargoBuildScriptLayout(root: File, manifests: List<File>): String? = runCatching {
     val rootAlias = root.toPath().toAbsolutePath().normalize()
