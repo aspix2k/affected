@@ -95,6 +95,15 @@ class ManifestSearchTest {
     }
 
     @Test
+    fun `a scan that exceeds its time budget fails closed`() {
+        val root = createTempDirectory("budget").toFile()
+        File(root, "composer.json").writeText("{}")
+
+        assertEquals(emptyList(), ManifestSearch.find(root, "composer.json", budgetNanos = 0))
+        assertEquals(listOf("composer.json"), ManifestSearch.find(root, "composer.json").map { it.name })
+    }
+
+    @Test
     fun `fingerprint follows manifest content instead of timestamps`() {
         val root = createTempDirectory("fingerprint").toFile()
         val manifest = File(root, "package.json").apply { writeText("{\"name\":\"first\"}") }
