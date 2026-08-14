@@ -1,0 +1,6 @@
+name: affected_dart_workspace
+environment:
+  sdk: ^3.13.0
+workspace:
+  - packages/alpha
+  - packages/beta
