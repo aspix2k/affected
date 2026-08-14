@@ -27,6 +27,8 @@ internal fun remoteFrontendProven(
     platformPrefix.equals("JetBrainsClient", ignoreCase = true) ||
         rdctClient.equals("true", ignoreCase = true)
 
+internal fun shouldRefreshOnStartup(frontend: Boolean): Boolean = !frontend
+
 internal fun shouldRefreshFromVfs(
     frontend: Boolean,
     paths: List<String>,

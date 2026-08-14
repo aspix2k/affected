@@ -87,4 +87,14 @@ class ChangeListenerTest {
         assertTrue(isRelevantPath("/Users/я/проект/src/Главный.kt", extensions))
         assertTrue(isRelevantPath("C:\\Users\\я\\проект\\src\\Главный.kt", extensions))
     }
+
+    @Test
+    fun `a proven remote frontend does not analyze on startup`() {
+        assertFalse(shouldRefreshOnStartup(frontend = true))
+    }
+
+    @Test
+    fun `a local IDE still analyzes on startup`() {
+        assertTrue(shouldRefreshOnStartup(frontend = false))
+    }
 }
