@@ -3,7 +3,7 @@ package com.aspix2k.affected.build
 import com.intellij.openapi.project.Project
 import java.io.File
 
-class KotlinToolchainBuildSystem : SuspendingBuildSystem, WorkspaceChangesBuildSystem {
+class KotlinToolchainBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuildSystem {
 
     override val id: String = "KOTLIN_TOOLCHAIN"
 
@@ -35,6 +35,18 @@ class KotlinToolchainBuildSystem : SuspendingBuildSystem, WorkspaceChangesBuildS
             kotlinToolchainCommands(File(root), tasks),
             "Affected Kotlin Toolchain",
         )
+
+    override suspend fun runAndWaitSuspending(
+        project: Project,
+        root: String,
+        tasks: List<String>,
+        changes: BuildChanges,
+    ): Boolean = CommandRunner.runBatchAndWait(
+        project,
+        root,
+        kotlinToolchainCommands(File(root), tasks, changes),
+        "Affected Kotlin Toolchain",
+    )
 
     private fun manifestOf(project: Project): File? =
         project.basePath?.let { kotlinToolchainManifest(File(it)) }
@@ -129,7 +141,11 @@ internal fun kotlinToolchainRequiresWorkspace(root: String, changes: BuildChange
     }
 }
 
-internal fun kotlinToolchainCommands(root: File, tasks: List<String>): List<CliCommand> {
+internal fun kotlinToolchainCommands(
+    root: File,
+    tasks: List<String>,
+    changes: BuildChanges? = null,
+): List<CliCommand> {
     if (tasks.isEmpty()) return emptyList()
     val wrapper = kotlinToolchainWrapper(root) ?: return emptyList()
     val verbs = tasks.map { it.substringAfterLast(':') }.toSet()
@@ -142,13 +158,33 @@ internal fun kotlinToolchainCommands(root: File, tasks: List<String>): List<CliC
     val scoped = kotlinToolchainVersionProven(root) &&
         modules.none { it == "." } &&
         modules.all { MODULE_NAME.matches(it) }
+    val platformArgs = kotlinToolchainPlatforms(root, changes).orEmpty().flatMap { listOf("-p", it) }
     val arguments = when {
-        !scoped -> listOf(wrapper, verb)
-        verb == KotlinToolchainTasks.BUILD && modules.size == 1 -> listOf(wrapper, verb, "-m", modules.single())
-        verb == KotlinToolchainTasks.TEST -> listOf(wrapper, verb) + modules.sorted().flatMap { listOf("-m", it) }
-        else -> listOf(wrapper, verb)
+        !scoped && platformArgs.isEmpty() -> listOf(wrapper, verb)
+        !scoped -> listOf(wrapper, verb) + platformArgs
+        verb == KotlinToolchainTasks.BUILD && modules.size == 1 ->
+            listOf(wrapper, verb, "-m", modules.single()) + platformArgs
+        verb == KotlinToolchainTasks.TEST ->
+            listOf(wrapper, verb) + modules.sorted().flatMap { listOf("-m", it) } + platformArgs
+        else -> listOf(wrapper, verb) + platformArgs
     }
     return listOf(CliCommand("kotlin $verb", arguments))
+}
+
+internal fun kotlinToolchainPlatforms(root: File, changes: BuildChanges?): List<String>? {
+    if (changes == null || !changes.comparedToBase || changes.files.isEmpty()) return null
+    if (!kotlinToolchainVersionProven(root)) return null
+    val rootPath = root.toPath().toAbsolutePath().normalize()
+    val platforms = LinkedHashSet<String>()
+    for (raw in changes.files) {
+        val file = File(raw).toPath().toAbsolutePath().normalize()
+        if (!file.startsWith(rootPath)) return null
+        val relative = rootPath.relativize(file).toString().replace('\\', '/')
+        val name = PLATFORM_QUALIFIER.find(relative)?.groupValues?.get(1) ?: return null
+        if (name !in TOOLCHAIN_PLATFORMS) return null
+        platforms += name
+    }
+    return platforms.takeIf { it.isNotEmpty() }?.sorted()
 }
 
 internal fun kotlinToolchainVersionProven(root: File): Boolean {
@@ -171,3 +207,40 @@ private val TOOLCHAIN_MODULE_PATH = Regex("""(?m)^[ \t]*-[ \t]+(?:\./)?([A-Za-z0
 private val MODULE_NAME = Regex("""[A-Za-z0-9][A-Za-z0-9_./-]*""")
 private val TOOLCHAIN_VERSION = Regex("""(?im)(?:^|\n)\s*(?:set\s+)?kotlin_cli_version=([0-9]+\.[0-9]+\.[0-9]+)""")
 private val PROVEN_TOOLCHAIN_VERSION = Regex("""0\.11\.[0-9]+""")
+private val PLATFORM_QUALIFIER = Regex("""(?:^|/)(?:src|test|resources|testResources)@([A-Za-z][A-Za-z0-9]*)(?:/|$)""")
+private val TOOLCHAIN_PLATFORMS = setOf(
+    "jvm",
+    "android",
+    "web",
+    "js",
+    "wasmJs",
+    "wasmWasi",
+    "native",
+    "linux",
+    "linuxX64",
+    "linuxArm64",
+    "mingw",
+    "mingwX64",
+    "apple",
+    "macos",
+    "macosX64",
+    "macosArm64",
+    "ios",
+    "iosArm64",
+    "iosSimulatorArm64",
+    "iosX64",
+    "watchos",
+    "watchosArm32",
+    "watchosArm64",
+    "watchosDeviceArm64",
+    "watchosSimulatorArm64",
+    "tvos",
+    "tvosArm64",
+    "tvosSimulatorArm64",
+    "tvosX64",
+    "androidNative",
+    "androidNativeArm32",
+    "androidNativeArm64",
+    "androidNativeX64",
+    "androidNativeX86",
+)

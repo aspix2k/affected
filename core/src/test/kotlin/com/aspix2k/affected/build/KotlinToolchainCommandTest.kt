@@ -221,6 +221,111 @@ class KotlinToolchainCommandTest {
         )
     }
 
+    @Test
+    fun `a jvm source set change tests only the jvm platform`() {
+        val root = toolchainRoot()
+        val source = File(root, "src@jvm/Alpha.kt").apply {
+            parentFile.mkdirs()
+            writeText("class Alpha")
+        }
+
+        assertEquals(
+            listOf(kotlinToolchainWrapper(root), "test", "-p", "jvm"),
+            kotlinToolchainCommands(root, listOf(".:test"), jvmChange(source)).single().arguments,
+        )
+    }
+
+    @Test
+    fun `a named module jvm change tests that module on jvm`() {
+        val root = toolchainRoot()
+        val source = File(root, "app/src@jvm/App.kt").apply {
+            parentFile.mkdirs()
+            writeText("class App")
+        }
+
+        assertEquals(
+            listOf(kotlinToolchainWrapper(root), "test", "-m", "app", "-p", "jvm"),
+            kotlinToolchainCommands(root, listOf("app:test"), jvmChange(source)).single().arguments,
+        )
+    }
+
+    @Test
+    fun `a common source change keeps every platform`() {
+        val root = toolchainRoot()
+        val source = File(root, "src/Alpha.kt").apply {
+            parentFile.mkdirs()
+            writeText("class Alpha")
+        }
+
+        assertEquals(
+            listOf(kotlinToolchainWrapper(root), "test"),
+            kotlinToolchainCommands(root, listOf(".:test"), jvmChange(source)).single().arguments,
+        )
+    }
+
+    @Test
+    fun `an unproved platform qualifier keeps every platform`() {
+        val root = toolchainRoot()
+        val source = File(root, "src@jvmAndAndroid/Alpha.kt").apply {
+            parentFile.mkdirs()
+            writeText("class Alpha")
+        }
+
+        assertEquals(
+            listOf(kotlinToolchainWrapper(root), "test"),
+            kotlinToolchainCommands(root, listOf(".:test"), jvmChange(source)).single().arguments,
+        )
+    }
+
+    @Test
+    fun `an unversioned wrapper keeps every platform`() {
+        val root = toolchainRoot(version = null)
+        val source = File(root, "src@jvm/Alpha.kt").apply {
+            parentFile.mkdirs()
+            writeText("class Alpha")
+        }
+
+        assertEquals(
+            listOf(kotlinToolchainWrapper(root), "test"),
+            kotlinToolchainCommands(root, listOf("app:test"), jvmChange(source)).single().arguments,
+        )
+    }
+
+    @Test
+    fun `several platform source sets repeat -p`() {
+        val root = toolchainRoot()
+        val jvm = File(root, "src@jvm/Alpha.kt").apply {
+            parentFile.mkdirs()
+            writeText("class Alpha")
+        }
+        val ios = File(root, "src@ios/AlphaIos.kt").apply {
+            parentFile.mkdirs()
+            writeText("class AlphaIos")
+        }
+
+        assertEquals(
+            listOf(kotlinToolchainWrapper(root), "test", "-p", "ios", "-p", "jvm"),
+            kotlinToolchainCommands(root, listOf(".:test"), jvmChange(jvm, ios)).single().arguments,
+        )
+    }
+
+    @Test
+    fun `a jvm production change builds only the jvm platform`() {
+        val root = toolchainRoot()
+        val source = File(root, "lib/src@jvm/Lib.kt").apply {
+            parentFile.mkdirs()
+            writeText("class Lib")
+        }
+
+        assertEquals(
+            listOf(kotlinToolchainWrapper(root), "build", "-m", "lib", "-p", "jvm"),
+            kotlinToolchainCommands(root, listOf("lib:build"), jvmChange(source)).single().arguments,
+        )
+    }
+
+    private fun jvmChange(vararg files: File): BuildChanges =
+        BuildChanges(files.map(File::getPath), emptySet(), comparedToBase = true)
+
     private fun toolchainRoot(version: String? = "0.11.0"): File {
         val root = createTempDirectory("toolchain-root").toFile()
         File(root, "module.yaml").writeText("product: jvm/lib")
