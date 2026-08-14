@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Run Ant `generate` / `codegen` before `test` when the test target does not depend on it; proved `depends` skip the extra command, unproved depends keep generate.
 - Select an Ant target that contains a `junit` or `testng` task when `test` / `junit` names are absent; a named `test` target still wins.
 - Select proven pub workspace packages with one `dart test <pkg>/test` session; `pubspec.yaml` / `pubspec.lock` changes and unproved workspace lists keep the root command. Flutter modules stay unclaimed.
 - Merge static Ant `import` files into the target set so a `test` declared in `testdefs.xml` is runnable; property, prefixed `include` and missing imports keep `ant test`.

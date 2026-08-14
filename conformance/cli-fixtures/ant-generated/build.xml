@@ -1,0 +1,12 @@
+<project name="affected-ant-generated" default="test">
+    <target name="generate">
+        <mkdir dir="build"/>
+        <echo file="build/generated.marker" message="generated"/>
+    </target>
+
+    <target name="test">
+        <available file="build/generated.marker" property="generated.ready"/>
+        <fail unless="generated.ready" message="missing generated sources"/>
+        <echo message="AlphaTest"/>
+    </target>
+</project>
