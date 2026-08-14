@@ -217,7 +217,7 @@ jobs:
         run: |
           python -m pip install cmake==4.4.2 pytest==9.1.1 ruff==0.16.3
           sudo apt-get update
-          sudo apt-get install -y ant meson ninja-build gcc
+          sudo apt-get install -y ant meson ninja-build gcc make
 
       - name: Check Python adapter
         run: |
