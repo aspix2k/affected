@@ -116,6 +116,24 @@ class DbtCommandTest {
         assertNull(dbtManifest(root))
     }
 
+    @Test
+    fun `a single first-level nested DuckDB project is the dbt root`() {
+        val base = createTempDirectory("dbt-nested").toFile()
+        val nested = File(base, "analytics")
+        dbtRoot().copyRecursively(nested)
+
+        assertEquals(nested.canonicalFile, dbtProjectRoot(base)?.canonicalFile)
+    }
+
+    @Test
+    fun `several first-level nested dbt projects stay off`() {
+        val base = createTempDirectory("dbt-many").toFile()
+        dbtRoot().copyRecursively(File(base, "analytics"))
+        dbtRoot().copyRecursively(File(base, "warehouse"))
+
+        assertNull(dbtProjectRoot(base))
+    }
+
     private fun dbtRoot(
         profiles: String = """
             shop:

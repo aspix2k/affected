@@ -26,13 +26,16 @@ class DbtBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
         CommandRunner.runBatchAndWait(project, root, dbtCommands(tasks), "Affected dbt")
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { dbtManifest(File(it)) }
+        project.basePath?.let(::File)?.let(::dbtProjectRoot)?.let(::dbtManifest)
 }
 
 internal object DbtTasks {
     const val TEST = "test"
     const val COMPILE = "compile"
 }
+
+internal fun dbtProjectRoot(base: File): File? =
+    nestedBuildRoot(base) { dbtManifest(it) != null }
 
 internal fun dbtManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null
