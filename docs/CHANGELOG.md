@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Resolve CLI programs through `PATH` and Windows `PATHEXT`, so a proven `name.exe` is chosen and a missing program keeps the original name.
 - Treat Windows path separators like `/` when deciding whether a VFS event is a source change, so spaces, non-ASCII names and `.git` / `build` paths stay classified the same on every OS.
 - Stop failing pull-request `review` on a missing PR-head snapshot. Submit still publishes snapshots only from `main`; generate still requires a complete snapshot artifact; `fail-on-severity: low` stays.
 - Point Kotlin Toolchain native fixtures at `JAVA_HOME/bin` and drop a leftover `TEST_TMPDIR`, so the CLI can find `java` after other native tools run.
