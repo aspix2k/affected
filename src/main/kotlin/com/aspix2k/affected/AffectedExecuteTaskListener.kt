@@ -29,4 +29,3 @@ class AffectedExecuteTaskListener : ExternalSystemTaskNotificationListener {
 
 internal fun shouldClaimExternalExecute(type: ExternalSystemTaskType, frontend: Boolean): Boolean =
     !frontend && type == ExternalSystemTaskType.EXECUTE_TASK
-
