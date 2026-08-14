@@ -57,8 +57,8 @@ class CiContractsTest(unittest.TestCase):
             path = root / ".github/workflows/conformance.yml"
             path.write_text(
                 path.read_text(encoding="utf-8").replace(
-                    '- "SUPPORT.md"\n',
-                    '- "SUPPORT.md"\n      - "README.md"\n',
+                    '- "docs/SUPPORT.md"\n',
+                    '- "docs/SUPPORT.md"\n      - "README.md"\n',
                     1,
                 ),
                 encoding="utf-8",
@@ -218,7 +218,7 @@ class CiContractsTest(unittest.TestCase):
             "scripts/run_gradle.sh",
             ".githooks/pre-commit",
             ".githooks/pre-push",
-            "CONTRIBUTING.md",
+            "docs/CONTRIBUTING.md",
             "settings.gradle.kts",
             "mcp/build.gradle.kts",
             "build.gradle.kts",

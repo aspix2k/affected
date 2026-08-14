@@ -49,7 +49,7 @@ Keep GitHub "Automatically delete head branches" on. After a squash lands,
 delete leftover heads and worktrees.
 
 `config/support-matrix.json` is the source of truth for products, build systems,
-runners and OS evidence. `SUPPORT.md` and the README / Marketplace summaries
+runners and OS evidence. `docs/SUPPORT.md` and the README / Marketplace summaries
 are generated from it: `python3 scripts/support_matrix.py --write`.
 
 `config/release-currentness.json` governs direct pins. Compatibility entries
@@ -94,7 +94,7 @@ fail closed to a visible root command or an explicit unresolved Run.
 Native adapter projects live under `conformance/cli-fixtures` and run with
 `./gradlew :core:test --tests '*CliAdapterConformanceTest' -Paffected.cliConformance=true`.
 Parser-only proof is not enough for a release. Exact selection rules belong in
-the adapter tests and `SUPPORT.md`, not here.
+the adapter tests and `docs/SUPPORT.md`, not here.
 
 `ChangeAnalyzer` and `TaskPlanner` have no IDE dependencies. Keep them that
 way: return data and let the action format it. The `collector` module produces
@@ -115,13 +115,13 @@ A release is not only a tag. A user who never opens the repository sees only
 the last two items:
 
 1. `version` in `build.gradle.kts`.
-2. A section for that version in `CHANGELOG.md`. CI fails without it; the same
+2. A section for that version in `docs/CHANGELOG.md`. CI fails without it; the same
    text is the GitHub release notes and Marketplace What's New.
 3. `README.md` when the change affects what the plugin does or needs.
 4. The `<description>` in `plugin.xml` when supported systems change.
 5. Getting Started on the Marketplace page — edited in the web form, goes stale
    silently.
-6. `config/support-matrix.json` and generated `SUPPORT.md` when a system,
+6. `config/support-matrix.json` and generated `docs/SUPPORT.md` when a system,
    product, selection unit or minimum IDE version changes.
 
 The pull-request CI job records the verified Git tree and plugin SHA-256 beside

@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 MATRIX_PATH = Path("config/support-matrix.json")
-SUPPORT_PATH = Path("SUPPORT.md")
+SUPPORT_PATH = Path("docs/SUPPORT.md")
 README_PATH = Path("README.md")
 PLUGIN_PATH = Path("src/main/resources/META-INF/plugin.xml")
 SUMMARY_START = "<!-- affected-support-summary:start -->"
@@ -619,9 +619,12 @@ def markdown(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
 
 
-def links(paths: list[str]) -> str:
-    """Render concise relative Markdown links for repository evidence paths."""
-    return " · ".join(f"[{Path(path).name}]({path})" for path in paths)
+def links(paths: list[str], origin: Path = SUPPORT_PATH) -> str:
+    """Render concise Markdown links relative to the generated support page."""
+    return " · ".join(
+        f"[{Path(path).name}]({Path(os.path.relpath(path, start=origin.parent)).as_posix()})"
+        for path in paths
+    )
 
 
 def render(matrix: dict[str, Any], mcp_section: str = "") -> str:
@@ -746,7 +749,7 @@ def readme_summary(matrix: dict[str, Any]) -> str:
     adapters = len(matrix["adapters"])
     return (
         f"Built for multi-module projects and monorepos across {adapters} supported build "
-        f"ecosystems and {products} JetBrains products. See the [support matrix](SUPPORT.md) "
+        f"ecosystems and {products} JetBrains products. See the [support matrix](docs/SUPPORT.md) "
         "for languages, test runners, selection units and evidence."
     )
 
@@ -760,7 +763,7 @@ def plugin_summary(matrix: dict[str, Any]) -> str:
     return (
         f"        <p>Built for multi-module projects and monorepos across {adapters} supported build "
         f"ecosystems and {products} JetBrains products.</p>\n"
-        '        <p><a href="https://github.com/aspix2k/affected/blob/main/SUPPORT.md">'
+        '        <p><a href="https://github.com/aspix2k/affected/blob/main/docs/SUPPORT.md">'
         "Support matrix</a>: languages, test runners, selection units and evidence.</p>"
     )
 

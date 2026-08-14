@@ -17,14 +17,14 @@
 
 <p align="center">
   <a href="https://plugins.jetbrains.com/plugin/33425-affected"><strong>Install</strong></a> ·
-  <a href="SUPPORT.md">Support matrix</a> ·
+  <a href="docs/SUPPORT.md">Support matrix</a> ·
   <a href="https://github.com/aspix2k/affected/releases">Releases</a> ·
   <a href="https://github.com/aspix2k/affected/issues/29">Roadmap</a> ·
   <a href="https://github.com/aspix2k/affected/issues/new/choose">Report a problem</a>
 </p>
 
 <!-- affected-support-summary:start -->
-Built for multi-module projects and monorepos across 25 supported build ecosystems and 11 JetBrains products. See the [support matrix](SUPPORT.md) for languages, test runners, selection units and evidence.
+Built for multi-module projects and monorepos across 25 supported build ecosystems and 11 JetBrains products. See the [support matrix](docs/SUPPORT.md) for languages, test runners, selection units and evidence.
 <!-- affected-support-summary:end -->
 
 > A change in one package no longer starts checks for every unrelated package.
@@ -51,6 +51,6 @@ Built for multi-module projects and monorepos across 25 supported build ecosyste
 The first successful compatible run may test a full module once while
 **Affected** learns its exact test relationships.
 
-[How it works](CONTRIBUTING.md#how-it-works) · [Privacy](PRIVACY.md) · [Security](SECURITY.md) ·
-[Code of Conduct](CODE_OF_CONDUCT.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) ·
+[How it works](docs/CONTRIBUTING.md#how-it-works) · [Privacy](docs/PRIVACY.md) · [Security](docs/SECURITY.md) ·
+[Code of Conduct](docs/CODE_OF_CONDUCT.md) · [Contributing](docs/CONTRIBUTING.md) · [Changelog](docs/CHANGELOG.md) ·
 [MIT License](LICENSE)

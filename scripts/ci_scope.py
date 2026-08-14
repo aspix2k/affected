@@ -17,14 +17,14 @@ PRODUCT_PREFIXES = ("src/", "core/", "mcp/", "collector/")
 DOC_FILES = frozenset(
     {
         "AGENTS.md",
-        "CHANGELOG.md",
-        "CODE_OF_CONDUCT.md",
-        "CONTRIBUTING.md",
         "LICENSE",
-        "PRIVACY.md",
         "README.md",
-        "SECURITY.md",
-        "SUPPORT.md",
+        "docs/CHANGELOG.md",
+        "docs/CODE_OF_CONDUCT.md",
+        "docs/CONTRIBUTING.md",
+        "docs/PRIVACY.md",
+        "docs/SECURITY.md",
+        "docs/SUPPORT.md",
     }
 )
 HYGIENE_FILES = frozenset({".gitignore", ".gitattributes"})

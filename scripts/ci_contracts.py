@@ -79,6 +79,7 @@ def check(root: Path = ROOT) -> None:
         "scripts/mcp_capabilities.py --check",
         "scripts.tests.test_ci_contracts",
         "scripts.tests.test_ci_scope",
+        "scripts.tests.test_docs_layout",
         "scripts.tests.test_fetch_gradle",
         "scripts.tests.test_local_gate",
         "scripts.tests.test_run_gradle",
@@ -93,7 +94,7 @@ def check(root: Path = ROOT) -> None:
         raise CiContractError("pre-commit must run the local commit gate")
     if "scripts/local_gate.py push" not in read(root / ".githooks/pre-push"):
         raise CiContractError("pre-push must run the local push gate")
-    contributing = read(root / "CONTRIBUTING.md")
+    contributing = read(root / "docs/CONTRIBUTING.md")
     if "core.hooksPath" not in contributing or "scripts/local_gate.py install" not in contributing:
         raise CiContractError("CONTRIBUTING must document hook installation")
 

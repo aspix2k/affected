@@ -13,11 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- Stop tracking `AGENTS.md`. Agent-facing process stays in `CONTRIBUTING.md`.
+- Stop tracking `AGENTS.md`. Agent-facing process stays in `docs/CONTRIBUTING.md`.
 
 ### Changed
 
-- Keep `CONTRIBUTING.md` to building, architecture, conventions and release. Adapter selection rules stay in tests and `SUPPORT.md`.
+- Keep `docs/CONTRIBUTING.md` to building, architecture, conventions and release. Adapter selection rules stay in tests and `docs/SUPPORT.md`.
+- Move community and generated markdown into `docs/` so the repository root keeps `README.md` and `LICENSE`.
 
 ### Added
 
