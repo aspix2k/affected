@@ -253,6 +253,7 @@ class CiContractsTest(unittest.TestCase):
             "settings.gradle.kts",
             "mcp/build.gradle.kts",
             "build.gradle.kts",
+            "core/build.gradle.kts",
             "gradle/wrapper/gradle-wrapper.properties",
         ):
             destination = root / relative

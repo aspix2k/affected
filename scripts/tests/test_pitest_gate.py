@@ -132,6 +132,58 @@ class PitestGateTest(unittest.TestCase):
             with self.assertRaisesRegex(pitest_gate.PitestGateError, "surviving"):
                 pitest_gate.check(report)
 
+    def test_non_directory_path_entry_mutants_are_equivalent(self) -> None:
+        """A file on PATH cannot contain a child executable, so isDirectory fail-open is idle."""
+        with TemporaryDirectory() as directory:
+            report = Path(directory) / "mutations.xml"
+            report.write_text(
+                """<mutations>
+                  <mutation detected="false" status="SURVIVED">
+                    <mutatedClass>com.aspix2k.affected.build.ExecutablePathKt</mutatedClass>
+                    <mutatedMethod>isReadableDirectory</mutatedMethod>
+                    <lineNumber>54</lineNumber>
+                    <mutator>org.pitest.mutationtest.engine.gregor.mutators.returns.BooleanTrueReturnValsMutator</mutator>
+                    <description>replaced boolean return with true for com/aspix2k/affected/build/ExecutablePathKt::isReadableDirectory</description>
+                  </mutation>
+                  <mutation detected="false" status="SURVIVED">
+                    <mutatedClass>com.aspix2k.affected.build.ExecutablePathKt</mutatedClass>
+                    <mutatedMethod>isReadableDirectory</mutatedMethod>
+                    <lineNumber>54</lineNumber>
+                    <mutator>org.pitest.mutationtest.engine.gregor.mutators.RemoveConditionalMutator_EQUAL_ELSE</mutator>
+                    <description>removed conditional - replaced equality check with false</description>
+                  </mutation>
+                </mutations>
+                """,
+                encoding="utf-8",
+            )
+            self.assertEqual(2, pitest_gate.check(report))
+
+    def test_can_read_true_on_a_directory_still_fails(self) -> None:
+        """Skipping canRead on a real directory is not the non-directory equivalent case."""
+        with TemporaryDirectory() as directory:
+            report = Path(directory) / "mutations.xml"
+            report.write_text(
+                """<mutations>
+                  <mutation detected="false" status="SURVIVED">
+                    <mutatedClass>com.aspix2k.affected.build.ExecutablePathKt</mutatedClass>
+                    <mutatedMethod>isReadableDirectory</mutatedMethod>
+                    <lineNumber>55</lineNumber>
+                    <mutator>org.pitest.mutationtest.engine.gregor.mutators.returns.BooleanTrueReturnValsMutator</mutator>
+                    <description>replaced boolean return with true for com/aspix2k/affected/build/ExecutablePathKt::isReadableDirectory</description>
+                  </mutation>
+                </mutations>
+                """,
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(pitest_gate.PitestGateError, "surviving"):
+                pitest_gate.check(report)
+
+    def test_isreadable_early_return_stays_on_the_classified_line(self) -> None:
+        """Line 54 is the isDirectory early return the equivalent-mutant matcher keys on."""
+        source = Path(__file__).resolve().parents[2] / "core/src/main/kotlin/com/aspix2k/affected/build/ExecutablePath.kt"
+        lines = source.read_text(encoding="utf-8").splitlines()
+        self.assertEqual("    if (!isDirectory) return false", lines[53])
+
     def test_meaningful_survivor_is_not_hidden_by_equivalent_intrinsics(self) -> None:
         """An Intrinsics classification cannot greenwash a real surviving conditional."""
         with TemporaryDirectory() as directory:
