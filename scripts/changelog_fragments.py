@@ -72,7 +72,15 @@ def check_paths(paths: list[str], root: Path = ROOT) -> None:
             continue
         if relative.name in {".gitkeep"} or relative.name.startswith("."):
             continue
-        parse_fragment(root / relative)
+        candidate = root / relative
+        if not candidate.is_file():
+            if is_release_cut(normalized):
+                continue
+            raise ChangelogError(
+                f"{FRAGMENT_DIR / relative.name} was deleted; "
+                "consume fragments only in a release pull request"
+            )
+        parse_fragment(candidate)
 
 
 def check(root: Path = ROOT, *, paths: list[str] | None = None, base: str | None = None) -> None:
