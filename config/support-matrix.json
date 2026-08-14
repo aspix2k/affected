@@ -98,6 +98,14 @@
       "reviewed": "2026-08-14"
     },
     {
+      "id": "gateway",
+      "name": "JetBrains Gateway",
+      "support": "planned",
+      "reason": "Analysis and build stay on the IDE backend; a proven JetBrains Client frontend skips VFS refresh. Gateway install and update stay unclaimed.",
+      "issue": "https://github.com/aspix2k/affected/issues/127",
+      "reviewed": "2026-08-14"
+    },
+    {
       "id": "aqua",
       "name": "Aqua",
       "support": "excluded",
