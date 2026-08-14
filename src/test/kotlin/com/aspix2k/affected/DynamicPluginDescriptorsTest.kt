@@ -77,6 +77,36 @@ class DynamicPluginDescriptorsTest {
     }
 
     @Test
+    fun `a content module without optional loading blocks a dynamic update`() {
+        val problems = DynamicPluginDescriptors.problems(
+            mapOf(
+                "META-INF/plugin.xml" to """
+                    <idea-plugin>
+                      <content><module name="affected.mcp"/></content>
+                    </idea-plugin>
+                """.trimIndent(),
+                "affected.mcp.xml" to "<idea-plugin package=\"x\"/>",
+            ),
+        )
+        assertTrue(problems.any { it.contains("loading") && it.contains("optional") }, problems.toString())
+    }
+
+    @Test
+    fun `a required config-file dependency blocks a dynamic update`() {
+        val problems = DynamicPluginDescriptors.problems(
+            mapOf(
+                "META-INF/plugin.xml" to """
+                    <idea-plugin>
+                      <depends config-file="affected-gradle.xml">com.intellij.gradle</depends>
+                    </idea-plugin>
+                """.trimIndent(),
+                "META-INF/affected-gradle.xml" to "<idea-plugin/>",
+            ),
+        )
+        assertTrue(problems.any { it.contains("optional") }, problems.toString())
+    }
+
+    @Test
     fun `a missing content-module descriptor is not a complete descriptor set`() {
         val problems = DynamicPluginDescriptors.problems(
             mapOf(
@@ -153,7 +183,9 @@ object DynamicPluginDescriptors {
             groupProblems(name, root) +
             extensionPointProblems(name, root) +
             optionalConfigProblems(name, root, descriptors) +
-            contentModuleProblems(name, root, descriptors)
+            contentModuleProblems(name, root, descriptors) +
+            optionalLoadingProblems(name, root) +
+            requiredConfigProblems(name, root)
 
     private fun restartProblems(name: String, root: Element): List<String> =
         if (root.getAttribute("require-restart") == "true") {
@@ -188,6 +220,16 @@ object DynamicPluginDescriptors {
             .map { it.getAttribute("name") }
             .filter { "$it.xml" !in descriptors }
             .map { "$name: content module $it has no descriptor" }
+
+    private fun optionalLoadingProblems(name: String, root: Element): List<String> =
+        elements(root, "module")
+            .filter { it.parentNode.nodeName == "content" && it.getAttribute("loading") != "optional" }
+            .map { "$name: content module ${it.getAttribute("name")} must set loading=\"optional\"" }
+
+    private fun requiredConfigProblems(name: String, root: Element): List<String> =
+        elements(root, "depends")
+            .filter { it.getAttribute("config-file").isNotBlank() && it.getAttribute("optional") != "true" }
+            .map { "$name: config-file ${it.getAttribute("config-file")} must be optional" }
 
     private fun elements(root: Element, tag: String): List<Element> {
         val nodes = root.getElementsByTagName(tag)
