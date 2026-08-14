@@ -28,10 +28,40 @@ class BuildSystemDetectionTest {
     }
 
     @Test
-    fun `a nested marker does not replace the project root`() {
+    fun `a single first-level nested marker is present`() {
         systems.forEach { (system, marker) ->
             val root = createTempDirectory("nested-detection").toFile()
             File(root, "nested/$marker").apply {
+                parentFile.mkdirs()
+                writeText("")
+            }
+
+            assertTrue(system(projectAt(root)), marker)
+        }
+    }
+
+    @Test
+    fun `several first-level nested markers stay off`() {
+        systems.forEach { (system, marker) ->
+            val root = createTempDirectory("nested-many").toFile()
+            File(root, "one/$marker").apply {
+                parentFile.mkdirs()
+                writeText("")
+            }
+            File(root, "two/$marker").apply {
+                parentFile.mkdirs()
+                writeText("")
+            }
+
+            assertFalse(system(projectAt(root)), marker)
+        }
+    }
+
+    @Test
+    fun `a deeper nested marker stays off`() {
+        systems.forEach { (system, marker) ->
+            val root = createTempDirectory("nested-deep").toFile()
+            File(root, "src/nested/$marker").apply {
                 parentFile.mkdirs()
                 writeText("")
             }

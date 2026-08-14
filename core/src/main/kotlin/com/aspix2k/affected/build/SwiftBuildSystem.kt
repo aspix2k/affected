@@ -26,7 +26,8 @@ class SwiftBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
         CommandRunner.runBatchAndWait(project, root, swiftCommands(tasks), "Affected Swift")
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { swiftManifest(File(it)) }
+        project.basePath?.let(::File)?.let { nestedBuildRoot(it) { swiftManifest(it) != null } }
+            ?.let(::swiftManifest)
 }
 
 internal object SwiftTasks {

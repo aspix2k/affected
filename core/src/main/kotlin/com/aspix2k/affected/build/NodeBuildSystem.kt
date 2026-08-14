@@ -76,7 +76,7 @@ class NodeBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSys
             .filter(File::isFile)
 
     private fun rootOf(project: Project): File? =
-        project.basePath?.let(::File)?.takeIf { File(it, "package.json").isRegularFileNoFollow() }
+        project.basePath?.let(::File)?.let { nestedBuildRoot(it) { File(it, "package.json").isRegularFileNoFollow() } }
 }
 
 private val NODE_TEST_MARKERS = setOf("__tests__", "test", "tests", "spec")
