@@ -9,6 +9,8 @@ import com.aspix2k.affected.build.gradleIsSourceFile
 import com.aspix2k.affected.build.gradleKmpAdditionalTestTasks
 import com.aspix2k.affected.build.gradleProductionCompileTask
 import com.aspix2k.affected.build.gradleProjectPath
+import com.aspix2k.affected.build.gradleTestCompileTask
+import com.aspix2k.affected.build.gradleTestTask
 import com.aspix2k.affected.build.gradleVerificationTasks
 import com.aspix2k.affected.build.isAndroidInstrumentationSource
 import com.aspix2k.affected.build.selectAndroidTestTask
@@ -140,7 +142,7 @@ class GradleTaskPathTest {
     }
 
     @Test
-    fun `Android task detection does not require the imported task list`() {
+    fun `a missing Gradle task list does not invent Android task names`() {
         val module = createTempDirectory("affected-android-module").toFile()
         File(module, "src/main/AndroidManifest.xml").apply {
             parentFile.mkdirs()
@@ -148,8 +150,8 @@ class GradleTaskPathTest {
         }
 
         assertEquals(
-            "testDebugUnitTest" to "compileDebugUnitTestKotlin",
-            gradleVerificationTasks(module.path, emptyList(), emptySet()),
+            null to null,
+            gradleVerificationTasks(emptySet()),
         )
     }
 
@@ -200,7 +202,6 @@ class GradleTaskPathTest {
             "compileDebugKotlin",
             gradleProductionCompileTask(
                 setOf("compileDebugKotlin", "compileDebugUnitTestKotlin", "assembleDebug"),
-                android = true,
             ),
         )
     }
@@ -218,11 +219,11 @@ class GradleTaskPathTest {
 
         assertEquals(
             "compileAndroidMain",
-            gradleProductionCompileTask(available, android = true),
+            gradleProductionCompileTask(available),
         )
         assertEquals(
             "testAndroidHostTest" to "compileAndroidHostTest",
-            gradleVerificationTasks("/repo/shared/feature/capture", listOf("/repo/shared/feature/capture"), available),
+            gradleVerificationTasks(available),
         )
     }
 
@@ -232,9 +233,15 @@ class GradleTaskPathTest {
             null,
             gradleProductionCompileTask(
                 setOf("testAndroidHostTest", "iosSimulatorArm64Test", "assemble"),
-                android = true,
             ),
         )
+    }
+
+    @Test
+    fun `an unknown Gradle task list does not invent test or compile names`() {
+        assertEquals(null, gradleTestTask(emptySet()))
+        assertEquals(null, gradleTestCompileTask("test", emptySet()))
+        assertEquals(null, gradleProductionCompileTask(emptySet()))
     }
 
     @Test
@@ -251,7 +258,7 @@ class GradleTaskPathTest {
 
         assertEquals(
             "iosSimulatorArm64Test" to "compileTestKotlinIosSimulatorArm64",
-            gradleVerificationTasks("/repo/shared/feature/auth", listOf("/repo/shared/feature/auth"), available),
+            gradleVerificationTasks(available),
         )
         assertFalse("compileTestKotlin" in available)
     }
@@ -287,7 +294,7 @@ class GradleTaskPathTest {
 
         assertEquals(
             "testAndroidHostTest" to "compileAndroidHostTestKotlin",
-            gradleVerificationTasks("/repo/shared/core/ui", listOf("/repo/shared/core/ui"), available),
+            gradleVerificationTasks(available),
         )
         assertEquals(
             setOf("iosSimulatorArm64Test"),
@@ -299,11 +306,7 @@ class GradleTaskPathTest {
     fun `an imported JVM test task is still planned exactly`() {
         assertEquals(
             "test" to "compileTestKotlin",
-            gradleVerificationTasks(
-                "/repo/lib",
-                listOf("/repo/lib"),
-                setOf("test", "compileTestKotlin", "compileKotlin"),
-            ),
+            gradleVerificationTasks(setOf("test", "compileTestKotlin", "compileKotlin")),
         )
     }
 
@@ -325,15 +328,14 @@ class GradleTaskPathTest {
     @Test
     fun `a production-only Kotlin module compiles metadata or main Kotlin`() {
         assertEquals(
-            "compileKotlinMetadata",
+            "compileDebugKotlinAndroid",
             gradleProductionCompileTask(
                 setOf("compileKotlinMetadata", "compileDebugKotlinAndroid"),
-                android = false,
             ),
         )
         assertEquals(
             "compileKotlin",
-            gradleProductionCompileTask(setOf("compileKotlin", "jar"), android = false),
+            gradleProductionCompileTask(setOf("compileKotlin", "jar")),
         )
     }
 
