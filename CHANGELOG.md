@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Merge static Make `include` files into the target set so a `test` declared in `testdefs.mk` is runnable; variable, glob and missing includes keep `make test`.
 - Detect standalone Ninja roots from `build.ninja` and run one `ninja test` or `ninja check` session; production-only changes run the default target. The Ninja file is not parsed as a source graph. CMake, Meson, Make, Gradle and Maven roots stay off this adapter.
 - Detect conventional Make roots from `Makefile` / `GNUmakefile` and run one `make test` or `make check` session; production-only changes run the default target. Gradle, Maven, CMake and Meson roots stay off this adapter. Includes and Ninja stay unclaimed.
 - Detect Meson roots from `meson.build` and run one `meson test` or `meson compile` session; setup runs only when no configured build directory exists. Gradle, Maven and CMake roots stay off this adapter. Subprojects and Make/Ninja stay unclaimed.
