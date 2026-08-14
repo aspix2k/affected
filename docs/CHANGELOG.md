@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Detect local sqlc roots from `sqlc.yaml` / `sqlc.yml` / `sqlc.json` and run one `sqlc compile` session; database URIs, managed/cloud databases, process plugins and interpolated manifests stay off this adapter. Native sqlc execution and plain SQL files stay unclaimed.
 - Fail dynamic-plugin descriptor tests when a content module is not `loading="optional"` or a `config-file` dependency is required.
 - Keep Ant off JetBrains MPS projects that generate `build.xml` (`.mps`, `*.mpl`, `*.msd`); MPS stays unsupported without a public test CLI.
 - Detect local dbt roots from `dbt_project.yml` plus an in-repo DuckDB `profiles.yml` and run one `dbt test` / `dbt compile` session with `--profiles-dir .`; warehouse, MotherDuck and interpolated profiles stay off this adapter.
