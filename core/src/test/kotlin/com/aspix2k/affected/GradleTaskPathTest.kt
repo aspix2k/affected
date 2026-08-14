@@ -238,6 +238,25 @@ class GradleTaskPathTest {
     }
 
     @Test
+    fun `a KMP iOS module does not plan ambiguous compileTestKotlin`() {
+        val available = setOf(
+            "iosSimulatorArm64Test",
+            "compileKotlinMetadata",
+            "compileAndroidMain",
+            "compileKotlinIosArm64",
+            "compileKotlinIosSimulatorArm64",
+            "compileTestKotlinIosArm64",
+            "compileTestKotlinIosSimulatorArm64",
+        )
+
+        assertEquals(
+            "iosSimulatorArm64Test" to "compileTestKotlinIosSimulatorArm64",
+            gradleVerificationTasks("/repo/shared/feature/auth", listOf("/repo/shared/feature/auth"), available),
+        )
+        assertFalse("compileTestKotlin" in available)
+    }
+
+    @Test
     fun `Scala and Groovy files count as Gradle sources and tests`() {
         val module = createTempDirectory("affected-scala-groovy").toFile()
         val scala = File(module, "src/test/scala/AlphaSpec.scala").apply {
