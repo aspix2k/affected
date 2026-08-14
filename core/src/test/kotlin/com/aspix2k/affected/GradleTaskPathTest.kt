@@ -10,6 +10,8 @@ import com.aspix2k.affected.build.gradleKmpAdditionalTestTasks
 import com.aspix2k.affected.build.gradleProductionCompileTask
 import com.aspix2k.affected.build.gradleProjectPath
 import com.aspix2k.affected.build.gradleVerificationTasks
+import com.aspix2k.affected.build.isAndroidInstrumentationSource
+import com.aspix2k.affected.build.selectAndroidTestTask
 import com.intellij.openapi.externalSystem.model.ProjectSystemId
 import com.intellij.openapi.externalSystem.model.project.ModuleData
 import java.io.File
@@ -149,6 +151,47 @@ class GradleTaskPathTest {
             "testDebugUnitTest" to "compileDebugUnitTestKotlin",
             gradleVerificationTasks(module.path, emptyList(), emptySet()),
         )
+    }
+
+    @Test
+    fun `an instrumentation-only Android change uses connectedDebugAndroidTest`() {
+        assertEquals(
+            "connectedDebugAndroidTest",
+            selectAndroidTestTask(
+                "testDebugUnitTest",
+                setOf("testDebugUnitTest", "connectedDebugAndroidTest"),
+                instrumentationOnly = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `a unit Android change keeps testDebugUnitTest when a connected task exists`() {
+        assertEquals(
+            "testDebugUnitTest",
+            selectAndroidTestTask(
+                "testDebugUnitTest",
+                setOf("testDebugUnitTest", "connectedDebugAndroidTest"),
+                instrumentationOnly = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `an instrumentation-only change without a connected task keeps the unit task`() {
+        assertEquals(
+            "testDebugUnitTest",
+            selectAndroidTestTask("testDebugUnitTest", setOf("testDebugUnitTest"), instrumentationOnly = true),
+        )
+    }
+
+    @Test
+    fun `androidTest sources are instrumentation and unit trees are not`() {
+        assertTrue(isAndroidInstrumentationSource("/app/src/androidTest/java/Ui.kt"))
+        assertTrue(isAndroidInstrumentationSource("/app/src/androidInstrumentedTest/kotlin/Ui.kt"))
+        assertFalse(isAndroidInstrumentationSource("/app/src/test/java/Unit.kt"))
+        assertFalse(isAndroidInstrumentationSource("/app/src/androidUnitTest/kotlin/Unit.kt"))
+        assertFalse(isAndroidInstrumentationSource("/app/src/main/java/App.kt"))
     }
 
     @Test

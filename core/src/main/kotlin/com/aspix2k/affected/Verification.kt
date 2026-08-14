@@ -4,6 +4,8 @@ import com.aspix2k.affected.build.BuildChanges
 import com.aspix2k.affected.build.BuildSystems
 import com.aspix2k.affected.build.ChangeAwareSuspendingBuildSystem
 import com.aspix2k.affected.build.SuspendingBuildSystem
+import com.aspix2k.affected.build.isAndroidInstrumentationSource
+import com.aspix2k.affected.build.selectAndroidTestTask
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.Dispatchers
@@ -145,7 +147,10 @@ private fun verificationPlans(
             )
         }
     }
-    val tested = (changed + testConsumers).map { it.info() }
+    val changedNodes = changed.toSet()
+    val tested = (changed + testConsumers).map { node ->
+        androidTestInfo(node, if (node in changedNodes) pathsOwnedBy(node, effectiveOwners) else emptyList())
+    }
     val testsOnly = TaskPlanner.plan(tested, emptyList())
     val consumers = if (apiNodes.isEmpty()) emptyList() else graph.directDependents(apiNodes)
     return VerificationPlans(
@@ -167,5 +172,24 @@ internal fun ProjectChanges.Result.toBuildChanges(): BuildChanges = BuildChanges
 
 internal fun affectsConsumers(systemId: String, path: String, signatureTouched: Boolean): Boolean =
     signatureTouched || systemId !in JVM_BUILD_SYSTEMS && !ChangeAnalyzer.isTestSource(systemId, path)
+
+private fun pathsOwnedBy(
+    node: ModuleGraph.Node,
+    owners: Map<java.io.File, List<ModuleGraph.Node>>,
+): List<String> = owners.mapNotNull { (file, nodes) ->
+    file.invariantSeparatorsPath.takeIf { node in nodes }
+}
+
+private fun androidTestInfo(node: ModuleGraph.Node, changedPaths: List<String>): ModuleInfo {
+    val info = node.info()
+    if (info.systemId != "GRADLE" || changedPaths.isEmpty()) return info
+    return info.copy(
+        testTask = selectAndroidTestTask(
+            info.testTask,
+            node.module.extraTasks,
+            changedPaths.all(::isAndroidInstrumentationSource),
+        ),
+    )
+}
 
 private val JVM_BUILD_SYSTEMS = setOf("GRADLE", "MAVEN")
