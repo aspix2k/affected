@@ -52,10 +52,7 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
     private fun modules(project: Project, snapshot: Snapshot): List<BuildModule> {
         if (snapshot.modules.isEmpty() && snapshot.linkedRoots.isNotEmpty()) {
             return snapshot.linkedRoots.map { linked ->
-                val root = File(linked)
-                val android = gradleAndroidModule(linked, listOf(linked), emptySet()) ||
-                    File(root, "androidApp/src/main/AndroidManifest.xml").isFile
-                rootFallbackModule(root, "test", gradleProductionCompileTask(emptySet(), android) ?: "compileKotlin")
+                rootFallbackModule(File(linked), "", null).copy(hasTests = false)
             }
         }
         return snapshot.modules.groupBy(Described::key).values.map { descriptions ->
@@ -251,14 +248,15 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
     ): BuildModule {
         val source = roots.filterNot { it.contains("/build/") || it.contains("/.gradle/") }.minByOrNull { it.length }
         val availableTasks = tasks[projectPath] ?: source?.let(tasks::get).orEmpty()
-        val hasTests = roots.any(::gradleHoldsTests)
+        val filesystemTests = roots.any(::gradleHoldsTests)
         val android = gradleAndroidModule(projectPath, roots, availableTasks)
-        val kmp = gradleKmpModule(projectPath, roots, availableTasks)
-        val (testTask, testCompile) = gradleVerificationTasks(projectPath, roots, availableTasks)
+        val (verifiedTest, testCompile) = gradleVerificationTasks(projectPath, roots, availableTasks)
+        val hasTests = filesystemTests && !verifiedTest.isNullOrBlank()
+        val testTask = verifiedTest.orEmpty()
         val compileTask = if (hasTests) {
             testCompile
         } else {
-            gradleProductionCompileTask(availableTasks, android, kmp) ?: testCompile
+            gradleProductionCompileTask(availableTasks, android)
         }
         return BuildModule(
             id = path,
@@ -432,28 +430,12 @@ internal fun gradleCompositeRoot(ownerRoot: String, linkedRoots: List<String>, b
     return root?.toFile()?.invariantSeparatorsPath
 }
 
-internal fun gradleKmpModule(
-    projectPath: String,
-    roots: List<String>,
-    availableTasks: Set<String>,
-): Boolean =
-    "compileKotlinMetadata" in availableTasks ||
-        "compileAndroidMain" in availableTasks ||
-        KMP_TEST_TASKS.any { it in availableTasks && it !in ANDROID_TEST_TASKS } ||
-        File(projectPath, "src/commonMain").isDirectory ||
-        roots.any {
-            val normalized = it.replace('\\', '/')
-            normalized.endsWith("/commonMain") || "/commonMain/" in normalized ||
-                normalized.endsWith("/iosMain") || "/iosMain/" in normalized
-        }
-
 internal fun gradleAndroidModule(
     projectPath: String,
     roots: List<String>,
     availableTasks: Set<String>,
 ): Boolean =
-    ANDROID_TEST_TASKS.any { it in availableTasks } ||
-        ANDROID_COMPILE_TASKS.any { it in availableTasks } ||
+    availableTasks.any(::isGradleAndroidTask) ||
         File(projectPath, "src/main/AndroidManifest.xml").isFile ||
         roots.any {
             File(it, "src/main/AndroidManifest.xml").isFile ||
@@ -464,43 +446,38 @@ internal fun gradleVerificationTasks(
     projectPath: String,
     roots: List<String>,
     availableTasks: Set<String>,
-): Pair<String, String> {
-    val android = gradleAndroidModule(projectPath, roots, availableTasks)
-    val testTask = gradleTestTask(availableTasks, android)
-    return testTask to gradleTestCompileTask(testTask, availableTasks, android)
+): Pair<String?, String?> {
+    val testTask = gradleTestTask(availableTasks)
+    val testCompile = testTask?.let { gradleTestCompileTask(it, availableTasks) }
+    return testTask to (testCompile ?: gradleProductionCompileTask(availableTasks))
 }
 
-internal fun gradleTestTask(available: Set<String>, android: Boolean): String {
-    val preferred = buildList {
-        addAll(ANDROID_TEST_TASKS)
-        add("jvmTest")
-        add("test")
+internal fun gradleTestTask(available: Set<String>, android: Boolean = false): String? {
+    if (available.isEmpty()) return null
+    val unit = available.filter(::isGradleUnitTestTask)
+    val concrete = unit.filter { it != "test" }.ifEmpty { unit }
+    if (concrete.isEmpty()) return null
+    val withCompile = concrete.mapNotNull { task ->
+        val stem = testTaskStem(task)
+        if (existingCompileTask(available, stem, testish = true) == null) return@mapNotNull null
+        task to stem.length
     }
-    if (available.isEmpty()) return if (android) "testDebugUnitTest" else "test"
-    return preferred.firstOrNull { it in available }
-        ?: KMP_TEST_TASKS.firstOrNull { it in available }
-        ?: if (android) "testDebugUnitTest" else "test"
+    return withCompile.maxByOrNull { it.second }?.first ?: concrete.minOrNull()
 }
 
 internal fun gradleTestCompileTask(
     testTask: String,
     available: Set<String> = emptySet(),
     android: Boolean = false,
-): String {
-    if (available.isEmpty()) {
-        val stem = testTask.removePrefix("test")
-        return when {
-            stem.isEmpty() -> "compileTestKotlin"
-            stem.endsWith("UnitTest") -> "compile${stem}Kotlin"
-            else -> "compile$stem"
-        }
-    }
-    val stem = testTask.removePrefix("test").removeSuffix("Test")
+): String? {
+    if (available.isEmpty()) return null
+    val stem = testTaskStem(testTask)
     return existingCompileTask(available, matching = stem, testish = true)
         ?: gradleProductionCompileTask(available, android)
-        ?: existingCompileTask(available, matching = "", testish = false)
-        ?: "compileTestKotlin"
 }
+
+private fun testTaskStem(testTask: String): String =
+    testTask.removePrefix("test").removeSuffix("Test")
 
 internal fun existingCompileTask(
     available: Set<String>,
@@ -508,12 +485,9 @@ internal fun existingCompileTask(
     testish: Boolean,
 ): String? {
     val needle = matching.lowercase()
-    return available.asSequence()
-        .filter(::isCompileCodeTask)
-        .filter { needle.isEmpty() || it.lowercase().contains(needle) }
-        .filter { isTestCompileName(it) == testish }
-        .sortedWith(compareBy(::compileTaskRank, { it }))
-        .firstOrNull()
+    return available.filter { isCompileCodeTask(it) && isTestCompileName(it) == testish }
+        .filter { needle.isEmpty() || needle in it.lowercase() }
+        .minOrNull()
 }
 
 private fun isCompileCodeTask(name: String): Boolean {
@@ -524,17 +498,16 @@ private fun isCompileCodeTask(name: String): Boolean {
 
 private fun isTestCompileName(name: String): Boolean = "test" in name.lowercase()
 
-private fun compileTaskRank(name: String): Int {
+internal fun isGradleUnitTestTask(name: String): Boolean {
     val n = name.lowercase()
-    return when {
-        n.contains("iossimulator") -> 0
-        n.contains("androidhost") -> 1
-        n.contains("androidmain") -> 2
-        n.contains("debugkotlin") -> 3
-        n.contains("kotlinmetadata") -> 4
-        n == "compiletestkotlin" || n == "compilekotlin" -> 5
-        else -> 10
+    if (n.startsWith("compile") || n.startsWith("assemble") || n.startsWith("link") ||
+        n.startsWith("clean") || n.startsWith("detekt") || n.startsWith("ktlint") ||
+        n.startsWith("connected") || n.startsWith("all") ||
+        "resource" in n || "lint" in n
+    ) {
+        return false
     }
+    return n == "test" || n.startsWith("test") || n.endsWith("test")
 }
 
 internal fun isAndroidInstrumentationSource(path: String): Boolean {
@@ -543,7 +516,10 @@ internal fun isAndroidInstrumentationSource(path: String): Boolean {
 }
 
 internal fun gradleInstrumentationTestTask(available: Set<String>): String? =
-    listOf("connectedDebugAndroidTest", "connectedAndroidTest").firstOrNull { it in available }
+    available.filter {
+        val n = it.lowercase()
+        n.startsWith("connected") && "androidtest" in n
+    }.minOrNull()
 
 internal fun selectAndroidTestTask(
     unitTestTask: String,
@@ -553,74 +529,30 @@ internal fun selectAndroidTestTask(
     if (instrumentationOnly) gradleInstrumentationTestTask(available) ?: unitTestTask else unitTestTask
 
 internal fun gradleKmpAdditionalTestTasks(available: Set<String>, primary: String): Set<String> {
-    val extra = KMP_TEST_TASKS.filterTo(LinkedHashSet()) { it in available && it != primary }
-    if (primary in ANDROID_TEST_TASKS) extra.removeAll(ANDROID_TEST_TASKS.toSet())
+    val extra = available.filterTo(LinkedHashSet()) {
+        it != primary && it != "test" && isGradleUnitTestTask(it)
+    }
+    if (primary.contains("android", ignoreCase = true)) {
+        extra.removeAll { it.contains("android", ignoreCase = true) }
+    }
     return extra
 }
 
-private val ANDROID_TEST_TASKS = listOf(
-    "testDebugUnitTest",
-    "testAndroidHostTest",
-    "testAndroid",
-)
-
-private val KMP_TEST_TASKS = listOf(
-    "testDebugUnitTest",
-    "testAndroidHostTest",
-    "testAndroid",
-    "iosSimulatorArm64Test",
-    "iosX64Test",
-    "iosArm64Test",
-    "jvmTest",
-    "jsBrowserTest",
-    "jsNodeTest",
-    "wasmJsBrowserTest",
-    "linuxX64Test",
-    "macosArm64Test",
-    "macosX64Test",
-    "mingwX64Test",
-)
-
 internal fun gradleProductionCompileTask(
     available: Set<String>,
-    android: Boolean,
+    android: Boolean = false,
     kmp: Boolean = false,
 ): String? {
-    val preferred = if (android) {
-        listOf(
-            "compileDebugKotlin",
-            "compileDebugKotlinAndroid",
-            "compileAndroidMain",
-            "compileKotlinAndroid",
-            "compileDebugJavaWithJavac",
-            "compileKotlinMetadata",
-            "compileKotlin",
-        )
-    } else {
-        listOf(
-            "compileKotlinMetadata",
-            "compileKotlin",
-            "compileDebugKotlinAndroid",
-            "compileAndroidMain",
-            "compileJava",
-        )
-    }
-    if (available.isEmpty()) {
-        return when {
-            android && kmp -> "compileAndroidMain"
-            android -> "compileDebugKotlin"
-            else -> preferred.first()
-        }
-    }
-    return preferred.firstOrNull { it in available }
+    if (available.isEmpty()) return null
+    return existingCompileTask(available, matching = "", testish = false)
 }
 
-private val ANDROID_COMPILE_TASKS = listOf(
-    "compileDebugKotlin",
-    "compileDebugKotlinAndroid",
-    "compileAndroidMain",
-    "compileKotlinAndroid",
-)
+private fun isGradleAndroidTask(name: String): Boolean {
+    val n = name.lowercase()
+    return "android" in n && (
+        n.startsWith("test") || n.startsWith("compile") || n.startsWith("connected")
+    )
+}
 
 private val SOURCE_SET_NAMES = setOf("main", "unitTest", "androidTest", "test")
 private const val DIRECTORY_TO_RUN_TASK_PROPERTY = "directoryToRunTask"

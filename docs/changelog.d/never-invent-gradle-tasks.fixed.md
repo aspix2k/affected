@@ -1,0 +1,1 @@
+- Plan only Gradle test and compile tasks that exist in the imported project. Missing task lists stay empty instead of guessing `test` or `compileTestKotlin`.

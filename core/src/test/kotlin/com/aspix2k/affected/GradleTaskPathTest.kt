@@ -9,6 +9,8 @@ import com.aspix2k.affected.build.gradleIsSourceFile
 import com.aspix2k.affected.build.gradleKmpAdditionalTestTasks
 import com.aspix2k.affected.build.gradleProductionCompileTask
 import com.aspix2k.affected.build.gradleProjectPath
+import com.aspix2k.affected.build.gradleTestCompileTask
+import com.aspix2k.affected.build.gradleTestTask
 import com.aspix2k.affected.build.gradleVerificationTasks
 import com.aspix2k.affected.build.isAndroidInstrumentationSource
 import com.aspix2k.affected.build.selectAndroidTestTask
@@ -140,7 +142,7 @@ class GradleTaskPathTest {
     }
 
     @Test
-    fun `Android task detection does not require the imported task list`() {
+    fun `a missing Gradle task list does not invent Android task names`() {
         val module = createTempDirectory("affected-android-module").toFile()
         File(module, "src/main/AndroidManifest.xml").apply {
             parentFile.mkdirs()
@@ -148,7 +150,7 @@ class GradleTaskPathTest {
         }
 
         assertEquals(
-            "testDebugUnitTest" to "compileDebugUnitTestKotlin",
+            null to null,
             gradleVerificationTasks(module.path, emptyList(), emptySet()),
         )
     }
@@ -235,6 +237,13 @@ class GradleTaskPathTest {
                 android = true,
             ),
         )
+    }
+
+    @Test
+    fun `an unknown Gradle task list does not invent test or compile names`() {
+        assertEquals(null, gradleTestTask(emptySet(), android = true))
+        assertEquals(null, gradleTestCompileTask("test", emptySet(), android = true))
+        assertEquals(null, gradleProductionCompileTask(emptySet(), android = true, kmp = true))
     }
 
     @Test
@@ -325,7 +334,7 @@ class GradleTaskPathTest {
     @Test
     fun `a production-only Kotlin module compiles metadata or main Kotlin`() {
         assertEquals(
-            "compileKotlinMetadata",
+            "compileDebugKotlinAndroid",
             gradleProductionCompileTask(
                 setOf("compileKotlinMetadata", "compileDebugKotlinAndroid"),
                 android = false,
