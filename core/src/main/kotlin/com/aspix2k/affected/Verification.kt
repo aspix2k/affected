@@ -90,7 +90,7 @@ object Verification {
                 plan.groups.map { group ->
                     async(Dispatchers.Default) {
                         when (val system = BuildSystems.byId(group.systemId)) {
-                            null -> true
+                            null -> preparedGroupPasses(adapterFound = false)
                             is ChangeAwareSuspendingBuildSystem ->
                                 system.runAndWaitSuspending(project, group.root, group.tasks, prepared.changes)
                             is SuspendingBuildSystem ->
@@ -108,6 +108,8 @@ object Verification {
         }
     }
 }
+
+internal fun preparedGroupPasses(adapterFound: Boolean): Boolean = adapterFound
 
 internal fun verificationPlan(
     graph: ModuleGraph,
