@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Scope Kotlin Toolchain `-p` when every changed file sits in a proven `src@platform` / `test@platform` family; common sources, aliases and unproved versions keep every platform.
 - Merge static Buck2 `[cells]` directories into the project content roots; unproved or missing cell paths keep the project root. Aliases and native buck2 execution stay unclaimed.
 - Detect Xcode roots from `.xcodeproj` / `.xcworkspace` and run one `xcodebuild test` or `xcodebuild build` session; a single shared scheme is selected, several schemes keep the unscoped command. SwiftPM, Gradle and Maven roots stay off this adapter.
 - Detect SwiftPM roots from `Package.swift` and run one `swift test` or `swift build` session; Gradle and Maven roots stay off this adapter. Xcode schemes, target selection and native Swift execution stay unclaimed.
