@@ -66,6 +66,8 @@ pull-request artifact.
 Same-repository ready pull requests are enqueued with
 `gh pr merge --auto --squash`. GitHub merges when `verify`, CodeQL
 `pull-request` and dependency `review` pass. Agents must not merge by hand.
+Keep GitHub "Automatically delete head branches" on. After a squash lands,
+delete any leftover head branch and its worktree.
 Required checks also listen for `merge_group` so a GitHub merge queue can be
 enabled if the repository is ever owned by an organization.
 
