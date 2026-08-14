@@ -206,6 +206,38 @@ class GradleTaskPathTest {
     }
 
     @Test
+    fun `a KMP Android library does not plan missing compileDebugKotlin`() {
+        val available = setOf(
+            "testAndroid",
+            "testAndroidHostTest",
+            "iosSimulatorArm64Test",
+            "compileKotlinMetadata",
+            "compileAndroidMain",
+            "compileAndroidHostTest",
+        )
+
+        assertEquals(
+            "compileAndroidMain",
+            gradleProductionCompileTask(available, android = true),
+        )
+        assertEquals(
+            "testAndroidHostTest" to "compileAndroidHostTest",
+            gradleVerificationTasks("/repo/shared/feature/capture", listOf("/repo/shared/feature/capture"), available),
+        )
+    }
+
+    @Test
+    fun `known Gradle tasks never invent a missing compileDebugKotlin`() {
+        assertEquals(
+            null,
+            gradleProductionCompileTask(
+                setOf("testAndroidHostTest", "iosSimulatorArm64Test", "assemble"),
+                android = true,
+            ),
+        )
+    }
+
+    @Test
     fun `Scala and Groovy files count as Gradle sources and tests`() {
         val module = createTempDirectory("affected-scala-groovy").toFile()
         val scala = File(module, "src/test/scala/AlphaSpec.scala").apply {
