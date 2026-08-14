@@ -42,7 +42,7 @@ class DotnetProjectsTest {
         val tests = DotnetProjects.parse(root).single { it.id == "Lib.Tests" }
 
         assertEquals(
-            setOf("${root.invariantSeparatorsPath}|Lib"),
+            setOf("DOTNET|${root.invariantSeparatorsPath}|Lib"),
             tests.dependencies,
             "MSBuild emits Windows separators even on macOS",
         )
@@ -64,7 +64,7 @@ class DotnetProjectsTest {
 
         val tests = DotnetProjects.parse(root).single { it.id == "Lib.Tests" }
 
-        assertEquals(setOf("${root.invariantSeparatorsPath}|Lib"), tests.dependencies)
+        assertEquals(setOf("DOTNET|${root.invariantSeparatorsPath}|Lib"), tests.dependencies)
     }
 
     @Test

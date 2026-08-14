@@ -40,7 +40,7 @@ class CMakeTargetsTest {
 
         val app = CMakeTargets.parse(root).single { it.id == "app" }
 
-        assertEquals(setOf("${root.invariantSeparatorsPath}|core"), app.dependencies)
+        assertEquals(setOf("CMAKE|${root.invariantSeparatorsPath}|core"), app.dependencies)
     }
 
     @Test
@@ -59,7 +59,7 @@ class CMakeTargetsTest {
         val app = CMakeTargets.parse(root).single { it.id == "app" }
 
         assertEquals(
-            setOf("${root.invariantSeparatorsPath}|core"),
+            setOf("CMAKE|${root.invariantSeparatorsPath}|core"),
             app.dependencies,
             "PUBLIC and PRIVATE are modifiers, and pthread is not declared in the project",
         )
@@ -120,6 +120,6 @@ class CMakeTargetsTest {
 
         val b = CMakeTargets.parse(root).single { it.id == "b" }
 
-        assertEquals(setOf("${root.invariantSeparatorsPath}|a"), b.dependencies)
+        assertEquals(setOf("CMAKE|${root.invariantSeparatorsPath}|a"), b.dependencies)
     }
 }

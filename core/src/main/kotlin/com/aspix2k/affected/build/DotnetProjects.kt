@@ -42,7 +42,7 @@ object DotnetProjects {
                 .mapNotNull { match -> INCLUDE.find(match.groupValues[1])?.groupValues?.get(1) }
                 .mapNotNull { reference -> resolve(directory, reference) }
                 .mapNotNull { byPath[it] }
-                .mapTo(HashSet()) { "$rootPath|${ids.getValue(it)}" }
+                .mapTo(HashSet()) { moduleDependencyKey("DOTNET", rootPath, ids.getValue(it)) }
 
             val id = ids.getValue(project)
             val hasTests = TEST_MARKERS.any { text.contains(it, ignoreCase = true) }
@@ -54,8 +54,9 @@ object DotnetProjects {
                 testTask = if (hasTests) TEST else COMPILE,
                 compileTask = COMPILE,
                 hasTests = true,
-                dependencies = dependencies - "$rootPath|$id",
+                dependencies = dependencies - moduleDependencyKey("DOTNET", rootPath, id),
                 executionId = relativeProjectPath(rootPath, project),
+                systemId = "DOTNET",
             )
         }
     }

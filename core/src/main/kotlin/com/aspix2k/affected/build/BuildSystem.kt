@@ -20,9 +20,13 @@ data class BuildModule(
     val executionRoot: String = root,
     val executionId: String = id,
     val additionalTestTasks: Set<String> = emptySet(),
+    val systemId: String = "",
 ) {
-    val key: String get() = "$root|$id"
+    val key: String get() = moduleDependencyKey(systemId, root, id)
 }
+
+internal fun moduleDependencyKey(systemId: String, root: String, id: String): String =
+    if (systemId.isBlank()) "$root|$id" else "$systemId|$root|$id"
 
 interface BuildSystem {
 

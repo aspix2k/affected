@@ -7,7 +7,12 @@ import kotlin.test.assertNotEquals
 
 class BuildModuleTest {
 
-    private fun module(id: String, root: String = "/repo", dependencies: Set<String> = emptySet()) =
+    private fun module(
+        id: String,
+        root: String = "/repo",
+        dependencies: Set<String> = emptySet(),
+        systemId: String = "",
+    ) =
         BuildModule(
             id = id,
             root = root,
@@ -16,6 +21,7 @@ class BuildModuleTest {
             compileTask = "compileTestKotlin",
             hasTests = true,
             dependencies = dependencies,
+            systemId = systemId,
         )
 
     @Test
@@ -47,5 +53,15 @@ class BuildModuleTest {
         val app = module(":app", dependencies = setOf(core.key))
 
         assertEquals(setOf("/repo|:core"), app.dependencies)
+    }
+
+    @Test
+    fun `the key includes the build system so same-named modules stay distinct`() {
+        val cmake = module("lib", systemId = "CMAKE")
+        val dotnet = module("lib", systemId = "DOTNET")
+
+        assertEquals("CMAKE|/repo|lib", cmake.key)
+        assertEquals("DOTNET|/repo|lib", dotnet.key)
+        assertNotEquals(cmake.key, dotnet.key)
     }
 }

@@ -49,7 +49,7 @@ object CMakeTargets {
         return declared.map { (name, directory) ->
             val dependencies = links[name].orEmpty()
                 .filter { it in declared.keys }
-                .mapTo(HashSet()) { "$rootPath|$it" }
+                .mapTo(HashSet()) { moduleDependencyKey("CMAKE", rootPath, it) }
 
             BuildModule(
                 id = name,
@@ -58,7 +58,8 @@ object CMakeTargets {
                 testTask = if (projectHasTests) TEST else BUILD,
                 compileTask = BUILD,
                 hasTests = true,
-                dependencies = dependencies - "$rootPath|$name",
+                dependencies = dependencies - moduleDependencyKey("CMAKE", rootPath, name),
+                systemId = "CMAKE",
             )
         }
     }
