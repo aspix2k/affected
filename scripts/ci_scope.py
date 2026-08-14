@@ -16,6 +16,7 @@ ZERO_SHA = "0" * 40
 PRODUCT_PREFIXES = ("src/", "core/", "mcp/", "collector/")
 DOC_FILES = frozenset(
     {
+        "AGENTS.md",
         "CHANGELOG.md",
         "CODE_OF_CONDUCT.md",
         "CONTRIBUTING.md",

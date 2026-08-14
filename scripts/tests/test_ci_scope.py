@@ -23,6 +23,7 @@ class CiScopeTest(unittest.TestCase):
         self.assertEqual(
             ci_scope.scope_for(
                 [
+                    "AGENTS.md",
                     "CHANGELOG.md",
                     "docs/superpowers/plans/x.md",
                     ".github/ISSUE_TEMPLATE/bug.md",
