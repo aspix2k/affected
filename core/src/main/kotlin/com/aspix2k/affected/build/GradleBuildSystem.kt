@@ -249,14 +249,13 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
         val source = roots.filterNot { it.contains("/build/") || it.contains("/.gradle/") }.minByOrNull { it.length }
         val availableTasks = tasks[projectPath] ?: source?.let(tasks::get).orEmpty()
         val filesystemTests = roots.any(::gradleHoldsTests)
-        val android = gradleAndroidModule(projectPath, roots, availableTasks)
-        val (verifiedTest, testCompile) = gradleVerificationTasks(projectPath, roots, availableTasks)
+        val (verifiedTest, testCompile) = gradleVerificationTasks(availableTasks)
         val hasTests = filesystemTests && !verifiedTest.isNullOrBlank()
         val testTask = verifiedTest.orEmpty()
         val compileTask = if (hasTests) {
             testCompile
         } else {
-            gradleProductionCompileTask(availableTasks, android)
+            gradleProductionCompileTask(availableTasks)
         }
         return BuildModule(
             id = path,
@@ -442,17 +441,13 @@ internal fun gradleAndroidModule(
                 File(it, "AndroidManifest.xml").isFile
         }
 
-internal fun gradleVerificationTasks(
-    projectPath: String,
-    roots: List<String>,
-    availableTasks: Set<String>,
-): Pair<String?, String?> {
+internal fun gradleVerificationTasks(availableTasks: Set<String>): Pair<String?, String?> {
     val testTask = gradleTestTask(availableTasks)
     val testCompile = testTask?.let { gradleTestCompileTask(it, availableTasks) }
     return testTask to (testCompile ?: gradleProductionCompileTask(availableTasks))
 }
 
-internal fun gradleTestTask(available: Set<String>, android: Boolean = false): String? {
+internal fun gradleTestTask(available: Set<String>): String? {
     if (available.isEmpty()) return null
     val unit = available.filter(::isGradleUnitTestTask)
     val concrete = unit.filter { it != "test" }.ifEmpty { unit }
@@ -465,15 +460,11 @@ internal fun gradleTestTask(available: Set<String>, android: Boolean = false): S
     return withCompile.maxByOrNull { it.second }?.first ?: concrete.minOrNull()
 }
 
-internal fun gradleTestCompileTask(
-    testTask: String,
-    available: Set<String> = emptySet(),
-    android: Boolean = false,
-): String? {
+internal fun gradleTestCompileTask(testTask: String, available: Set<String> = emptySet()): String? {
     if (available.isEmpty()) return null
     val stem = testTaskStem(testTask)
     return existingCompileTask(available, matching = stem, testish = true)
-        ?: gradleProductionCompileTask(available, android)
+        ?: gradleProductionCompileTask(available)
 }
 
 private fun testTaskStem(testTask: String): String =
@@ -500,13 +491,8 @@ private fun isTestCompileName(name: String): Boolean = "test" in name.lowercase(
 
 internal fun isGradleUnitTestTask(name: String): Boolean {
     val n = name.lowercase()
-    if (n.startsWith("compile") || n.startsWith("assemble") || n.startsWith("link") ||
-        n.startsWith("clean") || n.startsWith("detekt") || n.startsWith("ktlint") ||
-        n.startsWith("connected") || n.startsWith("all") ||
-        "resource" in n || "lint" in n
-    ) {
-        return false
-    }
+    if (UNIT_TEST_EXCLUDED_PREFIXES.any { n.startsWith(it) }) return false
+    if ("resource" in n || "lint" in n) return false
     return n == "test" || n.startsWith("test") || n.endsWith("test")
 }
 
@@ -538,21 +524,27 @@ internal fun gradleKmpAdditionalTestTasks(available: Set<String>, primary: Strin
     return extra
 }
 
-internal fun gradleProductionCompileTask(
-    available: Set<String>,
-    android: Boolean = false,
-    kmp: Boolean = false,
-): String? {
+internal fun gradleProductionCompileTask(available: Set<String>): String? {
     if (available.isEmpty()) return null
     return existingCompileTask(available, matching = "", testish = false)
 }
 
 private fun isGradleAndroidTask(name: String): Boolean {
     val n = name.lowercase()
-    return "android" in n && (
-        n.startsWith("test") || n.startsWith("compile") || n.startsWith("connected")
-    )
+    if ("android" !in n) return false
+    return n.startsWith("test") || n.startsWith("compile") || n.startsWith("connected")
 }
+
+private val UNIT_TEST_EXCLUDED_PREFIXES = listOf(
+    "compile",
+    "assemble",
+    "link",
+    "clean",
+    "detekt",
+    "ktlint",
+    "connected",
+    "all",
+)
 
 private val SOURCE_SET_NAMES = setOf("main", "unitTest", "androidTest", "test")
 private const val DIRECTORY_TO_RUN_TASK_PROPERTY = "directoryToRunTask"
