@@ -225,6 +225,38 @@ class GradleTaskPathTest {
     }
 
     @Test
+    fun `a KMP Android module without an exact test task does not plan test`() {
+        val available = setOf(
+            "testAndroid",
+            "testAndroidHostTest",
+            "iosSimulatorArm64Test",
+            "compileKotlinMetadata",
+            "compileAndroidHostTestKotlin",
+        )
+
+        assertEquals(
+            "testAndroidHostTest" to "compileAndroidHostTestKotlin",
+            gradleVerificationTasks("/repo/shared/core/ui", listOf("/repo/shared/core/ui"), available),
+        )
+        assertEquals(
+            setOf("iosSimulatorArm64Test"),
+            gradleKmpAdditionalTestTasks(available, "testAndroidHostTest"),
+        )
+    }
+
+    @Test
+    fun `an imported JVM test task is still planned exactly`() {
+        assertEquals(
+            "test" to "compileTestKotlin",
+            gradleVerificationTasks(
+                "/repo/lib",
+                listOf("/repo/lib"),
+                setOf("test", "compileTestKotlin", "compileKotlin"),
+            ),
+        )
+    }
+
+    @Test
     fun `KMP additional tests exclude the primary task`() {
         assertEquals(
             setOf("iosSimulatorArm64Test", "testDebugUnitTest"),

@@ -28,6 +28,23 @@ class AffectedStateTest {
     }
 
     @Test
+    fun `the toolbar count is modules that will run tests`() {
+        val snapshot = AffectedStateSnapshot(
+            revision = 1,
+            analysisStatus = AnalysisStatus.READY,
+            modules = listOf(
+                module(":ui").copy(hasTests = true),
+                module(":auth").copy(hasTests = false, compileTask = "compileKotlinMetadata"),
+                module(":prefs").copy(hasTests = false, compileTask = "compileKotlinMetadata"),
+            ),
+            verificationStatus = VerificationStatus.IDLE,
+        )
+
+        assertEquals(1, snapshot.affectedModules)
+        assertEquals(3, snapshot.modules.size)
+    }
+
+    @Test
     fun `a snapshot at the published module budget stays ready`() {
         val state = AffectedStateStore()
         val revision = state.invalidate()

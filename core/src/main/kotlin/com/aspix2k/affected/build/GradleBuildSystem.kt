@@ -434,8 +434,9 @@ internal fun gradleAndroidModule(
     roots: List<String>,
     availableTasks: Set<String>,
 ): Boolean =
-    "testDebugUnitTest" in availableTasks ||
+    ANDROID_TEST_TASKS.any { it in availableTasks } ||
         "compileDebugKotlin" in availableTasks ||
+        "compileDebugKotlinAndroid" in availableTasks ||
         File(projectPath, "src/main/AndroidManifest.xml").isFile ||
         roots.any {
             File(it, "src/main/AndroidManifest.xml").isFile ||
@@ -446,10 +447,29 @@ internal fun gradleVerificationTasks(
     projectPath: String,
     roots: List<String>,
     availableTasks: Set<String>,
-): Pair<String, String> = if (gradleAndroidModule(projectPath, roots, availableTasks)) {
-    "testDebugUnitTest" to "compileDebugUnitTestKotlin"
-} else {
-    "test" to "compileTestKotlin"
+): Pair<String, String> {
+    val android = gradleAndroidModule(projectPath, roots, availableTasks)
+    val testTask = gradleTestTask(availableTasks, android)
+    return testTask to gradleTestCompileTask(testTask)
+}
+
+internal fun gradleTestTask(available: Set<String>, android: Boolean): String {
+    val preferred = buildList {
+        addAll(ANDROID_TEST_TASKS)
+        add("jvmTest")
+        add("test")
+    }
+    if (available.isEmpty()) return if (android) "testDebugUnitTest" else "test"
+    return preferred.firstOrNull { it in available }
+        ?: KMP_TEST_TASKS.firstOrNull { it in available }
+        ?: if (android) "testDebugUnitTest" else "test"
+}
+
+internal fun gradleTestCompileTask(testTask: String): String = when (testTask) {
+    "testDebugUnitTest" -> "compileDebugUnitTestKotlin"
+    "testAndroidHostTest" -> "compileAndroidHostTestKotlin"
+    "testAndroid" -> "compileTestKotlinAndroid"
+    else -> "compileTestKotlin"
 }
 
 internal fun isAndroidInstrumentationSource(path: String): Boolean {
@@ -467,11 +487,22 @@ internal fun selectAndroidTestTask(
 ): String =
     if (instrumentationOnly) gradleInstrumentationTestTask(available) ?: unitTestTask else unitTestTask
 
-internal fun gradleKmpAdditionalTestTasks(available: Set<String>, primary: String): Set<String> =
-    KMP_TEST_TASKS.filterTo(LinkedHashSet()) { it in available && it != primary }
+internal fun gradleKmpAdditionalTestTasks(available: Set<String>, primary: String): Set<String> {
+    val extra = KMP_TEST_TASKS.filterTo(LinkedHashSet()) { it in available && it != primary }
+    if (primary in ANDROID_TEST_TASKS) extra.removeAll(ANDROID_TEST_TASKS.toSet())
+    return extra
+}
+
+private val ANDROID_TEST_TASKS = listOf(
+    "testDebugUnitTest",
+    "testAndroidHostTest",
+    "testAndroid",
+)
 
 private val KMP_TEST_TASKS = listOf(
     "testDebugUnitTest",
+    "testAndroidHostTest",
+    "testAndroid",
     "iosSimulatorArm64Test",
     "iosX64Test",
     "iosArm64Test",

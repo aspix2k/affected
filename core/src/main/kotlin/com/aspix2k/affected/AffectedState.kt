@@ -40,7 +40,7 @@ data class AffectedStateSnapshot(
     val changes: ProjectChanges.Result? = null,
     val plans: Verification.PreparedPlans? = null,
 ) {
-    val affectedModules: Int get() = modules.size
+    val affectedModules: Int get() = modules.count { it.hasTests }
 }
 
 internal data class AffectedAnalysis(

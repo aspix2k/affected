@@ -60,6 +60,8 @@ private val KMP_SOURCE_SET_FAMILIES = listOf(
 
 private val KMP_TASK_FAMILIES = mapOf(
     "testDebugUnitTest" to KmpFamily.ANDROID,
+    "testAndroidHostTest" to KmpFamily.ANDROID,
+    "testAndroid" to KmpFamily.ANDROID,
     "iosSimulatorArm64Test" to KmpFamily.APPLE,
     "iosX64Test" to KmpFamily.APPLE,
     "iosArm64Test" to KmpFamily.APPLE,
