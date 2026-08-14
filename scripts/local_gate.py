@@ -18,6 +18,7 @@ SCRIPT_TESTS = (
     "scripts.tests.test_local_gate",
     "scripts.tests.test_mcp_capabilities",
     "scripts.tests.test_pitest_gate",
+    "scripts.tests.test_product_claims",
     "scripts.tests.test_release_currentness",
     "scripts.tests.test_run_gradle",
     "scripts.tests.test_support_matrix",
