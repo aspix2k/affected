@@ -18,6 +18,15 @@ class ExternalSystemRefreshListenerTest {
     }
 
     @Test
+    fun `a proven remote frontend does not invalidate after an external task`() {
+        var invalidations = 0
+
+        invalidateAfterExternalTask(project(disposed = false), frontend = true) { invalidations++ }
+
+        assertEquals(0, invalidations)
+    }
+
+    @Test
     fun `missing or disposed projects are ignored`() {
         var invalidations = 0
 
