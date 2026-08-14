@@ -24,7 +24,7 @@ class CliMesonSubprojectConformanceTest {
             commands.map(CliCommand::arguments),
         )
         val text = commands.joinToString("\n") { execute(root, it.arguments) }
-        assertContains(text, "AlphaTest")
+        assertContains(text, "1/1")
         assertContains(text, "OK")
     }
 
