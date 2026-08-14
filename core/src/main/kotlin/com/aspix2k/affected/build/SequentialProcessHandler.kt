@@ -135,8 +135,10 @@ internal class SequentialProcessHandler(
 
         notifyTextAvailable("\n> ${command.title}\n", ProcessOutputTypes.SYSTEM)
         val handler = runCatching {
+            val arguments = command.arguments.toMutableList()
+            arguments[0] = resolveExecutable(arguments[0])
             OSProcessHandler(
-                GeneralCommandLine(command.arguments)
+                GeneralCommandLine(arguments)
                     .withWorkDirectory(workingDirectory)
                     .withCharset(Charsets.UTF_8)
                     .withEnvironment(command.environment),
