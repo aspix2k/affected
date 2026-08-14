@@ -635,6 +635,29 @@
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/ninja"],
       "gates": [".github/workflows/conformance.yml"]
+    },
+    {
+      "id": "RPROJECT",
+      "implementation": "com.aspix2k.affected.build.RBuildSystem",
+      "ecosystem": "R",
+      "languages": ["R"],
+      "runners": ["testthat::test_dir", "read.dcf"],
+      "selection": ["project"],
+      "selectionProofs": [
+        {
+          "units": ["project"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliRConformanceTest.kt",
+          "marker": "r runs the project test command for the affected root",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        }
+      ],
+      "versions": "R 4.x with testthat; project-level until file selection, renv and R Markdown contracts are proven",
+      "support": "supported",
+      "fixtures": ["conformance/cli-fixtures/r"],
+      "gates": [".github/workflows/conformance.yml"]
     }
   ]
 }
