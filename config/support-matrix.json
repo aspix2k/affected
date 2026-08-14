@@ -580,6 +580,29 @@
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/make"],
       "gates": [".github/workflows/conformance.yml"]
+    },
+    {
+      "id": "NINJA",
+      "implementation": "com.aspix2k.affected.build.NinjaBuildSystem",
+      "ecosystem": "Ninja",
+      "languages": ["C", "C++"],
+      "runners": ["ninja test", "ninja check", "ninja"],
+      "selection": ["project"],
+      "selectionProofs": [
+        {
+          "units": ["project"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliNinjaConformanceTest.kt",
+          "marker": "ninja runs the project test command for the affected root",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        }
+      ],
+      "versions": "Ninja as an execution backend; project-level only, no inferred source graph",
+      "support": "supported",
+      "fixtures": ["conformance/cli-fixtures/ninja"],
+      "gates": [".github/workflows/conformance.yml"]
     }
   ]
 }
