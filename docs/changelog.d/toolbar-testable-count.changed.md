@@ -1,0 +1,1 @@
+- The toolbar count is modules that will run tests. Compile-only affected modules stay in the menu and plan, but no longer inflate the badge.

@@ -1,0 +1,1 @@
+- Plan exact Kotlin Multiplatform Android test tasks (`testAndroidHostTest`, `testAndroid`) instead of a bare `test` that Gradle treats as ambiguous.
