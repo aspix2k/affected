@@ -192,6 +192,26 @@ class KotlinToolchainCommandTest {
     }
 
     @Test
+    fun `an unversioned wrapper keeps the unscoped test command`() {
+        val root = toolchainRoot(version = null)
+
+        assertEquals(
+            listOf(kotlinToolchainWrapper(root), "test"),
+            kotlinToolchainCommands(root, listOf("app:test")).single().arguments,
+        )
+    }
+
+    @Test
+    fun `an unproven toolchain version keeps the unscoped test command`() {
+        val root = toolchainRoot(version = "0.12.0")
+
+        assertEquals(
+            listOf(kotlinToolchainWrapper(root), "test"),
+            kotlinToolchainCommands(root, listOf("app:test")).single().arguments,
+        )
+    }
+
+    @Test
     fun `several production modules keep the unscoped build command`() {
         val root = toolchainRoot()
 
@@ -201,11 +221,12 @@ class KotlinToolchainCommandTest {
         )
     }
 
-    private fun toolchainRoot(): File {
+    private fun toolchainRoot(version: String? = "0.11.0"): File {
         val root = createTempDirectory("toolchain-root").toFile()
         File(root, "module.yaml").writeText("product: jvm/lib")
-        File(root, "kotlin").writeText("#!/bin/sh\n")
-        File(root, "kotlin.bat").writeText("@echo off\n")
+        val pin = version?.let { "kotlin_cli_version=$it\n" }.orEmpty()
+        File(root, "kotlin").writeText("#!/bin/sh\n$pin")
+        File(root, "kotlin.bat").writeText("@echo off\n${version?.let { "set kotlin_cli_version=$it\n" }.orEmpty()}")
         return root
     }
 }
