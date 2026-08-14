@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Stop tracking `AGENTS.md`. Agent-facing process stays in `CONTRIBUTING.md`.
 
+### Changed
+
+- Keep `CONTRIBUTING.md` to building, architecture, conventions and release. Adapter selection rules stay in tests and `SUPPORT.md`.
+
 ### Added
 
 - Keep Ant off JetBrains MPS projects that generate `build.xml` (`.mps`, `*.mpl`, `*.msd`); MPS stays unsupported without a public test CLI.
