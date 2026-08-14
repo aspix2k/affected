@@ -39,6 +39,7 @@ SCRIPT_ONLY_FILES = frozenset(
         "scripts/support_matrix.py",
         "scripts/mcp_capabilities.py",
         "scripts/local_gate.py",
+        "scripts/changelog_fragments.py",
         "config/release-currentness.json",
         "config/support-matrix.json",
         "config/mcp-capabilities.json",

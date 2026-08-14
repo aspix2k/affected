@@ -77,12 +77,14 @@ def check(root: Path = ROOT) -> None:
         "scripts/support_matrix.py --check",
         "scripts.tests.test_mcp_capabilities",
         "scripts/mcp_capabilities.py --check",
+        "scripts.tests.test_changelog_fragments",
         "scripts.tests.test_ci_contracts",
         "scripts.tests.test_ci_scope",
         "scripts.tests.test_docs_layout",
         "scripts.tests.test_fetch_gradle",
         "scripts.tests.test_local_gate",
         "scripts.tests.test_run_gradle",
+        "changelog_fragments.py check",
         "changelog-section.sh",
         "SHELLCHECK_VERSION",
         "ACTIONLINT_VERSION",
@@ -97,6 +99,8 @@ def check(root: Path = ROOT) -> None:
     contributing = read(root / "docs/CONTRIBUTING.md")
     if "core.hooksPath" not in contributing or "scripts/local_gate.py install" not in contributing:
         raise CiContractError("CONTRIBUTING must document hook installation")
+    if "docs/changelog.d" not in contributing or "docs/CHANGELOG.md" not in contributing:
+        raise CiContractError("CONTRIBUTING must tell pull requests to use changelog fragments")
 
     if "buildHealth" not in slice_job(ci, "health"):
         raise CiContractError("buildHealth must remain a required CI job")
