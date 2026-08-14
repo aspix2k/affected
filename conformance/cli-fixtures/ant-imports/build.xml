@@ -1,0 +1,3 @@
+<project name="affected-ant-imports" default="test">
+    <import file="testdefs.xml"/>
+</project>
