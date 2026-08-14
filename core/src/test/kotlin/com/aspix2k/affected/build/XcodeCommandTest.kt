@@ -41,6 +41,19 @@ class XcodeCommandTest {
     }
 
     @Test
+    fun `a single user scheme is selected`() {
+        val root = xcodeRoot()
+        val schemes = File(root, "App.xcodeproj/xcuserdata/aspix.xcuserdatad/xcschemes")
+        schemes.mkdirs()
+        File(schemes, "iosApp.xcscheme").writeText("<Scheme/>")
+
+        assertEquals(
+            listOf("xcodebuild", "test", "-scheme", "iosApp"),
+            xcodeCommands(root, listOf(".:test")).single().arguments,
+        )
+    }
+
+    @Test
     fun `a single shared scheme is selected`() {
         val root = xcodeRoot()
         val schemes = File(root, "App.xcodeproj/xcshareddata/xcschemes")

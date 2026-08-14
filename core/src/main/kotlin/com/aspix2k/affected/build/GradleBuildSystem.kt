@@ -487,16 +487,54 @@ internal fun gradleTestCompileTask(
     available: Set<String> = emptySet(),
     android: Boolean = false,
 ): String {
-    val preferred = when (testTask) {
-        "testDebugUnitTest" -> listOf("compileDebugUnitTestKotlin", "compileAndroidHostTest")
-        "testAndroidHostTest" -> listOf("compileAndroidHostTest", "compileAndroidHostTestKotlin")
-        "testAndroid" -> listOf("compileTestKotlinAndroid", "compileAndroidHostTest", "compileAndroidHostTestKotlin")
-        else -> listOf("compileTestKotlin")
+    if (available.isEmpty()) {
+        val stem = testTask.removePrefix("test")
+        return when {
+            stem.isEmpty() -> "compileTestKotlin"
+            stem.endsWith("UnitTest") -> "compile${stem}Kotlin"
+            else -> "compile$stem"
+        }
     }
-    if (available.isEmpty()) return preferred.first()
-    return preferred.firstOrNull { it in available }
+    val stem = testTask.removePrefix("test").removeSuffix("Test")
+    return existingCompileTask(available, matching = stem, testish = true)
         ?: gradleProductionCompileTask(available, android)
-        ?: preferred.first()
+        ?: existingCompileTask(available, matching = "", testish = false)
+        ?: "compileTestKotlin"
+}
+
+internal fun existingCompileTask(
+    available: Set<String>,
+    matching: String,
+    testish: Boolean,
+): String? {
+    val needle = matching.lowercase()
+    return available.asSequence()
+        .filter(::isCompileCodeTask)
+        .filter { needle.isEmpty() || it.lowercase().contains(needle) }
+        .filter { isTestCompileName(it) == testish }
+        .sortedWith(compareBy(::compileTaskRank, { it }))
+        .firstOrNull()
+}
+
+private fun isCompileCodeTask(name: String): Boolean {
+    if (!name.startsWith("compile")) return false
+    val n = name.lowercase()
+    return "resource" !in n && "lint" !in n && "javares" !in n
+}
+
+private fun isTestCompileName(name: String): Boolean = "test" in name.lowercase()
+
+private fun compileTaskRank(name: String): Int {
+    val n = name.lowercase()
+    return when {
+        n.contains("iossimulator") -> 0
+        n.contains("androidhost") -> 1
+        n.contains("androidmain") -> 2
+        n.contains("debugkotlin") -> 3
+        n.contains("kotlinmetadata") -> 4
+        n == "compiletestkotlin" || n == "compilekotlin" -> 5
+        else -> 10
+    }
 }
 
 internal fun isAndroidInstrumentationSource(path: String): Boolean {

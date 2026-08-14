@@ -72,11 +72,18 @@ internal fun xcodeSchemes(root: File): List<String> {
     root.listFiles().orEmpty()
         .filter { it.isDirectory && XCODE_BUNDLE.containsMatchIn(it.name) }
         .forEach { project ->
-            File(project, "xcshareddata/xcschemes").listFiles().orEmpty()
-                .filter { it.isFile && it.name.endsWith(".xcscheme") }
-                .mapTo(names) { it.name.removeSuffix(".xcscheme") }
+            collectXcodeSchemes(File(project, "xcshareddata/xcschemes"), names)
+            File(project, "xcuserdata").listFiles().orEmpty()
+                .filter { it.isDirectory }
+                .forEach { user -> collectXcodeSchemes(File(user, "xcschemes"), names) }
         }
     return names.toList()
+}
+
+private fun collectXcodeSchemes(directory: File, names: MutableSet<String>) {
+    directory.listFiles().orEmpty()
+        .filter { it.isFile && it.name.endsWith(".xcscheme") }
+        .mapTo(names) { it.name.removeSuffix(".xcscheme") }
 }
 
 private fun xcodeProject(root: File): File? =
