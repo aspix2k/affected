@@ -26,13 +26,16 @@ class PantsBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
         CommandRunner.runBatchAndWait(project, root, pantsCommands(tasks), "Affected Pants")
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { pantsManifest(File(it)) }
+        project.basePath?.let(::File)?.let(::pantsProjectRoot)?.let(::pantsManifest)
 }
 
 internal object PantsTasks {
     const val TEST = "test"
     const val CHECK = "check"
 }
+
+internal fun pantsProjectRoot(base: File): File? =
+    nestedBuildRoot(base) { pantsManifest(it) != null }
 
 internal fun pantsManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null
