@@ -1,1 +1,0 @@
-- Select a lone user Xcode scheme so `xcodebuild test` is not unscoped.
