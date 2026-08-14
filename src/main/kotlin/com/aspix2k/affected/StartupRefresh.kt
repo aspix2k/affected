@@ -6,6 +6,7 @@ import com.intellij.openapi.startup.ProjectActivity
 
 class StartupRefresh : ProjectActivity {
     override suspend fun execute(project: Project) {
+        if (!shouldRefreshOnStartup(remoteFrontendProven())) return
         val state = project.service<AffectedState>()
         state.watchDumbMode()
         state.invalidate()
