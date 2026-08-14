@@ -1,5 +1,6 @@
 package com.aspix2k.affected
 
+import com.intellij.openapi.startup.ProjectActivity
 import org.w3c.dom.Element
 import org.xml.sax.InputSource
 import java.io.File
@@ -158,6 +159,33 @@ class DynamicPluginDescriptorsTest {
     }
 
     @Test
+    fun `a blocking startupActivity fails closed`() {
+        val problems = DynamicPluginDescriptors.problems(
+            mapOf(
+                "plugin.xml" to """
+                    <idea-plugin>
+                      <extensions defaultExtensionNs="com.intellij">
+                        <startupActivity implementation="x.Blocking"/>
+                      </extensions>
+                    </idea-plugin>
+                """.trimIndent(),
+            ),
+        )
+        assertTrue(problems.any { it.contains("startupActivity") }, problems.toString())
+    }
+
+    @Test
+    fun `the plugin starts analysis through one ProjectActivity`() {
+        val xml = DynamicPluginDescriptors.repository().getValue("META-INF/plugin.xml")
+        val activities = Regex("""<postStartupActivity\s+implementation="([^"]+)"""").findAll(xml)
+            .map { it.groupValues[1] }
+            .toList()
+        assertEquals(listOf("com.aspix2k.affected.StartupRefresh"), activities)
+        assertTrue(ProjectActivity::class.java.isAssignableFrom(StartupRefresh::class.java))
+        assertEquals(emptyList(), DynamicPluginDescriptors.problems(DynamicPluginDescriptors.repository()))
+    }
+
+    @Test
     fun `the repository descriptors satisfy the DevKit dynamic rules`() {
         val problems = DynamicPluginDescriptors.problems(DynamicPluginDescriptors.repository())
         assertEquals(emptyList(), problems)
@@ -195,12 +223,18 @@ object DynamicPluginDescriptors {
     private fun problemsIn(name: String, root: Element, descriptors: Set<String>): List<String> =
         restartProblems(name, root) +
             componentProblems(name, root) +
+            blockingStartupProblems(name, root) +
             groupProblems(name, root) +
             extensionPointProblems(name, root) +
             optionalConfigProblems(name, root, descriptors) +
             contentModuleProblems(name, root, descriptors) +
             optionalLoadingProblems(name, root) +
             requiredConfigProblems(name, root)
+
+    private fun blockingStartupProblems(name: String, root: Element): List<String> =
+        elements(root, "startupActivity").map {
+            "$name: <startupActivity> blocks startup; use postStartupActivity ProjectActivity"
+        }
 
     private fun restartProblems(name: String, root: Element): List<String> =
         if (root.getAttribute("require-restart") == "true") {
