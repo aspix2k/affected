@@ -434,6 +434,7 @@ tasks.named<PitestTask>("pitest") {
 }
 
 changelog {
+    path = "docs/CHANGELOG.md"
     repositoryUrl = "https://github.com/aspix2k/affected"
 }
 

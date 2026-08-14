@@ -281,7 +281,7 @@ class SupportMatrixTest(unittest.TestCase):
 
             support_matrix.write(root)
 
-            support = (root / "SUPPORT.md").read_text()
+            support = (root / "docs/SUPPORT.md").read_text()
             readme = (root / "README.md").read_text()
             self.assertIn("## Planned coverage", support)
             self.assertIn("[Issue #120]", support)
@@ -293,7 +293,7 @@ class SupportMatrixTest(unittest.TestCase):
         with TemporaryDirectory() as directory:
             root = Path(directory)
             self.write_repository(root)
-            self.write(root / "SUPPORT.md", "stale\n")
+            self.write(root / "docs/SUPPORT.md", "stale\n")
 
             with self.assertRaisesRegex(
                 support_matrix.SupportMatrixError, "SUPPORT.md"
@@ -404,7 +404,7 @@ class SupportMatrixTest(unittest.TestCase):
             "config/support-matrix.json",
             "scripts/support_matrix.py",
             "scripts/tests/test_support_matrix.py",
-            "SUPPORT.md",
+            "docs/SUPPORT.md",
             "src/main/resources/META-INF/plugin.xml",
         ):
             self.assertIn(f'- "{path}"', workflow)
@@ -490,7 +490,7 @@ class SupportMatrixTest(unittest.TestCase):
             f"{support_matrix.SUMMARY_START}\n{support_matrix.readme_summary(matrix)}\n"
             f"{support_matrix.SUMMARY_END}\n",
         )
-        self.write(root / "SUPPORT.md", support_matrix.render(matrix))
+        self.write(root / "docs/SUPPORT.md", support_matrix.render(matrix))
 
     @staticmethod
     def write(path: Path, content: str) -> None:

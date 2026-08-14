@@ -3,4 +3,4 @@
 ## How it was verified
 
 List the commands, environments and observed results. See
-[CONTRIBUTING.md](../CONTRIBUTING.md#building) for the current gates.
+[CONTRIBUTING.md](../docs/CONTRIBUTING.md#building) for the current gates.

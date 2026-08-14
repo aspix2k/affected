@@ -104,7 +104,7 @@ jobs:
 
       - name: Test pull-request CI contracts
         run: |
-          python3 -m unittest scripts.tests.test_ci_contracts scripts.tests.test_ci_scope scripts.tests.test_fetch_gradle scripts.tests.test_local_gate scripts.tests.test_run_gradle
+          python3 -m unittest scripts.tests.test_ci_contracts scripts.tests.test_ci_scope scripts.tests.test_docs_layout scripts.tests.test_fetch_gradle scripts.tests.test_local_gate scripts.tests.test_run_gradle
           python3 scripts/ci_contracts.py --check
 
       - name: Test the PIT survivor gate
@@ -118,7 +118,7 @@ jobs:
           match = re.search(r"(?m)^version = \"([^\"]+)\"", text)
           sys.exit("version is missing from build.gradle.kts") if match is None else print(match.group(1))')
           .github/changelog-section.sh "$version" > /dev/null \
-            || { echo "::error file=CHANGELOG.md::Add a section for $version before bumping the version."; exit 1; }
+            || { echo "::error file=docs/CHANGELOG.md::Add a section for $version before bumping the version."; exit 1; }
 
   plugin:
     name: Plugin verification
@@ -150,7 +150,7 @@ jobs:
           match = re.search(r"(?m)^version = \"([^\"]+)\"", text)
           sys.exit("version is missing from build.gradle.kts") if match is None else print(match.group(1))')
           .github/changelog-section.sh "$version" > /dev/null \
-            || { echo "::error file=CHANGELOG.md::Add a section for $version before bumping the version."; exit 1; }
+            || { echo "::error file=docs/CHANGELOG.md::Add a section for $version before bumping the version."; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Analyze, test, package and verify

@@ -79,6 +79,7 @@ def check(root: Path = ROOT) -> None:
         "scripts/mcp_capabilities.py --check",
         "scripts.tests.test_ci_contracts",
         "scripts.tests.test_ci_scope",
+        "scripts.tests.test_docs_layout",
         "scripts.tests.test_fetch_gradle",
         "scripts.tests.test_local_gate",
         "scripts.tests.test_run_gradle",
@@ -93,7 +94,7 @@ def check(root: Path = ROOT) -> None:
         raise CiContractError("pre-commit must run the local commit gate")
     if "scripts/local_gate.py push" not in read(root / ".githooks/pre-push"):
         raise CiContractError("pre-push must run the local push gate")
-    contributing = read(root / "CONTRIBUTING.md")
+    contributing = read(root / "docs/CONTRIBUTING.md")
     if "core.hooksPath" not in contributing or "scripts/local_gate.py install" not in contributing:
         raise CiContractError("CONTRIBUTING must document hook installation")
 
@@ -174,8 +175,14 @@ def check_scope(root: Path, ci: str, codeql: str) -> None:
         raise CiContractError("CodeQL pull-request must keep its check name and skip only the analyze")
     if "scripts/ci_scope.py" not in review or "steps.scope.outputs.dependencies" not in review:
         raise CiContractError("Dependency review must keep its check name and skip only the compare")
+    if "dependency-graph/compare/" in review:
+        raise CiContractError(
+            "PR review must not call the compare API; submit never publishes PR-head snapshots"
+        )
     if "scripts/ci_scope.py" not in graph or "needs.scope.outputs.dependencies" not in graph:
         raise CiContractError("Dependency graph generate must follow ci_scope")
+    if "Require a complete dependency snapshot" not in graph:
+        raise CiContractError("Generate must require a complete snapshot artifact")
 
 
 def has_on_block(workflow: str) -> str:
@@ -200,8 +207,6 @@ def check_merge_queue(root: Path, ci: str, codeql: str) -> None:
         raise CiContractError("CodeQL pull-request must analyze merge_group")
     if "github.event_name != 'pull_request'" in codeql:
         raise CiContractError("CodeQL main must not run on merge_group")
-    if "github.event.merge_group.base_sha" not in review or "github.event.merge_group.head_sha" not in review:
-        raise CiContractError("Dependency review must compare merge_group SHAs")
     if "gh pr merge" not in queue or "--squash" not in queue:
         raise CiContractError("queue.yml must enable squash auto-merge")
     if "--auto" not in queue or re.search(r"gh pr merge(?![^\n]*--auto)", queue):

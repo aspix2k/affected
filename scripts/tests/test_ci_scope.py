@@ -24,7 +24,7 @@ class CiScopeTest(unittest.TestCase):
             ci_scope.scope_for(
                 [
                     "AGENTS.md",
-                    "CHANGELOG.md",
+                    "docs/CHANGELOG.md",
                     "docs/superpowers/plans/x.md",
                     ".github/ISSUE_TEMPLATE/bug.md",
                     "scripts/ci_scope.py",

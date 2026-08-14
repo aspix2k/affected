@@ -57,8 +57,8 @@ class CiContractsTest(unittest.TestCase):
             path = root / ".github/workflows/conformance.yml"
             path.write_text(
                 path.read_text(encoding="utf-8").replace(
-                    '- "SUPPORT.md"\n',
-                    '- "SUPPORT.md"\n      - "README.md"\n',
+                    '- "docs/SUPPORT.md"\n',
+                    '- "docs/SUPPORT.md"\n      - "README.md"\n',
                     1,
                 ),
                 encoding="utf-8",
@@ -122,6 +122,37 @@ class CiContractsTest(unittest.TestCase):
                 )
                 with self.assertRaisesRegex(ci_contracts.CiContractError, "Dependabot version-update pull requests"):
                     ci_contracts.check(root)
+
+    def test_review_must_not_call_the_compare_api(self) -> None:
+        """Submit never publishes PR-head snapshots, so compare cannot be complete."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/dependency-review.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8")
+                + "\n      - run: curl $GITHUB_API_URL/repos/x/y/dependency-graph/compare/a...b\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "compare API"):
+                ci_contracts.check(root)
+
+    def test_generate_must_require_a_complete_snapshot(self) -> None:
+        """A PR compare cannot prove the graph; generate must keep the artifact check."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/dependency-graph.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "Require a complete dependency snapshot",
+                    "Validate dependency snapshot",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "complete snapshot"):
+                ci_contracts.check(root)
 
     def test_submit_must_not_run_for_pull_request_graphs(self) -> None:
         """A PR whose generate job is skipped still concludes success and emails on submit failure."""
@@ -218,7 +249,7 @@ class CiContractsTest(unittest.TestCase):
             "scripts/run_gradle.sh",
             ".githooks/pre-commit",
             ".githooks/pre-push",
-            "CONTRIBUTING.md",
+            "docs/CONTRIBUTING.md",
             "settings.gradle.kts",
             "mcp/build.gradle.kts",
             "build.gradle.kts",
