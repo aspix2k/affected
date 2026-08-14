@@ -452,6 +452,21 @@ internal fun gradleVerificationTasks(
     "test" to "compileTestKotlin"
 }
 
+internal fun isAndroidInstrumentationSource(path: String): Boolean {
+    val segments = path.replace('\\', '/').split('/')
+    return segments.any { it == "androidTest" || it == "androidInstrumentedTest" }
+}
+
+internal fun gradleInstrumentationTestTask(available: Set<String>): String? =
+    listOf("connectedDebugAndroidTest", "connectedAndroidTest").firstOrNull { it in available }
+
+internal fun selectAndroidTestTask(
+    unitTestTask: String,
+    available: Set<String>,
+    instrumentationOnly: Boolean,
+): String =
+    if (instrumentationOnly) gradleInstrumentationTestTask(available) ?: unitTestTask else unitTestTask
+
 internal fun gradleKmpAdditionalTestTasks(available: Set<String>, primary: String): Set<String> =
     KMP_TEST_TASKS.filterTo(LinkedHashSet()) { it in available && it != primary }
 
