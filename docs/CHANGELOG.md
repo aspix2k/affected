@@ -34,7 +34,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Fail descriptor checks when the plugin registers a blocking `<startupActivity>`; startup stays on one `ProjectActivity`.
 - Fail Scripts CI when a tracked markdown page points at a missing repository path, so docs moves cannot leave stale relative links.
 - Skip startup analysis, VFS refresh, external-system invalidation and external execute-task claims on a proven JetBrains Client frontend so analysis stays on the IDE backend; Gateway install and update stay unclaimed.
 - Detect local Atlas roots from `atlas.hcl` and run one `atlas migrate validate` session; database URLs, `dev` databases, cloud directories and interpolated manifests stay off this adapter. Native atlas execution and plain SQL files stay unclaimed.
