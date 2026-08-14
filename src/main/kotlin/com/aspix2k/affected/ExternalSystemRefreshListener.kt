@@ -17,6 +17,11 @@ class ExternalSystemRefreshListener : ExternalSystemTaskNotificationListener {
 internal fun externalTaskRefreshesModel(type: ExternalSystemTaskType): Boolean =
     type == ExternalSystemTaskType.RESOLVE_PROJECT || type == ExternalSystemTaskType.REFRESH_TASKS_LIST
 
-internal fun invalidateAfterExternalTask(project: Project?, invalidate: (Project) -> Unit) {
+internal fun invalidateAfterExternalTask(
+    project: Project?,
+    frontend: Boolean = remoteFrontendProven(),
+    invalidate: (Project) -> Unit,
+) {
+    if (frontend) return
     if (project != null && !project.isDisposed) invalidate(project)
 }
