@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.6.0] - 2026-08-14
+
+### Added
+
+- A lone first-level `backend/` Cargo project is now the Cargo root when the repository base has no marker.
+
 ## [3.5.0] - 2026-08-14
 
 ### Added
@@ -423,7 +429,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.5.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.6.0...HEAD
+[3.6.0]: https://github.com/aspix2k/affected/compare/v3.5.0...v3.6.0
 [3.5.0]: https://github.com/aspix2k/affected/compare/v3.4.1...v3.5.0
 [3.4.1]: https://github.com/aspix2k/affected/compare/v3.4.0...v3.4.1
 [3.4.0]: https://github.com/aspix2k/affected/compare/v3.3.0...v3.4.0
