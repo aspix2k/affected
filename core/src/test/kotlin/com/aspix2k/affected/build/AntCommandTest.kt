@@ -185,6 +185,57 @@ class AntCommandTest {
     }
 
     @Test
+    fun `a generate target runs before test when test does not depend on it`() {
+        val root = antRoot(
+            """
+            <project>
+              <target name="generate"/>
+              <target name="test"/>
+            </project>
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            listOf(listOf("ant", "generate"), listOf("ant", "test")),
+            antCommands(root, listOf(".:test")).map(CliCommand::arguments),
+        )
+    }
+
+    @Test
+    fun `a test that depends on generate does not prepend generate`() {
+        val root = antRoot(
+            """
+            <project>
+              <target name="generate"/>
+              <target name="test" depends="generate"/>
+            </project>
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            listOf(listOf("ant", "test")),
+            antCommands(root, listOf(".:test")).map(CliCommand::arguments),
+        )
+    }
+
+    @Test
+    fun `an unproved depends keeps generate before test`() {
+        val root = antRoot(
+            """
+            <project>
+              <target name="generate"/>
+              <target name="test" depends="\${'$'}{prep}"/>
+            </project>
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            listOf(listOf("ant", "generate"), listOf("ant", "test")),
+            antCommands(root, listOf(".:test")).map(CliCommand::arguments),
+        )
+    }
+
+    @Test
     fun `an optional missing import does not invent tests`() {
         val root = antRoot(
             "<project><import file=\"missing.xml\" optional=\"true\"/><target name=\"compile\"/></project>",
