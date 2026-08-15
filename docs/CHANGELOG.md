@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.8.1] - 2026-08-15
+
+### Changed
+
+- Apply the configured failure strategy to native Gradle and Maven runs without weakening failed-run reporting or collector promotion.
+
 ## [3.8.0] - 2026-08-15
 
 ### Added
@@ -456,7 +462,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.8.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.8.1...HEAD
+[3.8.1]: https://github.com/aspix2k/affected/compare/v3.8.0...v3.8.1
 [3.8.0]: https://github.com/aspix2k/affected/compare/v3.7.0...v3.8.0
 [3.7.0]: https://github.com/aspix2k/affected/compare/v3.6.2...v3.7.0
 [3.6.2]: https://github.com/aspix2k/affected/compare/v3.6.1...v3.6.2
