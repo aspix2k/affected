@@ -82,8 +82,11 @@ their ownership while compatible tasks can run through the composite root.
 
 `TaskPlanner` makes one group per build system and execution root. Gradle and
 Maven use one native IDE invocation. CLI adapters put their command sequence
-behind one process handler, so one root is one Run tab. Commands stop on
-failure unless the native contract disables fail-fast. Independent roots stay
+behind one process handler, so one root is one Run tab. With Stop after first
+failure disabled, CLI sequences continue, Gradle adds `--continue`, and Maven
+adds `--fail-at-end`. Stop mode uses Gradle's native default and adds Maven
+`--fail-fast`. A project-level `.mvn/maven.config` `--fail-fast` remains native
+Maven policy and can override the full-plan behavior. Independent roots stay
 separate. A Gradle module without test sources is compiled, not dropped, so
 Kotlin Multiplatform libraries do not become an empty plan.
 

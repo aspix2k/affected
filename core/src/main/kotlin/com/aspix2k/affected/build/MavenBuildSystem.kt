@@ -1,6 +1,7 @@
 package com.aspix2k.affected.build
 
 import com.aspix2k.affected.AffectedRunSessions
+import com.aspix2k.affected.AffectedSettings
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.runners.ProgramRunner
@@ -97,14 +98,22 @@ class MavenBuildSystem : SuspendingBuildSystem {
 
     override fun run(project: Project, root: String, tasks: List<String>) {
         if (project.isDisposed) return
-        MavenRunConfigurationType.runConfiguration(project, parameters(root, tasks), null)
+        val arguments = mavenInvocationArguments(
+            emptyList(),
+            AffectedSettings.getInstance().stopAfterFirstFailure,
+        )
+        MavenRunConfigurationType.runConfiguration(project, parameters(root, tasks, arguments), null)
     }
 
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean {
         if (project.isDisposed) return false
 
         val collector = withContext(Dispatchers.IO) { collectorRun(project) }
-        val parameters = parameters(root, tasks, collector?.arguments.orEmpty())
+        val arguments = mavenInvocationArguments(
+            collector?.arguments.orEmpty(),
+            AffectedSettings.getInstance().stopAfterFirstFailure,
+        )
+        val parameters = parameters(root, tasks, arguments)
         return suspendCancellableCoroutine { continuation ->
             val completed = AtomicBoolean(false)
 
