@@ -24,13 +24,16 @@ class FlutterBuildSystem : SuspendingBuildSystem {
         CommandRunner.runBatchAndWait(project, root, flutterCommands(File(root), tasks), "Affected Flutter")
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { flutterManifest(File(it)) }
+        project.basePath?.let(::File)?.let(::flutterProjectRoot)?.let(::flutterManifest)
 }
 
 internal object FlutterTasks {
     const val TEST = "test"
     const val ANALYZE = "analyze"
 }
+
+internal fun flutterProjectRoot(base: File): File? =
+    nestedBuildRoot(base) { flutterManifest(it) != null }
 
 internal fun flutterManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null

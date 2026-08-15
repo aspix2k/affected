@@ -7,6 +7,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class CliFlutterConformanceTest {
@@ -22,13 +23,26 @@ class CliFlutterConformanceTest {
         assertTrue("All tests passed" in text || "1 test passed" in text, text)
     }
 
-    private fun fixture(name: String, block: (File) -> Unit) {
+    @Test
+    fun `flutter runs from a single first-level nested app`() = fixture("flutter", nested = true) { root ->
+        val nested = assertNotNull(flutterProjectRoot(root))
+        assertEquals(File(root, "app").canonicalFile, nested.canonicalFile)
+        val module = flutterRootModule(nested)
+        val command = flutterCommands(listOf("${module.executionId}:${module.testTask}")).single()
+        resolve(nested)
+        val text = execute(nested, command.arguments)
+        assertContains(text, "AlphaTest")
+        assertTrue("All tests passed" in text || "1 test passed" in text, text)
+    }
+
+    private fun fixture(name: String, nested: Boolean = false, block: (File) -> Unit) {
         assumeTrue(System.getProperty("affected.cliConformance") == "true")
         val source = File(fixtureRoot(), name)
         assertTrue(source.isDirectory, "Missing CLI conformance fixture: $source")
         val target = createTempDirectory("affected-cli-$name").toFile()
         try {
-            assertTrue(source.copyRecursively(target, overwrite = true), "Could not copy $source")
+            val destination = if (nested) File(target, "app") else target
+            assertTrue(source.copyRecursively(destination, overwrite = true), "Could not copy $source")
             block(target)
         } finally {
             target.deleteRecursively()

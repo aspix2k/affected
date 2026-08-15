@@ -84,7 +84,9 @@ internal interface ChangeAwareSuspendingBuildSystem : SuspendingBuildSystem {
 internal fun nestedBuildRoot(base: File, hasMarker: (File) -> Boolean): File? {
     if (hasMarker(base)) return base
     val children = base.listFiles().orEmpty().filter { child ->
-        child.isDirectory && child.canRead() && child.name !in NESTED_ROOT_SKIP
+        Files.isDirectory(child.toPath(), LinkOption.NOFOLLOW_LINKS) &&
+            child.canRead() &&
+            child.name !in NESTED_ROOT_SKIP
     }
     return children.singleOrNull(hasMarker)
 }
