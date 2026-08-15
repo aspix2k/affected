@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.10.0] - 2026-08-15
+
+### Added
+
+- A lone first-level Dart package is now the Dart root when the repository base has no marker.
+
 ## [3.9.0] - 2026-08-15
 
 ### Added
@@ -473,7 +479,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.9.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.10.0...HEAD
+[3.10.0]: https://github.com/aspix2k/affected/compare/v3.9.0...v3.10.0
 [3.9.0]: https://github.com/aspix2k/affected/compare/v3.8.1...v3.9.0
 [3.8.1]: https://github.com/aspix2k/affected/compare/v3.8.0...v3.8.1
 [3.8.0]: https://github.com/aspix2k/affected/compare/v3.7.0...v3.8.0
