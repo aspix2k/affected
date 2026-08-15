@@ -54,7 +54,11 @@ are generated from it: `python3 scripts/support_matrix.py --write`.
 
 `config/release-currentness.json` governs direct pins. Compatibility entries
 need an exact value, a reason and repository-owned evidence. Update the direct
-manifest and regenerate its lock; do not inventory transitive versions.
+manifest and regenerate its lock; do not inventory transitive versions. A
+temporary `security-preview` entry additionally binds the exact official
+preview, the first patched preview and the stable replacement. The gate rejects
+an unpublished or superseded preview and expires the exception when that stable
+release appears.
 
 Every IDE the build or verifier unpacks lives under `~/.gradle/caches`. Old
 transforms are never removed; deleting that cache is safe and it rebuilds.

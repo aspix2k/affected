@@ -1,0 +1,1 @@
+- Build Affected with the patched Kotlin 2.4.20 release line, closing CVE-2026-53914 in the project build cache.

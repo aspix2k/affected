@@ -60,6 +60,8 @@ UNSTABLE = re.compile(
 VERSION = re.compile(r"^[vV]?(\d+(?:\.\d+)+(?:[-+][0-9A-Za-z.-]+)?)$")
 SHA = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+SECURITY_PREVIEW = re.compile(r"^(\d+)\.(\d+)\.(\d+)-(Alpha|Beta|RC)([1-9]\d*)?$")
+STABLE_RELEASE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 
 
 class CurrentnessError(RuntimeError):
@@ -214,6 +216,25 @@ def newest(values: list[str], series: str | None = None) -> str:
     if not stable:
         raise CurrentnessError(f"Official source returned no stable releases for series {series or 'latest'}")
     return max(stable, key=version_key)
+
+
+def security_preview_key(value: str) -> tuple[int, int, int, int, int]:
+    """Order one strict Alpha, Beta, or RC release without treating it as stable."""
+    match = SECURITY_PREVIEW.fullmatch(value)
+    if match is None or (match.group(4) != "RC" and match.group(5) is None):
+        raise CurrentnessError(f"Expected an ordered security preview version, found {value!r}")
+    major, minor, patch = (int(match.group(index)) for index in range(1, 4))
+    stage = {"Alpha": 0, "Beta": 1, "RC": 2}[match.group(4)]
+    sequence = int(match.group(5) or "1")
+    return major, minor, patch, stage, sequence
+
+
+def stable_release_key(value: str) -> tuple[int, int, int]:
+    """Parse one strict major.minor.patch stable replacement."""
+    match = STABLE_RELEASE.fullmatch(value)
+    if match is None:
+        raise CurrentnessError(f"Expected a stable replacement version, found {value!r}")
+    return tuple(int(match.group(index)) for index in range(1, 4))
 
 
 def local_version(local: dict[str, Any]) -> tuple[str, str | None]:
@@ -384,8 +405,12 @@ def local_version(local: dict[str, Any]) -> tuple[str, str | None]:
     raise CurrentnessError(f"Unknown local extractor: {kind}")
 
 
-def metadata_versions(transport: Transport, base: str, name: str) -> list[str]:
-    """Read stable candidates from Maven-compatible metadata."""
+def metadata_version_state(
+    transport: Transport,
+    base: str,
+    name: str,
+) -> tuple[list[str], tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]]:
+    """Read bounded Maven versions plus the declared current-version headers."""
     group, artifact = name.split(":", 1)
     path = f"{group.replace('.', '/')}/{artifact}"
     url = f"{base}/{path}/maven-metadata.xml"
@@ -393,7 +418,99 @@ def metadata_versions(transport: Transport, base: str, name: str) -> list[str]:
         root = ET.fromstring(transport.read(url))
     except ET.ParseError as error:
         raise CurrentnessError(f"Invalid Maven metadata for {name}: {error}") from error
-    return [node.text or "" for node in root.findall("./versioning/versions/version")]
+    versions = [node.text or "" for node in root.findall("./versioning/versions/version")]
+    header_groups = (
+        tuple(node.text or "" for node in root.findall("./version")),
+        tuple(node.text or "" for node in root.findall("./versioning/latest")),
+        tuple(node.text or "" for node in root.findall("./versioning/release")),
+    )
+    return versions, header_groups
+
+
+def metadata_versions(transport: Transport, base: str, name: str) -> list[str]:
+    """Read bounded version candidates from Maven-compatible metadata."""
+    return metadata_version_state(transport, base, name)[0]
+
+
+def validate_security_preview(
+    entry: dict[str, Any],
+    local: str,
+    source: dict[str, Any],
+    transport: Transport,
+) -> str:
+    """Validate a temporary patched preview and expire it at a stable replacement."""
+    expected = entry.get("expected")
+    minimum = entry.get("minimumPatched")
+    replacement = entry.get("stableReplacement")
+    local_config = entry.get("local")
+    if (
+        type(expected) is not str
+        or type(minimum) is not str
+        or type(replacement) is not str
+        or not isinstance(local_config, dict)
+        or source.get("type") != "gradle-plugin"
+        or source.get("name") != local_config.get("name")
+    ):
+        raise CurrentnessError("Security preview policy has invalid version or source metadata")
+    expected_key = security_preview_key(expected)
+    minimum_key = security_preview_key(minimum)
+    replacement_line = stable_release_key(replacement)
+    replacement_order = version_key(replacement)
+    if expected_key[:3] != replacement_line or minimum_key[:3] != replacement_line:
+        raise CurrentnessError("Security preview policy versions must share one stable release line")
+    if expected_key < minimum_key:
+        raise CurrentnessError(f"Security preview {expected} is below patched minimum {minimum}")
+    if local != expected:
+        raise CurrentnessError(f"Security preview pin drifted: local {local}, approved {expected}")
+
+    name = str(source.get("name"))
+    versions, header_groups = metadata_version_state(
+        transport,
+        "https://plugins.gradle.org/m2",
+        f"{name}:{name}.gradle.plugin",
+    )
+    if any(len(group) != 1 for group in header_groups):
+        raise CurrentnessError("Official security preview metadata has missing or duplicate headers")
+    headers = tuple(group[0] for group in header_groups)
+    if (
+        not versions
+        or len(versions) > 10_000
+        or len(versions) != len(set(versions))
+        or any(not version or version.strip() != version for version in versions)
+    ):
+        raise CurrentnessError("Official security preview metadata is empty, too large, or ambiguous")
+    if versions.count(expected) != 1 or versions.count(minimum) != 1:
+        raise CurrentnessError("Expected and minimum security previews must be officially published once")
+
+    stable = []
+    for version in (*versions, *headers):
+        try:
+            stable.append(normalize_version(version))
+        except CurrentnessError:
+            pass
+    if any(version_key(version) >= replacement_order for version in stable):
+        raise CurrentnessError(f"Security preview expired because stable {replacement} or newer is published")
+    if (
+        any(not header or header.strip() != header for header in headers)
+        or len(set(headers)) != 1
+        or headers[0] != expected
+        or headers[0] not in versions
+    ):
+        raise CurrentnessError("Official security preview headers contradict the published version list")
+
+    prefix = f"{replacement}-"
+    previews: list[tuple[tuple[int, int, int, int, int], str]] = []
+    for version in versions:
+        if not version.startswith(prefix):
+            continue
+        key = security_preview_key(version)
+        previews.append((key, version))
+    if not previews or len({key for key, _ in previews}) != len(previews):
+        raise CurrentnessError("Official security previews have ambiguous ordering")
+    newest_patched = max((item for item in previews if item[0] >= minimum_key), default=None)
+    if newest_patched is None or newest_patched[1] != expected:
+        raise CurrentnessError(f"Security preview {expected} is not the newest patched preview")
+    return f"{entry['id']}: {local} (security preview until stable {replacement})"
 
 
 def is_transient_metadata_error(error: CurrentnessError) -> bool:
@@ -655,13 +772,16 @@ def validate_entry(entry: dict[str, Any], transport: Transport) -> str:
     identifier = str(entry.get("id", ""))
     if not re.fullmatch(r"[a-z0-9][a-z0-9.-]*", identifier):
         raise CurrentnessError(f"Invalid currentness entry id: {identifier!r}")
-    local, local_sha = local_version(entry.get("local", {}))
+    local_config = entry.get("local")
+    if not isinstance(local_config, dict):
+        raise CurrentnessError(f"Currentness entry {identifier} has invalid local metadata")
+    local, local_sha = local_version(local_config)
     policy = entry.get("policy")
-    if policy not in {"latest", "series", "compatibility", "branch"}:
+    if policy not in {"latest", "series", "compatibility", "branch", "security-preview"}:
         raise CurrentnessError(f"Currentness entry {identifier} has an invalid policy: {policy!r}")
     if policy == "series" and not isinstance(entry.get("series"), str):
         raise CurrentnessError(f"Series pin {identifier} lacks a declared series")
-    if policy in {"compatibility", "series"}:
+    if policy in {"compatibility", "series", "security-preview"}:
         reason = entry.get("reason")
         evidence = entry.get("evidence")
         if not isinstance(reason, str) or len(reason.strip()) < 20 or not isinstance(evidence, list) or not evidence:
@@ -678,6 +798,8 @@ def validate_entry(entry: dict[str, Any], transport: Transport) -> str:
     source = entry.get("source")
     if not isinstance(source, dict):
         raise CurrentnessError(f"Currentness entry {identifier} has no official source")
+    if policy == "security-preview":
+        return validate_security_preview(entry, local, source, transport)
     expected, expected_shas = remote_version(source, str(policy), entry.get("series"), transport)
     if policy == "branch":
         local_shas = set(local_sha.split(",")) if local_sha else set()
