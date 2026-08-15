@@ -1,6 +1,8 @@
 package com.aspix2k.affected.build
 
+import org.junit.Assume.assumeTrue
 import java.io.File
+import java.nio.file.Files
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -52,6 +54,25 @@ class NestedBuildRootTest {
         val base = createTempDirectory("nested-ignored").toFile()
         File(base, "node_modules").mkdirs()
         File(base, "node_modules/CMakeLists.txt").writeText("")
+
+        assertNull(nestedBuildRoot(base, ::hasCMakeLists))
+    }
+
+    @Test
+    fun `a symlinked first-level marker directory is not a root`() {
+        val base = createTempDirectory("nested-link-base").toFile()
+        val external = createTempDirectory("nested-link-external").toFile()
+        File(external, "CMakeLists.txt").writeText("")
+        assumeTrue(runCatching { Files.createSymbolicLink(File(base, "cpp").toPath(), external.toPath()) }.isSuccess)
+
+        assertNull(nestedBuildRoot(base, ::hasCMakeLists))
+    }
+
+    @Test
+    fun `a dangling first-level directory symlink is not a root`() {
+        val base = createTempDirectory("nested-dangling-base").toFile()
+        val target = File(base, "missing")
+        assumeTrue(runCatching { Files.createSymbolicLink(File(base, "cpp").toPath(), target.toPath()) }.isSuccess)
 
         assertNull(nestedBuildRoot(base, ::hasCMakeLists))
     }
