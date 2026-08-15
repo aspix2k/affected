@@ -3,8 +3,11 @@ package com.aspix2k.affected
 import com.aspix2k.affected.build.BuildSystems
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.ProjectManager
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
+import com.intellij.openapi.vfs.newvfs.events.VFileMoveEvent
+import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
 import java.nio.file.Path
 
 class ChangeListener : BulkFileListener {
@@ -13,20 +16,32 @@ class ChangeListener : BulkFileListener {
         val extensions = BuildSystems.sourceExtensions()
         val names = BuildSystems.sourceFileNames()
         val frontend = remoteFrontendProven()
-        val paths = events.map { it.path }
+        val paths = affectedVfsPaths(events)
         val sourceChanged = shouldRefreshFromVfs(frontend, paths, extensions, names)
 
         for (project in ProjectManager.getInstance().openProjects) {
             if (!project.isDisposed) {
-                val allFileChanged = project.basePath?.let { root ->
-                    BuildSystems.includesAllFileChanges(project) &&
-                        shouldRefreshAllFilesForProject(frontend, root, paths)
+                val allFileChanged = !sourceChanged && project.basePath?.let { root ->
+                    shouldRefreshAllFilesForProject(frontend, root, paths) &&
+                        BuildSystems.includesAllFileChanges(project)
                 } == true
                 if (sourceChanged || allFileChanged) project.service<AffectedState>().invalidate()
             }
         }
     }
 }
+
+internal fun affectedVfsPaths(events: List<VFileEvent>): List<String> = events.flatMap { event ->
+    when (event) {
+        is VFileMoveEvent -> listOf(event.oldPath, event.newPath)
+        is VFilePropertyChangeEvent -> if (event.propertyName == VirtualFile.PROP_NAME) {
+            listOf(event.oldPath, event.newPath)
+        } else {
+            listOf(event.path)
+        }
+        else -> listOf(event.path)
+    }
+}.distinct()
 
 internal fun remoteFrontendProven(
     platformPrefix: String? = System.getProperty("idea.platform.prefix"),
@@ -59,9 +74,10 @@ internal fun shouldRefreshAllFilesForProject(
     val root = Path.of(projectRoot).toAbsolutePath().normalize()
     paths.any { raw ->
         val candidate = Path.of(raw).toAbsolutePath().normalize()
-        candidate != root && candidate.startsWith(root) &&
-            !ignoredPath(raw.replace('\\', '/')) &&
-            !isProjectDocumentation(candidate.fileName.toString())
+        if (candidate == root || !candidate.startsWith(root)) return@any false
+        val relative = root.relativize(candidate).toString().replace('\\', '/')
+        !ignoredPath("/$relative") &&
+            !isProjectDocumentation(relative)
     }
 }.getOrDefault(false)
 
