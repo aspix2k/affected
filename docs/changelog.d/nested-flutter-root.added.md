@@ -1,1 +1,0 @@
-- A lone first-level Flutter package is now the Flutter root when the repository base has no marker.
