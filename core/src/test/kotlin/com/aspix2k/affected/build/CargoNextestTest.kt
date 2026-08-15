@@ -351,6 +351,37 @@ class CargoNextestTest {
     }
 
     @Test
+    fun `global failure strategy overrides only snapshot fail fast`() {
+        val strict = cargoNextestTask(
+            CargoNextestPlan(CargoNextestMode.PACKAGES, "strict", "0.9.143", true),
+        )
+        val relaxed = cargoNextestTask(
+            CargoNextestPlan(CargoNextestMode.PACKAGES, "ci", "0.9.143", false),
+        )
+
+        assertEquals(
+            """
+            nextest-version = { required = "0.9.143" }
+
+            [profile.strict]
+            fail-fast = false
+
+            """.trimIndent(),
+            requireNotNull(cargoNextestSnapshot(strict, failFastOverride = false)).readText(),
+        )
+        assertEquals(
+            """
+            nextest-version = { required = "0.9.143" }
+
+            [profile.ci]
+            fail-fast = true
+
+            """.trimIndent(),
+            requireNotNull(cargoNextestSnapshot(relaxed, failFastOverride = true)).readText(),
+        )
+    }
+
+    @Test
     fun `tampered generated config fails closed`() {
         val task = cargoNextestTask("tampered")
         val snapshot = requireNotNull(cargoNextestSnapshot(task))

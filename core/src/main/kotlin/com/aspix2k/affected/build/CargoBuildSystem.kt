@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.AffectedSettings
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -74,11 +75,26 @@ class CargoBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSy
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {
-        CommandRunner.runBatch(project, root, cargoCommandsForRun(root, tasks), "Affected Cargo")
+        val stopAfterFirstFailure = AffectedSettings.getInstance().stopAfterFirstFailure
+        CommandRunner.runBatch(
+            project,
+            root,
+            cargoCommandsForRun(root, tasks, stopAfterFirstFailure = stopAfterFirstFailure),
+            "Affected Cargo",
+            continueAfterFailure = continuesAfterFailure(stopAfterFirstFailure),
+        )
     }
 
-    override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
-        CommandRunner.runBatchAndWait(project, root, cargoCommandsForRun(root, tasks), "Affected Cargo")
+    override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean {
+        val stopAfterFirstFailure = AffectedSettings.getInstance().stopAfterFirstFailure
+        return CommandRunner.runBatchAndWait(
+            project,
+            root,
+            cargoCommandsForRun(root, tasks, stopAfterFirstFailure = stopAfterFirstFailure),
+            "Affected Cargo",
+            continueAfterFailure = continuesAfterFailure(stopAfterFirstFailure),
+        )
+    }
 
     override suspend fun runAndWaitSuspending(
         project: Project,
@@ -86,8 +102,17 @@ class CargoBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSy
         tasks: List<String>,
         changes: BuildChanges,
     ): Boolean {
-        val commands = withContext(Dispatchers.IO) { cargoCommands(root, tasks, changes) }
-        return CommandRunner.runBatchAndWait(project, root, commands, "Affected Cargo")
+        val stopAfterFirstFailure = AffectedSettings.getInstance().stopAfterFirstFailure
+        val commands = withContext(Dispatchers.IO) {
+            cargoCommands(root, tasks, changes, stopAfterFirstFailure = stopAfterFirstFailure)
+        }
+        return CommandRunner.runBatchAndWait(
+            project,
+            root,
+            commands,
+            "Affected Cargo",
+            continueAfterFailure = continuesAfterFailure(stopAfterFirstFailure),
+        )
     }
 
     override fun requiresWorkspace(module: BuildModule, changes: BuildChanges): Boolean =
@@ -188,6 +213,7 @@ internal fun cargoCommands(
     nextestExecutable: String = "cargo-nextest",
     cargoExecutable: String = "cargo",
     fileFilter: String? = null,
+    stopAfterFirstFailure: Boolean? = null,
 ): List<CliCommand> =
     tasks.groupBy { canonicalCargoTask(it.substringAfterLast(':')) }
         .flatMap { (task, requestedTasks) ->
@@ -197,21 +223,24 @@ internal fun cargoCommands(
             val selection = if (workspace) listOf("--workspace") else packages.flatMap { listOf("-p", it) }
             if (task.startsWith("nextest@") || cargoNextestWorkspaceTask(task)) {
                 if (unsafeCargoExecution) {
-                    listOf(CliCommand("cargo test", listOf("cargo", "test", "--workspace")))
+                    listOf(cargoTestCommand(listOf("--workspace"), stopAfterFirstFailure))
                 } else {
                     cargoNextestCommands(
                         root,
                         executionTask,
                         nextestExecutable,
                         cargoExecutable,
-                        selection,
+                        (fileFilter.takeUnless { workspace }?.let { listOf("-E", it) } ?: emptyList()) + selection,
                         requestedTasks.filter(::cargoNextestHasDoctests).map { it.substringBeforeLast(':') },
-                        fileFilter.takeUnless { workspace },
+                        stopAfterFirstFailure,
                     )
                 }
             } else {
-                val arguments = if (task == CargoMetadata.COMPILE) listOf("check", "--tests") else listOf("test")
-                listOf(CliCommand("cargo ${arguments.first()}", listOf("cargo") + arguments + selection))
+                if (task == CargoMetadata.COMPILE) {
+                    listOf(CliCommand("cargo check", listOf("cargo", "check", "--tests") + selection))
+                } else {
+                    listOf(cargoTestCommand(selection, stopAfterFirstFailure))
+                }
             }
         }
 
@@ -219,6 +248,7 @@ internal fun cargoCommandsForRun(
     root: String,
     tasks: List<String>,
     environment: Map<String, String> = System.getenv(),
+    stopAfterFirstFailure: Boolean? = null,
 ): List<CliCommand> {
     val executables = verifiedCargoNextestExecutables(root, tasks, environment)
     return cargoCommands(
@@ -227,6 +257,7 @@ internal fun cargoCommandsForRun(
         executables == null,
         executables?.nextest?.toString() ?: "cargo-nextest",
         executables?.cargo?.toString() ?: "cargo",
+        stopAfterFirstFailure = stopAfterFirstFailure,
     )
 }
 
@@ -273,16 +304,17 @@ private fun cargoNextestCommands(
     task: String,
     executable: String,
     cargo: String,
-    selection: List<String>,
+    nextestSelection: List<String>,
     doctestPackages: List<String>,
-    fileFilter: String? = null,
+    stopAfterFirstFailure: Boolean? = null,
 ): List<CliCommand> {
-    val snapshot = cargoNextestSnapshot(task)
-        ?: return listOf(CliCommand("cargo test", listOf("cargo", "test", "--workspace")))
     val profile = task.split('@').getOrNull(1)
-        ?: return listOf(CliCommand("cargo test", listOf("cargo", "test", "--workspace")))
-    val failFast = task.split('@').getOrNull(3)?.toBooleanStrictOrNull()
-        ?: return listOf(CliCommand("cargo test", listOf("cargo", "test", "--workspace")))
+        ?: return listOf(cargoTestCommand(listOf("--workspace"), stopAfterFirstFailure))
+    val encodedFailFast = task.split('@').getOrNull(3)?.toBooleanStrictOrNull()
+        ?: return listOf(cargoTestCommand(listOf("--workspace"), stopAfterFirstFailure))
+    val failFast = stopAfterFirstFailure ?: encodedFailFast
+    val snapshot = cargoNextestSnapshot(task, failFast)
+        ?: return listOf(cargoTestCommand(listOf("--workspace"), stopAfterFirstFailure))
     val doctestSelection = doctestPackages.distinct().let { packages ->
         if ("." in packages) listOf("--workspace") else packages.flatMap { listOf("-p", it) }
     }
@@ -302,11 +334,16 @@ private fun cargoNextestCommands(
             "--config-file", snapshot.path,
             "--profile", profile,
             "--no-tests=pass",
-        ) + (fileFilter?.let { listOf("-E", it) } ?: emptyList()) + selection,
+        ) + nextestSelection,
         environment = mapOf("CARGO" to cargo),
         continueOnFailure = !failFast && doctest != null,
     )
     return listOfNotNull(nextest, doctest)
+}
+
+private fun cargoTestCommand(selection: List<String>, stopAfterFirstFailure: Boolean?): CliCommand {
+    val strategy = if (stopAfterFirstFailure == false) listOf("--no-fail-fast") else emptyList()
+    return CliCommand("cargo test", listOf("cargo", "test") + strategy + selection)
 }
 
 private fun canonicalCargoTask(task: String): String =
@@ -315,7 +352,12 @@ private fun canonicalCargoTask(task: String): String =
 private fun cargoNextestHasDoctests(task: String): Boolean =
     task.substringAfterLast(':').substringAfterLast('@').toBooleanStrictOrNull() == true
 
-internal fun cargoCommands(root: String, tasks: List<String>, changes: BuildChanges): List<CliCommand> {
+internal fun cargoCommands(
+    root: String,
+    tasks: List<String>,
+    changes: BuildChanges,
+    stopAfterFirstFailure: Boolean? = null,
+): List<CliCommand> {
     val executables = verifiedCargoNextestExecutables(root, tasks, System.getenv())
     return cargoCommands(
         root,
@@ -324,6 +366,7 @@ internal fun cargoCommands(root: String, tasks: List<String>, changes: BuildChan
         executables == null,
         executables?.nextest?.toString() ?: "cargo-nextest",
         executables?.cargo?.toString() ?: "cargo",
+        stopAfterFirstFailure,
     )
 }
 
@@ -334,6 +377,7 @@ internal fun cargoCommands(
     unsafeCargoExecution: Boolean,
     nextestExecutable: String = "cargo-nextest",
     cargoExecutable: String = "cargo",
+    stopAfterFirstFailure: Boolean? = null,
 ): List<CliCommand> {
     val workspace = changes.requireCargoWorkspace(root)
     val effectiveTasks = if (workspace) {
@@ -357,6 +401,7 @@ internal fun cargoCommands(
         nextestExecutable,
         cargoExecutable,
         fileFilter = if (workspace) null else cargoNextestFileFilter(root, changes),
+        stopAfterFirstFailure = stopAfterFirstFailure,
     )
 }
 

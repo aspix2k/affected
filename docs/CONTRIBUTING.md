@@ -90,6 +90,11 @@ Maven policy and can override the full-plan behavior. Independent roots stay
 separate. A Gradle module without test sources is compiled, not dropped, so
 Kotlin Multiplatform libraries do not become an empty plan.
 
+Cargo keeps the validated nextest profile, required version and executable
+identity, while the Affected failure strategy overrides profile `fail-fast`
+in the generated run snapshot. The same setting controls Cargo's native
+`--no-fail-fast` flag for ordinary tests, fail-closed fallbacks and doctests.
+
 A `BuildSystem` registers through `com.aspix2k.affected.buildSystem`. Missing
 tools, malformed metadata, stale task identities, symlinks and discovery bounds
 fail closed to a visible root command or an explicit unresolved Run.
