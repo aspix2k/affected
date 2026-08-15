@@ -70,6 +70,32 @@ class ChangeListenerTest {
     }
 
     @Test
+    fun `an all-file project refreshes from an unknown in-root resource`() {
+        assertTrue(
+            shouldRefreshAllFilesForProject(
+                frontend = false,
+                projectRoot = "/project",
+                paths = listOf("/project/NAMESPACE", "/project/vignettes/guide.Rmd"),
+            ),
+        )
+    }
+
+    @Test
+    fun `an all-file project ignores foreign docs and generated output`() {
+        assertFalse(
+            shouldRefreshAllFilesForProject(
+                frontend = false,
+                projectRoot = "/project",
+                paths = listOf(
+                    "/other/NAMESPACE",
+                    "/project/README.md",
+                    "/project/build/generated/data.csv",
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun `Windows separators still ignore generated and VCS files`() {
         assertFalse(isRelevantPath("C:\\project\\.git\\worktrees\\main.go", extensions))
         assertFalse(isRelevantPath("C:\\project\\.gradle\\cache\\lib.rs", extensions))

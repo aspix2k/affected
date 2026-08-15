@@ -656,9 +656,18 @@
       "implementation": "com.aspix2k.affected.build.RBuildSystem",
       "ecosystem": "R",
       "languages": ["R"],
-      "runners": ["testthat::test_dir", "read.dcf"],
-      "selection": ["project"],
+      "runners": ["testthat::test_local", "testthat::test_dir", "read.dcf"],
+      "selection": ["file", "project"],
       "selectionProofs": [
+        {
+          "units": ["file"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliRConformanceTest.kt",
+          "marker": "r runs directly changed testthat files in one process",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        },
         {
           "units": ["project"],
           "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliRConformanceTest.kt",
@@ -669,7 +678,7 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "R 4.x with testthat; project-level until file selection, renv and R Markdown contracts are proven",
+      "versions": "R 4.x with testthat 3.x; source packages use test_local with changed conventional files or conservative project fallback; renv and R Markdown execution stay unproven",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/r"],
       "gates": [".github/workflows/conformance.yml"]
