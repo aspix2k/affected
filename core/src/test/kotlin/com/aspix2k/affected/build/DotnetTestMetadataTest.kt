@@ -204,6 +204,16 @@ class DotnetTestMetadataTest {
         )
         assertNotNull(
             supportedDotnetAdapter(
+                assets(library("xunit.runner.visualstudio/4.0.0"), library("xunit/2.9.3")),
+            ),
+        )
+        assertNull(
+            supportedDotnetAdapter(
+                assets(library("xunit.runner.visualstudio/5.0.0"), library("xunit/2.9.3")),
+            ),
+        )
+        assertNotNull(
+            supportedDotnetAdapter(
                 assets(library("nunit3testadapter/6.2.0"), library("nunit/4.6.1")),
             ),
         )

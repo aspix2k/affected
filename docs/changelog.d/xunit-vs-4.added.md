@@ -1,0 +1,1 @@
+- Support `xunit.runner.visualstudio` 4.0.0 for exact VSTest selection.
