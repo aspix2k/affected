@@ -1,0 +1,1 @@
+- A lone first-level `backend/` Kotlin Toolchain project is now the toolchain root when the repository base has no marker.

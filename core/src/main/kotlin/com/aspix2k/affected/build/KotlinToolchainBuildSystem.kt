@@ -49,13 +49,16 @@ class KotlinToolchainBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceCh
     )
 
     private fun manifestOf(project: Project): File? =
-        project.basePath?.let { kotlinToolchainManifest(File(it)) }
+        project.basePath?.let(::File)?.let(::kotlinToolchainProjectRoot)?.let(::kotlinToolchainManifest)
 }
 
 internal object KotlinToolchainTasks {
     const val TEST = "test"
     const val BUILD = "build"
 }
+
+internal fun kotlinToolchainProjectRoot(base: File): File? =
+    nestedBuildRoot(base) { kotlinToolchainManifest(it) != null }
 
 internal fun kotlinToolchainManifest(root: File): File? {
     if (GRADLE_SETTINGS.any { File(root, it).isRegularFileNoFollow() }) return null

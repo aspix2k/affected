@@ -323,6 +323,32 @@ class KotlinToolchainCommandTest {
         )
     }
 
+    @Test
+    fun `a single first-level nested toolchain project is the root`() {
+        val base = createTempDirectory("toolchain-nested").toFile()
+        val nested = File(base, "backend")
+        toolchainRoot().copyRecursively(nested)
+
+        assertEquals(nested.canonicalFile, kotlinToolchainProjectRoot(base)?.canonicalFile)
+    }
+
+    @Test
+    fun `several first-level nested toolchain projects stay off`() {
+        val base = createTempDirectory("toolchain-many").toFile()
+        toolchainRoot().copyRecursively(File(base, "backend"))
+        toolchainRoot().copyRecursively(File(base, "tools"))
+
+        assertNull(kotlinToolchainProjectRoot(base))
+    }
+
+    @Test
+    fun `a deeper nested toolchain project stays off`() {
+        val base = createTempDirectory("toolchain-deep").toFile()
+        toolchainRoot().copyRecursively(File(base, "src/backend"))
+
+        assertNull(kotlinToolchainProjectRoot(base))
+    }
+
     private fun jvmChange(vararg files: File): BuildChanges =
         BuildChanges(files.map(File::getPath), emptySet(), comparedToBase = true)
 
