@@ -1,0 +1,1 @@
+- Make Run the full plan and Stop after the first failure authoritative for Cargo tests, nextest profiles and doctests.

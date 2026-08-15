@@ -53,45 +53,62 @@ class CargoNextestCliAdapterConformanceTest {
     @Test
     fun `cargo-nextest exposes failures and stops its process tree`() = fixture { root ->
         val source = File(root, "alpha/src/lib.rs")
-        val commands = cargoCommands(
-            root.path,
-            listOf("affected-alpha:${cargoNextestTask(nativePlan(root))}"),
+        val marker = File(root, "stop-after-first-failure.marker")
+        val commands = failureStrategyProbe(
+            cargoCommands(
+                root.path,
+                listOf("affected-alpha:${cargoNextestTask(nativePlan(root, "ci"))}"),
+                stopAfterFirstFailure = true,
+            ),
+            marker,
         )
-        source.writeText(source.readText().replace("assert_eq!(super::value(), 1)", "assert_eq!(super::value(), 99)"))
+        source.writeText(FAILURE_STRATEGY_TESTS)
 
-        val failed = executeBatch(root, commands)
+        val failed = executeBatch(root, commands, stopAfterFirstFailure = true)
 
         assertFalse(failed.passed)
         assertContains(failed.semanticOutput, "> cargo nextest")
         assertContains(failed.semanticOutput, "FAIL")
+        assertFalse(marker.exists(), failed.output)
         assertFalse(failed.semanticOutput.contains("Doc-tests"), failed.output)
-        val marker = File(root, "nextest.pid")
+        val processMarker = File(root, "nextest.pid")
+        val cancellationCommands = cargoCommands(
+            root.path,
+            listOf("affected-alpha:${cargoNextestTask(nativePlan(root, "ci"))}"),
+            stopAfterFirstFailure = true,
+        )
         source.writeText(SLEEPING_TEST)
-        assertBatchStops(root, commands, marker)
+        assertBatchStops(root, cancellationCommands, processMarker)
     }
 
     @Test
-    fun `cargo-nextest non fail fast profile still runs doctests after a unit failure`() = fixture { root ->
+    fun `cargo-nextest full plan overrides a fail fast profile after a unit failure`() = fixture { root ->
         val source = File(root, "alpha/src/lib.rs")
-        val commands = cargoCommands(
-            root.path,
-            listOf("affected-alpha:${cargoNextestTask(nativePlan(root, "ci"))}"),
+        val marker = File(root, "full-plan.marker")
+        val commands = failureStrategyProbe(
+            cargoCommands(
+                root.path,
+                listOf("affected-alpha:${cargoNextestTask(nativePlan(root))}"),
+                stopAfterFirstFailure = false,
+            ),
+            marker,
         )
-        source.writeText(source.readText().replace("assert_eq!(super::value(), 1)", "assert_eq!(super::value(), 99)"))
+        source.writeText(FAILURE_STRATEGY_TESTS)
 
-        val result = executeBatch(root, commands)
+        val result = executeBatch(root, commands, stopAfterFirstFailure = false)
 
         assertFalse(result.passed)
         assertContains(result.semanticOutput, "> cargo nextest")
+        assertTrue(marker.isFile, result.output)
         assertContains(result.semanticOutput, "> cargo test --doc")
         assertContains(result.semanticOutput, "Doc-tests affected_alpha")
     }
 
     @Test
-    fun `cargo-nextest non fail fast profile runs every selected doctest package`() = fixture { root ->
+    fun `cargo-nextest full plan runs every selected doctest package`() = fixture { root ->
         val source = File(root, "alpha/src/lib.rs")
         source.writeText(source.readText().replace("affected_alpha::value(), 1", "affected_alpha::value(), 99"))
-        val plan = nativePlan(root, "ci")
+        val plan = nativePlan(root)
         val result = executeBatch(
             root,
             cargoCommands(
@@ -100,7 +117,9 @@ class CargoNextestCliAdapterConformanceTest {
                     "affected-alpha:${cargoNextestTask(plan)}",
                     "affected-beta:${cargoNextestTask(plan)}",
                 ),
+                stopAfterFirstFailure = false,
             ),
+            stopAfterFirstFailure = false,
         )
 
         assertFalse(result.passed)
@@ -116,6 +135,19 @@ class CargoNextestCliAdapterConformanceTest {
         assertContains(result.semanticOutput, "affected-alpha")
         assertFalse(result.semanticOutput.contains("affected-beta"))
         assertContains(result.semanticOutput, "Doc-tests affected_alpha")
+    }
+
+    private fun failureStrategyProbe(commands: List<CliCommand>, marker: File): List<CliCommand> {
+        return commands.mapIndexed { index, command ->
+            if (index == 0) {
+                command.copy(
+                    arguments = command.arguments + "--test-threads=1",
+                    environment = command.environment + ("AFFECTED_FAILURE_STRATEGY_MARKER" to marker.path),
+                )
+            } else {
+                command
+            }
+        }
     }
 
     private fun nativePlan(root: File, profile: String? = null): CargoNextestPlan {
@@ -178,9 +210,17 @@ class CargoNextestCliAdapterConformanceTest {
         }
     }
 
-    private fun executeBatch(directory: File, commands: List<CliCommand>): CommandResult {
+    private fun executeBatch(
+        directory: File,
+        commands: List<CliCommand>,
+        stopAfterFirstFailure: Boolean = false,
+    ): CommandResult {
         val output = StringBuilder()
-        val handler = SequentialProcessHandler(directory, commands)
+        val handler = SequentialProcessHandler(
+            directory,
+            commands,
+            continueAfterFailure = !stopAfterFirstFailure,
+        )
         handler.addProcessListener(outputListener(output))
         handler.startNotify()
         val completed = handler.waitFor(TimeUnit.SECONDS.toMillis(COMMAND_TIMEOUT_SECONDS))
@@ -228,6 +268,27 @@ class CargoNextestCliAdapterConformanceTest {
         const val CONFORMANCE_PROPERTY = "affected.cliConformance"
         const val COMMAND_TIMEOUT_SECONDS = 180L
         val ANSI_ESCAPE = Regex("\u001B\\[[0-?]*[ -/]*[@-~]")
+        val FAILURE_STRATEGY_TESTS = """
+            pub fn value() -> u32 { 1 }
+
+            #[cfg(test)]
+            mod tests {
+                #[test]
+                fn a_fails_first() {
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                    panic!("failure strategy probe");
+                }
+
+                #[test]
+                fn z_marks_after_failure() {
+                    std::thread::sleep(std::time::Duration::from_secs(5));
+                    std::fs::write(
+                        std::env::var("AFFECTED_FAILURE_STRATEGY_MARKER").unwrap(),
+                        "continued",
+                    ).unwrap();
+                }
+            }
+        """.trimIndent()
         val SLEEPING_TEST = """
             pub fn value() -> u32 { 1 }
 

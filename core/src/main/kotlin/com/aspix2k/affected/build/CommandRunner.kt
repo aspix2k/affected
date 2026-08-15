@@ -40,6 +40,7 @@ object CommandRunner {
         commands: List<CliStep>,
         title: String,
         unresolvedMessage: String? = null,
+        continueAfterFailure: Boolean = planContinuesAfterFailure(),
     ) {
         if (project.isDisposed) return
 
@@ -47,7 +48,7 @@ object CommandRunner {
             File(workingDirectory),
             commands,
             unresolvedMessage ?: DEFAULT_UNRESOLVED_MESSAGE,
-            continueAfterFailure = planContinuesAfterFailure(),
+            continueAfterFailure = continueAfterFailure,
         )
         ProcessTerminatedListener.attach(handler)
         AffectedRunSessions.getInstance(project).register(handler)
@@ -71,6 +72,7 @@ object CommandRunner {
         commands: List<CliStep>,
         title: String,
         unresolvedMessage: String? = null,
+        continueAfterFailure: Boolean = planContinuesAfterFailure(),
     ): Boolean {
         if (project.isDisposed) return false
 
@@ -78,7 +80,7 @@ object CommandRunner {
             File(workingDirectory),
             commands,
             unresolvedMessage ?: DEFAULT_UNRESOLVED_MESSAGE,
-            continueAfterFailure = planContinuesAfterFailure(),
+            continueAfterFailure = continueAfterFailure,
         )
         ProcessTerminatedListener.attach(handler)
         AffectedRunSessions.getInstance(project).register(handler)

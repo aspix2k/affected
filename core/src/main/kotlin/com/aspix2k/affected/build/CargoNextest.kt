@@ -202,12 +202,13 @@ internal fun cargoNextestExecutableIdentityFromTask(task: String): String? = tas
     ?.get(4)
     ?.takeIf(EXECUTABLE_IDENTITY::matches)
 
-internal fun cargoNextestSnapshot(task: String): File? = runCatching {
+internal fun cargoNextestSnapshot(task: String, failFastOverride: Boolean? = null): File? = runCatching {
     val parts = task.split('@')
     if (parts.size != 6 || parts.first() !in setOf("nextest", CARGO_NEXTEST_WORKSPACE_TASK)) return null
     val profile = parts[1].takeIf(::validProfileName) ?: return null
     val required = NextestVersion.parse(parts[2])?.takeIf { it.supportedRequired } ?: return null
-    val failFast = parts[3].toBooleanStrictOrNull() ?: return null
+    val encodedFailFast = parts[3].toBooleanStrictOrNull() ?: return null
+    val failFast = failFastOverride ?: encodedFailFast
     if (!EXECUTABLE_IDENTITY.matches(parts[4])) return null
     parts[5].toBooleanStrictOrNull() ?: return null
     val content = """
