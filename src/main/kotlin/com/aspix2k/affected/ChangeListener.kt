@@ -2,6 +2,7 @@ package com.aspix2k.affected
 
 import com.aspix2k.affected.build.BuildSystems
 import com.intellij.openapi.components.service
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
@@ -21,12 +22,20 @@ class ChangeListener : BulkFileListener {
 
         for (project in ProjectManager.getInstance().openProjects) {
             if (!project.isDisposed) {
-                val allFileChanged = !sourceChanged && project.basePath?.let { root ->
-                    shouldRefreshAllFilesForProject(frontend, root, paths) &&
-                        BuildSystems.includesAllFileChanges(project)
-                } == true
+                val allFileChanged = !sourceChanged && shouldRefreshAllFiles(project, frontend, paths)
                 if (sourceChanged || allFileChanged) project.service<AffectedState>().invalidate()
             }
+        }
+    }
+}
+
+private fun shouldRefreshAllFiles(project: Project, frontend: Boolean, paths: List<String>): Boolean {
+    val root = project.basePath ?: return false
+    return when {
+        shouldRefreshAllFilesForProject(frontend, root, paths) ->
+            BuildSystems.includesAllFileChanges(project)
+        else -> BuildSystems.generatedFileChangeRoots(project).any { generatedRoot ->
+            shouldRefreshAllFilesForProject(frontend, generatedRoot, paths, includeGeneratedFiles = true)
         }
     }
 }
@@ -70,38 +79,49 @@ internal fun shouldRefreshAllFilesForProject(
     frontend: Boolean,
     projectRoot: String,
     paths: List<String>,
+    includeGeneratedFiles: Boolean = false,
 ): Boolean = !frontend && runCatching {
     val root = Path.of(projectRoot).toAbsolutePath().normalize()
     paths.any { raw ->
         val candidate = Path.of(raw).toAbsolutePath().normalize()
         if (candidate == root || !candidate.startsWith(root)) return@any false
         val relative = root.relativize(candidate).toString().replace('\\', '/')
-        !ignoredPath("/$relative") &&
+        !hardIgnoredPath("/$relative") &&
+            (!generatedPath("/$relative") || includeGeneratedFiles) &&
             !isProjectDocumentation(relative)
     }
 }.getOrDefault(false)
 
 private fun ignoredPath(normalized: String): Boolean =
-    IGNORED_DIRECTORIES.any(normalized::contains)
+    hardIgnoredPath(normalized) || generatedPath(normalized)
 
-private val IGNORED_DIRECTORIES = listOf(
+private fun hardIgnoredPath(normalized: String): Boolean =
+    HARD_IGNORED_DIRECTORIES.any(normalized::contains)
+
+private fun generatedPath(normalized: String): Boolean =
+    GENERATED_DIRECTORIES.any(normalized::contains)
+
+private val HARD_IGNORED_DIRECTORIES = listOf(
     "/.git/",
     "/.gradle/",
     "/.idea/",
     "/.venv/",
     "/.cache/",
     "/.tox/",
+    "/node_modules/",
+    "/Pods/",
+    "/vendor/",
+    "/venv/",
+    "/__pycache__/",
+)
+
+private val GENERATED_DIRECTORIES = listOf(
     "/build/",
     "/cmake-build-",
     "/coverage/",
     "/DerivedData/",
     "/dist/",
-    "/node_modules/",
     "/obj/",
     "/out/",
-    "/Pods/",
     "/target/",
-    "/vendor/",
-    "/venv/",
-    "/__pycache__/",
 )

@@ -23,6 +23,26 @@ class CliRConformanceTest {
             command.arguments,
         )
         val text = execute(root, command)
+        assertContains(text, "Starting 2 test processes")
+        assertTrue(testMarker(root, "alpha").isFile)
+        assertTrue(testMarker(root, "beta").isFile)
+        assertTrue(testMarker(root, "unrelated").isFile)
+    }
+
+    @Test
+    fun `r full suite loads setup and teardown in serial mode`() = fixture("r") { root ->
+        val description = File(root, "DESCRIPTION")
+        val original = description.readText()
+        assertContains(original, "Config/testthat/parallel: true")
+        description.writeText(
+            original.replace(
+                "Config/testthat/parallel: true",
+                "Config/testthat/parallel: false",
+            ),
+        )
+        val command = rCommands(root, listOf(".:test")).single()
+
+        val text = execute(root, command)
         assertContains(text, "AlphaTest")
         assertContains(text, "BetaTest")
         assertContains(text, "UnrelatedTest")
@@ -48,6 +68,7 @@ class CliRConformanceTest {
                 "local({version <- utils::packageVersion(\"testthat\"); " +
                     "if (version < \"3.0.0\" || version >= \"4.0.0\") " +
                     "testthat::test_dir(\"tests/testthat\") else {paths <- commandArgs(trailingOnly = TRUE); " +
+                    "Sys.setenv(TESTTHAT_PARALLEL = \"false\"); " +
                     "contexts <- sub(\"\\\\.[rR]$\", \"\", " +
                     "sub(\"^test[-_.]?\", \"\", basename(paths))); testthat::test_local(\".\", " +
                     "filter = paste0(\"^(\", paste(contexts, collapse = \"|\"), \")$\"))}})",
@@ -62,6 +83,10 @@ class CliRConformanceTest {
         assertContains(text, "AlphaTest")
         assertContains(text, "BetaTest")
         assertFalse(text.contains("UnrelatedTest"), text)
+        assertFalse(text.contains("Starting 2 test processes"), text)
+        assertTrue(testMarker(root, "alpha").isFile)
+        assertTrue(testMarker(root, "beta").isFile)
+        assertFalse(testMarker(root, "unrelated").exists())
         assertEquals(1, "SetupRun".toRegex().findAll(text).count(), text)
         assertEquals(1, "TeardownRun".toRegex().findAll(text).count(), text)
     }
@@ -108,6 +133,9 @@ class CliRConformanceTest {
         .map { File(it, "conformance/cli-fixtures") }
         .firstOrNull(File::isDirectory)
         ?: File(System.getProperty("user.dir"), "conformance/cli-fixtures")
+
+    private fun testMarker(root: File, context: String): File =
+        File(root, "tests/testthat/$context.marker")
 
     private fun execute(directory: File, command: CliCommand, succeeds: Boolean = true): String {
         val output = File.createTempFile("affected-cli-output", ".log")

@@ -1,20 +1,24 @@
 package com.aspix2k.affected.build
 
+import com.intellij.openapi.progress.ProcessCanceledException
+import kotlinx.coroutines.CancellationException
 import java.io.File
 import java.nio.file.Files
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class RCommandTest {
 
     @Test
     fun `the R adapter collects non-R changes before exact selection`() {
-        assertIs<AllFileChangesBuildSystem>(RBuildSystem())
+        assertTrue(assertIs<AllFileChangesBuildSystem>(RBuildSystem()).includeGeneratedFiles)
     }
 
     @Test
@@ -38,6 +42,7 @@ class RCommandTest {
                 "local({version <- utils::packageVersion(\"testthat\"); " +
                     "if (version < \"3.0.0\" || version >= \"4.0.0\") " +
                     "testthat::test_dir(\"tests/testthat\") else {paths <- commandArgs(trailingOnly = TRUE); " +
+                    "Sys.setenv(TESTTHAT_PARALLEL = \"false\"); " +
                     "contexts <- sub(\"\\\\.[rR]$\", \"\", " +
                     "sub(\"^test[-_.]?\", \"\", basename(paths))); testthat::test_local(\".\", " +
                     "filter = paste0(\"^(\", paste(contexts, collapse = \"|\"), \")$\"))}})",
@@ -47,10 +52,7 @@ class RCommandTest {
             ),
             rCommands(root, listOf(".:test"), changes(beta, alpha)).single().arguments,
         )
-        assertEquals(
-            mapOf("TESTTHAT_PARALLEL" to "false"),
-            rCommands(root, listOf(".:test"), changes(beta, alpha)).single().environment,
-        )
+        assertTrue(rCommands(root, listOf(".:test"), changes(beta, alpha)).single().environment.isEmpty())
     }
 
     @Test
@@ -83,6 +85,69 @@ class RCommandTest {
 
         assertFalse(refreshed)
         assertEquals(rCommands(root, listOf(".:test")).single(), command)
+    }
+
+    @Test
+    fun `deferred R selection propagates coroutine cancellation`() {
+        val root = rRoot()
+        val selected = testFile(root, "test-alpha.R")
+        val planned = changes(selected)
+        val cancellation = CancellationException("cancelled")
+
+        assertSame(
+            cancellation,
+            assertFailsWith<CancellationException> {
+                rDeferredCommands(root, listOf(".:test"), planned) { throw cancellation }.single().resolve()
+            },
+        )
+    }
+
+    @Test
+    fun `deferred R selection propagates IDE process cancellation`() {
+        val root = rRoot()
+        val selected = testFile(root, "test-alpha.R")
+        val planned = changes(selected)
+        val processCancellation = ProcessCanceledException()
+
+        assertSame(
+            processCancellation,
+            assertFailsWith<ProcessCanceledException> {
+                rDeferredCommands(root, listOf(".:test"), planned) { throw processCancellation }.single().resolve()
+            },
+        )
+    }
+
+    @Test
+    fun `deferred R selection propagates interruption and restores its flag`() {
+        val root = rRoot()
+        val selected = testFile(root, "test-alpha.R")
+        val planned = changes(selected)
+        val interruption = InterruptedException("interrupted")
+
+        try {
+            assertSame(
+                interruption,
+                assertFailsWith<InterruptedException> {
+                    rDeferredCommands(root, listOf(".:test"), planned) { throw interruption }.single().resolve()
+                },
+            )
+            assertTrue(Thread.interrupted())
+        } finally {
+            Thread.interrupted()
+        }
+    }
+
+    @Test
+    fun `an ordinary R revalidation failure widens to the full suite`() {
+        val root = rRoot()
+        val selected = testFile(root, "test-alpha.R")
+        val planned = changes(selected)
+
+        val command = rDeferredCommands(root, listOf(".:test"), planned) {
+            error("inspection failed")
+        }.single().resolve()
+
+        assertEquals(rCommands(root, listOf(".:test")).single().arguments, command?.arguments)
     }
 
     @Test

@@ -25,4 +25,9 @@ object BuildSystems {
 
     fun includesAllFileChanges(project: Project): Boolean =
         of(project).any { it is AllFileChangesBuildSystem }
+
+    fun generatedFileChangeRoots(project: Project): List<String> =
+        point.extensionList
+            .filter { it is AllFileChangesBuildSystem && it.includeGeneratedFiles }
+            .flatMap { system -> system.modules(project).map(BuildModule::root) }
 }

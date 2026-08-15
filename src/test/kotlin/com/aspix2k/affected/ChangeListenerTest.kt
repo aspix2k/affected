@@ -101,6 +101,38 @@ class ChangeListenerTest {
     }
 
     @Test
+    fun `an opted-in all-file project refreshes from generated input`() {
+        assertTrue(
+            shouldRefreshAllFilesForProject(
+                frontend = false,
+                projectRoot = "/project/packages/probe",
+                paths = listOf("/project/packages/probe/build/generated/data.csv"),
+                includeGeneratedFiles = true,
+            ),
+        )
+        assertFalse(
+            shouldRefreshAllFilesForProject(
+                frontend = false,
+                projectRoot = "/project/packages/probe",
+                paths = listOf("/project/build/generated/data.csv"),
+                includeGeneratedFiles = true,
+            ),
+        )
+        assertFalse(
+            shouldRefreshAllFilesForProject(
+                frontend = false,
+                projectRoot = "/project/packages/probe",
+                paths = listOf(
+                    "/project/packages/probe/.git/worktrees/build/data.csv",
+                    "/project/packages/probe/node_modules/package/dist/data.csv",
+                    "/project/packages/probe/vendor/package/target/data.csv",
+                ),
+                includeGeneratedFiles = true,
+            ),
+        )
+    }
+
+    @Test
     fun `an all-file project refreshes for a snapshot named like project documentation`() {
         assertTrue(
             shouldRefreshAllFilesForProject(
