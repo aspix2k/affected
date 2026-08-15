@@ -1,1 +1,0 @@
-- Reject symlinked first-level nested build roots instead of executing a build outside the opened project.

@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.9.0] - 2026-08-15
+
+### Added
+
+- A lone first-level Flutter package is now the Flutter root when the repository base has no marker.
+
+### Fixed
+
+- Make Run the full plan and Stop after the first failure authoritative for Cargo tests, nextest profiles and doctests.
+- Reject symlinked first-level nested build roots instead of executing a build outside the opened project.
+
 ## [3.8.1] - 2026-08-15
 
 ### Changed
@@ -462,7 +473,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.8.1...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.9.0...HEAD
+[3.9.0]: https://github.com/aspix2k/affected/compare/v3.8.1...v3.9.0
 [3.8.1]: https://github.com/aspix2k/affected/compare/v3.8.0...v3.8.1
 [3.8.0]: https://github.com/aspix2k/affected/compare/v3.7.0...v3.8.0
 [3.7.0]: https://github.com/aspix2k/affected/compare/v3.6.2...v3.7.0
