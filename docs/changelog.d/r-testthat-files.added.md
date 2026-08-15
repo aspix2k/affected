@@ -1,1 +1,0 @@
-- Load R package source and run directly changed conventional testthat files in one process while helper, snapshot, configuration, generated and ambiguous changes keep the full project suite.
