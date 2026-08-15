@@ -1,1 +1,0 @@
-- Apply the configured failure strategy to native Gradle and Maven runs without weakening failed-run reporting or collector promotion.
