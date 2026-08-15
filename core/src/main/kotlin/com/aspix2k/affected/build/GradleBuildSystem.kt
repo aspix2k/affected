@@ -1,6 +1,7 @@
 package com.aspix2k.affected.build
 
 import com.aspix2k.affected.AffectedRunSessions
+import com.aspix2k.affected.AffectedSettings
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.application.readAction
@@ -124,12 +125,16 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
         if (project.isDisposed) return false
         val collector = withContext(Dispatchers.IO) { collectorRun(project) }
         val taskNames = withContext(Dispatchers.IO) { gradleTaskNames(tasks, changes) }
+        val arguments = gradleInvocationArguments(
+            collector?.arguments.orEmpty(),
+            AffectedSettings.getInstance().stopAfterFirstFailure,
+        )
 
         val settings = ExternalSystemTaskExecutionSettings().apply {
             externalProjectPath = root
             this.taskNames = taskNames
             externalSystemIdString = GradleConstants.SYSTEM_ID.id
-            if (collector != null) scriptParameters = ParametersListUtil.join(collector.arguments)
+            if (arguments.isNotEmpty()) scriptParameters = ParametersListUtil.join(arguments)
         }
 
         return suspendCancellableCoroutine { continuation ->
@@ -221,11 +226,16 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
 
     override fun run(project: Project, root: String, tasks: List<String>) {
         if (project.isDisposed) return
+        val arguments = gradleInvocationArguments(
+            emptyList(),
+            AffectedSettings.getInstance().stopAfterFirstFailure,
+        )
 
         val settings = ExternalSystemTaskExecutionSettings().apply {
             externalProjectPath = root
             taskNames = tasks
             externalSystemIdString = GradleConstants.SYSTEM_ID.id
+            if (arguments.isNotEmpty()) scriptParameters = ParametersListUtil.join(arguments)
         }
         ExternalSystemUtil.runTask(
             settings,
