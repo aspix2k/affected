@@ -828,6 +828,17 @@ class MtpRuntimeProofTest {
             Thread.interrupted()
         }
     }
+
+    @Test
+    fun `runtime file hashing propagates interruption`() {
+        val file = Files.createTempFile("dotnet-mtp-hash", ".bin").toFile().apply { writeBytes(ByteArray(1_024)) }
+        Thread.currentThread().interrupt()
+        try {
+            assertFailsWith<InterruptedException> { dotnetFileSha256(file.toPath()) }
+        } finally {
+            assertTrue(Thread.interrupted())
+        }
+    }
 }
 
 private fun writeNativeXunitProject(root: File, xunitVersion: String = "4.0.0") {

@@ -204,6 +204,7 @@ class SequentialProcessHandlerTest {
         val entered = CountDownLatch(1)
         val resolved = CountDownLatch(1)
         val interrupted = AtomicBoolean()
+        val output = StringBuilder()
         val handler = SequentialProcessHandler(
             createTempDirectory("sequential-cancelled").toFile(),
             listOf(
@@ -216,10 +217,11 @@ class SequentialProcessHandlerTest {
                     } finally {
                         resolved.countDown()
                     }
-                    null
+                    listOf(java(), "-version")
                 },
             ),
         )
+        handler.addProcessListener(listener(output))
 
         handler.startNotify()
         assertTrue(entered.await(5, TimeUnit.SECONDS))
@@ -229,6 +231,7 @@ class SequentialProcessHandlerTest {
         assertTrue(resolved.await(5, TimeUnit.SECONDS))
         assertTrue(interrupted.get())
         assertTrue(handler.exitCode != 0)
+        assertFalse(output.contains("> resolve"), output.toString())
     }
 
     private fun listener(output: StringBuilder): ProcessListener = object : ProcessListener {

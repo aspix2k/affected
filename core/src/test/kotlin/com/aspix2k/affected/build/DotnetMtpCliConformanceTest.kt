@@ -22,26 +22,28 @@ class DotnetMtpCliConformanceTest {
             assumeTrue(version == "10.0.400")
             val project = "Mtp.Tests/Mtp.Tests.csproj"
             val alpha = File(root, "Mtp.Tests/AlphaTests.cs")
+            val beta = File(root, "Mtp.Tests/BetaTests.cs")
             val markers = File(environment.getValue("AFFECTED_MTP_MARKERS"))
 
-            val alphaChanges = changes(alpha)
-            val alphaPlan = assertNotNull(dotnetMtpSelectionPlan(root.path, project, alphaChanges))
+            val exactChanges = changes(alpha, beta)
+            val exactPlan = assertNotNull(dotnetMtpSelectionPlan(root.path, project, exactChanges))
             execute(root, dotnetBuildCommand(project).arguments, environment).requirePassed()
             val archiveIdentity = nativeMtpArchiveIdentity(root.path, project)
             assertTrue(
                 nativeMtpAssetsProof(root.path, project),
                 "restored MTP assets are not proven: $archiveIdentity",
             )
-            val alphaArguments = dotnetMtpTestArguments(root.path, project, alphaChanges, alphaPlan, { alphaChanges })
+            val exactArguments = dotnetMtpTestArguments(root.path, project, exactChanges, exactPlan, { exactChanges })
             assertEquals(
                 listOf(
                     "dotnet", "test", "--project", project, "--no-build",
-                    "--minimum-expected-tests", "1", "--filter-class", "Mtp.Tests.AlphaTests",
+                    "--minimum-expected-tests", "2", "--filter-class",
+                    "Mtp.Tests.AlphaTests", "Mtp.Tests.BetaTests",
                 ),
-                alphaArguments,
+                exactArguments,
             )
-            execute(root, alphaArguments, environment).requirePassed()
-            assertMarkers(markers, expected = setOf("alpha"))
+            execute(root, exactArguments, environment).requirePassed()
+            assertMarkers(markers, expected = setOf("alpha", "beta"))
 
             clearMarkers(markers)
             val helper = File(root, "Mtp.Tests/Helper.cs").apply {
@@ -52,7 +54,7 @@ class DotnetMtpCliConformanceTest {
             val fullArguments = dotnetMtpTestArguments(root.path, project, helperChanges, null, { helperChanges })
             assertEquals(listOf("dotnet", "test", "--project", project, "--no-build"), fullArguments)
             execute(root, fullArguments, environment).requirePassed()
-            assertMarkers(markers, expected = setOf("alpha", "beta"))
+            assertMarkers(markers, expected = setOf("alpha", "beta", "gamma"))
 
             clearMarkers(markers)
             alpha.writeText(alpha.readText().replace("Assert.True(true);", "Assert.True(false);"))
@@ -70,7 +72,7 @@ class DotnetMtpCliConformanceTest {
             assertMarkers(markers, expected = setOf("alpha"))
 
             clearMarkers(markers)
-            val missingArguments = alphaArguments.dropLast(1) + "Mtp.Tests.MissingTests"
+            val missingArguments = exactArguments.dropLast(2) + "Mtp.Tests.MissingTests"
             execute(root, missingArguments, environment).requireFailed()
             assertMarkers(markers, expected = emptySet())
 
@@ -79,6 +81,7 @@ class DotnetMtpCliConformanceTest {
                 "namespace Xunit; [System.AttributeUsage(System.AttributeTargets.Method)] " +
                     "public sealed class FactAttribute : System.Attribute {}",
             )
+            val alphaChanges = changes(alpha)
             val shadowedPlan = assertNotNull(dotnetMtpSelectionPlan(root.path, project, alphaChanges))
             execute(root, dotnetBuildCommand(project).arguments, environment).requirePassed()
             assertEquals(
@@ -134,9 +137,9 @@ class DotnetMtpCliConformanceTest {
         directory.listFiles().orEmpty().forEach { assertTrue(it.delete(), "Could not delete $it") }
     }
 
-    private fun changes(file: File) = BuildChanges(
-        files = listOf(file.path),
-        exactSelectionEligible = setOf(file.path),
+    private fun changes(vararg files: File) = BuildChanges(
+        files = files.map(File::getPath),
+        exactSelectionEligible = files.mapTo(LinkedHashSet(), File::getPath),
         comparedToBase = true,
     )
 
