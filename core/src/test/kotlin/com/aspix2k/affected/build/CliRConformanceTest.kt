@@ -23,10 +23,10 @@ class CliRConformanceTest {
             command.arguments,
         )
         val text = execute(root, command)
-        assertContains(text, "AlphaTest")
-        assertContains(text, "BetaTest")
-        assertContains(text, "UnrelatedTest")
         assertContains(text, "Starting 2 test processes")
+        assertTrue(testMarker(root, "alpha").isFile)
+        assertTrue(testMarker(root, "beta").isFile)
+        assertTrue(testMarker(root, "unrelated").isFile)
     }
 
     @Test
@@ -84,6 +84,9 @@ class CliRConformanceTest {
         assertContains(text, "BetaTest")
         assertFalse(text.contains("UnrelatedTest"), text)
         assertFalse(text.contains("Starting 2 test processes"), text)
+        assertTrue(testMarker(root, "alpha").isFile)
+        assertTrue(testMarker(root, "beta").isFile)
+        assertFalse(testMarker(root, "unrelated").exists())
         assertEquals(1, "SetupRun".toRegex().findAll(text).count(), text)
         assertEquals(1, "TeardownRun".toRegex().findAll(text).count(), text)
     }
@@ -130,6 +133,9 @@ class CliRConformanceTest {
         .map { File(it, "conformance/cli-fixtures") }
         .firstOrNull(File::isDirectory)
         ?: File(System.getProperty("user.dir"), "conformance/cli-fixtures")
+
+    private fun testMarker(root: File, context: String): File =
+        File(root, "tests/testthat/$context.marker")
 
     private fun execute(directory: File, command: CliCommand, succeeds: Boolean = true): String {
         val output = File.createTempFile("affected-cli-output", ".log")
