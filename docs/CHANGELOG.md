@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.1] - 2026-08-16
+
+### Fixed
+
+- Forward only selected testthat paths to exact Rscript runs, without injecting a synthetic argument into the test context filter.
+
 ## [3.13.0] - 2026-08-16
 
 ### Added
@@ -497,7 +503,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.13.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.13.1...HEAD
+[3.13.1]: https://github.com/aspix2k/affected/compare/v3.13.0...v3.13.1
 [3.13.0]: https://github.com/aspix2k/affected/compare/v3.12.0...v3.13.0
 [3.12.0]: https://github.com/aspix2k/affected/compare/v3.11.0...v3.12.0
 [3.11.0]: https://github.com/aspix2k/affected/compare/v3.10.0...v3.11.0
