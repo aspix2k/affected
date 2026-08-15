@@ -636,7 +636,7 @@ private val UUID_VALUE = Regex("[0-9a-fA-F-]{36}")
 private val DOTNET_CLASS_NAME = Regex("[A-Za-z_][A-Za-z0-9_`+]*(\\.[A-Za-z_][A-Za-z0-9_`+]*)+")
 private val DOTNET_METHOD_NAME = Regex("[A-Za-z_][A-Za-z0-9_`]*")
 private val SUPPORTED_ADAPTERS = mapOf(
-    "xunit.runner.visualstudio" to SupportedDotnetAdapter(2..3, "xunit"),
+    "xunit.runner.visualstudio" to SupportedDotnetAdapter(2..4, "xunit"),
     "nunit3testadapter" to SupportedDotnetAdapter(5..6, "nunit"),
     "mstest.testadapter" to SupportedDotnetAdapter(3..4, "mstest.testframework"),
 )
