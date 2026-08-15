@@ -2,7 +2,9 @@ package com.aspix2k.affected.build
 
 import com.aspix2k.affected.ProjectChanges
 import com.aspix2k.affected.toBuildChanges
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
+import kotlinx.coroutines.CancellationException
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -15,6 +17,8 @@ class RBuildSystem : ChangeAwareSuspendingBuildSystem, NamedSourceBuildSystem, A
     override val sourceExtensions: Set<String> = setOf("r", "R")
 
     override val sourceFileNames: Set<String> = setOf("DESCRIPTION", "renv.lock")
+
+    override val includeGeneratedFiles: Boolean = true
 
     override fun isPresent(project: Project): Boolean = manifestOf(project) != null
 
@@ -107,8 +111,7 @@ internal fun rCommands(
         } ?: fullTest
         else -> fullTest
     }
-    val environment = if (packageRoot && !check) R_TEST_ENVIRONMENT else emptyMap()
-    return listOf(CliCommand(arguments.joinToString(" "), arguments, environment))
+    return listOf(CliCommand(arguments.joinToString(" "), arguments))
 }
 
 internal fun rDeferredCommands(
@@ -123,14 +126,26 @@ internal fun rDeferredCommands(
     return listOf(
         DeferredCliCommand(
             title = "Rscript testthat",
-            environment = { R_TEST_ENVIRONMENT },
             arguments = {
-                val current = runCatching(currentChanges).getOrNull()
+                val current = currentChangesOrNull(currentChanges)
                 val effective = current?.takeIf { sameRChanges(planned, it) }
                 rCommands(root, tasks, effective).singleOrNull()?.arguments
             },
         ),
     )
+}
+
+private fun currentChangesOrNull(currentChanges: () -> BuildChanges): BuildChanges? = try {
+    currentChanges()
+} catch (error: CancellationException) {
+    throw error
+} catch (error: ProcessCanceledException) {
+    throw error
+} catch (error: InterruptedException) {
+    Thread.currentThread().interrupt()
+    throw error
+} catch (_: Exception) {
+    null
 }
 
 private fun sameRChanges(planned: BuildChanges, current: BuildChanges): Boolean =
@@ -203,13 +218,13 @@ private const val TEST_FILE_EXPRESSION =
     "local({version <- utils::packageVersion(\"testthat\"); " +
         "if (version < \"3.0.0\" || version >= \"4.0.0\") " +
         "testthat::test_dir(\"tests/testthat\") else {paths <- commandArgs(trailingOnly = TRUE); " +
+        "Sys.setenv(TESTTHAT_PARALLEL = \"false\"); " +
         "contexts <- sub(\"\\\\.[rR]$\", \"\", " +
         "sub(\"^test[-_.]?\", \"\", basename(paths))); testthat::test_local(\".\", " +
         "filter = paste0(\"^(\", paste(contexts, collapse = \"|\"), \")$\"))}})"
 private val PACKAGE_TEST_ARGUMENTS = listOf("Rscript", "-e", "testthat::test_local(\".\")")
 private val PROJECT_TEST_ARGUMENTS = listOf("Rscript", "-e", "testthat::test_dir(\"tests/testthat\")")
 private val EXACT_TEST_ARGUMENTS = listOf("Rscript", "-e", TEST_FILE_EXPRESSION, "--args")
-private val R_TEST_ENVIRONMENT = mapOf("TESTTHAT_PARALLEL" to "false")
 
 private fun testthatContext(name: String): String = name
     .replace(Regex("""\.[rR]$"""), "")

@@ -25,4 +25,7 @@ object BuildSystems {
 
     fun includesAllFileChanges(project: Project): Boolean =
         of(project).any { it is AllFileChangesBuildSystem }
+
+    fun includesGeneratedFileChanges(project: Project): Boolean =
+        of(project).filterIsInstance<AllFileChangesBuildSystem>().any { it.includeGeneratedFiles }
 }

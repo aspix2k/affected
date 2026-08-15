@@ -48,7 +48,9 @@ internal interface NamedSourceBuildSystem {
     val sourceFileNames: Set<String>
 }
 
-internal interface AllFileChangesBuildSystem
+internal interface AllFileChangesBuildSystem {
+    val includeGeneratedFiles: Boolean get() = false
+}
 
 internal interface TransitiveTestConsumersBuildSystem
 
