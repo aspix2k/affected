@@ -62,7 +62,10 @@ class CliRConformanceTest {
             exactSelectionEligible = setOf(alpha.path, beta.path),
             comparedToBase = true,
         )
-        val command = rCommands(root, listOf("${module.executionId}:${module.testTask}"), changes).single()
+        val marker = File(root, "argv.marker")
+        val command = rCommands(root, listOf("${module.executionId}:${module.testTask}"), changes).single().copy(
+            environment = mapOf("AFFECTED_R_ARGV_MARKER" to marker.path),
+        )
         assertEquals(
             listOf(
                 "Rscript",
@@ -74,7 +77,6 @@ class CliRConformanceTest {
                     "contexts <- sub(\"\\\\.[rR]$\", \"\", " +
                     "sub(\"^test[-_.]?\", \"\", basename(paths))); testthat::test_local(\".\", " +
                     "filter = paste0(\"^(\", paste(contexts, collapse = \"|\"), \")$\"))}})",
-                "--args",
                 "tests/testthat/test-alpha.R",
                 "tests/testthat/test-beta.R",
             ),
@@ -89,6 +91,10 @@ class CliRConformanceTest {
         assertTrue(testMarker(root, "alpha").isFile)
         assertTrue(testMarker(root, "beta").isFile)
         assertFalse(testMarker(root, "unrelated").exists())
+        assertEquals(
+            listOf("tests/testthat/test-alpha.R", "tests/testthat/test-beta.R"),
+            marker.readLines(),
+        )
         assertEquals(1, "SetupRun".toRegex().findAll(text).count(), text)
         assertEquals(1, "TeardownRun".toRegex().findAll(text).count(), text)
     }

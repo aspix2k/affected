@@ -47,13 +47,23 @@ class RCommandTest {
                     "contexts <- sub(\"\\\\.[rR]$\", \"\", " +
                     "sub(\"^test[-_.]?\", \"\", basename(paths))); testthat::test_local(\".\", " +
                     "filter = paste0(\"^(\", paste(contexts, collapse = \"|\"), \")$\"))}})",
-                "--args",
                 "tests/testthat/test-alpha.R",
                 "tests/testthat/test-beta.r",
             ),
             rCommands(root, listOf(".:test"), changes(beta, alpha)).single().arguments,
         )
         assertTrue(rCommands(root, listOf(".:test"), changes(beta, alpha)).single().environment.isEmpty())
+    }
+
+    @Test
+    fun `one directly changed testthat file is the only trailing argument`() {
+        val root = rRoot()
+        val alpha = testFile(root, "test-alpha.R")
+
+        val arguments = rCommands(root, listOf(".:test"), changes(alpha)).single().arguments
+
+        assertEquals(listOf("tests/testthat/test-alpha.R"), arguments.drop(3))
+        assertFalse(arguments.contains("--args"))
     }
 
     @Test
