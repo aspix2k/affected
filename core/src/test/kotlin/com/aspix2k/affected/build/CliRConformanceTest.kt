@@ -26,6 +26,26 @@ class CliRConformanceTest {
         assertContains(text, "AlphaTest")
         assertContains(text, "BetaTest")
         assertContains(text, "UnrelatedTest")
+        assertContains(text, "Starting 2 test processes")
+    }
+
+    @Test
+    fun `r full suite loads setup and teardown in serial mode`() = fixture("r") { root ->
+        val description = File(root, "DESCRIPTION")
+        val original = description.readText()
+        assertContains(original, "Config/testthat/parallel: true")
+        description.writeText(
+            original.replace(
+                "Config/testthat/parallel: true",
+                "Config/testthat/parallel: false",
+            ),
+        )
+        val command = rCommands(root, listOf(".:test")).single()
+
+        val text = execute(root, command)
+        assertContains(text, "AlphaTest")
+        assertContains(text, "BetaTest")
+        assertContains(text, "UnrelatedTest")
         assertEquals(1, "SetupRun".toRegex().findAll(text).count(), text)
         assertEquals(1, "TeardownRun".toRegex().findAll(text).count(), text)
     }
@@ -63,6 +83,7 @@ class CliRConformanceTest {
         assertContains(text, "AlphaTest")
         assertContains(text, "BetaTest")
         assertFalse(text.contains("UnrelatedTest"), text)
+        assertFalse(text.contains("Starting 2 test processes"), text)
         assertEquals(1, "SetupRun".toRegex().findAll(text).count(), text)
         assertEquals(1, "TeardownRun".toRegex().findAll(text).count(), text)
     }

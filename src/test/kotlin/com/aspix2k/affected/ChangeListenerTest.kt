@@ -105,7 +105,15 @@ class ChangeListenerTest {
         assertTrue(
             shouldRefreshAllFilesForProject(
                 frontend = false,
-                projectRoot = "/project",
+                projectRoot = "/project/packages/probe",
+                paths = listOf("/project/packages/probe/build/generated/data.csv"),
+                includeGeneratedFiles = true,
+            ),
+        )
+        assertFalse(
+            shouldRefreshAllFilesForProject(
+                frontend = false,
+                projectRoot = "/project/packages/probe",
                 paths = listOf("/project/build/generated/data.csv"),
                 includeGeneratedFiles = true,
             ),
@@ -113,8 +121,12 @@ class ChangeListenerTest {
         assertFalse(
             shouldRefreshAllFilesForProject(
                 frontend = false,
-                projectRoot = "/project",
-                paths = listOf("/project/.git/objects/data.csv", "/project/node_modules/package/data.csv"),
+                projectRoot = "/project/packages/probe",
+                paths = listOf(
+                    "/project/packages/probe/.git/worktrees/build/data.csv",
+                    "/project/packages/probe/node_modules/package/dist/data.csv",
+                    "/project/packages/probe/vendor/package/target/data.csv",
+                ),
                 includeGeneratedFiles = true,
             ),
         )

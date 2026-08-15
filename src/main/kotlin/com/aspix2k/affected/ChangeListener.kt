@@ -34,9 +34,9 @@ private fun shouldRefreshAllFiles(project: Project, frontend: Boolean, paths: Li
     return when {
         shouldRefreshAllFilesForProject(frontend, root, paths) ->
             BuildSystems.includesAllFileChanges(project)
-        shouldRefreshAllFilesForProject(frontend, root, paths, includeGeneratedFiles = true) ->
-            BuildSystems.includesGeneratedFileChanges(project)
-        else -> false
+        else -> BuildSystems.generatedFileChangeRoots(project).any { generatedRoot ->
+            shouldRefreshAllFilesForProject(frontend, generatedRoot, paths, includeGeneratedFiles = true)
+        }
     }
 }
 
@@ -86,34 +86,30 @@ internal fun shouldRefreshAllFilesForProject(
         val candidate = Path.of(raw).toAbsolutePath().normalize()
         if (candidate == root || !candidate.startsWith(root)) return@any false
         val relative = root.relativize(candidate).toString().replace('\\', '/')
-        (!ignoredPath("/$relative") || includeGeneratedFiles && generatedPath("/$relative")) &&
+        !hardIgnoredPath("/$relative") &&
+            (!generatedPath("/$relative") || includeGeneratedFiles) &&
             !isProjectDocumentation(relative)
     }
 }.getOrDefault(false)
 
 private fun ignoredPath(normalized: String): Boolean =
-    IGNORED_DIRECTORIES.any(normalized::contains)
+    hardIgnoredPath(normalized) || generatedPath(normalized)
+
+private fun hardIgnoredPath(normalized: String): Boolean =
+    HARD_IGNORED_DIRECTORIES.any(normalized::contains)
 
 private fun generatedPath(normalized: String): Boolean =
     GENERATED_DIRECTORIES.any(normalized::contains)
 
-private val IGNORED_DIRECTORIES = listOf(
+private val HARD_IGNORED_DIRECTORIES = listOf(
     "/.git/",
     "/.gradle/",
     "/.idea/",
     "/.venv/",
     "/.cache/",
     "/.tox/",
-    "/build/",
-    "/cmake-build-",
-    "/coverage/",
-    "/DerivedData/",
-    "/dist/",
     "/node_modules/",
-    "/obj/",
-    "/out/",
     "/Pods/",
-    "/target/",
     "/vendor/",
     "/venv/",
     "/__pycache__/",
