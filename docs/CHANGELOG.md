@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.0] - 2026-08-15
+
+### Added
+
+- Select directly changed C# xUnit v3 4 test classes in standalone projects through the native .NET 10 Microsoft Testing Platform runner when SDK, locked NuGet metadata and archives, effective imports, output configuration, and a conventional one-class file with an explicit `global::Xunit.Fact` method are fully proven; projects with dependencies or extensions and every ambiguous case run the full test project.
+
 ## [3.11.0] - 2026-08-15
 
 ### Added
@@ -485,7 +491,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.11.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.12.0...HEAD
+[3.12.0]: https://github.com/aspix2k/affected/compare/v3.11.0...v3.12.0
 [3.11.0]: https://github.com/aspix2k/affected/compare/v3.10.0...v3.11.0
 [3.10.0]: https://github.com/aspix2k/affected/compare/v3.9.0...v3.10.0
 [3.9.0]: https://github.com/aspix2k/affected/compare/v3.8.1...v3.9.0
