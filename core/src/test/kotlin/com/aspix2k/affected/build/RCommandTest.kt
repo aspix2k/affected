@@ -6,6 +6,7 @@ import java.io.File
 import java.nio.file.Files
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -391,13 +392,39 @@ class RCommandTest {
     }
 
     @Test
-    fun `a production-only R change checks the DESCRIPTION`() {
+    fun `a production-only R change runs an isolated package check`() {
         val root = rRoot()
+        val output = createTempDirectory("affected-r-check-command-")
+        val command = rPackageCheckCommand(output)
 
-        assertEquals(
-            listOf("Rscript", "-e", "read.dcf(\"DESCRIPTION\")"),
-            rCommands(root, listOf(".:check")).single().arguments,
+        assertEquals(listOf("Rscript", "--vanilla", "-e"), command.arguments.take(3))
+        assertContains(command.arguments.single { it.contains("tools::Rcmd") }, "--no-manual")
+        assertContains(command.arguments.single { it.contains("tools::Rcmd") }, "--no-build-vignettes")
+        assertContains(command.arguments.single { it.contains("tools::Rcmd") }, "shQuote(package)")
+        assertContains(
+            command.arguments.single { it.contains("tools::Rcmd") },
+            "unlink(output, recursive = TRUE, force = TRUE)",
         )
+        assertContains(command.arguments.single { it.contains("tools::Rcmd") }, "cleanup != 0L")
+        assertEquals(listOf(output), command.ownedTemporaryDirectories)
+        assertEquals(output.toString(), command.arguments.last())
+        assertFalse(command.arguments.any { it.contains("read.dcf") })
+    }
+
+    @Test
+    fun `an R package check allocates owned output only when execution resolves`() {
+        val root = rRoot()
+        val step = rExecutionCommands(root, listOf(".:check")).single()
+
+        assertTrue(step is DeferredCliCommand)
+        val command = step.resolve()
+        assertTrue(command != null)
+        try {
+            assertTrue(Files.isDirectory(command.ownedTemporaryDirectories.single()))
+            assertEquals(command.ownedTemporaryDirectories.single().toString(), command.arguments.last())
+        } finally {
+            command.ownedTemporaryDirectories.single().toFile().deleteRecursively()
+        }
     }
 
     @Test
@@ -471,6 +498,19 @@ class RCommandTest {
             listOf("Rscript", "-e", "testthat::test_dir(\"tests/testthat\")"),
             rCommands(root, listOf(".:check")).single().arguments,
         )
+    }
+
+    @Test
+    fun `an R package check is distinct from testthat routing`() {
+        val root = rRoot()
+        testFile(root, "test-alpha.R")
+        val output = createTempDirectory("affected-r-check-command-")
+
+        assertEquals(
+            listOf("Rscript", "-e", "testthat::test_local(\".\")"),
+            rCommands(root, listOf(".:test")).single().arguments,
+        )
+        assertTrue(rPackageCheckCommand(output).arguments.contains("--vanilla"))
     }
 
     @Test

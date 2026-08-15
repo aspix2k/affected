@@ -665,7 +665,7 @@
       "implementation": "com.aspix2k.affected.build.RBuildSystem",
       "ecosystem": "R",
       "languages": ["R"],
-      "runners": ["testthat::test_local", "testthat::test_dir", "read.dcf"],
+      "runners": ["testthat::test_local", "testthat::test_dir", "R CMD check"],
       "selection": ["file", "project"],
       "selectionProofs": [
         {
@@ -680,16 +680,16 @@
         {
           "units": ["project"],
           "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliRConformanceTest.kt",
-          "marker": "r runs the project test command for the affected root",
+          "marker": "r checks a source package outside the repository and removes output",
           "gate": ".github/workflows/conformance.yml",
           "gateMarker": "--tests '*Cli*ConformanceTest'",
           "gateJob": "cli-native",
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "R 4.x with testthat 3.x; source packages use test_local with changed conventional files or conservative project fallback; renv and R Markdown execution stay unproven",
+      "versions": "R 4.x with testthat 3.x; source packages use exact or full test_local when testthat is present and an isolated R CMD check without manuals or built vignettes otherwise; renv and R Markdown execution stay unproven",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/r"],
+      "fixtures": ["conformance/cli-fixtures/r", "conformance/cli-fixtures/r-check"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {

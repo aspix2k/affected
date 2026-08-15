@@ -9,6 +9,14 @@ import com.intellij.execution.process.ProcessOutputTypes
 import com.intellij.util.concurrency.AppExecutorUtil
 import java.io.File
 import java.io.OutputStream
+import java.nio.file.FileVisitResult
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 internal const val DEFAULT_UNRESOLVED_MESSAGE =
@@ -23,27 +31,33 @@ internal data class CliCommand(
     val arguments: List<String>,
     val environment: Map<String, String> = emptyMap(),
     val continueOnFailure: Boolean = false,
+    val ownedTemporaryDirectories: List<Path> = emptyList(),
 ) : CliStep {
     init {
         require(title.isNotBlank())
         require(arguments.isNotEmpty())
+        require(ownedTemporaryDirectories.all(::isOwnedTemporaryDirectory))
     }
 
     override fun resolve(): CliCommand = this
 }
 
-internal class DeferredCliCommand(
-    private val title: String,
-    private val environment: () -> Map<String, String>,
-    private val arguments: () -> List<String>?,
+internal class DeferredCliCommand private constructor(
+    private val command: () -> CliCommand?,
 ) : CliStep {
+    constructor(
+        title: String,
+        environment: () -> Map<String, String>,
+        arguments: () -> List<String>?,
+    ) : this({ arguments()?.let { CliCommand(title, it, environment()) } })
+
     constructor(title: String, arguments: () -> List<String>?) : this(title, { emptyMap() }, arguments)
 
-    init {
-        require(title.isNotBlank())
-    }
+    override fun resolve(): CliCommand? = command()
 
-    override fun resolve(): CliCommand? = arguments()?.let { CliCommand(title, it, environment()) }
+    companion object {
+        fun command(resolve: () -> CliCommand?): DeferredCliCommand = DeferredCliCommand(resolve)
+    }
 }
 
 internal class SequentialProcessHandler(
@@ -51,6 +65,9 @@ internal class SequentialProcessHandler(
     private val commands: List<CliStep>,
     private val unresolvedMessage: String = DEFAULT_UNRESOLVED_MESSAGE,
     private val continueAfterFailure: Boolean = false,
+    private val processHandlerFactory: (GeneralCommandLine) -> OSProcessHandler = { OSProcessHandler(it) },
+    private val afterInitialProcessTermination: () -> Unit = {},
+    private val processTerminationStarted: () -> Unit = {},
 ) : ProcessHandler() {
 
     private val finished = AtomicBoolean(false)
@@ -58,6 +75,9 @@ internal class SequentialProcessHandler(
     private val lock = Any()
     private var next = 0
     private var recordedExitCode = 0
+    private var activeCommand: CliCommand? = null
+    private var terminationSetup: CountDownLatch? = null
+    private var terminatingProcesses = emptyList<ProcessHandle>()
 
     @Volatile
     private var current: OSProcessHandler? = null
@@ -71,12 +91,25 @@ internal class SequentialProcessHandler(
     }
 
     override fun destroyProcessImpl() {
-        stopped.set(true)
-        val handler = synchronized(lock) {
+        var handler: OSProcessHandler? = null
+        var hasActiveLifecycle = false
+        var setup: CountDownLatch? = null
+        var initiate = false
+        synchronized(lock) {
+            if (!stopped.get()) {
+                handler = current
+                if (handler != null) setup = prepareTerminationLocked()
+                stopped.set(true)
+                initiate = true
+            }
             resolverThread?.interrupt()
-            current
+            hasActiveLifecycle = resolverThread != null || activeCommand != null
         }
-        handler?.destroyProcess() ?: finish(1)
+        if (!initiate) return
+        when {
+            handler != null -> destroyProcessTree(handler, setup!!)
+            !hasActiveLifecycle -> finish(1)
+        }
     }
 
     override fun detachProcessImpl() {
@@ -116,11 +149,15 @@ internal class SequentialProcessHandler(
             }
         }
         if (!mayResolve) return finish(1)
-        val command = runCatching(step::resolve).also {
-            synchronized(lock) {
-                if (resolverThread === Thread.currentThread()) resolverThread = null
+        val resolved = runCatching(step::resolve)
+        val command = resolved.getOrNull()
+        synchronized(lock) {
+            if (resolverThread === Thread.currentThread()) {
+                if (resolved.isSuccess && command != null) activeCommand = command
+                resolverThread = null
             }
-        }.getOrElse { error ->
+        }
+        resolved.exceptionOrNull()?.let { error ->
             notifyTextAvailable(
                 "Affected could not resolve the next command: ${error.message.orEmpty()}\n",
                 ProcessOutputTypes.STDERR,
@@ -132,13 +169,22 @@ internal class SequentialProcessHandler(
             AppExecutorUtil.getAppExecutorService().execute(::startNext)
             return
         }
-        if (stopped.get()) return finish(1)
+        start(command)
+    }
+
+    private fun start(command: CliCommand) {
+        if (stopped.get()) {
+            cleanup(command)
+            release(command)
+            finish(1)
+            return
+        }
 
         notifyTextAvailable("\n> ${command.title}\n", ProcessOutputTypes.SYSTEM)
         val handler = runCatching {
             val arguments = command.arguments.toMutableList()
             arguments[0] = resolveExecutable(arguments[0])
-            OSProcessHandler(
+            processHandlerFactory(
                 GeneralCommandLine(arguments)
                     .withWorkDirectory(workingDirectory)
                     .withCharset(Charsets.UTF_8)
@@ -149,7 +195,10 @@ internal class SequentialProcessHandler(
                 "Affected could not start ${command.title}: ${error.message.orEmpty()}\n",
                 ProcessOutputTypes.STDERR,
             )
-            return finish(1)
+            cleanup(command)
+            release(command)
+            finish(1)
+            return
         }
 
         val shouldStart = synchronized(lock) {
@@ -161,8 +210,12 @@ internal class SequentialProcessHandler(
             }
         }
         if (!shouldStart) {
-            handler.destroyProcess()
-            return finish(1)
+            val setup = synchronized(lock) { prepareTerminationLocked() }
+            destroyProcessTree(handler, setup)
+            if (awaitTerminatingProcesses()) cleanup(command)
+            release(command)
+            finish(1)
+            return
         }
         handler.addProcessListener(object : ProcessListener {
             override fun onTextAvailable(event: ProcessEvent, outputType: com.intellij.openapi.util.Key<*>) {
@@ -173,16 +226,27 @@ internal class SequentialProcessHandler(
                 synchronized(lock) {
                     if (current === handler) current = null
                 }
+                processTerminationStarted()
+                val terminated = !stopped.get() || awaitTerminatingProcesses()
+                if (!terminated) {
+                    notifyTextAvailable(
+                        "Affected could not terminate every child process before cleanup.\n",
+                        ProcessOutputTypes.STDERR,
+                    )
+                }
+                val cleaned = terminated && cleanup(command)
+                release(command)
+                val exitCode = if (cleaned) event.exitCode else event.exitCode.takeIf { it != 0 } ?: 1
                 when {
-                    event.exitCode == 0 && !stopped.get() ->
+                    exitCode == 0 && !stopped.get() ->
                         AppExecutorUtil.getAppExecutorService().execute(::startNext)
-                    shouldContinueAfterFailure(command, event.exitCode) -> {
+                    shouldContinueAfterFailure(command, exitCode) -> {
                         synchronized(lock) {
-                            if (recordedExitCode == 0) recordedExitCode = event.exitCode
+                            if (recordedExitCode == 0) recordedExitCode = exitCode
                         }
                         AppExecutorUtil.getAppExecutorService().execute(::startNext)
                     }
-                    else -> finish(event.exitCode.takeIf { it != 0 } ?: 1)
+                    else -> finish(exitCode.takeIf { it != 0 } ?: 1)
                 }
             }
         })
@@ -192,6 +256,89 @@ internal class SequentialProcessHandler(
     private fun shouldContinueAfterFailure(command: CliCommand, exitCode: Int): Boolean =
         exitCode != 0 && !stopped.get() && (command.continueOnFailure || continueAfterFailure)
 
+    private fun release(command: CliCommand) {
+        synchronized(lock) {
+            if (activeCommand === command) activeCommand = null
+        }
+    }
+
+    private fun cleanup(command: CliCommand): Boolean {
+        val interrupted = Thread.interrupted()
+        return try {
+            val failed = command.ownedTemporaryDirectories.filterNot(::deleteOwnedTemporaryDirectory)
+            if (failed.isEmpty()) {
+                true
+            } else {
+                notifyTextAvailable(
+                    "Affected could not remove its temporary output: ${failed.joinToString()}\n",
+                    ProcessOutputTypes.STDERR,
+                )
+                false
+            }
+        } finally {
+            if (interrupted) Thread.currentThread().interrupt()
+        }
+    }
+
+    private fun prepareTerminationLocked(): CountDownLatch = terminationSetup ?: CountDownLatch(1).also {
+        terminationSetup = it
+        terminatingProcesses = emptyList()
+    }
+
+    private fun destroyProcessTree(handler: OSProcessHandler, setup: CountDownLatch) {
+        try {
+            val first = runCatching { handler.process.descendants().toList().asReversed() }.getOrDefault(emptyList())
+            synchronized(lock) {
+                terminatingProcesses = (first + handler.process.toHandle()).distinct()
+            }
+            first.forEach { process -> runCatching { process.destroyForcibly() } }
+            afterInitialProcessTermination()
+            val second = runCatching { handler.process.descendants().toList().asReversed() }.getOrDefault(emptyList())
+            val processes = (first + second + handler.process.toHandle()).distinct()
+            synchronized(lock) {
+                terminatingProcesses = processes
+            }
+            processes.forEach { process -> runCatching { process.destroyForcibly() } }
+            handler.destroyProcess()
+        } finally {
+            setup.countDown()
+        }
+    }
+
+    private fun awaitTerminatingProcesses(): Boolean {
+        val deadline = System.nanoTime() + PROCESS_TERMINATION_TIMEOUT_NANOS
+        val setup = synchronized(lock) { terminationSetup }
+        if (setup != null) {
+            val remaining = deadline - System.nanoTime()
+            try {
+                if (remaining <= 0 || !setup.await(remaining, TimeUnit.NANOSECONDS)) return false
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
+        }
+        val processes = synchronized(lock) { terminatingProcesses }
+        for (process in processes) {
+            while (process.isAlive && System.nanoTime() < deadline) {
+                try {
+                    Thread.sleep(PROCESS_TERMINATION_POLL_MILLIS)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return false
+                }
+            }
+        }
+        val terminated = processes.none(ProcessHandle::isAlive)
+        if (!terminated) return false
+        synchronized(lock) {
+            if (terminationSetup === setup) {
+                terminationSetup = null
+                terminatingProcesses = emptyList()
+            }
+        }
+        return true
+    }
+
     private fun notifyDetached() {
         if (finished.compareAndSet(false, true)) notifyProcessDetached()
     }
@@ -200,3 +347,61 @@ internal class SequentialProcessHandler(
         if (finished.compareAndSet(false, true)) notifyProcessTerminated(exitCode)
     }
 }
+
+private fun isOwnedTemporaryDirectory(path: Path): Boolean = runCatching {
+    val normalized = path.toAbsolutePath().normalize()
+    normalized == path &&
+        normalized.fileName.toString().startsWith(OWNED_TEMPORARY_PREFIX) &&
+        Files.isDirectory(normalized, LinkOption.NOFOLLOW_LINKS) &&
+        !Files.isSymbolicLink(normalized) &&
+        normalized.toRealPath().startsWith(temporaryRoot())
+}.getOrDefault(false)
+
+private fun deleteOwnedTemporaryDirectory(path: Path): Boolean {
+    repeat(CLEANUP_ATTEMPTS) { attempt ->
+        if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return true
+        if (Files.isSymbolicLink(path) || !isOwnedTemporaryDirectory(path)) return false
+        var entries = 0
+        runCatching {
+            Files.walkFileTree(path, object : SimpleFileVisitor<Path>() {
+                override fun preVisitDirectory(directory: Path, attributes: BasicFileAttributes): FileVisitResult {
+                    check(++entries <= MAX_CLEANUP_ENTRIES)
+                    check(!Thread.currentThread().isInterrupted)
+                    return FileVisitResult.CONTINUE
+                }
+
+                override fun visitFile(file: Path, attributes: BasicFileAttributes): FileVisitResult {
+                    check(++entries <= MAX_CLEANUP_ENTRIES)
+                    check(!Thread.currentThread().isInterrupted)
+                    Files.delete(file)
+                    return FileVisitResult.CONTINUE
+                }
+
+                override fun postVisitDirectory(directory: Path, error: java.io.IOException?): FileVisitResult {
+                    if (error != null) throw error
+                    Files.delete(directory)
+                    return FileVisitResult.CONTINUE
+                }
+            })
+        }
+        if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return true
+        if (attempt + 1 < CLEANUP_ATTEMPTS) {
+            try {
+                Thread.sleep(CLEANUP_BACKOFF_MILLIS shl attempt)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
+        }
+    }
+    return false
+}
+
+private fun temporaryRoot(): Path = Path.of(System.getProperty("java.io.tmpdir")).toRealPath()
+
+private const val OWNED_TEMPORARY_PREFIX = "affected-"
+private const val CLEANUP_ATTEMPTS = 3
+private const val CLEANUP_BACKOFF_MILLIS = 50L
+private const val MAX_CLEANUP_ENTRIES = 100_000
+private const val PROCESS_TERMINATION_POLL_MILLIS = 25L
+private const val PROCESS_TERMINATION_TIMEOUT_NANOS = 5_000_000_000L
