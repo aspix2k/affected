@@ -5,17 +5,25 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
+import java.nio.file.Path
 
 class ChangeListener : BulkFileListener {
 
     override fun after(events: List<VFileEvent>) {
         val extensions = BuildSystems.sourceExtensions()
         val names = BuildSystems.sourceFileNames()
-        if (!shouldRefreshFromVfs(remoteFrontendProven(), events.map { it.path }, extensions, names)) return
+        val frontend = remoteFrontendProven()
+        val paths = events.map { it.path }
+        val sourceChanged = shouldRefreshFromVfs(frontend, paths, extensions, names)
 
         for (project in ProjectManager.getInstance().openProjects) {
-            if (project.isDisposed) continue
-            project.service<AffectedState>().invalidate()
+            if (!project.isDisposed) {
+                val allFileChanged = project.basePath?.let { root ->
+                    BuildSystems.includesAllFileChanges(project) &&
+                        shouldRefreshAllFilesForProject(frontend, root, paths)
+                } == true
+                if (sourceChanged || allFileChanged) project.service<AffectedState>().invalidate()
+            }
         }
     }
 }
@@ -38,10 +46,27 @@ internal fun shouldRefreshFromVfs(
 
 internal fun isRelevantPath(path: String, extensions: Set<String>, names: Set<String> = emptySet()): Boolean {
     val normalized = path.replace('\\', '/')
-    if (IGNORED_DIRECTORIES.any(normalized::contains)) return false
+    if (ignoredPath(normalized)) return false
     return normalized.substringAfterLast('.', "").lowercase() in extensions ||
         normalized.substringAfterLast('/') in names
 }
+
+internal fun shouldRefreshAllFilesForProject(
+    frontend: Boolean,
+    projectRoot: String,
+    paths: List<String>,
+): Boolean = !frontend && runCatching {
+    val root = Path.of(projectRoot).toAbsolutePath().normalize()
+    paths.any { raw ->
+        val candidate = Path.of(raw).toAbsolutePath().normalize()
+        candidate != root && candidate.startsWith(root) &&
+            !ignoredPath(raw.replace('\\', '/')) &&
+            !isProjectDocumentation(candidate.fileName.toString())
+    }
+}.getOrDefault(false)
+
+private fun ignoredPath(normalized: String): Boolean =
+    IGNORED_DIRECTORIES.any(normalized::contains)
 
 private val IGNORED_DIRECTORIES = listOf(
     "/.git/",
