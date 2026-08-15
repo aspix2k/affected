@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - A lone first-level `backend/` Kotlin Toolchain project is now the toolchain root when the repository base has no marker.
+- Support `xunit.runner.visualstudio` 4.0.0 for exact VSTest selection.
 
 ## [3.7.0] - 2026-08-15
 
