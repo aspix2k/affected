@@ -2,6 +2,8 @@ Package: affectedcheck
 Title: Affected R Package Check Fixture
 Version: 0.0.1
 Authors@R: person("Affected", "Fixture", email = "fixture@example.com", role = c("aut", "cre"))
+Author: Affected Fixture [aut, cre]
+Maintainer: Affected Fixture <fixture@example.com>
 Description: A public source package fixture for native R package checks.
 License: MIT + file LICENSE
 Encoding: UTF-8
