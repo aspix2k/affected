@@ -406,6 +406,7 @@ class RCommandTest {
             "unlink(output, recursive = TRUE, force = TRUE)",
         )
         assertContains(command.arguments.single { it.contains("tools::Rcmd") }, "cleanup != 0L")
+        assertFalse(command.arguments.contains("--args"))
         assertEquals(listOf(output), command.ownedTemporaryDirectories)
         assertEquals(output.toString(), command.arguments.last())
         assertFalse(command.arguments.any { it.contains("read.dcf") })

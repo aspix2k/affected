@@ -154,7 +154,7 @@ private fun rPackageCheckStep(): CliStep = DeferredCliCommand.command {
 
 internal fun rPackageCheckCommand(outputDirectory: Path): CliCommand {
     val output = outputDirectory.toAbsolutePath().normalize()
-    val arguments = PACKAGE_CHECK_ARGUMENTS + listOf("--args", output.toString())
+    val arguments = PACKAGE_CHECK_ARGUMENTS + output.toString()
     return CliCommand(
         title = "R CMD check",
         arguments = arguments,
