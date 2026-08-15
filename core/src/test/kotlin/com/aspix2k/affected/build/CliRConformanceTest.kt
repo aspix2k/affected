@@ -22,7 +22,7 @@ class CliRConformanceTest {
             listOf("Rscript", "-e", "testthat::test_local(\".\")"),
             command.arguments,
         )
-        val text = execute(root, command.arguments)
+        val text = execute(root, command)
         assertContains(text, "AlphaTest")
         assertContains(text, "BetaTest")
         assertContains(text, "UnrelatedTest")
@@ -58,7 +58,7 @@ class CliRConformanceTest {
             command.arguments,
         )
 
-        val text = execute(root, command.arguments)
+        val text = execute(root, command)
         assertContains(text, "AlphaTest")
         assertContains(text, "BetaTest")
         assertFalse(text.contains("UnrelatedTest"), text)
@@ -86,7 +86,7 @@ class CliRConformanceTest {
             BuildChanges(paths, paths.toSet(), comparedToBase = true),
         ).single()
 
-        val text = execute(root, command.arguments, succeeds = false)
+        val text = execute(root, command, succeeds = false)
         assertContains(text, "AlphaTest")
         assertContains(text, "BetaTest")
     }
@@ -109,22 +109,23 @@ class CliRConformanceTest {
         .firstOrNull(File::isDirectory)
         ?: File(System.getProperty("user.dir"), "conformance/cli-fixtures")
 
-    private fun execute(directory: File, arguments: List<String>, succeeds: Boolean = true): String {
+    private fun execute(directory: File, command: CliCommand, succeeds: Boolean = true): String {
         val output = File.createTempFile("affected-cli-output", ".log")
         try {
-            val process = ProcessBuilder(arguments)
+            val processBuilder = ProcessBuilder(command.arguments)
                 .directory(directory)
                 .redirectErrorStream(true)
                 .redirectOutput(output)
-                .start()
+            processBuilder.environment().putAll(command.environment)
+            val process = processBuilder.start()
             val completed = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             if (!completed) process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)
             val text = output.readText()
-            assertTrue(completed, "Timed out: ${arguments.joinToString(" ")}\n$text")
+            assertTrue(completed, "Timed out: ${command.arguments.joinToString(" ")}\n$text")
             assertEquals(
                 if (succeeds) 0 else 1,
                 process.exitValue(),
-                "Unexpected exit: ${arguments.joinToString(" ")}\n$text",
+                "Unexpected exit: ${command.arguments.joinToString(" ")}\n$text",
             )
             return text
         } finally {

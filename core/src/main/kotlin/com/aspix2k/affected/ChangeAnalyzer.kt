@@ -229,8 +229,10 @@ private fun isJvmTestSource(segments: List<String>): Boolean =
 private val NODE_TEST_DIRECTORIES = setOf("test", "tests", "spec", "specs", "__tests__")
 
 fun isProjectDocumentation(path: String): Boolean {
-    val name = path.substringAfterLast('/').substringAfterLast('\\').lowercase()
-    return name in PROJECT_DOCUMENTATION_NAMES
+    val normalized = path.replace('\\', '/').trimStart('/')
+    val name = normalized.substringAfterLast('/').lowercase()
+    val parent = normalized.substringBeforeLast('/', "")
+    return name in PROJECT_DOCUMENTATION_NAMES && (parent.isEmpty() || parent == "docs")
 }
 
 internal fun isCollectedSource(

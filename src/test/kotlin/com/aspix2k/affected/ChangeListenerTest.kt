@@ -1,6 +1,11 @@
 package com.aspix2k.affected
 
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.newvfs.events.VFileMoveEvent
+import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
+import com.intellij.testFramework.LightVirtualFile
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -96,6 +101,40 @@ class ChangeListenerTest {
     }
 
     @Test
+    fun `an all-file project refreshes for a snapshot named like project documentation`() {
+        assertTrue(
+            shouldRefreshAllFilesForProject(
+                frontend = false,
+                projectRoot = "/project",
+                paths = listOf("/project/tests/testthat/_snaps/readme.md"),
+            ),
+        )
+    }
+
+    @Test
+    fun `a moved resource reports both its old and new paths`() {
+        val file = TestVirtualFile("input.csv", TestVirtualFile("project", directory = true))
+        val target = TestVirtualFile("outside", directory = true)
+        val event = VFileMoveEvent(this, file, target)
+
+        assertEquals(listOf(event.oldPath, event.newPath), affectedVfsPaths(listOf(event)))
+    }
+
+    @Test
+    fun `a renamed resource reports both its old and new paths`() {
+        val file = TestVirtualFile("input.csv", TestVirtualFile("project", directory = true))
+        val event = VFilePropertyChangeEvent(
+            this,
+            file,
+            VirtualFile.PROP_NAME,
+            "input.csv",
+            "renamed.csv",
+        )
+
+        assertEquals(listOf(event.oldPath, event.newPath), affectedVfsPaths(listOf(event)))
+    }
+
+    @Test
     fun `Windows separators still ignore generated and VCS files`() {
         assertFalse(isRelevantPath("C:\\project\\.git\\worktrees\\main.go", extensions))
         assertFalse(isRelevantPath("C:\\project\\.gradle\\cache\\lib.rs", extensions))
@@ -122,5 +161,17 @@ class ChangeListenerTest {
     @Test
     fun `a local IDE still analyzes on startup`() {
         assertTrue(shouldRefreshOnStartup(frontend = false))
+    }
+
+    private class TestVirtualFile(
+        name: String,
+        private val parentFile: VirtualFile? = null,
+        private val directory: Boolean = false,
+    ) : LightVirtualFile(name) {
+        override fun getParent(): VirtualFile? = parentFile
+
+        override fun isDirectory(): Boolean = directory
+
+        override fun getPath(): String = parentFile?.let { "${it.path}/$name" } ?: "/$name"
     }
 }

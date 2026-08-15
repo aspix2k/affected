@@ -47,6 +47,89 @@ class RCommandTest {
             ),
             rCommands(root, listOf(".:test"), changes(beta, alpha)).single().arguments,
         )
+        assertEquals(
+            mapOf("TESTTHAT_PARALLEL" to "false"),
+            rCommands(root, listOf(".:test"), changes(beta, alpha)).single().environment,
+        )
+    }
+
+    @Test
+    fun `deferred R selection keeps exact arguments only while the change proof is current`() {
+        val root = rRoot()
+        val selected = testFile(root, "test-alpha.R")
+        val planned = changes(selected)
+
+        val command = rDeferredCommands(root, listOf(".:test"), planned) { planned }
+            .single()
+            .resolve()
+
+        assertEquals(rCommands(root, listOf(".:test"), planned).single().arguments, command?.arguments)
+    }
+
+    @Test
+    fun `a full R plan does not refresh changes on the click path`() {
+        val root = rRoot()
+        val source = File(root, "R/alpha.R").apply {
+            parentFile.mkdirs()
+            writeText("alpha <- TRUE\n")
+        }
+        val planned = changes(source)
+        var refreshed = false
+
+        val command = rDeferredCommands(root, listOf(".:test"), planned) {
+            refreshed = true
+            planned
+        }.single().resolve()
+
+        assertFalse(refreshed)
+        assertEquals(rCommands(root, listOf(".:test")).single(), command)
+    }
+
+    @Test
+    fun `a helper added after planning widens deferred R selection`() {
+        val root = rRoot()
+        val selected = testFile(root, "test-alpha.R")
+        val planned = changes(selected)
+        val helper = File(root, "tests/testthat/helper.R").apply { writeText("helper_value <- TRUE\n") }
+
+        val command = rDeferredCommands(root, listOf(".:test"), planned) { changes(selected, helper) }
+            .single()
+            .resolve()
+
+        assertEquals(rCommands(root, listOf(".:test")).single().arguments, command?.arguments)
+    }
+
+    @Test
+    fun `a generated input added after planning widens deferred R selection`() {
+        val root = rRoot()
+        val selected = testFile(root, "test-alpha.R")
+        val planned = changes(selected)
+        val generated = File(root, "build/generated/input.csv").apply {
+            parentFile.mkdirs()
+            writeText("input\n")
+        }
+
+        val command = rDeferredCommands(root, listOf(".:test"), planned) { changes(selected, generated) }
+            .single()
+            .resolve()
+
+        assertEquals(rCommands(root, listOf(".:test")).single().arguments, command?.arguments)
+    }
+
+    @Test
+    fun `a testthat file replaced by a symlink after planning widens deferred R selection`() {
+        val root = rRoot()
+        val selected = testFile(root, "test-alpha.R")
+        val planned = changes(selected)
+        val outside = testFile(createTempDirectory("r-outside").toFile(), "external.R")
+        selected.delete()
+        if (runCatching { Files.createSymbolicLink(selected.toPath(), outside.toPath()) }.isFailure) return
+
+        val command = rDeferredCommands(root, listOf(".:test"), planned) { planned }
+            .single()
+            .resolve()
+
+        assertEquals(rCommands(root, listOf(".:test")).single().arguments, command?.arguments)
     }
 
     @Test
@@ -75,7 +158,7 @@ class RCommandTest {
     @Test
     fun `testthat snapshots keep the full project test command`() {
         val root = rRoot()
-        val snapshot = File(root, "tests/testthat/_snaps/alpha.md").apply {
+        val snapshot = File(root, "tests/testthat/_snaps/readme.md").apply {
             parentFile.mkdirs()
             writeText("snapshot\n")
         }
@@ -228,6 +311,16 @@ class RCommandTest {
     fun `an oversized set of changed testthat files keeps the full project test command`() {
         val root = rRoot()
         val files = (0..256).map { testFile(root, "test-$it.R") }.toTypedArray()
+
+        assertFullTestCommand(root, changes(*files))
+    }
+
+    @Test
+    fun `testthat paths beyond the portable process argument budget keep the full project command`() {
+        val root = rRoot()
+        val files = (0 until 128).map { index ->
+            testFile(root, "test-$index-${"a".repeat(110)}.R")
+        }.toTypedArray()
 
         assertFullTestCommand(root, changes(*files))
     }

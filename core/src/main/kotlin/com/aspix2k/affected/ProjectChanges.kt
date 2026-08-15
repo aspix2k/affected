@@ -58,6 +58,7 @@ object ProjectChanges {
         names: Set<String>,
         includeAllFiles: Boolean,
     ): List<File> {
+        val projectDir = project.basePath?.let(::File) ?: return emptyList()
         val manager = ChangeListManager.getInstance(project)
 
         val tracked = manager.affectedPaths + manager.modifiedWithoutEditing.map { File(it.path) }
@@ -65,7 +66,9 @@ object ProjectChanges {
 
         return (tracked + untracked)
             .filter { file ->
-                isCollectedSource(file.invariantSeparatorsPath, includeAllFiles, extensions, names)
+                val relative = runCatching { file.relativeTo(projectDir).invariantSeparatorsPath }
+                    .getOrDefault(file.invariantSeparatorsPath)
+                isCollectedSource(relative, includeAllFiles, extensions, names)
             }
             .distinct()
     }

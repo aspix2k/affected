@@ -1,5 +1,7 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.ProjectChanges
+import com.aspix2k.affected.toBuildChanges
 import com.intellij.openapi.project.Project
 import java.io.File
 import java.nio.file.Files
@@ -36,7 +38,9 @@ class RBuildSystem : ChangeAwareSuspendingBuildSystem, NamedSourceBuildSystem, A
     ): Boolean = CommandRunner.runBatchAndWait(
         project,
         root,
-        rCommands(File(root), tasks, changes),
+        rDeferredCommands(File(root), tasks, changes) {
+            ProjectChanges.collect(project).toBuildChanges()
+        },
         "Affected R",
     )
 
@@ -99,12 +103,40 @@ internal fun rCommands(
     val arguments = when {
         check -> listOf("Rscript", "-e", "read.dcf(\"DESCRIPTION\")")
         verbs == setOf(RTasks.TEST) && packageRoot -> selectedTestthatFiles(root, changes)?.let { selected ->
-            listOf("Rscript", "-e", TEST_FILE_EXPRESSION, "--args") + selected
+            EXACT_TEST_ARGUMENTS + selected
         } ?: fullTest
         else -> fullTest
     }
-    return listOf(CliCommand(arguments.joinToString(" "), arguments))
+    val environment = if (packageRoot && !check) R_TEST_ENVIRONMENT else emptyMap()
+    return listOf(CliCommand(arguments.joinToString(" "), arguments, environment))
 }
+
+internal fun rDeferredCommands(
+    root: File,
+    tasks: List<String>,
+    planned: BuildChanges,
+    currentChanges: () -> BuildChanges,
+): List<CliStep> {
+    if (tasks.isEmpty()) return emptyList()
+    val plannedCommands = rCommands(root, tasks, planned)
+    if (plannedCommands == rCommands(root, tasks)) return plannedCommands
+    return listOf(
+        DeferredCliCommand(
+            title = "Rscript testthat",
+            environment = { R_TEST_ENVIRONMENT },
+            arguments = {
+                val current = runCatching(currentChanges).getOrNull()
+                val effective = current?.takeIf { sameRChanges(planned, it) }
+                rCommands(root, tasks, effective).singleOrNull()?.arguments
+            },
+        ),
+    )
+}
+
+private fun sameRChanges(planned: BuildChanges, current: BuildChanges): Boolean =
+    planned.comparedToBase == current.comparedToBase &&
+        planned.files.toSet() == current.files.toSet() &&
+        planned.exactSelectionEligible == current.exactSelectionEligible
 
 private fun selectedTestthatFiles(root: File, changes: BuildChanges?): List<String>? = runCatching {
     require(changes != null && changes.comparedToBase)
@@ -145,6 +177,7 @@ private fun selectedTestthatFiles(root: File, changes: BuildChanges?): List<Stri
         require(SAFE_TEST_CONTEXT.matches(context))
         require(byContext[context] == listOf(name))
     }
+    require((EXACT_TEST_ARGUMENTS + selected).sumOf { it.length + 1 } <= MAX_EXACT_ARGUMENT_CHARACTERS)
     selected
 }.getOrNull()
 
@@ -164,6 +197,7 @@ private val SAFE_TEST_CONTEXT = Regex("""[A-Za-z0-9][A-Za-z0-9_-]{0,127}""")
 private val FOREIGN_ROOTS = listOf("settings.gradle.kts", "settings.gradle", "pom.xml")
 private const val MAX_SELECTED_TEST_FILES = 256
 private const val MAX_TEST_DIRECTORY_ENTRIES = 4_096
+private const val MAX_EXACT_ARGUMENT_CHARACTERS = 16_000
 private const val TEST_DIRECTORY = "tests/testthat"
 private const val TEST_FILE_EXPRESSION =
     "local({version <- utils::packageVersion(\"testthat\"); " +
@@ -174,6 +208,8 @@ private const val TEST_FILE_EXPRESSION =
         "filter = paste0(\"^(\", paste(contexts, collapse = \"|\"), \")$\"))}})"
 private val PACKAGE_TEST_ARGUMENTS = listOf("Rscript", "-e", "testthat::test_local(\".\")")
 private val PROJECT_TEST_ARGUMENTS = listOf("Rscript", "-e", "testthat::test_dir(\"tests/testthat\")")
+private val EXACT_TEST_ARGUMENTS = listOf("Rscript", "-e", TEST_FILE_EXPRESSION, "--args")
+private val R_TEST_ENVIRONMENT = mapOf("TESTTHAT_PARALLEL" to "false")
 
 private fun testthatContext(name: String): String = name
     .replace(Regex("""\.[rR]$"""), "")

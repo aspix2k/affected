@@ -143,12 +143,25 @@ class ChangeAnalyzerTest {
     }
 
     @Test
-    fun `windows separators still drop project documentation from all-file collection`() {
-        assertTrue(isProjectDocumentation("C:\\repo\\README.md"))
-        assertTrue(isProjectDocumentation("C:\\repo\\docs\\CHANGELOG.md"))
+    fun `all-file collection keeps a snapshot named like project documentation`() = repo { dir ->
+        val snapshot = File(dir, "tests/testthat/_snaps/readme.md").apply {
+            parentFile.mkdirs()
+            writeText("snapshot")
+        }
+
+        val changes = ChangeAnalyzer(dir, "main", includeAllFiles = true).collect().files
+
+        assertTrue(snapshot in changes, changes.toString())
+    }
+
+    @Test
+    fun `windows separators still drop root documentation from all-file collection`() {
+        assertTrue(isProjectDocumentation("README.md"))
+        assertTrue(isProjectDocumentation("docs\\CHANGELOG.md"))
+        assertFalse(isProjectDocumentation("tests\\testthat\\_snaps\\README.md"))
         assertFalse(
             isCollectedSource(
-                "C:\\repo\\README.md",
+                "README.md",
                 includeAllFiles = true,
                 extensions = setOf("kt"),
                 names = emptySet(),
