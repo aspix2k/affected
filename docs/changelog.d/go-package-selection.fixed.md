@@ -1,0 +1,1 @@
+- Restore the documented Go package-level test boundary so build tags and platform-specific test files cannot produce a successful zero-test function filter.
