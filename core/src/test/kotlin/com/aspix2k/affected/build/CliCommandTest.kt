@@ -325,19 +325,7 @@ class CliCommandTest {
     }
 
     @Test
-    fun `dotnet uses the Microsoft Testing Platform project option`() {
-        val root = createTempDirectory("dotnet-mtp").toFile()
-        File(root, "global.json").writeText(
-            """{ "test": { "runner": "Microsoft.Testing.Platform" } }""",
-        )
-
-        val command = dotnetCommands(root.path, listOf("tests/App.Tests.csproj:test")).single()
-
-        assertEquals(listOf("dotnet", "test", "--project", "tests/App.Tests.csproj"), command.arguments)
-    }
-
-    @Test
-    fun `dotnet detects Microsoft Testing Platform from the project file`() {
+    fun `a project level Microsoft Testing Platform marker keeps the compatibility command`() {
         val root = createTempDirectory("dotnet-mtp-csproj").toFile()
         File(root, "tests/App.Tests.csproj").apply {
             parentFile.mkdirs()
@@ -357,7 +345,7 @@ class CliCommandTest {
 
         val command = dotnetCommands(root.path, listOf("tests/App.Tests.csproj:test")).single()
 
-        assertEquals(listOf("dotnet", "test", "--project", "tests/App.Tests.csproj"), command.arguments)
+        assertEquals(listOf("dotnet", "test", "tests/App.Tests.csproj"), command.arguments)
     }
 
     @Test

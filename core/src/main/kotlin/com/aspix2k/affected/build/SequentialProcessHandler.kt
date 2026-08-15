@@ -132,6 +132,7 @@ internal class SequentialProcessHandler(
             AppExecutorUtil.getAppExecutorService().execute(::startNext)
             return
         }
+        if (stopped.get()) return finish(1)
 
         notifyTextAvailable("\n> ${command.title}\n", ProcessOutputTypes.SYSTEM)
         val handler = runCatching {

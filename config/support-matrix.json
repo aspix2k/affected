@@ -289,22 +289,31 @@
       "implementation": "com.aspix2k.affected.build.DotnetBuildSystem",
       "ecosystem": ".NET",
       "languages": ["C#", "F#", "Visual Basic", "Razor"],
-      "runners": ["VSTest with xUnit", "NUnit", "MSTest", "Microsoft Testing Platform", "dotnet build"],
-      "selection": ["test", "project"],
+      "runners": ["VSTest with xUnit", "NUnit", "MSTest", "Microsoft Testing Platform with xUnit v3 4", "dotnet build"],
+      "selection": ["test", "class", "project"],
       "selectionProofs": [
         {
-          "units": ["test", "project"],
+          "units": ["test"],
           "path": "core/src/test/kotlin/com/aspix2k/affected/build/DotnetCliConformanceTest.kt",
           "marker": "dotnet runs exact VSTest identities and preserves full fallback",
           "gate": ".github/workflows/conformance.yml",
           "gateMarker": "--tests '*DotnetCliConformanceTest*'",
           "gateJob": "dotnet-sdks",
           "gateStep": "Run .NET exact fixtures"
+        },
+        {
+          "units": ["class", "project"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/DotnetMtpCliConformanceTest.kt",
+          "marker": "dotnet 10 xUnit 4 runs exact classes and preserves full fallback",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": ".NET SDK 8–10",
+      "versions": ".NET SDK 8–10 for VSTest; SDK 10.0.400 with xunit.v3 4.0.0 and MTP v2 for standalone projects without ProjectReference or custom extensions, and one public sealed Test/Tests class with an explicit global::Xunit.Fact method in a file-scoped namespace per changed C# file; other metadata or syntax runs the full project",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/dotnet"],
+      "fixtures": ["conformance/cli-fixtures/dotnet", "conformance/cli-fixtures/dotnet-mtp-xunit4"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
