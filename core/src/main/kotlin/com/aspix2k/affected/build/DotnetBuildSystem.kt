@@ -1,5 +1,7 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.ProjectChanges
+import com.aspix2k.affected.toBuildChanges
 import com.google.gson.JsonParser
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.project.Project
@@ -10,8 +12,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicReference
 
@@ -51,11 +53,11 @@ class DotnetBuildSystem :
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {
-        CommandRunner.runBatch(project, root, dotnetCommands(root, tasks), "Affected .NET")
+        CommandRunner.runBatch(project, root, dotnetSteps(root, tasks), "Affected .NET")
     }
 
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
-        CommandRunner.runBatchAndWait(project, root, dotnetCommands(root, tasks), "Affected .NET")
+        CommandRunner.runBatchAndWait(project, root, dotnetSteps(root, tasks), "Affected .NET")
 
     override suspend fun runAndWaitSuspending(
         project: Project,
@@ -70,7 +72,7 @@ class DotnetBuildSystem :
             return CommandRunner.runBatchAndWait(
                 project,
                 root,
-                dotnetCommands(root, tasks, changes),
+                dotnetSteps(root, tasks),
                 "Affected .NET",
             )
         }
@@ -154,7 +156,7 @@ private class DotnetSelectiveRun private constructor(
                         dependencies.projects,
                         changes,
                         cache.resolve(sha256(executionId)),
-                    )
+                    ) { ProjectChanges.collect(project).toBuildChanges() }
                     projectRuns += run
                     commands += dotnetBuildCommand(executionId)
                     commands += DeferredCliCommand("dotnet test $executionId", run::resolve)
@@ -172,15 +174,29 @@ private class DotnetProjectRun(
     private val productionProjects: Set<Path>,
     private val changes: BuildChanges,
     cache: Path,
+    private val currentChanges: () -> BuildChanges,
 ) {
 
     private val directory = secureDotnetDirectory(cache)
     private val store = DotnetTestBaselineStore(directory.resolve("maps"))
+    private val mtpSelection = dotnetMtpSelectionPlan(root.toString(), project, changes)
     private var state: DotnetRunState = DotnetRunState.Unresolved
 
     @Synchronized
     fun resolve(): List<String>? {
         check(state == DotnetRunState.Unresolved)
+        if (globalJsonDeclaresTestingPlatform(root.toString())) {
+            val activeSdk = requireNotNull(activeDotnetSdkVersion(root.toString())) {
+                DOTNET_SDK_UNRESOLVED_MESSAGE
+            }
+            state = DotnetRunState.Unsupported
+            return if (nativeMicrosoftTestingPlatform(root.toString(), activeSdk)) {
+                dotnetMtpTestArguments(root.toString(), project, changes, mtpSelection, currentChanges)
+            } else {
+                dotnetCommands(root.toString(), listOf("$project:${DotnetProjects.TEST}"), activeSdk)
+                    .single().arguments
+            }
+        }
         val metadata = readDotnetProjectMetadata(root, project, productionProjects)
         if (metadata == null) {
             state = DotnetRunState.Unsupported
@@ -222,7 +238,11 @@ private class DotnetProjectRun(
     }
 
     private fun mtpOrFullTestArguments(): List<String> =
-        dotnetCommands(root.toString(), listOf("$project:${DotnetProjects.TEST}"), changes).single().arguments
+        dotnetSteps(root.toString(), listOf("$project:${DotnetProjects.TEST}")) {
+            activeDotnetSdkVersion(root.toString())
+        }
+            .single().resolve()?.arguments
+            ?: dotnetCommands(root.toString(), listOf("$project:${DotnetProjects.TEST}")).single().arguments
 
     private fun complete(resolved: DotnetRunState.Selected): Boolean {
         if (resolved.selection == DotnetTestSelection.Empty) {
@@ -339,79 +359,70 @@ private const val DOTNET_CACHE_DIRECTORY = "affected"
 internal fun dotnetCommands(
     root: String,
     tasks: List<String>,
-    changes: BuildChanges? = null,
+    activeSdkVersion: String? = null,
 ): List<CliCommand> = tasks.map { task ->
     val project = task.substringBeforeLast(':')
     val verb = if (task.substringAfterLast(':') == DotnetProjects.COMPILE) "build" else "test"
+    val nativeMtp = verb == "test" && nativeMicrosoftTestingPlatform(root, activeSdkVersion)
     val selection = when {
         project == "." -> emptyList()
-        verb == "test" && usesMicrosoftTestingPlatform(root, project) -> listOf("--project", project)
+        nativeMtp -> listOf("--project", project)
         else -> listOf(project)
     }
     val arguments = mutableListOf("dotnet", verb)
     arguments += selection
-    if (verb == "test" && changes != null) {
-        val classes = selectMtpFilterClasses(root, project, changes)
-        if (classes != null) {
-            arguments += "--"
-            classes.forEach { name ->
-                arguments += "--filter-class"
-                arguments += name
-            }
-        }
-    }
     CliCommand("dotnet $verb $project", arguments)
 }
 
-internal fun selectMtpFilterClasses(root: String, project: String, changes: BuildChanges): List<String>? = runCatching {
-    require(usesMicrosoftTestingPlatform(root, project))
-    require(changes.comparedToBase)
-    require(changes.files.isNotEmpty() && changes.files.size <= MAX_MTP_FILTER_CLASSES)
-    require(changes.files.toSet() == changes.exactSelectionEligible)
-    val projectDirectory = File(root, project).toPath().toAbsolutePath().normalize().parent
-    require(projectDirectory != null)
-    require(Files.isDirectory(projectDirectory, LinkOption.NOFOLLOW_LINKS))
-    val names = LinkedHashSet<String>()
-    for (raw in changes.files) {
-        val requested = Path.of(raw).toAbsolutePath().normalize()
-        require(Files.isRegularFile(requested, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(requested))
-        val real = requested.toRealPath(LinkOption.NOFOLLOW_LINKS)
-        require(real.startsWith(projectDirectory))
-        val fileName = real.fileName.toString()
-        require(
-            fileName.endsWith(".cs", ignoreCase = true) ||
-                fileName.endsWith(".fs", ignoreCase = true) ||
-                fileName.endsWith(".vb", ignoreCase = true),
-        )
-        val text = Files.readString(real)
-        val found = MTP_TEST_CLASS.findAll(text).map { it.groupValues[1] }.filter(::mtpTestClassName).toList()
-        require(found.isNotEmpty())
-        names += found
+internal fun dotnetSteps(
+    root: String,
+    tasks: List<String>,
+    activeSdkVersion: () -> String? = { activeDotnetSdkVersion(root) },
+): List<CliStep> = tasks.map { task ->
+    if (task.substringAfterLast(':') == DotnetProjects.TEST && globalJsonDeclaresTestingPlatform(root)) {
+        DeferredCliCommand("dotnet test ${task.substringBeforeLast(':')}") {
+            val version = requireNotNull(activeSdkVersion()) { DOTNET_SDK_UNRESOLVED_MESSAGE }
+            dotnetCommands(root, listOf(task), version).single().arguments
+        }
+    } else {
+        dotnetCommands(root, listOf(task)).single()
     }
-    names.sorted().takeIf { it.isNotEmpty() }
-}.getOrNull()
-
-private fun mtpTestClassName(name: String): Boolean =
-    name.endsWith("Test") || name.endsWith("Tests")
-
-private val MTP_TEST_CLASS = Regex(
-    """(?:public|internal|file)\s+(?:sealed\s+|abstract\s+|partial\s+|static\s+)*class\s+([A-Za-z_][A-Za-z0-9_]*)""",
-)
-private const val MAX_MTP_FILTER_CLASSES = 32
+}
 
 internal fun usesMicrosoftTestingPlatform(root: String, project: String = "."): Boolean =
     globalJsonDeclaresTestingPlatform(root) || projectDeclaresTestingPlatform(root, project)
 
-private fun globalJsonDeclaresTestingPlatform(root: String): Boolean = runCatching {
-    val global = File(root, "global.json").takeIf(File::isRegularFileNoFollow) ?: return false
-    val text = ManifestSearch.readText(global) ?: return false
-    JsonParser.parseString(text).asJsonObject
-        .getAsJsonObject("test")
-        ?.get("runner")
-        ?.takeIf { it.isJsonPrimitive }
-        ?.asString
-        ?.equals("Microsoft.Testing.Platform", ignoreCase = true) == true
-}.getOrDefault(false)
+internal fun nativeMicrosoftTestingPlatform(root: String, activeSdkVersion: String? = null): Boolean =
+    dotnetMtpConfiguration(root)?.let { configuration ->
+        val major = if (activeSdkVersion != null) {
+            activeSdkVersion.substringBefore('.').toIntOrNull()
+        } else {
+            configuration.sdkMajor
+        }
+        major != null && major >= 10
+    } == true
+
+private fun activeDotnetSdkVersion(root: String): String? =
+    CommandRunner.capture(root, listOf("dotnet", "--version"), DOTNET_SDK_TIMEOUT, DOTNET_SDK_MAX_BYTES)
+        ?.trim()
+        ?.takeIf(DOTNET_SDK_VERSION::matches)
+
+private fun dotnetMtpConfiguration(root: String): DotnetMtpConfiguration? = runCatching {
+    val requested = Path.of(root).toAbsolutePath().normalize()
+    require(Files.isDirectory(requested) && Files.isReadable(requested))
+    val global = requested.resolve("global.json")
+    require(Files.isRegularFile(global) && Files.isReadable(global))
+    require(Files.size(global) <= PerformanceBudgets.MAX_MANIFEST_BYTES)
+    val json = JsonParser.parseString(Files.readString(global, StandardCharsets.UTF_8)).asJsonObject
+    val runner = json.getAsJsonObject("test")?.get("runner")
+    require(runner?.isJsonPrimitive == true && runner.asString.equals("Microsoft.Testing.Platform", true))
+    val sdkMajor = json.get("sdk")?.takeIf { it.isJsonObject }?.asJsonObject
+        ?.get("version")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+        ?.asString?.substringBefore('.')?.toIntOrNull()
+    DotnetMtpConfiguration(sdkMajor)
+}.getOrNull()
+
+private fun globalJsonDeclaresTestingPlatform(root: String): Boolean = dotnetMtpConfiguration(root) != null
 
 private fun projectDeclaresTestingPlatform(root: String, project: String): Boolean {
     if (project == ".") return false
@@ -426,3 +437,9 @@ private val TESTING_PLATFORM_PROJECT_MARKERS = listOf(
     "UseMicrosoftTestingPlatformRunner",
     "TestingPlatformDotnetTestSupport",
 )
+private val DOTNET_SDK_VERSION = Regex("[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?")
+private const val DOTNET_SDK_TIMEOUT = 10L
+private const val DOTNET_SDK_MAX_BYTES = 4 * 1024
+private const val DOTNET_SDK_UNRESOLVED_MESSAGE =
+    "Affected could not determine the active .NET SDK for Microsoft Testing Platform."
+private data class DotnetMtpConfiguration(val sdkMajor: Int?)

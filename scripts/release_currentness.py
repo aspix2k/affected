@@ -356,8 +356,9 @@ def local_version(local: dict[str, Any]) -> tuple[str, str | None]:
         return one(re.findall(rf"gem\s+\"{re.escape(name)}\"\s*,\s*\"([^\"]+)\"", text), f"gem {name}"), None
     if kind == "nuget":
         values: list[str] = []
-        for file in (ROOT / "conformance" / "cli-fixtures" / "dotnet").rglob("*.csproj"):
-            values += re.findall(rf"<PackageReference\s+Include=\"{re.escape(name)}\"\s+Version=\"([^\"]+)\"", file.read_text(encoding="utf-8"), re.IGNORECASE)
+        for file in dotnet_fixture_projects():
+            versions = re.findall(rf"<PackageReference\s+Include=\"{re.escape(name)}\"\s+Version=\"([^\"]+)\"", file.read_text(encoding="utf-8"), re.IGNORECASE)
+            values += [exact_nuget_version(version) for version in versions]
         return one(values, f"NuGet package {name}"), None
     if kind == "workflow-matrix":
         text = read_text(path)
@@ -857,7 +858,7 @@ def discovered_pin_keys() -> set[str]:
                 keys.add(f"json:{path}:{name}")
     gemfile = read_text("conformance/cli-fixtures/ruby/Gemfile")
     keys.update(f"gem:{name}" for name in re.findall(r'gem\s+"([^"]+)"\s*,\s*"[^"]+"', gemfile))
-    for file in (ROOT / "conformance" / "cli-fixtures" / "dotnet").rglob("*.csproj"):
+    for file in dotnet_fixture_projects():
         text = file.read_text(encoding="utf-8")
         keys.update(f"nuget:{name.lower()}" for name in re.findall(r'<PackageReference\s+Include="([^"]+)"\s+Version="[^"]+"', text, re.IGNORECASE))
     testkit = "collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java"
@@ -877,6 +878,7 @@ def discovered_pin_keys() -> set[str]:
         keys.add(f"go-directive:{go_mod}")
     dotnet_globs = (
         "conformance/cli-fixtures/dotnet/**/*.csproj",
+        "conformance/cli-fixtures/dotnet-mtp-xunit4/**/*.csproj",
         "core/src/main/dotnet/**/*.csproj",
     )
     for pattern in dotnet_globs:
@@ -885,6 +887,21 @@ def discovered_pin_keys() -> set[str]:
             for value in re.findall(r"<TargetFramework(?:\s+[^>]*)?>(net[^<$]+)</TargetFramework>", text):
                 keys.add(f"dotnet-target-framework:{pattern}:{value}")
     return keys
+
+
+def dotnet_fixture_projects() -> list[Path]:
+    """Return every public .NET fixture project governed by currentness."""
+    roots = (
+        ROOT / "conformance" / "cli-fixtures" / "dotnet",
+        ROOT / "conformance" / "cli-fixtures" / "dotnet-mtp-xunit4",
+    )
+    return sorted(file for root in roots for file in root.rglob("*.csproj"))
+
+
+def exact_nuget_version(value: str) -> str:
+    """Normalize a plain or exact-bracket NuGet package version."""
+    match = re.fullmatch(r"\[([^,\[\]]+)\]", value)
+    return match.group(1) if match else value
 
 
 def validate_inventory_coverage(entries: list[dict[str, Any]]) -> None:

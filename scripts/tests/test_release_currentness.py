@@ -591,6 +591,19 @@ class ReleaseCurrentnessTest(unittest.TestCase):
         """Keep the independent direct-pin scan and typed inventory in lockstep."""
         currentness.validate_inventory_coverage(currentness.load_config())
 
+    def test_dotnet_mtp_fixture_pins_are_discovered_and_extracted(self) -> None:
+        """Govern the sibling xUnit 4 MTP project instead of scanning only legacy fixtures."""
+        keys = currentness.discovered_pin_keys()
+        self.assertIn("nuget:xunit.v3", keys)
+        self.assertIn(
+            "dotnet-target-framework:conformance/cli-fixtures/dotnet-mtp-xunit4/**/*.csproj:net10.0",
+            keys,
+        )
+        version, _ = currentness.local_version(
+            {"type": "nuget", "name": "xunit.v3"},
+        )
+        self.assertEqual("4.0.0", version)
+
     def test_unpinned_action_fails_discovery(self) -> None:
         """Reject a new Action reference before inventory comparison."""
         with TemporaryDirectory() as temporary:

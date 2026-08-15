@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build
 
+import com.google.gson.JsonElement
 import com.google.gson.JsonParser
 import java.io.File
 import java.io.StringReader
@@ -101,20 +102,7 @@ private fun supportedDotnetImportedManifest(manifest: Path): Boolean {
 }
 
 private fun supportedDotnetManifest(manifest: Path, text: String, allowImports: Boolean): Boolean = runCatching {
-    val factory = DocumentBuilderFactory.newInstance().apply {
-        isNamespaceAware = true
-        setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
-        setFeature("http://xml.org/sax/features/external-general-entities", false)
-        setFeature("http://xml.org/sax/features/external-parameter-entities", false)
-        setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
-        setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "")
-        setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
-        isXIncludeAware = false
-        isExpandEntityReferences = false
-    }
-    val document = factory.newDocumentBuilder().parse(
-        org.xml.sax.InputSource(StringReader(text.removePrefix("\uFEFF"))),
-    )
+    val document = secureDotnetDocument(text)
     val root = document.documentElement
     require(root.localName == "Project")
     if (manifest.fileName.toString().substringAfterLast('.', "").lowercase() in DOTNET_PROJECT_EXTENSIONS) {
@@ -130,6 +118,143 @@ private fun supportedDotnetManifest(manifest: Path, text: String, allowImports: 
     })
     true
 }.getOrDefault(false)
+
+internal fun supportsNativeXunit4Mtp(root: String, project: String): Boolean = runCatching {
+    val rootPath = Path.of(root).toAbsolutePath().normalize()
+    require(Files.isDirectory(rootPath, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(rootPath))
+    val realRoot = rootPath.toRealPath()
+    require(nativeMtpGlobalJson(realRoot.resolve("global.json")))
+    require(!hasExternalDotnetConfiguration(realRoot))
+    require(!hasDotnetEnvironmentOverrides())
+
+    val projectPath = realRoot.resolve(project).normalize()
+    require(projectPath.startsWith(realRoot) && projectPath.fileName.toString().substringAfterLast('.', "") == "csproj")
+    require(projectPath.isSecureImportedFile() && projectPath.toRealPath() == projectPath)
+    require(mtpConfigurationPathIsClean(realRoot, requireNotNull(projectPath.parent)))
+    val projectText = ManifestSearch.readText(projectPath.toFile()) ?: return false
+    require(supportedDotnetManifest(projectPath, projectText, allowImports = false))
+    require(DOTNET_UNSUPPORTED_MSBUILD_SETTINGS.none { projectText.contains(it, ignoreCase = true) })
+    val document = secureDotnetDocument(projectText)
+    require(document.documentElement.attributes.length == 1)
+    require(document.documentElement.getAttribute("Sdk") == "Microsoft.NET.Sdk")
+    val elements = document.getElementsByTagName("*")
+    repeat(elements.length) { index ->
+        val element = elements.item(index)
+        require(element.localName in MTP_ALLOWED_PROJECT_ELEMENTS)
+        if (element.localName !in setOf("Project", "PackageReference")) {
+            require(element.attributes.length == 0)
+        }
+    }
+    require(document.singleElementText("TargetFramework") == "net10.0")
+    require(document.singleElementText("OutputType") == "Exe")
+    require(document.singleElementText("RestorePackagesWithLockFile") == "true")
+    require(document.singleElementText("RestoreLockedMode") == "true")
+    val references = document.getElementsByTagNameNS("*", "PackageReference")
+    require(references.length == 1)
+    val reference = references.item(0)
+    require(reference.attributes.length == 2)
+    require(reference.attributes.getNamedItem("Include")?.nodeValue == "xunit.v3")
+    require(reference.attributes.getNamedItem("Version")?.nodeValue == "[4.0.0]")
+    require(reference.childNodes.length == 0)
+
+    val lock = projectPath.parent.resolve("packages.lock.json")
+    require(lock.isSecureImportedFile() && lock.toRealPath() == lock)
+    val lockText = ManifestSearch.readText(lock.toFile()) ?: return false
+    val lockJson = JsonParser.parseString(lockText)
+    require(sha256(canonicalDotnetJson(lockJson)) == XUNIT4_MTP_LOCK_IDENTITY)
+    true
+}.getOrDefault(false)
+
+internal fun nativeMtpGlobalJson(path: Path): Boolean = runCatching {
+    require(path.isSecureImportedFile() && path.toRealPath() == path)
+    val text = ManifestSearch.readText(path.toFile()) ?: return false
+    val root = JsonParser.parseString(text).asJsonObject
+    require(root.keySet() == setOf("sdk", "test"))
+    val sdk = root.getAsJsonObject("sdk")
+    require(sdk.keySet() == setOf("version", "rollForward", "allowPrerelease"))
+    require(sdk.get("version").isExactString(NATIVE_MTP_SDK))
+    require(sdk.get("rollForward").isExactString("disable"))
+    require(sdk.get("allowPrerelease")?.let { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean } == true)
+    require(!sdk.get("allowPrerelease").asBoolean)
+    val test = root.getAsJsonObject("test")
+    require(test.keySet() == setOf("runner"))
+    require(test.get("runner").isExactString("Microsoft.Testing.Platform"))
+    true
+}.getOrDefault(false)
+
+private fun JsonElement?.isExactString(value: String): Boolean =
+    this?.let { it.isJsonPrimitive && it.asJsonPrimitive.isString && it.asString == value } == true
+
+private fun JsonElement?.isExactString(pattern: Regex): Boolean =
+    this?.let { it.isJsonPrimitive && it.asJsonPrimitive.isString && it.asString.matches(pattern) } == true
+
+private fun mtpConfigurationPathIsClean(root: Path, projectDirectory: Path): Boolean = runCatching {
+    var current = projectDirectory
+    while (true) {
+        require(current.startsWith(root))
+        Files.newDirectoryStream(current).use { entries ->
+            var count = 0
+            entries.forEach { entry ->
+                require(++count <= MAX_MTP_CONFIGURATION_ENTRIES)
+                val name = entry.fileName.toString().lowercase()
+                require(name !in MTP_CONFIGURATION_NAMES && !name.endsWith(".runsettings"))
+            }
+        }
+        if (current == root) break
+        current = requireNotNull(current.parent)
+    }
+    val properties = Files.newDirectoryStream(projectDirectory).use { entries ->
+        entries.firstOrNull { entry -> entry.fileName.toString().equals("Properties", ignoreCase = true) }
+    }
+    if (properties != null) {
+        require(Files.isDirectory(properties, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(properties))
+        Files.newDirectoryStream(properties).use { entries ->
+            var count = 0
+            entries.forEach { entry ->
+                require(++count <= MAX_MTP_CONFIGURATION_ENTRIES)
+                require(!entry.fileName.toString().equals("launchSettings.json", ignoreCase = true))
+            }
+        }
+    }
+    true
+}.getOrDefault(false)
+
+private fun org.w3c.dom.Document.singleElementText(name: String): String {
+    val elements = getElementsByTagNameNS("*", name)
+    require(elements.length == 1)
+    return elements.item(0).textContent.trim()
+}
+
+private fun canonicalDotnetJson(element: JsonElement): String = when {
+    element.isJsonObject -> element.asJsonObject.entrySet().sortedBy { it.key }
+        .joinToString(separator = ",", prefix = "{", postfix = "}") { (key, value) ->
+            "${com.google.gson.JsonPrimitive(key)}:${canonicalDotnetJson(value)}"
+        }
+    element.isJsonArray -> element.asJsonArray.joinToString(
+        separator = ",",
+        prefix = "[",
+        postfix = "]",
+        transform = ::canonicalDotnetJson,
+    )
+    else -> element.toString()
+}
+
+internal fun secureDotnetDocument(text: String): org.w3c.dom.Document {
+    val factory = DocumentBuilderFactory.newInstance().apply {
+        isNamespaceAware = true
+        setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+        setFeature("http://xml.org/sax/features/external-general-entities", false)
+        setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+        setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+        setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "")
+        setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
+        isXIncludeAware = false
+        isExpandEntityReferences = false
+    }
+    return factory.newDocumentBuilder().parse(
+        org.xml.sax.InputSource(StringReader(text.removePrefix("\uFEFF"))),
+    )
+}
 
 private fun preprocessedDotnetImports(raw: String): Set<Path>? = runCatching {
     val lines = raw.lineSequence().map { it.removeSuffix("\r") }.toList()
@@ -228,6 +353,7 @@ private val DOTNET_UNSUPPORTED_MSBUILD_SETTINGS = setOf(
     "MSTest.Sdk",
     "MSBuildProjectExtensionsPath",
     "MSBuildSDKsPath",
+    "MSBuildUserExtensionsPath",
     "RunSettingsFilePath",
     "TestingPlatformDotnetTestSupport",
     "VSTestTestAdapterPath",
@@ -249,6 +375,12 @@ private val DOTNET_UNSUPPORTED_ENVIRONMENT = setOf(
     "MicrosoftTestingPlatformDotnetTestSupport",
     "MSBuildProjectExtensionsPath",
     "MSBuildSDKsPath",
+    "MSBuildUserExtensionsPath",
+    "RestoreAdditionalProjectSources",
+    "RestoreConfigFile",
+    "RestoreSources",
+    "TestingPlatformCommandLineArguments",
+    "TESTINGPLATFORM_EXITCODE_IGNORE",
     "TestingPlatformDotnetTestSupport",
     "UseMicrosoftTestingPlatformRunner",
 )
@@ -259,6 +391,27 @@ private val DOTNET_PARENT_CONFIG_NAMES = setOf(
     "global.json",
     "NuGet.Config",
 )
+private val MTP_CONFIGURATION_NAMES = setOf(
+    "directory.build.props",
+    "directory.build.targets",
+    "directory.packages.props",
+    "nuget.config",
+    "testconfig.json",
+    "xunit.runner.json",
+)
+private val MTP_ALLOWED_PROJECT_ELEMENTS = setOf(
+    "Project",
+    "PropertyGroup",
+    "TargetFramework",
+    "OutputType",
+    "ImplicitUsings",
+    "Nullable",
+    "RestorePackagesWithLockFile",
+    "RestoreLockedMode",
+    "ItemGroup",
+    "PackageReference",
+)
+private const val MAX_MTP_CONFIGURATION_ENTRIES = 4_096
 private const val DOTNET_PREPROCESS_MAX_BYTES = 16 * 1024 * 1024
 private const val DOTNET_PREPROCESS_SEPARATOR_LENGTH = 140
 private const val MAX_DOTNET_IMPORTS = 4096
@@ -266,3 +419,5 @@ private const val MAX_DOTNET_PACKAGE_FILES = 131_072
 private const val MAX_DOTNET_IMPORT_BYTES = 128L * 1024 * 1024
 private val DOTNET_PREPROCESS_IMPORT = Regex("^<Import(?:\\s|>)")
 private val DOTNET_STABLE_SDK_VERSION = Regex("[0-9]+\\.[0-9]+\\.[0-9]+")
+private val NATIVE_MTP_SDK = Regex("10\\.0\\.400")
+private const val XUNIT4_MTP_LOCK_IDENTITY = "903449ba76017a825dfe05c28d4e46c9459b14c3da38d541b93c95cf404a6f09"
