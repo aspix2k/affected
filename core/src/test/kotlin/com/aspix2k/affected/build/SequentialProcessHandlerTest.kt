@@ -1,9 +1,12 @@
 package com.aspix2k.affected.build
 
+import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
 import com.intellij.openapi.util.Key
+import org.junit.Assume.assumeTrue
 import java.io.File
+import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -234,6 +237,212 @@ class SequentialProcessHandlerTest {
         assertFalse(output.contains("> resolve"), output.toString())
     }
 
+    @Test
+    fun `stopping deferred resolution waits for owned cleanup`() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        lateinit var temporary: java.nio.file.Path
+        val handler = SequentialProcessHandler(
+            createTempDirectory("sequential-deferred-cleanup").toFile(),
+            listOf(
+                DeferredCliCommand.command {
+                    temporary = Files.createTempDirectory("affected-handler-deferred-")
+                    val command = CliCommand(
+                        "deferred cleanup",
+                        listOf(java(), "-version"),
+                        ownedTemporaryDirectories = listOf(temporary),
+                    )
+                    entered.countDown()
+                    try {
+                        release.await()
+                    } catch (_: InterruptedException) {
+                        while (release.count > 0) Thread.onSpinWait()
+                        Thread.currentThread().interrupt()
+                    }
+                    command
+                },
+            ),
+        )
+
+        handler.startNotify()
+        assertTrue(entered.await(5, TimeUnit.SECONDS))
+        handler.destroyProcess()
+
+        assertFalse(handler.waitFor(100))
+        assertTrue(Files.isDirectory(temporary))
+        release.countDown()
+        assertTrue(handler.waitFor(5_000))
+        assertTrue(handler.exitCode != 0)
+        assertFalse(Files.exists(temporary))
+    }
+
+    @Test
+    fun `stopping command startup waits for owned cleanup`() {
+        val starting = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val temporary = Files.createTempDirectory("affected-handler-starting-")
+        val handler = SequentialProcessHandler(
+            createTempDirectory("sequential-starting-cleanup").toFile(),
+            listOf(
+                DeferredCliCommand.command {
+                    CliCommand(
+                        "starting cleanup",
+                        listOf(java(), "-version"),
+                        ownedTemporaryDirectories = listOf(temporary),
+                    )
+                },
+            ),
+            processHandlerFactory = { commandLine ->
+                starting.countDown()
+                release.await()
+                OSProcessHandler(commandLine)
+            },
+        )
+
+        handler.startNotify()
+        assertTrue(starting.await(5, TimeUnit.SECONDS))
+        handler.destroyProcess()
+
+        assertFalse(handler.waitFor(100))
+        assertTrue(Files.isDirectory(temporary))
+        release.countDown()
+        assertTrue(handler.waitFor(5_000))
+        assertTrue(handler.exitCode != 0)
+        assertFalse(Files.exists(temporary))
+    }
+
+    @Test
+    fun `stopping a command terminates descendants before owned cleanup`() {
+        val directory = createTempDirectory("sequential-process-tree")
+        val source = directory.resolve("HandlerTree.java")
+        val ready = directory.resolve("child.ready")
+        val pid = directory.resolve("child.pid")
+        val parentPid = directory.resolve("parent.pid")
+        val temporary = Files.createTempDirectory("affected-handler-process-tree-")
+        val initialTermination = CountDownLatch(1)
+        val releaseTermination = CountDownLatch(1)
+        val processTermination = CountDownLatch(1)
+        source.toFile().writeText(processTreeSource())
+        val compiler = ProcessBuilder(javac(), source.toString()).directory(directory.toFile()).start()
+        assertEquals(0, compiler.waitFor())
+        val handler = SequentialProcessHandler(
+            directory.toFile(),
+            listOf(
+                CliCommand(
+                    "process tree",
+                    listOf(
+                        java(),
+                        "-cp",
+                        directory.toString(),
+                        "HandlerTree",
+                        "parent",
+                        temporary.toString(),
+                        pid.toString(),
+                        ready.toString(),
+                        parentPid.toString(),
+                    ),
+                    ownedTemporaryDirectories = listOf(temporary),
+                ),
+            ),
+            afterInitialProcessTermination = {
+                initialTermination.countDown()
+                releaseTermination.await()
+            },
+            processTerminationStarted = processTermination::countDown,
+        )
+
+        var destroying: Thread? = null
+        try {
+            handler.startNotify()
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            while (!ready.toFile().isFile && System.nanoTime() < deadline) Thread.sleep(25)
+            assertTrue(ready.toFile().isFile)
+            val childPid = pid.toFile().readText().toLong()
+            val parentProcess = ProcessHandle.of(parentPid.toFile().readText().toLong()).orElseThrow()
+            destroying = Thread(handler::destroyProcess).apply { start() }
+            assertTrue(initialTermination.await(5, TimeUnit.SECONDS))
+            val parentDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (parentProcess.isAlive && System.nanoTime() < parentDeadline) Thread.sleep(25)
+            assertFalse(parentProcess.isAlive)
+            assertTrue(processTermination.await(5, TimeUnit.SECONDS))
+            assertFalse(handler.waitFor(100))
+            assertTrue(Files.isDirectory(temporary))
+            releaseTermination.countDown()
+            destroying.join(5_000)
+            assertFalse(destroying.isAlive)
+            assertTrue(handler.waitFor(10_000))
+            assertTrue(handler.exitCode != 0)
+            assertFalse(ProcessHandle.of(childPid).map(ProcessHandle::isAlive).orElse(false))
+            assertFalse(Files.exists(temporary))
+        } finally {
+            releaseTermination.countDown()
+            destroying?.join(5_000)
+            if (!handler.isProcessTerminated) handler.destroyProcess()
+            if (pid.toFile().isFile) {
+                ProcessHandle.of(pid.toFile().readText().toLong()).ifPresent { it.destroyForcibly() }
+            }
+            temporary.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `a completed command removes its owned temporary directory`() {
+        val temporary = Files.createTempDirectory("affected-handler-cleanup-")
+        temporary.resolve("nested").toFile().mkdirs()
+        temporary.resolve("nested/result.txt").toFile().writeText("result")
+        val handler = SequentialProcessHandler(
+            createTempDirectory("sequential-cleanup").toFile(),
+            listOf(
+                CliCommand(
+                    "cleanup",
+                    listOf(java(), "-version"),
+                    ownedTemporaryDirectories = listOf(temporary),
+                ),
+            ),
+        )
+
+        handler.startNotify()
+
+        assertTrue(handler.waitFor(30_000))
+        assertEquals(0, handler.exitCode)
+        assertFalse(Files.exists(temporary))
+    }
+
+    @Test
+    fun `an unsafe cleanup replacement fails without following the link`() {
+        val temporary = Files.createTempDirectory("affected-handler-replaced-")
+        val external = createTempDirectory("sequential-cleanup-external")
+        external.resolve("keep.txt").toFile().writeText("keep")
+        val probe = temporary.resolveSibling("${temporary.fileName}-probe")
+        assumeTrue(
+            runCatching {
+                Files.createSymbolicLink(probe, external)
+                Files.delete(probe)
+            }.isSuccess,
+        )
+        val command = CliCommand(
+            "cleanup",
+            listOf(java(), "-version"),
+            ownedTemporaryDirectories = listOf(temporary),
+        )
+        val handler = SequentialProcessHandler(
+            createTempDirectory("sequential-cleanup-replaced").toFile(),
+            listOf(
+                DeferredCliCommand.command {
+                    temporary.toFile().deleteRecursively()
+                    Files.createSymbolicLink(temporary, external)
+                    command
+                },
+            ),
+        )
+
+        handler.startNotify()
+
+        assertTrue(handler.waitFor(30_000))
+        assertTrue(handler.exitCode != 0)
+        assertTrue(external.resolve("keep.txt").toFile().isFile)
+    }
+
     private fun listener(output: StringBuilder): ProcessListener = object : ProcessListener {
         override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
             output.append(event.text)
@@ -244,4 +453,41 @@ class SequentialProcessHandlerTest {
         System.getProperty("java.home"),
         if (System.getProperty("os.name").startsWith("Windows")) "bin/java.exe" else "bin/java",
     ).absolutePath
+
+    private fun javac(): String = File(
+        System.getProperty("java.home"),
+        if (System.getProperty("os.name").startsWith("Windows")) "bin/javac.exe" else "bin/javac",
+    ).absolutePath
+
+    private fun processTreeSource(): String =
+        """
+        import java.nio.channels.FileChannel;
+        import java.nio.file.Files;
+        import java.nio.file.Path;
+        import java.nio.file.StandardOpenOption;
+
+        class HandlerTree {
+            public static void main(String[] args) throws Exception {
+                if (args[0].equals("child")) {
+                    Path output = Path.of(args[1]);
+                    Files.writeString(Path.of(args[2]), Long.toString(ProcessHandle.current().pid()));
+                    try (FileChannel ignored = FileChannel.open(
+                            output.resolve("locked.txt"),
+                            StandardOpenOption.CREATE,
+                            StandardOpenOption.WRITE)) {
+                        Files.writeString(Path.of(args[3]), "ready");
+                        Thread.sleep(60_000);
+                    }
+                    return;
+                }
+                String java = ProcessHandle.current().info().command().orElseThrow();
+                Files.writeString(Path.of(args[4]), Long.toString(ProcessHandle.current().pid()));
+                Process child = new ProcessBuilder(
+                    java, "-cp", System.getProperty("java.class.path"), "HandlerTree",
+                    "child", args[1], args[2], args[3]
+                ).start();
+                child.waitFor();
+            }
+        }
+        """.trimIndent()
 }

@@ -28,11 +28,11 @@ class RBuildSystem : ChangeAwareSuspendingBuildSystem, NamedSourceBuildSystem, A
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {
-        CommandRunner.runBatch(project, root, rCommands(File(root), tasks), "Affected R")
+        CommandRunner.runBatch(project, root, rExecutionCommands(File(root), tasks), "Affected R")
     }
 
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
-        CommandRunner.runBatchAndWait(project, root, rCommands(File(root), tasks), "Affected R")
+        CommandRunner.runBatchAndWait(project, root, rExecutionCommands(File(root), tasks), "Affected R")
 
     override suspend fun runAndWaitSuspending(
         project: Project,
@@ -103,9 +103,9 @@ internal fun rCommands(
     val verbs = tasks.map { it.substringAfterLast(':') }.toSet()
     val packageRoot = rManifest(root)?.name == "DESCRIPTION"
     val check = verbs == setOf(RTasks.CHECK) && packageRoot
+    if (check) return emptyList()
     val fullTest = if (packageRoot) PACKAGE_TEST_ARGUMENTS else PROJECT_TEST_ARGUMENTS
     val arguments = when {
-        check -> listOf("Rscript", "-e", "read.dcf(\"DESCRIPTION\")")
         verbs == setOf(RTasks.TEST) && packageRoot -> selectedTestthatFiles(root, changes)?.let { selected ->
             EXACT_TEST_ARGUMENTS + selected
         } ?: fullTest
@@ -121,6 +121,7 @@ internal fun rDeferredCommands(
     currentChanges: () -> BuildChanges,
 ): List<CliStep> {
     if (tasks.isEmpty()) return emptyList()
+    if (isPackageCheck(root, tasks)) return listOf(rPackageCheckStep())
     val plannedCommands = rCommands(root, tasks, planned)
     if (plannedCommands == rCommands(root, tasks)) return plannedCommands
     return listOf(
@@ -132,6 +133,32 @@ internal fun rDeferredCommands(
                 rCommands(root, tasks, effective).singleOrNull()?.arguments
             },
         ),
+    )
+}
+
+internal fun rExecutionCommands(root: File, tasks: List<String>): List<CliStep> =
+    if (isPackageCheck(root, tasks)) listOf(rPackageCheckStep()) else rCommands(root, tasks)
+
+private fun isPackageCheck(root: File, tasks: List<String>): Boolean =
+    tasks.isNotEmpty() &&
+        tasks.map { it.substringAfterLast(':') }.toSet() == setOf(RTasks.CHECK) &&
+        rManifest(root)?.name == "DESCRIPTION"
+
+private fun rPackageCheckStep(): CliStep = DeferredCliCommand.command {
+    val output = Files.createTempDirectory(R_CHECK_DIRECTORY_PREFIX).toAbsolutePath().normalize()
+    runCatching { rPackageCheckCommand(output) }.getOrElse { error ->
+        output.toFile().deleteRecursively()
+        throw error
+    }
+}
+
+internal fun rPackageCheckCommand(outputDirectory: Path): CliCommand {
+    val output = outputDirectory.toAbsolutePath().normalize()
+    val arguments = PACKAGE_CHECK_ARGUMENTS + listOf("--args", output.toString())
+    return CliCommand(
+        title = "R CMD check",
+        arguments = arguments,
+        ownedTemporaryDirectories = listOf(output),
     )
 }
 
@@ -225,6 +252,24 @@ private const val TEST_FILE_EXPRESSION =
 private val PACKAGE_TEST_ARGUMENTS = listOf("Rscript", "-e", "testthat::test_local(\".\")")
 private val PROJECT_TEST_ARGUMENTS = listOf("Rscript", "-e", "testthat::test_dir(\"tests/testthat\")")
 private val EXACT_TEST_ARGUMENTS = listOf("Rscript", "-e", TEST_FILE_EXPRESSION, "--args")
+private const val PACKAGE_CHECK_EXPRESSION =
+    "status <- local({arguments <- commandArgs(trailingOnly = TRUE); " +
+        "if (length(arguments) != 1L) stop(\"Expected one R package check directory\"); " +
+        "package <- normalizePath(\".\", winslash = \"/\", mustWork = TRUE); " +
+        "output <- normalizePath(arguments[[1L]], winslash = \"/\", mustWork = TRUE); " +
+        "if (identical(output, package) || startsWith(output, paste0(package, \"/\"))) " +
+        "stop(\"R package check directory must be outside the package\"); " +
+        "previous <- setwd(output); " +
+        "on.exit({setwd(previous); if (dir.exists(output)) " +
+        "unlink(output, recursive = TRUE, force = TRUE)}, add = TRUE); " +
+        "result <- tryCatch(tools::Rcmd(c(\"check\", \"--no-manual\", \"--no-build-vignettes\", " +
+        "shQuote(package))), error = function(error) {message(conditionMessage(error)); 1L}); " +
+        "setwd(previous); cleanup <- unlink(output, recursive = TRUE, force = TRUE); " +
+        "if (cleanup != 0L || dir.exists(output)) {message(\"Could not remove R package check directory\"); " +
+        "if (result == 0L) result <- 1L}; result}); " +
+        "quit(status = status)"
+private val PACKAGE_CHECK_ARGUMENTS = listOf("Rscript", "--vanilla", "-e", PACKAGE_CHECK_EXPRESSION)
+private const val R_CHECK_DIRECTORY_PREFIX = "affected-r-check-"
 
 private fun testthatContext(name: String): String = name
     .replace(Regex("""\.[rR]$"""), "")

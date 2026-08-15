@@ -1,0 +1,1 @@
+- Replace the metadata-only R package check with an isolated real `R CMD check` that runs package tests and examples, propagates failures, and removes temporary output without changing testthat selection.

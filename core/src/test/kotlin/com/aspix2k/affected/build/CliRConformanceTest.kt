@@ -2,12 +2,14 @@ package com.aspix2k.affected.build
 
 import org.junit.Assume.assumeTrue
 import java.io.File
+import java.nio.file.Files
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class CliRConformanceTest {
@@ -116,16 +118,102 @@ class CliRConformanceTest {
         assertContains(text, "BetaTest")
     }
 
+    @Test
+    fun `r checks a source package outside the repository and removes output`() = fixture("r-check") { root ->
+        val temporary = createTempDirectory("affected-r-check-output").toFile()
+        val marker = File.createTempFile("affected-r-check-marker", ".txt").apply { delete() }
+        val sentinel = File.createTempFile("affected-r-check-sentinel", ".txt").apply { delete() }
+        try {
+            val output = Files.createTempDirectory(temporary.toPath(), "affected-r-check-")
+            val command = rPackageCheckCommand(output).copy(
+                environment = mapOf(
+                    "AFFECTED_R_CHECK_MARKER" to marker.path,
+                    "AFFECTED_R_SHELL_SENTINEL" to sentinel.path,
+                ),
+            )
+
+            val text = execute(root, command)
+            assertTrue(marker.readText().contains("RPackageCheck"))
+            assertTrue(marker.readText().contains("RPackageExample"))
+            assertFalse(sentinel.exists(), text)
+            assertFalse(root.walkTopDown().any { it.name.endsWith(".Rcheck") })
+            assertTrue(temporary.listFiles().orEmpty().isEmpty())
+        } finally {
+            marker.delete()
+            sentinel.delete()
+            temporary.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `r package check propagates test failure and removes output`() = fixture("r-check") { root ->
+        val temporary = createTempDirectory("affected-r-check-output").toFile()
+        File(root, "tests/check.R").appendText("\nstop(\"AffectedCheckFailure\")\n")
+        val marker = File.createTempFile("affected-r-check-marker", ".txt").apply { delete() }
+        try {
+            val output = Files.createTempDirectory(temporary.toPath(), "affected-r-check-")
+            val command = rPackageCheckCommand(output).copy(
+                environment = mapOf(
+                    "AFFECTED_R_CHECK_MARKER" to marker.path,
+                ),
+            )
+
+            val text = execute(root, command, succeeds = false)
+            assertContains(text, "AffectedCheckFailure")
+            assertTrue(marker.readText().contains("RPackageCheck"))
+            assertTrue(marker.readText().contains("RPackageExample"))
+            assertFalse(root.walkTopDown().any { it.name.endsWith(".Rcheck") })
+            assertTrue(temporary.listFiles().orEmpty().isEmpty())
+        } finally {
+            marker.delete()
+            temporary.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `stopping an R package check terminates children and removes output`() = fixture("r-check") { root ->
+        val temporary = createTempDirectory("affected-r-check-output").toFile()
+        val marker = File.createTempFile("affected-r-check-cancel", ".txt").apply { delete() }
+        File(root, "tests/check.R").appendText(
+            "\ncat(\"started\", file = Sys.getenv(\"AFFECTED_R_CANCEL_MARKER\"))\nSys.sleep(60)\n",
+        )
+        val output = Files.createTempDirectory(temporary.toPath(), "affected-r-check-")
+        val command = rPackageCheckCommand(output).copy(
+            environment = mapOf("AFFECTED_R_CANCEL_MARKER" to marker.path),
+        )
+        val handler = SequentialProcessHandler(root, listOf(command))
+
+        try {
+            handler.startNotify()
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(120)
+            while (!marker.isFile && System.nanoTime() < deadline) Thread.sleep(50)
+            assertTrue(marker.isFile, "R package check did not reach the cancellation marker")
+            handler.destroyProcess()
+            assertTrue(handler.waitFor(30_000), "R package check did not stop")
+            assertTrue(handler.exitCode != 0)
+            assertTrue(temporary.listFiles().orEmpty().isEmpty())
+        } finally {
+            if (!handler.isProcessTerminated) handler.destroyProcess()
+            marker.delete()
+            temporary.deleteRecursively()
+        }
+    }
+
     private fun fixture(name: String, block: (File) -> Unit) {
         assumeTrue(System.getProperty("affected.cliConformance") == "true")
         val source = File(fixtureRoot(), name)
         assertTrue(source.isDirectory, "Missing CLI conformance fixture: $source")
-        val target = createTempDirectory("affected-cli-$name").toFile()
+        val container = createTempDirectory("affected-cli-$name").toFile()
+        val target = if (name == "r-check") {
+            File(container, "package with spaces;touch \$AFFECTED_R_SHELL_SENTINEL").apply { mkdirs() }
+        } else {
+            container
+        }
         try {
             assertTrue(source.copyRecursively(target, overwrite = true), "Could not copy $source")
             block(target)
         } finally {
-            target.deleteRecursively()
+            container.deleteRecursively()
         }
     }
 
@@ -150,11 +238,15 @@ class CliRConformanceTest {
             if (!completed) process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)
             val text = output.readText()
             assertTrue(completed, "Timed out: ${command.arguments.joinToString(" ")}\n$text")
-            assertEquals(
-                if (succeeds) 0 else 1,
-                process.exitValue(),
-                "Unexpected exit: ${command.arguments.joinToString(" ")}\n$text",
-            )
+            if (succeeds) {
+                assertEquals(0, process.exitValue(), "Unexpected exit: ${command.arguments.joinToString(" ")}\n$text")
+            } else {
+                assertNotEquals(
+                    0,
+                    process.exitValue(),
+                    "Unexpected success: ${command.arguments.joinToString(" ")}\n$text",
+                )
+            }
             return text
         } finally {
             output.delete()
