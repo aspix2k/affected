@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.8.0] - 2026-08-15
+
+### Added
+
+- A lone first-level `backend/` Kotlin Toolchain project is now the toolchain root when the repository base has no marker.
+- Support `xunit.runner.visualstudio` 4.0.0 for exact VSTest selection.
+
 ## [3.7.0] - 2026-08-15
 
 ### Added
@@ -449,7 +456,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.7.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.8.0...HEAD
+[3.8.0]: https://github.com/aspix2k/affected/compare/v3.7.0...v3.8.0
 [3.7.0]: https://github.com/aspix2k/affected/compare/v3.6.2...v3.7.0
 [3.6.2]: https://github.com/aspix2k/affected/compare/v3.6.1...v3.6.2
 [3.6.1]: https://github.com/aspix2k/affected/compare/v3.6.0...v3.6.1
