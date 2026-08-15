@@ -251,7 +251,7 @@ private const val TEST_FILE_EXPRESSION =
         "filter = paste0(\"^(\", paste(contexts, collapse = \"|\"), \")$\"))}})"
 private val PACKAGE_TEST_ARGUMENTS = listOf("Rscript", "-e", "testthat::test_local(\".\")")
 private val PROJECT_TEST_ARGUMENTS = listOf("Rscript", "-e", "testthat::test_dir(\"tests/testthat\")")
-private val EXACT_TEST_ARGUMENTS = listOf("Rscript", "-e", TEST_FILE_EXPRESSION, "--args")
+private val EXACT_TEST_ARGUMENTS = listOf("Rscript", "-e", TEST_FILE_EXPRESSION)
 private const val PACKAGE_CHECK_EXPRESSION =
     "status <- local({arguments <- commandArgs(trailingOnly = TRUE); " +
         "if (length(arguments) != 1L) stop(\"Expected one R package check directory\"); " +

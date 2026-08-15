@@ -1,0 +1,1 @@
+- Forward only selected testthat paths to exact Rscript runs, without injecting a synthetic argument into the test context filter.
