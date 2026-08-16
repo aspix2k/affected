@@ -106,11 +106,13 @@ jobs:
           java-version: "21"
       - uses: gradle/actions/setup-gradle@67621b124fd2e251c5e8a0e6e3b91318f2287669 # v6.3.0
 
-      - name: Run CrossPlatformPathTest
+      - name: Run platform-specific core tests
         shell: bash
         run: >-
           scripts/run_gradle.sh :core:test
           --tests com.aspix2k.affected.CrossPlatformPathTest
+          --tests com.aspix2k.affected.build.XcodeNativeTest
+          -Paffected.cliConformance=true
           --rerun-tasks --no-daemon --no-parallel --max-workers=1
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -2,12 +2,14 @@ package com.aspix2k.affected.build
 
 import com.intellij.openapi.project.Project
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.LinkOption
 
 class XcodeBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
 
     override val id: String = "XCODE"
 
-    override val sourceExtensions: Set<String> = setOf("swift", "h", "m", "mm", "plist")
+    override val sourceExtensions: Set<String> = setOf("swift", "h", "m", "mm", "plist", "xcscheme", "xctestplan")
 
     override val sourceFileNames: Set<String> = setOf("project.pbxproj")
 
@@ -19,11 +21,23 @@ class XcodeBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {
-        CommandRunner.runBatch(project, root, xcodeCommands(File(root), tasks), "Affected Xcode")
+        CommandRunner.runBatch(
+            project,
+            root,
+            xcodeExecutionCommands(File(root), tasks),
+            "Affected Xcode",
+            XCODE_METADATA_DRIFT_MESSAGE,
+        )
     }
 
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
-        CommandRunner.runBatchAndWait(project, root, xcodeCommands(File(root), tasks), "Affected Xcode")
+        CommandRunner.runBatchAndWait(
+            project,
+            root,
+            xcodeExecutionCommands(File(root), tasks),
+            "Affected Xcode",
+            XCODE_METADATA_DRIFT_MESSAGE,
+        )
 
     private fun manifestOf(project: Project): File? =
         project.basePath?.let(::File)?.let { nestedBuildRoot(it) { xcodeManifest(it) != null } }
@@ -31,6 +45,7 @@ class XcodeBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
 }
 
 internal object XcodeTasks {
+    const val VALIDATE = "validate"
     const val TEST = "test"
     const val BUILD = "build"
 }
@@ -47,7 +62,7 @@ internal fun xcodeRootModule(root: File): BuildModule {
         id = root.name.ifBlank { "project" },
         root = rootPath,
         contentRoots = listOf(rootPath),
-        testTask = XcodeTasks.TEST,
+        testTask = XcodeTasks.VALIDATE,
         compileTask = XcodeTasks.BUILD,
         hasTests = true,
         executionId = ".",
@@ -55,39 +70,69 @@ internal fun xcodeRootModule(root: File): BuildModule {
 }
 
 internal fun xcodeCommands(root: File, tasks: List<String>): List<CliCommand> {
+    return listOfNotNull(xcodeCommand(root, tasks))
+}
+
+internal fun xcodeExecutionCommands(root: File, tasks: List<String>): List<CliStep> {
     if (tasks.isEmpty()) return emptyList()
+    return listOf(DeferredCliCommand.command {
+        xcodeCommand(root, tasks) ?: error(XCODE_METADATA_DRIFT_MESSAGE)
+    })
+}
+
+private fun xcodeCommand(root: File, tasks: List<String>): CliCommand? {
+    if (tasks.isEmpty()) return null
     val verbs = tasks.map { it.substringAfterLast(':') }.toSet()
-    val verb = if (verbs == setOf(XcodeTasks.BUILD)) XcodeTasks.BUILD else XcodeTasks.TEST
-    val schemes = xcodeSchemes(root)
+    val discovery = xcodeSchemeDiscovery(root)
+    val verb = when {
+        verbs == setOf(XcodeTasks.BUILD) -> XcodeTasks.BUILD
+        discovery.complete && discovery.schemes.isNotEmpty() && discovery.schemes.none(XcodeScheme::testable) ->
+            XcodeTasks.BUILD
+        else -> XcodeTasks.TEST
+    }
+    val schemes = if (discovery.complete) {
+        when (verb) {
+            XcodeTasks.TEST -> discovery.schemes.filter(XcodeScheme::testable).map(XcodeScheme::name)
+            else -> discovery.schemes.map(XcodeScheme::name)
+        }.distinct()
+    } else {
+        emptyList()
+    }
     val arguments = if (schemes.size == 1) {
         listOf("xcodebuild", verb, "-scheme", schemes.single())
     } else {
         listOf("xcodebuild", verb)
-    }
-    return listOf(CliCommand(arguments.joinToString(" "), arguments))
+    } + if (verb == XcodeTasks.BUILD) listOf("CODE_SIGNING_ALLOWED=NO") else emptyList()
+    return CliCommand(arguments.joinToString(" "), arguments)
 }
 
-internal fun xcodeSchemes(root: File): List<String> {
-    val names = LinkedHashSet<String>()
-    root.listFiles().orEmpty()
-        .filter { it.isDirectory && XCODE_BUNDLE.containsMatchIn(it.name) }
-        .forEach { project ->
-            collectXcodeSchemes(File(project, "xcshareddata/xcschemes"), names)
-            File(project, "xcuserdata").listFiles().orEmpty()
-                .filter { it.isDirectory }
-                .forEach { user -> collectXcodeSchemes(File(user, "xcschemes"), names) }
+private fun xcodeProject(root: File): File? {
+    val directory = root.toPath().toAbsolutePath().normalize()
+    if (!directory.isSecureXcodeDirectory()) return null
+    val started = System.nanoTime()
+    return runCatching {
+        Files.newDirectoryStream(directory).use { entries ->
+            var count = 0
+            for (entry in entries) {
+                if (++count > PerformanceBudgets.MAX_DIRECTORIES ||
+                    Thread.currentThread().isInterrupted ||
+                    System.nanoTime() - started > PerformanceBudgets.SCAN_TIME_NS
+                ) {
+                    return null
+                }
+                if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS) &&
+                    !Files.isSymbolicLink(entry) &&
+                    XCODE_BUNDLE.containsMatchIn(entry.fileName.toString())
+                ) {
+                    return entry.toFile()
+                }
+            }
         }
-    return names.toList()
+        null
+    }.getOrNull()
 }
 
-private fun collectXcodeSchemes(directory: File, names: MutableSet<String>) {
-    directory.listFiles().orEmpty()
-        .filter { it.isFile && it.name.endsWith(".xcscheme") }
-        .mapTo(names) { it.name.removeSuffix(".xcscheme") }
-}
-
-private fun xcodeProject(root: File): File? =
-    root.listFiles().orEmpty().firstOrNull { it.isDirectory && XCODE_BUNDLE.containsMatchIn(it.name) }
-
-private val XCODE_BUNDLE = Regex("""\.(?:xcodeproj|xcworkspace)$""")
+internal val XCODE_BUNDLE = Regex("""\.(?:xcodeproj|xcworkspace)$""")
 private val FOREIGN_ROOTS = listOf("settings.gradle.kts", "settings.gradle", "pom.xml")
+private const val XCODE_METADATA_DRIFT_MESSAGE =
+    "Affected detected an Xcode scheme change after planning. Refresh the project model and run again."

@@ -2,6 +2,7 @@ package com.aspix2k.affected
 
 import com.aspix2k.affected.build.GradleBuildSystem
 import com.aspix2k.affected.build.MavenBuildSystem
+import com.aspix2k.affected.build.XcodeBuildSystem
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -279,6 +280,19 @@ class ChangeAnalyzerTest {
         assertTrue(scala in maven.files, "a Scala production file belongs to the Maven module")
         assertTrue(groovy in maven.files, "a Groovy production file belongs to the Maven module")
         assertEquals(setOf(scala, groovy), maven.apiTouched)
+    }
+
+    @Test
+    fun `Xcode scheme and test plan edits remain affected inputs`() = repo { dir ->
+        val scheme = File(dir, "App.xcodeproj/xcshareddata/xcschemes/App.xcscheme").apply {
+            parentFile.mkdirs()
+            writeText("<Scheme/>")
+        }
+        val plan = File(dir, "App.xctestplan").apply { writeText("{}") }
+
+        val changes = analyze(dir, XcodeBuildSystem().sourceExtensions)
+
+        assertEquals(setOf(scheme, plan), changes.files.toSet())
     }
 
     @Test
