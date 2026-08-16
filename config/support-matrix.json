@@ -248,8 +248,8 @@
       "selectionProofs": [
         {
           "units": ["package"],
-          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
-          "marker": "Go commands run the selected module packages",
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliGoConformanceTest.kt",
+          "marker": "Go changed tests run their whole package without unrelated packages",
           "gate": ".github/workflows/conformance.yml",
           "gateMarker": "--tests '*Cli*ConformanceTest'",
           "gateJob": "cli-native",

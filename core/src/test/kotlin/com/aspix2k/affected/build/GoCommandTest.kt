@@ -1,52 +1,53 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.ModuleGraph
+import com.aspix2k.affected.TaskPlanner
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
 class GoCommandTest {
 
     @Test
-    fun `a changed Go test file selects its Test functions`() {
-        val root = createTempDirectory("go-exact-run").toFile()
-        val testFile = File(root, "alpha/alpha_test.go").apply {
-            parentFile.mkdirs()
-            writeText(
-                """
-                package alpha
+    fun `a changed Go test file keeps the package test command`() {
+        val command = goCommands(listOf("example.com/alpha:test")).single()
+        val system: BuildSystem = GoBuildSystem()
 
-                import "testing"
+        assertEquals(listOf("go", "test", "example.com/alpha"), command.arguments)
+        assertFalse(system is ChangeAwareSuspendingBuildSystem)
+    }
 
-                func TestValue(t *testing.T) {}
-                func TestOther(t *testing.T) {}
-                """.trimIndent(),
-            )
-        }
+    @Test
+    fun `constrained changed Go test files keep the package test command`() {
+        val root = createTempDirectory("go-build-tag").toFile()
+        val alpha = File(root, "alpha").apply { mkdirs() }
         val module = BuildModule(
             "example.com/alpha",
             root.path,
-            listOf(File(root, "alpha").path),
+            listOf(alpha.path),
             GoPackages.TEST,
             GoPackages.COMPILE,
             true,
         )
+        val graph = ModuleGraph(listOf(ModuleGraph.Node(module, GoBuildSystem())))
 
-        val command = goCommands(
-            listOf("example.com/alpha:test"),
-            listOf(module),
-            BuildChanges(
-                files = listOf(testFile.path),
-                exactSelectionEligible = setOf(testFile.path),
-                comparedToBase = true,
-            ),
-        ).single()
+        listOf(
+            "alpha_test.go" to "package alpha\n",
+            "excluded_test.go" to "//go:build affected_never\n\npackage alpha\n",
+            "alpha_windows_test.go" to "package alpha\n",
+            "alpha_arm64_test.go" to "package alpha\n",
+            "alpha_windows_arm64_test.go" to "package alpha\n",
+        ).forEach { (name, source) ->
+            val changed = File(alpha, name).apply { writeText(source) }
+            val plan = TaskPlanner.plan(graph.nodesFor(changed).map(ModuleGraph.Node::info), emptyList())
+            val command = goCommands(plan.groups.single().tasks).single()
 
-        assertEquals(
-            listOf("go", "test", "example.com/alpha", "-run", "^(TestOther|TestValue)$"),
-            command.arguments,
-        )
+            assertEquals(listOf("go", "test", "example.com/alpha"), command.arguments, name)
+            assertFalse("-run" in command.arguments, name)
+        }
     }
 
     @Test
@@ -68,15 +69,9 @@ class GoCommandTest {
             true,
         )
 
-        val command = goCommands(
-            listOf("example.com/alpha:test"),
-            listOf(module),
-            BuildChanges(
-                files = listOf(source.path),
-                exactSelectionEligible = setOf(source.path),
-                comparedToBase = true,
-            ),
-        ).single()
+        val graph = ModuleGraph(listOf(ModuleGraph.Node(module, GoBuildSystem())))
+        val plan = TaskPlanner.plan(graph.nodesFor(source).map(ModuleGraph.Node::info), emptyList())
+        val command = goCommands(plan.groups.single().tasks).single()
 
         assertEquals(listOf("go", "test", "example.com/alpha"), command.arguments)
     }
