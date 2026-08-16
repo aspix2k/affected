@@ -1,8 +1,61 @@
 package com.aspix2k.affected.build
 
-internal fun gradleNarrowKmpTasks(tasks: List<String>, changes: BuildChanges?): List<String> {
-    if (changes == null || !changes.comparedToBase || changes.files.isEmpty()) return tasks
-    val families = changes.files.map(::kmpFamilyForPath)
+internal data class GradleTaskSelection(
+    val taskNames: List<String>,
+    val reasons: List<GradleSelectionReason>,
+) {
+    val diagnosticArguments: List<String> = reasons.takeIf { it.isNotEmpty() }?.let { selected ->
+        listOf("-D$GRADLE_SELECTION_REASONS=${selected.joinToString(",") { it.name }}")
+    }.orEmpty()
+}
+
+internal enum class GradleSelectionReason {
+    CHANGE_BASE_UNAVAILABLE,
+    BUILD_CONFIGURATION_CHANGE,
+    SOURCE_IDENTITY_UNPROVEN,
+    COMMON_SOURCE_SET_FAN_OUT,
+    UNCLASSIFIED_SOURCE_SET,
+    TASK_FAMILY_UNPROVEN,
+    KOTLIN_NATIVE_EXACT_UNSUPPORTED,
+}
+
+internal fun gradleTaskSelection(tasks: List<String>, changes: BuildChanges?): GradleTaskSelection {
+    val reasons = LinkedHashSet<GradleSelectionReason>()
+    val selectedTasks = narrowKmpTasks(tasks, changes, reasons)
+    val explainsSelection = changes != null && changes.files.isNotEmpty() && isKmpSelection(tasks)
+    if (explainsSelection && selectedTasks.any(::isUnprovedTestTask)) {
+        reasons += GradleSelectionReason.TASK_FAMILY_UNPROVEN
+    }
+    if (explainsSelection && selectedTasks.any(::isKotlinNativeTestTask)) {
+        reasons += GradleSelectionReason.KOTLIN_NATIVE_EXACT_UNSUPPORTED
+    }
+    val classes = changes?.let(::selectTestNgClasses)
+    val withFilters = if (classes == null) selectedTasks else selectedTasks + classes.flatMap { listOf("--tests", it) }
+    return GradleTaskSelection(withFilters, reasons.sortedBy { it.ordinal })
+}
+
+private fun narrowKmpTasks(
+    tasks: List<String>,
+    changes: BuildChanges?,
+    reasons: MutableSet<GradleSelectionReason>,
+): List<String> {
+    val changed = changes ?: return tasks
+    if (!hasChangedKmpTestSelection(tasks, changed)) return tasks
+    val fallback = initialKmpFallback(changed)
+    if (fallback != null) {
+        reasons += fallback
+        return tasks
+    }
+    if (changed.files.toSet() != changed.exactSelectionEligible) {
+        reasons += GradleSelectionReason.SOURCE_IDENTITY_UNPROVEN
+    }
+    val families = changed.files.map(::kmpFamilyForPath)
+    if (families.any { it == KmpFamily.COMMON }) {
+        reasons += GradleSelectionReason.COMMON_SOURCE_SET_FAN_OUT
+    }
+    if (families.any { it == null } && tasks.any(::isKmpTargetTask) && changed.files.any(::isKmpSourceSetPath)) {
+        reasons += GradleSelectionReason.UNCLASSIFIED_SOURCE_SET
+    }
     if (families.any { it == null || it == KmpFamily.COMMON }) return tasks
     val allowed = families.filterNotNull().toSet()
     val narrowed = tasks.filter { task ->
@@ -10,15 +63,66 @@ internal fun gradleNarrowKmpTasks(tasks: List<String>, changes: BuildChanges?): 
         val family = KMP_TASK_FAMILIES[name]
         family == null || allowed.any { it.covers(family) }
     }
-    return narrowed.takeIf { it.any { task -> task != "--tests" && !task.startsWith("--") } } ?: tasks
+    return narrowed.takeIf { it.any(::isTestTask) } ?: tasks.also {
+        reasons += GradleSelectionReason.TASK_FAMILY_UNPROVEN
+    }
+}
+
+private fun hasChangedKmpTestSelection(tasks: List<String>, changes: BuildChanges): Boolean =
+    changes.files.isNotEmpty() && tasks.any(::isTestTask) && isKmpSelection(tasks)
+
+private fun isKmpSelection(tasks: List<String>): Boolean = tasks.any(::isKmpTargetTask)
+
+private fun initialKmpFallback(changes: BuildChanges): GradleSelectionReason? = when {
+    !changes.comparedToBase -> GradleSelectionReason.CHANGE_BASE_UNAVAILABLE
+    changes.files.any(::isGradleConfiguration) -> GradleSelectionReason.BUILD_CONFIGURATION_CHANGE
+    else -> null
+}
+
+private fun isTestTask(task: String): Boolean {
+    val name = task.substringAfterLast(':')
+    return isGradleUnitTestTask(name) && !name.endsWith("Classes", ignoreCase = true)
+}
+
+private fun isKmpTargetTask(task: String): Boolean {
+    val name = task.substringAfterLast(':')
+    return name != "test" && KMP_TASK_FAMILIES[name] != null
+}
+
+private fun isUnprovedTestTask(task: String): Boolean =
+    isTestTask(task) && KMP_TASK_FAMILIES[task.substringAfterLast(':')] == null
+
+private fun isKotlinNativeTestTask(task: String): Boolean =
+    KMP_TASK_FAMILIES[task.substringAfterLast(':')] in KOTLIN_NATIVE_FAMILIES
+
+private fun isGradleConfiguration(raw: String): Boolean {
+    val path = raw.replace('\\', '/')
+    val name = path.substringAfterLast('/')
+    return name == "build.gradle" ||
+        name == "build.gradle.kts" ||
+        name == "settings.gradle" ||
+        name == "settings.gradle.kts" ||
+        name == "gradle.properties" ||
+        name == "libs.versions.toml" ||
+        path.endsWith("/gradle/wrapper/gradle-wrapper.properties")
 }
 
 private fun kmpFamilyForPath(raw: String): KmpFamily? {
-    val segments = raw.replace('\\', '/').split('/')
-    val sourceSet = segments.zipWithNext().firstOrNull { it.first == "src" }?.second ?: return null
+    val sourceSet = sourceSetForPath(raw) ?: return null
     return KMP_SOURCE_SET_FAMILIES.entries.firstOrNull { (prefix, _) ->
         sourceSet == prefix || sourceSet.startsWith(prefix)
     }?.value
+}
+
+private fun isKmpSourceSetPath(raw: String): Boolean {
+    val sourceSet = sourceSetForPath(raw) ?: return false
+    return sourceSet != "main" && sourceSet != "test" &&
+        (sourceSet.endsWith("Main") || sourceSet.endsWith("Test"))
+}
+
+private fun sourceSetForPath(raw: String): String? {
+    val segments = raw.replace('\\', '/').split('/')
+    return segments.zipWithNext().firstOrNull { it.first == "src" }?.second
 }
 
 private enum class KmpFamily {
@@ -75,3 +179,13 @@ private val KMP_TASK_FAMILIES = mapOf(
     "macosX64Test" to KmpFamily.MACOS,
     "mingwX64Test" to KmpFamily.MINGW,
 )
+
+private val KOTLIN_NATIVE_FAMILIES = setOf(
+    KmpFamily.APPLE,
+    KmpFamily.LINUX,
+    KmpFamily.MACOS,
+    KmpFamily.MINGW,
+    KmpFamily.NATIVE,
+)
+
+internal const val GRADLE_SELECTION_REASONS = "affected.selection.reasons"

@@ -29,6 +29,7 @@ class GradleCollectorRunTest {
         val cache = root.resolve("cache")
         val run = assertNotNull(GradleCollectorRun.create(cache, artifacts))
         val taskKey = "file:///fixture/|:app:test"
+        Files.createFile(run.outputRoot.resolve("selection-diagnostics.reported"))
         writeCollectorTask(run.outputRoot, taskKey, "AlphaTest", "alpha-1")
 
         run.complete(passed = true)

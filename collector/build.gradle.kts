@@ -165,6 +165,7 @@ tasks.test {
     val agentJar = tasks.jar.flatMap { it.archiveFile }
     val listenerArchive = listenerJar.flatMap { it.archiveFile }
     val initScript = layout.projectDirectory.file("src/main/gradle/affected-collector.init.gradle")
+    val kmpFallbackFixture = rootProject.layout.projectDirectory.dir("conformance/cli-fixtures/gradle-kmp-fallback")
     val mavenExtensionArchive = mavenExtensionJar.flatMap { it.archiveFile }
     val mavenAgentArchive = mavenAgentJar.flatMap { it.archiveFile }
     dependsOn(
@@ -182,6 +183,7 @@ tasks.test {
         mavenExtensionArchive,
         mavenAgentArchive,
         initScript,
+        kmpFallbackFixture,
         smoke.runtimeClasspath,
         smokeProduction.output,
     )
@@ -194,6 +196,7 @@ tasks.test {
     systemProperty("affected.smoke.instrumentationSources", smoke.output.classesDirs.asPath)
     systemProperty("affected.smoke.testClasses", sourceSets.test.get().output.classesDirs.asPath)
     systemProperty("affected.test.initScript", initScript.asFile.absolutePath)
+    systemProperty("affected.test.repositoryRoot", rootProject.layout.projectDirectory.asFile.absolutePath)
     systemProperty("affected.test.listener", listenerArchive.get().asFile.absolutePath)
     systemProperty("affected.test.mavenExtension", mavenExtensionArchive.get().asFile.absolutePath)
     systemProperty("affected.test.mavenAgent", mavenAgentArchive.get().asFile.absolutePath)

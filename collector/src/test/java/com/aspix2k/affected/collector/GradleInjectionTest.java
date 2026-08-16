@@ -11,7 +11,9 @@ import org.junit.rules.TemporaryFolder;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.Base64;
@@ -25,6 +27,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -124,6 +127,165 @@ public class GradleInjectionTest {
         assertTrue(selected.getOutput(), readTaskManifest(selectedOutput).endsWith("all=false\n"));
         assertFallback(legacyOutput);
         assertTrue(unchanged.getOutput(), unchanged.getOutput().contains("Reusing configuration cache"));
+    }
+
+    @Test(timeout = 120_000L)
+    public void staticKmpFallbackReasonsAreReportedWithoutChangingExecution() throws Exception {
+        Path project = temporary.newFolder("static-reason-project").toPath();
+        Path firstOutput = temporary.newFolder("static-reason-first-output").toPath();
+        Path cachedOutput = temporary.newFolder("static-reason-cached-output").toPath();
+        Path changedOutput = temporary.newFolder("static-reason-changed-output").toPath();
+        Path noReasonOutput = temporary.newFolder("static-reason-empty-output").toPath();
+        Path markers = temporary.newFolder("static-reason-markers").toPath();
+        copyPublicFixture("gradle-kmp-fallback", project);
+
+        BuildResult first = run(
+            project,
+            firstOutput,
+            ":shared:testDebugUnitTest",
+            true,
+            ":shared:iosSimulatorArm64Test",
+            ":shared:customTest",
+            ":included:includedTest",
+            "-Daffected.selection.reasons=" +
+                "UNKNOWN_REASON,CHANGE_BASE_UNAVAILABLE,BUILD_CONFIGURATION_CHANGE," +
+                "SOURCE_IDENTITY_UNPROVEN,COMMON_SOURCE_SET_FAN_OUT,UNCLASSIFIED_SOURCE_SET," +
+                "TASK_FAMILY_UNPROVEN,KOTLIN_NATIVE_EXACT_UNSUPPORTED",
+            "-Daffected.kmp.markers=" + markers
+        );
+        BuildResult result = run(
+            project,
+            cachedOutput,
+            ":shared:testDebugUnitTest",
+            true,
+            ":shared:iosSimulatorArm64Test",
+            ":shared:customTest",
+            ":included:includedTest",
+            "-Daffected.selection.reasons=" +
+                "UNKNOWN_REASON,CHANGE_BASE_UNAVAILABLE,BUILD_CONFIGURATION_CHANGE," +
+                "SOURCE_IDENTITY_UNPROVEN,COMMON_SOURCE_SET_FAN_OUT,UNCLASSIFIED_SOURCE_SET," +
+                "TASK_FAMILY_UNPROVEN,KOTLIN_NATIVE_EXACT_UNSUPPORTED",
+            "-Daffected.kmp.markers=" + markers
+        );
+
+        List<String> diagnostics = selectionDiagnostics(result);
+        assertEquals(
+            result.getOutput(),
+            Arrays.asList(
+                "[Affected] Gradle selection - CHANGE_BASE_UNAVAILABLE: " +
+                    "change base is unavailable; full target selection retained",
+                "[Affected] Gradle selection - BUILD_CONFIGURATION_CHANGE: " +
+                    "Gradle configuration changed; full target selection retained",
+                "[Affected] Gradle selection - SOURCE_IDENTITY_UNPROVEN: " +
+                    "added, deleted or otherwise unproven source keeps module-level selection",
+                "[Affected] Gradle selection - COMMON_SOURCE_SET_FAN_OUT: " +
+                    "common source-set change retains all target test tasks",
+                "[Affected] Gradle selection - UNCLASSIFIED_SOURCE_SET: " +
+                    "source set is unclassified; full target selection retained",
+                "[Affected] Gradle selection - TASK_FAMILY_UNPROVEN: " +
+                    "task family is unproven; full target selection retained",
+                "[Affected] Gradle selection - KOTLIN_NATIVE_EXACT_UNSUPPORTED: " +
+                    "Kotlin/Native exact selection is unsupported; full target task retained"
+            ),
+            diagnostics
+        );
+        assertEquals(diagnostics, selectionDiagnostics(first));
+        assertTrue(result.getOutput(), result.getOutput().contains("Reusing configuration cache"));
+        assertFalse(diagnostics.toString().contains(project.toString()));
+        assertTrue(
+            result.getOutput(),
+            result.getOutput().indexOf(diagnostics.get(0)) <
+                result.getOutput().indexOf("> Task :shared:testDebugUnitTest")
+        );
+        assertEquals(TaskOutcome.SUCCESS, result.task(":shared:testDebugUnitTest").getOutcome());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":shared:iosSimulatorArm64Test").getOutcome());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":shared:customTest").getOutcome());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":included:includedTest").getOutcome());
+        assertEquals("android\n", read(markers.resolve("android.marker")));
+        assertEquals("ios\n", read(markers.resolve("ios.marker")));
+        assertEquals("custom\n", read(markers.resolve("custom.marker")));
+        assertEquals("included\n", read(markers.resolve("included.marker")));
+
+        BuildResult changedReason = run(
+            project,
+            changedOutput,
+            ":shared:testDebugUnitTest",
+            true,
+            ":shared:iosSimulatorArm64Test",
+            ":shared:customTest",
+            ":included:includedTest",
+            "-Daffected.selection.reasons=BUILD_CONFIGURATION_CHANGE",
+            "-Daffected.kmp.markers=" + markers
+        );
+        assertEquals(
+            Collections.singletonList(
+                "[Affected] Gradle selection - BUILD_CONFIGURATION_CHANGE: " +
+                    "Gradle configuration changed; full target selection retained"
+            ),
+            selectionDiagnostics(changedReason)
+        );
+
+        BuildResult noReason = run(
+            project,
+            noReasonOutput,
+            ":shared:testDebugUnitTest",
+            true,
+            ":shared:iosSimulatorArm64Test",
+            ":shared:customTest",
+            ":included:includedTest",
+            "-Daffected.kmp.markers=" + markers
+        );
+        assertTrue(selectionDiagnostics(noReason).isEmpty());
+    }
+
+    @Test(timeout = 120_000L)
+    public void oversizedKmpFallbackDiagnosticsAreIgnoredWithoutChangingExecution() throws Exception {
+        Path project = temporary.newFolder("oversized-reason-project").toPath();
+        Path output = temporary.newFolder("oversized-reason-output").toPath();
+        Path markers = temporary.newFolder("oversized-reason-markers").toPath();
+        copyPublicFixture("gradle-kmp-fallback", project);
+        char[] oversized = new char[513];
+        Arrays.fill(oversized, 'A');
+
+        BuildResult result = run(
+            project,
+            output,
+            ":shared:customTest",
+            false,
+            "-Daffected.selection.reasons=" + new String(oversized),
+            "-Daffected.kmp.markers=" + markers
+        );
+
+        assertFalse(result.getOutput().contains("[Affected] Gradle selection - "));
+        assertEquals(TaskOutcome.SUCCESS, result.task(":shared:customTest").getOutcome());
+        assertEquals("custom\n", read(markers.resolve("custom.marker")));
+    }
+
+    @Test(timeout = 120_000L)
+    public void includedBuildFallbackIsReportedOnce() throws Exception {
+        Path project = temporary.newFolder("included-reason-project").toPath();
+        Path output = temporary.newFolder("included-reason-output").toPath();
+        Path markers = temporary.newFolder("included-reason-markers").toPath();
+        copyPublicFixture("gradle-kmp-fallback", project);
+
+        BuildResult result = run(
+            project,
+            output,
+            ":included:includedTest",
+            true,
+            "-Daffected.selection.reasons=KOTLIN_NATIVE_EXACT_UNSUPPORTED",
+            "-Daffected.kmp.markers=" + markers
+        );
+
+        assertEquals(
+            Collections.singletonList(
+                "[Affected] Gradle selection - KOTLIN_NATIVE_EXACT_UNSUPPORTED: " +
+                    "Kotlin/Native exact selection is unsupported; full target task retained"
+            ),
+            selectionDiagnostics(result)
+        );
+        assertEquals(TaskOutcome.SUCCESS, result.task(":included:includedTest").getOutcome());
+        assertEquals("included\n", read(markers.resolve("included.marker")));
     }
 
     @Test(timeout = 5_000L)
@@ -243,6 +405,12 @@ public class GradleInjectionTest {
             offset += needle.length();
         }
         return count;
+    }
+
+    private static List<String> selectionDiagnostics(BuildResult result) {
+        return Arrays.stream(result.getOutput().split("\\R"))
+            .filter(line -> line.contains("[Affected] Gradle selection - "))
+            .collect(Collectors.toList());
     }
 
     private BuildResult run(Path project, Path output) throws Exception {
@@ -632,6 +800,29 @@ public class GradleInjectionTest {
         Files.write(path, content.getBytes(StandardCharsets.UTF_8));
     }
 
+    private static void copyPublicFixture(String name, Path destination) throws Exception {
+        Path repository = requiredDirectory("affected.test.repositoryRoot").toRealPath();
+        Path source = repository.resolve("conformance/cli-fixtures").resolve(name).normalize();
+        if (!source.startsWith(repository) || !Files.isDirectory(source, LinkOption.NOFOLLOW_LINKS) ||
+            Files.isSymbolicLink(source) || !Files.isReadable(source)) {
+            throw new IllegalStateException("Invalid public fixture: " + source);
+        }
+        try (Stream<Path> paths = Files.walk(source)) {
+            for (Path path : paths.sorted().collect(Collectors.toList())) {
+                if (Files.isSymbolicLink(path)) throw new IllegalStateException("Fixture link: " + path);
+                Path target = destination.resolve(source.relativize(path).toString()).normalize();
+                if (!target.startsWith(destination)) throw new IllegalStateException("Fixture path: " + path);
+                if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
+                    Files.createDirectories(target);
+                } else if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) && Files.isReadable(path)) {
+                    Files.copy(path, target, StandardCopyOption.REPLACE_EXISTING);
+                } else {
+                    throw new IllegalStateException("Unreadable fixture entry: " + path);
+                }
+            }
+        }
+    }
+
     private static String read(Path path) throws Exception {
         return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
     }
@@ -642,6 +833,17 @@ public class GradleInjectionTest {
         File file = new File(value);
         if (!file.isFile()) throw new IllegalStateException(file.toString());
         return file.getAbsolutePath();
+    }
+
+    private static Path requiredDirectory(String property) {
+        String value = System.getProperty(property);
+        if (value == null || value.trim().isEmpty()) throw new IllegalStateException(property);
+        Path path = new File(value).toPath().toAbsolutePath().normalize();
+        if (Files.isSymbolicLink(path) || !Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS) ||
+            !Files.isReadable(path)) {
+            throw new IllegalStateException(path.toString());
+        }
+        return path;
     }
 
     private static String collectorVersion() {

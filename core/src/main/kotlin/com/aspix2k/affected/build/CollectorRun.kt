@@ -39,7 +39,10 @@ internal class CollectorRun private constructor(
 
     private fun promote() {
         val taskDirectories = Files.list(outputRoot).use { stream ->
-            stream.limit(MAX_TASKS + 1L).toList().also { require(it.size <= MAX_TASKS) }
+            stream.filter { it.fileName.toString() != SELECTION_DIAGNOSTICS_MARKER }
+                .limit(MAX_TASKS + 1L)
+                .toList()
+                .also { require(it.size <= MAX_TASKS) }
         }
         val store = DependencyMapStore(mapsRoot)
         taskDirectories.forEach { directory ->
@@ -138,6 +141,7 @@ private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 private const val RUNS_DIRECTORY = "runs"
 internal const val MAPS_DIRECTORY = "maps"
 private const val MAX_TASKS = 10_000
+private const val SELECTION_DIAGNOSTICS_MARKER = "selection-diagnostics.reported"
 private const val MAX_STALE_RUNS = 1_000
 private const val BUFFER_SIZE = 64 * 1024
 private const val MINIMUM_DELETE_DEPTH = 4

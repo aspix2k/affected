@@ -1,0 +1,19 @@
+def markerTask = { String taskName, String markerName ->
+    tasks.register(taskName) {
+        doLast {
+            def configured = System.getProperty("affected.kmp.markers")
+            if (configured == null || configured.trim().isEmpty()) {
+                throw new GradleException("affected.kmp.markers is required")
+            }
+            def directory = new File(configured)
+            if (!directory.isDirectory() && !directory.mkdirs()) {
+                throw new GradleException("Cannot create marker directory")
+            }
+            new File(directory, markerName).setText(markerName.substring(0, markerName.indexOf('.')) + "\n", "UTF-8")
+        }
+    }
+}
+
+markerTask("testDebugUnitTest", "android.marker")
+markerTask("iosSimulatorArm64Test", "ios.marker")
+markerTask("customTest", "custom.marker")

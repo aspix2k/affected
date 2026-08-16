@@ -7,19 +7,91 @@ initscript {
 import com.aspix2k.affected.collector.AffectedDependencySelector
 import java.nio.charset.StandardCharsets
 import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import org.gradle.api.Task
+import org.gradle.api.DefaultTask
+import org.gradle.api.logging.Logger
 import org.gradle.api.specs.Spec
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.testing.Test
 import org.gradle.api.tasks.testing.TestDescriptor
 import org.gradle.api.tasks.testing.TestListener
 import org.gradle.api.tasks.testing.TestResult
 import org.gradle.api.tasks.testing.junitplatform.JUnitPlatformOptions
 import org.gradle.util.GradleVersion
+
+class AffectedSelectionDiagnostics {
+    private static final String PROPERTY = "affected.selection.reasons"
+    private static final int MAX_PROPERTY_LENGTH = 512
+    private static final Map<String, String> REASONS = [
+        CHANGE_BASE_UNAVAILABLE: "change base is unavailable; full target selection retained",
+        BUILD_CONFIGURATION_CHANGE: "Gradle configuration changed; full target selection retained",
+        SOURCE_IDENTITY_UNPROVEN:
+            "added, deleted or otherwise unproven source keeps module-level selection",
+        COMMON_SOURCE_SET_FAN_OUT: "common source-set change retains all target test tasks",
+        UNCLASSIFIED_SOURCE_SET: "source set is unclassified; full target selection retained",
+        TASK_FAMILY_UNPROVEN: "task family is unproven; full target selection retained",
+        KOTLIN_NATIVE_EXACT_UNSUPPORTED:
+            "Kotlin/Native exact selection is unsupported; full target task retained",
+    ].asImmutable()
+
+    static String configured(def project) {
+        String raw = project.providers.systemProperty(PROPERTY).orNull
+        if (raw == null || raw.isEmpty() || raw.length() > MAX_PROPERTY_LENGTH) return null
+        return raw
+    }
+
+    static void report(String raw, Logger logger) {
+        if (!claimReport()) return
+        Set<String> selected = new HashSet<String>(Arrays.asList(raw.split(",", -1)))
+        REASONS.each { code, description ->
+            if (selected.contains(code)) {
+                logger.lifecycle("[Affected] Gradle selection - {}: {}", code, description)
+            }
+        }
+    }
+
+    private static boolean claimReport() {
+        try {
+            String configured = System.getProperty("affected.collector.output")
+            if (configured == null || configured.trim().isEmpty()) return false
+            Path requested = new File(configured).toPath().toAbsolutePath().normalize()
+            if (Files.isSymbolicLink(requested) || !Files.isDirectory(requested, LinkOption.NOFOLLOW_LINKS) ||
+                !Files.isWritable(requested)) return false
+            Path root = requested.toRealPath(LinkOption.NOFOLLOW_LINKS)
+            Files.createFile(root.resolve("selection-diagnostics.reported"))
+            return true
+        } catch (FileAlreadyExistsException ignored) {
+            return false
+        } catch (Exception ignored) {
+            return false
+        }
+    }
+}
+
+class AffectedSelectionDiagnosticsTask extends DefaultTask {
+    private String reasonCodes
+
+    @Input
+    String getReasonCodes() {
+        return reasonCodes
+    }
+
+    void setReasonCodes(String value) {
+        reasonCodes = value
+    }
+
+    @TaskAction
+    void reportReasons() {
+        AffectedSelectionDiagnostics.report(reasonCodes, logger)
+    }
+}
 
 class AffectedCollectorSelectionSpec implements Spec<Task>, Serializable {
     private static final String OUTPUT = "affected.collector.output"
@@ -459,6 +531,21 @@ class AffectedCollectorCacheSpec implements Spec<Task>, Serializable {
 }
 
 gradle.projectsEvaluated {
+    try {
+        String reasonCodes = AffectedSelectionDiagnostics.configured(gradle.rootProject)
+        if (reasonCodes != null) {
+            String taskName = "affectedSelectionDiagnosticsBeforeRun"
+            def diagnostics = gradle.rootProject.tasks.register(taskName, AffectedSelectionDiagnosticsTask) { task ->
+                task.reasonCodes = reasonCodes
+            }
+            gradle.allprojects { project ->
+                project.tasks.configureEach { task ->
+                    if (task.project != gradle.rootProject || task.name != taskName) task.dependsOn(diagnostics)
+                }
+            }
+        }
+    } catch (Exception ignored) {
+    }
     gradle.allprojects { project ->
         try {
             Path agent = AffectedCollectorSelectionSpec.regularFile("affected.collector.agent")
