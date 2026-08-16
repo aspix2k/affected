@@ -283,6 +283,28 @@ class ChangeAnalyzerTest {
     }
 
     @Test
+    fun `Gradle configuration files remain affected inputs`() = repo { dir ->
+        val files = listOf(
+            File(dir, "settings.gradle").apply { writeText("rootProject.name = 'changed'") },
+            File(dir, "lib/build.gradle").apply { writeText("plugins {}") },
+            File(dir, "gradle.properties").apply { writeText("org.gradle.parallel=true") },
+            File(dir, "gradle/libs.versions.toml").apply {
+                parentFile.mkdirs()
+                writeText("[versions]\nkotlin = \"2.3.20\"")
+            },
+            File(dir, "gradle/wrapper/gradle-wrapper.properties").apply {
+                parentFile.mkdirs()
+                writeText("distributionUrl=https://example.invalid/gradle.zip")
+            },
+        )
+
+        val changes = analyze(dir, GradleBuildSystem().sourceExtensions)
+
+        assertEquals(files.toSet(), changes.files.toSet())
+        assertTrue(changes.apiTouched.isEmpty())
+    }
+
+    @Test
     fun `Xcode scheme and test plan edits remain affected inputs`() = repo { dir ->
         val scheme = File(dir, "App.xcodeproj/xcshareddata/xcschemes/App.xcscheme").apply {
             parentFile.mkdirs()

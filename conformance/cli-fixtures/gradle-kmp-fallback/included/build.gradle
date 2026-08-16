@@ -1,0 +1,13 @@
+tasks.register("includedTest") {
+    doLast {
+        def configured = System.getProperty("affected.kmp.markers")
+        if (configured == null || configured.trim().isEmpty()) {
+            throw new GradleException("affected.kmp.markers is required")
+        }
+        def directory = new File(configured)
+        if (!directory.isDirectory() && !directory.mkdirs()) {
+            throw new GradleException("Cannot create marker directory")
+        }
+        new File(directory, "included.marker").setText("included\n", "UTF-8")
+    }
+}

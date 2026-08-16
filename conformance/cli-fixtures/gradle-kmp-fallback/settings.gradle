@@ -1,0 +1,3 @@
+rootProject.name = "affected-gradle-kmp-fallback"
+include ":shared"
+includeBuild "included"

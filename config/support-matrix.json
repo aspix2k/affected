@@ -178,9 +178,9 @@
           "gateStep": "Analyze, test, package and verify"
         }
       ],
-      "versions": "Gradle 8–9; JDK 17, 21 and 26",
+      "versions": "Gradle 8–9; JDK 17, 21 and 26; in change-aware Affected test runs, exact KMP target narrowing is retained for proven platform source sets; common sources keep every target, Kotlin/Native stays task-level, and missing/stale JVM baselines or class-set drift keep the whole task; fallbacks report fixed reason codes without paths",
       "support": "supported",
-      "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java", "conformance/cli-fixtures/gradle-cancellation", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleCancellationConformanceTest.kt"],
+      "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java", "conformance/cli-fixtures/gradle-cancellation", "conformance/cli-fixtures/gradle-kmp-fallback", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleCancellationConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/GradleKmpSourceSetTest.kt"],
       "gates": [".github/workflows/conformance.yml", ".github/workflows/ci.yml"]
     },
     {

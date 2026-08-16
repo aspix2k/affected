@@ -46,7 +46,7 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
     override val id: String = GradleConstants.SYSTEM_ID.id
 
     override val sourceExtensions: Set<String> =
-        JVM_SOURCE_EXTENSIONS + setOf("kts", "xml", "json", "pro")
+        JVM_SOURCE_EXTENSIONS + setOf("gradle", "kts", "properties", "toml", "xml", "json", "pro")
 
     override fun isPresent(project: Project): Boolean =
         GradleSettings.getInstance(project).linkedProjectsSettings.isNotEmpty()
@@ -147,12 +147,13 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
                 prepare = {
                     val preparedCollector = publishGradleCollector(collector) { collectorRun(project) }
                     if (execution.isCancellationRequested()) preparedCollector?.cancel()
-                    val taskNames = withContext(Dispatchers.IO) { gradleTaskNames(tasks, changes) }
+                    val selection = withContext(Dispatchers.IO) { gradleTaskSelection(tasks, changes) }
                     val arguments = gradleInvocationArguments(
                         preparedCollector?.arguments.orEmpty(),
+                        selection,
                         AffectedSettings.getInstance().stopAfterFirstFailure,
                     )
-                    settings = gradleTaskExecutionSettings(root, taskNames, arguments)
+                    settings = gradleTaskExecutionSettings(root, selection.taskNames, arguments)
                 },
                 launch = { listener ->
                     ExternalSystemUtil.runTask(
