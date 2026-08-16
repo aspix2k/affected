@@ -43,6 +43,10 @@ tasks.test {
         layout.projectDirectory.file("src/main/python/affected_pytest.py").asFile.absolutePath,
     )
     systemProperty(
+        "affected.test.unittestAdapter",
+        layout.projectDirectory.file("src/main/python/affected_unittest.py").asFile.absolutePath,
+    )
+    systemProperty(
         "affected.test.dotnetAnalyzer",
         layout.projectDirectory.dir("src/main/dotnet/Affected.DotnetAnalyzer").asFile.absolutePath,
     )

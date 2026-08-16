@@ -154,9 +154,11 @@ class CliCommandTest {
 
     @Test
     fun `Python packages share one native command per task kind`() {
-        val modules = modules("/repo", "pkg-a", "packages/a", "pkg-b", "packages/b")
+        val root = createTempDirectory("python-pytest-commands").toFile()
+        File(root, "pytest.ini").writeText("[pytest]\n")
+        val modules = modules(root.path, "pkg-a", "packages/a", "pkg-b", "packages/b")
 
-        val commands = pythonCommands("/repo", listOf("pkg-a:test", "pkg-b:test"), modules)
+        val commands = pythonCommands(root.path, listOf("pkg-a:test", "pkg-b:test"), modules)
 
         assertEquals(
             listOf("python", "-m", "pytest", "packages/a", "packages/b"),

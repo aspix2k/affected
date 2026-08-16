@@ -207,6 +207,7 @@ val mavenAgentArchive = mavenAgentArtifact.elements.map { it.single().asFile }
 val mavenExtensionArchive = mavenExtensionArtifact.elements.map { it.single().asFile }
 val collectorInitScript = project(":collector").layout.projectDirectory.file("src/main/gradle/affected-collector.init.gradle")
 val pytestAdapter = project(":core").layout.projectDirectory.file("src/main/python/affected_pytest.py")
+val unittestAdapter = project(":core").layout.projectDirectory.file("src/main/python/affected_unittest.py")
 val phpunitAdapter = project(":core").layout.projectDirectory.file("src/main/php/affected_phpunit.php")
 val dotnetAnalyzer = project(":core").layout.projectDirectory.dir("src/main/dotnet/Affected.DotnetAnalyzer")
 val collectorAgentPath = "$pluginDirectory/agent/affected-collector-agent.jar"
@@ -215,6 +216,7 @@ val collectorInitScriptPath = "$pluginDirectory/agent/affected-collector.init.gr
 val mavenAgentPath = "$pluginDirectory/agent/affected-maven-agent.jar"
 val mavenExtensionPath = "$pluginDirectory/agent/affected-maven-extension.jar"
 val pytestAdapterPath = "$pluginDirectory/agent/affected-pytest.py"
+val unittestAdapterPath = "$pluginDirectory/agent/affected-unittest.py"
 val phpunitAdapterPath = "$pluginDirectory/agent/affected-phpunit.php"
 val dotnetAnalyzerPath = "$pluginDirectory/agent/dotnet/Affected.DotnetAnalyzer"
 val collectorPremain = "com.aspix2k.affected.collector.AffectedCollectorAgent"
@@ -239,6 +241,10 @@ tasks.named<BuildPluginTask>("buildPlugin") {
     from(pytestAdapter) {
         into("agent")
         rename { "affected-pytest.py" }
+    }
+    from(unittestAdapter) {
+        into("agent")
+        rename { "affected-unittest.py" }
     }
     from(phpunitAdapter) {
         into("agent")
@@ -319,6 +325,17 @@ tasks.named<BuildPluginTask>("buildPlugin") {
             val packagedPytestAdapter = archive.getInputStream(packagedPytestAdapters.single()).use { it.readBytes() }
             check(packagedPytestAdapter.contentEquals(pytestAdapter.asFile.readBytes())) {
                 "Packaged pytest adapter must match the core module source"
+            }
+
+            val packagedUnittestAdapters = archive.entries().asSequence()
+                .filter { it.name == unittestAdapterPath }
+                .toList()
+            check(packagedUnittestAdapters.size == 1) {
+                "Plugin distribution must contain exactly one $unittestAdapterPath"
+            }
+            val packagedUnittestAdapter = archive.getInputStream(packagedUnittestAdapters.single()).use { it.readBytes() }
+            check(packagedUnittestAdapter.contentEquals(unittestAdapter.asFile.readBytes())) {
+                "Packaged unittest adapter must match the core module source"
             }
 
             val packagedPhpunitAdapters = archive.entries().asSequence()

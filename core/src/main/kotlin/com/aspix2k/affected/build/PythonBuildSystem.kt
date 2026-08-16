@@ -1,5 +1,7 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.ProjectChanges
+import com.aspix2k.affected.toBuildChanges
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.intellij.openapi.application.PathManager
@@ -76,13 +78,24 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
         root: String,
         tasks: List<String>,
         changes: BuildChanges,
-    ): List<CliCommand> {
-        val adapter = configuredPytestAdapter()
-            ?: findPytestAdapter(Path.of(PathManager.getJarPathForClass(PythonBuildSystem::class.java)))
-        return if (adapter == null) {
-            pythonCommands(root, tasks, modules(project), changes)
-        } else {
-            pythonCommands(root, tasks, modules(project), changes, adapter)
+    ): List<CliStep> {
+        val directory = File(root)
+        val discovered = modules(project)
+        val runner = pythonTestRunner(directory)
+        val adapter = configuredPythonAdapter(runner)
+            ?: findPythonAdapter(runner, Path.of(PathManager.getJarPathForClass(PythonBuildSystem::class.java)))
+        return when {
+            adapter == null -> {
+                pythonCommands(root, tasks, discovered, changes)
+            }
+            runner == PythonTestRunner.UNITTEST -> {
+                pythonDeferredCommands(root, tasks, discovered, changes, adapter, runner) {
+                    ProjectChanges.collect(project).toBuildChanges()
+                }
+            }
+            else -> {
+                pythonCommands(root, tasks, discovered, changes, adapter)
+            }
         }
     }
 
@@ -93,6 +106,19 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
 }
 
 private val PYTHON_TEST_DIRECTORIES = setOf("test", "tests")
+private val PYTHON_GENERATED_DIRECTORIES = setOf(
+    ".mypy_cache",
+    ".nox",
+    ".pytest_cache",
+    ".tox",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "generated",
+    "out",
+    "venv",
+)
 
 internal fun pythonCommands(root: String, tasks: List<String>, modules: List<BuildModule>): List<CliCommand> {
     return resolvedPythonCommands(root, tasks, modules, null, null)
@@ -113,24 +139,30 @@ internal fun pythonCommands(
     adapter: Path,
 ): List<CliCommand> = resolvedPythonCommands(root, tasks, modules, changes, adapter)
 
-private fun resolvedPythonCommands(
+internal fun resolvedPythonCommands(
     root: String,
     tasks: List<String>,
     modules: List<BuildModule>,
     changes: BuildChanges?,
     adapter: Path?,
+    unittestAdapterFallback: Boolean = false,
+    runner: PythonTestRunner = pythonTestRunner(File(root)),
 ): List<CliCommand> {
     val byName = modules.associateBy { it.executionId }
+    val rootPath = Path.of(root).toAbsolutePath().normalize()
     val resolved = tasks.map { task ->
         val name = task.substringBeforeLast(':')
         val directory = byName[name]?.contentRoots?.singleOrNull() ?: return emptyList()
-        task.substringAfterLast(':') to directory.removePrefix("$root/").ifEmpty { "." }
+        val directoryPath = Path.of(directory).toAbsolutePath().normalize()
+        if (!directoryPath.startsWith(rootPath)) return emptyList()
+        val relative = rootPath.relativize(directoryPath).toString().replace('\\', '/').ifEmpty { "." }
+        task.substringAfterLast(':') to relative
     }
     return resolved.groupBy({ it.first }, { it.second }).flatMap { (task, paths) ->
         if (task == PythonProjects.TYPECHECK) {
             listOf(CliCommand("mypy", listOf("python", "-m", "mypy") + paths.distinct()))
         } else {
-            pythonTestCommands(root, paths.distinct(), modules, changes, adapter)
+            pythonTestCommands(root, paths.distinct(), modules, changes, adapter, unittestAdapterFallback, runner)
         }
     }
 }
@@ -141,19 +173,14 @@ private fun pythonTestCommands(
     modules: List<BuildModule>,
     changes: BuildChanges?,
     adapter: Path?,
+    unittestAdapterFallback: Boolean,
+    runner: PythonTestRunner,
 ): List<CliCommand> {
-    if (pythonTestRunner(File(root)) == PythonTestRunner.UNITTEST) {
-        val selected = changes?.let { selectUnittestFiles(root, packages, it) }
-        return if (selected == null) {
-            packages.map { path ->
-                CliCommand(
-                    "unittest $path",
-                    listOf("python", "-m", "unittest", "discover", "-s", path, "-t", "."),
-                )
-            }
-        } else {
-            listOf(CliCommand("unittest", listOf("python", "-m", "unittest") + selected))
-        }
+    if (runner == PythonTestRunner.UNKNOWN) {
+        return listOf(CliCommand("Python test runner unresolved", listOf("python", "-c", PYTHON_RUNNER_FAILURE)))
+    }
+    if (runner == PythonTestRunner.UNITTEST) {
+        return unittestCommands(root, packages, changes, adapter, unittestAdapterFallback)
     }
     val context = changes?.let { pythonExactContext(root, packages, modules, it) }
     return if (context == null || adapter == null || !adapter.isReadableRegularFile()) {
@@ -161,6 +188,42 @@ private fun pythonTestCommands(
     } else {
         listOf(CliCommand("pytest", listOf("python", adapter.toString(), context, "--") + packages))
     }
+}
+
+private fun unittestCommands(
+    root: String,
+    packages: List<String>,
+    changes: BuildChanges?,
+    adapter: Path?,
+    adapterFallback: Boolean,
+): List<CliCommand> {
+    val selected = changes?.let { selectUnittestFiles(root, packages, it) }
+    val context = when {
+        selected != null -> unittestContext(packages, selected)
+        adapterFallback -> unittestContext(packages, emptyList())
+        else -> null
+    }
+    if (adapter != null && adapter.isReadableRegularFile()) {
+        if (context != null) {
+            return listOf(CliCommand("unittest", listOf("python", adapter.toString(), context)))
+        }
+        if (adapterFallback) {
+            return listOf(
+                CliCommand(
+                    "unittest package set unresolved",
+                    listOf("python", "-c", UNITTEST_CONTEXT_FAILURE),
+                ),
+            )
+        }
+    }
+    return fullUnittestCommands(packages)
+}
+
+private fun fullUnittestCommands(packages: List<String>): List<CliCommand> = packages.map { path ->
+    CliCommand(
+        "unittest $path",
+        listOf("python", "-m", "unittest", "discover", "-s", path, "-t", "."),
+    )
 }
 
 private fun selectUnittestFiles(
@@ -177,15 +240,18 @@ private fun selectUnittestFiles(
         val directory = rootPath.resolve(packageName).normalize()
         require(directory.startsWith(rootPath))
         require(Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(directory))
+        require(symlinkFreePythonPath(rootPath, directory))
         directory
     }
     val selected = changes.files.map { raw ->
         val requested = Path.of(raw).toAbsolutePath().normalize()
+        require(requested.startsWith(rootPath) && symlinkFreePythonPath(rootPath, requested))
         require(Files.isRegularFile(requested, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(requested))
         val real = requested.toRealPath(LinkOption.NOFOLLOW_LINKS)
         require(real.startsWith(rootPath))
         require(isPythonTestModule(real.toFile()))
-        require(roots.any { real.startsWith(it) })
+        require(rootPath.relativize(real).none { it.toString().lowercase() in PYTHON_GENERATED_DIRECTORIES })
+        require(roots.count { real.startsWith(it) } == 1)
         val relative = rootPath.relativize(real).toString().replace('\\', '/')
         require(relative.isNotEmpty() && !relative.startsWith("../"))
         relative
@@ -200,6 +266,26 @@ private fun selectUnittestFiles(
     )
     selected
 }.getOrNull()
+
+private fun unittestContext(packages: List<String>, selected: List<String>): String? = runCatching {
+    val json = JsonObject().apply {
+        addProperty("schema", UNITTEST_CONTEXT_SCHEMA)
+        add("packages", packages.toJsonArray())
+        add("selected", selected.toJsonArray())
+    }.toString().toByteArray(StandardCharsets.UTF_8)
+    require(json.size <= MAX_UNITTEST_CONTEXT_BYTES)
+    Base64.getUrlEncoder().withoutPadding().encodeToString(json)
+}.getOrNull()
+
+private fun symlinkFreePythonPath(root: Path, target: Path): Boolean {
+    if (!target.startsWith(root)) return false
+    var current = root
+    for (segment in root.relativize(target)) {
+        current = current.resolve(segment)
+        if (Files.isSymbolicLink(current)) return false
+    }
+    return true
+}
 
 private fun pythonExactContext(
     root: String,
@@ -256,12 +342,40 @@ private fun configuredPytestAdapter(): Path? = System.getProperty(PYTEST_ADAPTER
     ?.normalize()
     ?.takeIf { it.isReadableRegularFile() }
 
-internal fun findPytestAdapter(classPath: Path): Path? {
+private fun configuredUnittestAdapter(): Path? = System.getProperty(UNITTEST_ADAPTER_PROPERTY)
+    ?.let(Path::of)
+    ?.toAbsolutePath()
+    ?.normalize()
+    ?.takeIf { it.isReadableRegularFile() }
+
+private fun configuredPythonAdapter(runner: PythonTestRunner): Path? = when (runner) {
+    PythonTestRunner.PYTEST -> configuredPytestAdapter()
+    PythonTestRunner.UNITTEST -> configuredUnittestAdapter()
+    PythonTestRunner.UNKNOWN -> null
+}
+
+internal fun findPytestAdapter(classPath: Path): Path? = findPythonAdapter(classPath, PYTEST_ADAPTER_PATH)
+
+internal fun findPythonAdapter(root: File, classPath: Path): Path? = findPythonAdapter(
+    pythonTestRunner(root),
+    classPath,
+)
+
+private fun findPythonAdapter(runner: PythonTestRunner, classPath: Path): Path? = findPythonAdapter(
+    classPath,
+    when (runner) {
+        PythonTestRunner.PYTEST -> PYTEST_ADAPTER_PATH
+        PythonTestRunner.UNITTEST -> UNITTEST_ADAPTER_PATH
+        PythonTestRunner.UNKNOWN -> return null
+    },
+)
+
+private fun findPythonAdapter(classPath: Path, adapterPath: String): Path? {
     var directory = classPath.toAbsolutePath().normalize().let {
         if (Files.isDirectory(it, LinkOption.NOFOLLOW_LINKS)) it else it.parent
     } ?: return null
     repeat(MAX_PLUGIN_PARENT_DEPTH) {
-        val adapter = directory.resolve(PYTEST_ADAPTER_PATH)
+        val adapter = directory.resolve(adapterPath)
         if (adapter.isReadableRegularFile()) return adapter
         directory = directory.parent ?: return null
     }
@@ -269,8 +383,18 @@ internal fun findPytestAdapter(classPath: Path): Path? {
 }
 
 private const val PYTEST_CONTEXT_SCHEMA = 1
+private const val UNITTEST_CONTEXT_SCHEMA = 1
 private const val MAX_PYTHON_CONTEXT_PATHS = 256
 private const val MAX_PYTHON_CONTEXT_BYTES = 12 * 1024
+private const val MAX_UNITTEST_CONTEXT_BYTES = 12 * 1024
 private const val MAX_PLUGIN_PARENT_DEPTH = 5
 private const val PYTEST_ADAPTER_PROPERTY = "affected.test.pytestAdapter"
+private const val UNITTEST_ADAPTER_PROPERTY = "affected.test.unittestAdapter"
 private const val PYTEST_ADAPTER_PATH = "agent/affected-pytest.py"
+private const val UNITTEST_ADAPTER_PATH = "agent/affected-unittest.py"
+private const val PYTHON_RUNNER_FAILURE =
+    "import sys; sys.stderr.write(\"Affected could not safely determine whether this project uses " +
+        "pytest or unittest; remove test-tree symlinks or declare pytest.\\n\"); raise SystemExit(2)"
+private const val UNITTEST_CONTEXT_FAILURE =
+    "import sys; sys.stderr.write(\"Affected could not safely encode the unittest package set; " +
+        "reduce the number or depth of Python package roots.\\n\"); raise SystemExit(2)"
