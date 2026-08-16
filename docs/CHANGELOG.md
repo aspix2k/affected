@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.2] - 2026-08-16
+
+### Fixed
+
+- Restore the documented Go package-level test boundary so build tags and platform-specific test files cannot produce a successful zero-test function filter.
+
 ## [3.13.1] - 2026-08-16
 
 ### Fixed
@@ -503,7 +509,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.13.1...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.13.2...HEAD
+[3.13.2]: https://github.com/aspix2k/affected/compare/v3.13.1...v3.13.2
 [3.13.1]: https://github.com/aspix2k/affected/compare/v3.13.0...v3.13.1
 [3.13.0]: https://github.com/aspix2k/affected/compare/v3.12.0...v3.13.0
 [3.12.0]: https://github.com/aspix2k/affected/compare/v3.11.0...v3.12.0
