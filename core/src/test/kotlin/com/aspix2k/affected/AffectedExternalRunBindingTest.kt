@@ -34,6 +34,24 @@ class AffectedExternalRunBindingTest : BasePlatformTestCase() {
         assertFalse(handler.destroyed)
     }
 
+    fun testOwnedExecutionCannotReuseAnExistingDirectRunDescriptor() {
+        val presentation = AffectedRunPresentation(claim(), RecordingView())
+        val directHandler = RecordingHandler()
+        val directDescriptor = RunContentDescriptor(null, directHandler, JPanel(), "Direct Gradle")
+        val owned = ExecutionEnvironment().apply { contentToReuse = directDescriptor }
+        val binding = checkNotNull(
+            AffectedExternalRunBinding.open(project, presentation, "Gradle · app") { environment, _ ->
+                environment === owned
+            },
+        )
+
+        binding.processStartScheduled("Run", owned)
+
+        assertTrue(owned.isHeadless)
+        assertNull(owned.contentToReuse)
+        assertFalse(directHandler.destroyed)
+    }
+
     fun testMissingHeadlessCompatibilityRefusesTheLaunchBinding() {
         val presentation = AffectedRunPresentation(claim(), RecordingView())
 

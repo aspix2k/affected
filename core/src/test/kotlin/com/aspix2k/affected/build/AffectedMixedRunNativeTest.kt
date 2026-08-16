@@ -1,16 +1,14 @@
 package com.aspix2k.affected.build
 
-import com.aspix2k.affected.AffectedRunChild
 import com.aspix2k.affected.AffectedRunClaim
 import com.aspix2k.affected.AffectedRunPresentation
 import com.aspix2k.affected.AffectedRunSessions
-import com.aspix2k.affected.AffectedRunView
 import com.aspix2k.affected.AffectedStateSnapshot
 import com.aspix2k.affected.AnalysisStatus
 import com.aspix2k.affected.TaskGroup
 import com.aspix2k.affected.VerificationStatus
 import com.aspix2k.affected.runClaimedGroupsWithPresentation
-import com.intellij.execution.process.ProcessHandler
+import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.openapi.externalSystem.service.execution.ExternalSystemJdkUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import kotlinx.coroutines.Deferred
@@ -23,7 +21,7 @@ import org.jetbrains.plugins.gradle.settings.DistributionType
 import org.jetbrains.plugins.gradle.settings.GradleProjectSettings
 import org.jetbrains.plugins.gradle.settings.GradleSettings
 import java.io.File
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.Collections
 
 class AffectedMixedRunNativeTest : BasePlatformTestCase() {
 
@@ -60,15 +58,17 @@ class AffectedMixedRunNativeTest : BasePlatformTestCase() {
     fun testStoppingTheSharedAffectedRunCancelsItsRunningChildAndWaitsForCleanup() = runBlocking {
         if (!nativeEnabled()) return@runBlocking
         if (!xcodeAvailable()) return@runBlocking
-        val fixture = prepare("mixed-gradle-xcode-cancellation", "slowTest")
+        val fixture = prepare("mixed-gradle-xcode-cancellation", "slowTest", slowXcode = true)
         try {
             val outcome = async { run(fixture) }
             awaitMarker(File(fixture.root, "affected-gradle-started.marker"), outcome)
+            awaitMarker(File(fixture.iosRoot, "affected-xcode-started.marker"), outcome)
 
-            fixture.view.handler.destroyProcess()
+            checkNotNull(fixture.descriptor().processHandler).destroyProcess()
 
             assertFalse(withTimeout(TERMINATION_TIMEOUT_MILLIS) { outcome.await() })
             assertFalse(File(fixture.root, "affected-gradle-finished.marker").exists())
+            assertFalse(File(fixture.iosRoot, "affected-xcode-finished.marker").exists())
             assertEquals(0, AffectedRunSessions.getInstance(project).activeCount())
             assertAggregate(fixture, expectedExitCode = 1)
         } finally {
@@ -76,24 +76,27 @@ class AffectedMixedRunNativeTest : BasePlatformTestCase() {
         }
     }
 
-    private fun prepare(name: String, gradleTask: String): PreparedRun {
+    private fun prepare(name: String, gradleTask: String, slowXcode: Boolean = false): PreparedRun {
         val repository = CliConformanceRepository.configured
         val root = File(checkNotNull(project.basePath), name)
         val iosRoot = File(root, "iosApp")
         root.deleteRecursively()
         assertTrue(repository.fixture("mixed-gradle-xcode").copyRecursively(root, overwrite = true))
         assertTrue(repository.fixture("xcode").copyRecursively(iosRoot, overwrite = true))
+        if (slowXcode) installSlowXcodeTest(iosRoot)
         installWrapper(repository, root)
         linkGradleProject(root)
         val claim = checkNotNull(AffectedRunSessions.getInstance(project).claim(::claim))
         assertTrue(claim.markRunning())
-        val view = RecordingRunView()
-        val presentation = AffectedRunPresentation(claim, view)
+        val descriptors = Collections.synchronizedList(mutableListOf<RunContentDescriptor>())
+        val presentation = AffectedRunPresentation.open(project, claim) { descriptor ->
+            descriptors += descriptor
+        }
         return PreparedRun(
             root,
             iosRoot,
             claim,
-            view,
+            descriptors,
             presentation,
             listOf(
                 TaskGroup("GRADLE", root.path, listOf(gradleTask)),
@@ -130,17 +133,22 @@ class AffectedMixedRunNativeTest : BasePlatformTestCase() {
     }
 
     private fun assertAggregate(fixture: PreparedRun, expectedExitCode: Int) {
-        assertEquals(1, fixture.view.publications.get())
+        val descriptor = fixture.descriptor()
+        val ui = checkNotNull(descriptor.runnerLayoutUi)
+        val handler = checkNotNull(descriptor.processHandler)
+        assertEquals("Affected", descriptor.displayName)
         assertEquals(
             listOf("Gradle · ${fixture.root.name}", "Xcode · ${fixture.root.name}/iosApp"),
-            fixture.view.attachedLabels(),
+            ui.contents.map { it.displayName }.sorted(),
         )
-        assertTrue(fixture.view.handler.isProcessTerminated)
-        assertEquals(expectedExitCode, fixture.view.handler.exitCode)
+        assertEquals(2, ui.contents.map { it.component }.distinct().size)
+        assertTrue(handler.isProcessTerminated)
+        assertEquals(expectedExitCode, handler.exitCode)
     }
 
     private fun cleanup(fixture: PreparedRun) {
         File(fixture.root, "release-gradle.marker").writeText("release\n")
+        File(fixture.iosRoot, "release-xcode.marker").writeText("release\n")
         AffectedRunSessions.getInstance(project).stopOwned()
         fixture.presentation.dispose()
         assertTrue(!fixture.root.exists() || fixture.root.deleteRecursively())
@@ -169,6 +177,37 @@ class AffectedMixedRunNativeTest : BasePlatformTestCase() {
             .copyTo(File(wrapper, "gradle-wrapper.properties"), overwrite = true)
     }
 
+    private fun installSlowXcodeTest(iosRoot: File) {
+        File(iosRoot, "Tests/AppTests.swift").writeText(
+            """
+            import Foundation
+            import XCTest
+
+            final class AppTests: XCTestCase {
+                func testAffectedExecution() throws {
+                    let root = URL(fileURLWithPath: #filePath)
+                        .deletingLastPathComponent().deletingLastPathComponent()
+                    try "started".write(
+                        to: root.appendingPathComponent("affected-xcode-started.marker"),
+                        atomically: true,
+                        encoding: .utf8
+                    )
+                    while !FileManager.default.fileExists(
+                        atPath: root.appendingPathComponent("release-xcode.marker").path
+                    ) {
+                        Thread.sleep(forTimeInterval: 0.1)
+                    }
+                    try "finished".write(
+                        to: root.appendingPathComponent("affected-xcode-finished.marker"),
+                        atomically: true,
+                        encoding: .utf8
+                    )
+                }
+            }
+            """.trimIndent(),
+        )
+    }
+
     private fun linkGradleProject(root: File) {
         GradleSettings.getInstance(project).linkProject(
             GradleProjectSettings().apply {
@@ -188,29 +227,14 @@ class AffectedMixedRunNativeTest : BasePlatformTestCase() {
         val root: File,
         val iosRoot: File,
         val claim: AffectedRunClaim,
-        val view: RecordingRunView,
+        val descriptors: MutableList<RunContentDescriptor>,
         val presentation: AffectedRunPresentation,
         val groups: List<TaskGroup>,
-    )
-
-    private class RecordingRunView : AffectedRunView {
-        val publications = AtomicInteger()
-        lateinit var handler: ProcessHandler
-        private val labels = mutableListOf<String>()
-
-        override fun publish(handler: ProcessHandler) {
-            publications.incrementAndGet()
-            this.handler = handler
-            handler.startNotify()
+    ) {
+        fun descriptor(): RunContentDescriptor = synchronized(descriptors) {
+            assertEquals(1, descriptors.size)
+            descriptors.single()
         }
-
-        override fun attach(label: String, child: AffectedRunChild) {
-            synchronized(labels) { labels += label }
-        }
-
-        fun attachedLabels(): List<String> = synchronized(labels) { labels.sorted() }
-
-        override fun dispose() = Unit
     }
 
     private companion object {

@@ -292,8 +292,11 @@ class AffectedRunClaim internal constructor(
             owner.complete(this, passed)
         }
         if (completion.released) {
-            listener?.invoke(completion.passed)
-            release()
+            try {
+                listener?.invoke(completion.passed)
+            } finally {
+                release()
+            }
         }
         return completion.passed
     }

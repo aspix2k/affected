@@ -33,6 +33,7 @@ internal class AffectedExternalRunBinding private constructor(
 
     override fun processStartScheduled(executorId: String, environment: ExecutionEnvironment) {
         if (disposed.get() || !matches(environment, marker)) return
+        environment.contentToReuse = null
         if (!claimed.compareAndSet(false, true) || !enableHeadless(environment)) {
             environment.putUserData(FAILED, true)
         }

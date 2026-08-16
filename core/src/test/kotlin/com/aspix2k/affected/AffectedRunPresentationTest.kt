@@ -98,6 +98,23 @@ class AffectedRunPresentationTest {
     }
 
     @Test
+    fun `child cleanup failure cannot retain the completed run claim`() {
+        val view = RecordingView()
+        var releases = 0
+        val claim = claim { releases++ }
+        val presentation = AffectedRunPresentation(claim, view)
+        val healthy = RecordingChild()
+        assertTrue(presentation.attach("Gradle · app", FailingDisposalChild()))
+        assertTrue(presentation.attach("Xcode · iosApp", healthy))
+        presentation.dispose()
+
+        assertFailsWith<IllegalStateException> { claim.complete(passed = true) }
+
+        assertEquals(1, releases)
+        assertTrue(healthy.disposed)
+    }
+
+    @Test
     fun `one presentation follows every claimed group across dispatchers`() = runBlocking {
         val view = RecordingView()
         val claim = claim()
@@ -193,5 +210,14 @@ class AffectedRunPresentationTest {
         override fun dispose() {
             disposed = true
         }
+    }
+
+    private class FailingDisposalChild : AffectedRunChild {
+        override val component = javax.swing.JPanel()
+        override val preferredFocus = component
+
+        override fun stop() = Unit
+
+        override fun dispose(): Unit = error("cleanup failed")
     }
 }

@@ -65,6 +65,7 @@ internal class ProcessAffectedRunChild(
 private class IdeAffectedRunView(
     private val project: Project,
     private val closed: () -> Unit,
+    private val publishContent: (RunContentDescriptor) -> Unit,
 ) : AffectedRunView {
     private val disposed = AtomicBoolean()
     private val nextContent = AtomicInteger()
@@ -93,10 +94,7 @@ private class IdeAffectedRunView(
             closed()
         })
         ProcessTerminatedListener.attach(handler)
-        RunContentManager.getInstance(project).showRunContent(
-            DefaultRunExecutor.getRunExecutorInstance(),
-            descriptor,
-        )
+        publishContent(descriptor)
         handler.startNotify()
     }
 
@@ -125,11 +123,38 @@ internal class AffectedRunPresentation(
 ) : Disposable {
 
     companion object {
-        fun open(project: Project, claim: AffectedRunClaim): AffectedRunPresentation {
-            lateinit var presentation: AffectedRunPresentation
-            val view = IdeAffectedRunView(project) { presentation.dispose() }
-            presentation = AffectedRunPresentation(claim, view)
-            return presentation
+        fun open(project: Project, claim: AffectedRunClaim): AffectedRunPresentation = open(project, claim) {
+            RunContentManager.getInstance(project).showRunContent(
+                DefaultRunExecutor.getRunExecutorInstance(),
+                it,
+            )
+        }
+
+        internal fun open(
+            project: Project,
+            claim: AffectedRunClaim,
+            publishContent: (RunContentDescriptor) -> Unit,
+        ): AffectedRunPresentation {
+            val lock = Any()
+            var presentation: AffectedRunPresentation? = null
+            var closeRequested = false
+            val view = IdeAffectedRunView(
+                project,
+                closed = {
+                    val current = synchronized(lock) {
+                        presentation.also { if (it == null) closeRequested = true }
+                    }
+                    current?.dispose()
+                },
+                publishContent,
+            )
+            val created = AffectedRunPresentation(claim, view)
+            val close = synchronized(lock) {
+                presentation = created
+                closeRequested
+            }
+            if (close) created.dispose()
+            return created
         }
     }
 
@@ -150,8 +175,11 @@ internal class AffectedRunPresentation(
             view.publish(aggregateHandler)
             claim.bindCompletion(::complete)
         } catch (error: Exception) {
-            aggregateHandler.finish(1)
-            view.dispose()
+            try {
+                aggregateHandler.finish(1)
+            } finally {
+                view.dispose()
+            }
             throw error
         }
     }
@@ -163,16 +191,22 @@ internal class AffectedRunPresentation(
             true
         }
         if (!accepted) {
-            child.stop()
-            child.dispose()
+            try {
+                child.stop()
+            } finally {
+                child.dispose()
+            }
             return false
         }
         return runCatching { view.attach(label, child) }.fold(
             onSuccess = { true },
             onFailure = {
                 synchronized(lock) { children.remove(child) }
-                child.stop()
-                child.dispose()
+                try {
+                    child.stop()
+                } finally {
+                    child.dispose()
+                }
                 false
             },
         )
@@ -188,8 +222,11 @@ internal class AffectedRunPresentation(
                 emptyList()
             }
         }
-        owned.forEach(AffectedRunChild::dispose)
-        view.dispose()
+        try {
+            forEachChild(owned, AffectedRunChild::dispose)
+        } finally {
+            view.dispose()
+        }
     }
 
     private fun stop() {
@@ -199,7 +236,7 @@ internal class AffectedRunPresentation(
             children.toList()
         }
         claim.stopIfActive()
-        owned.forEach(AffectedRunChild::stop)
+        forEachChild(owned, AffectedRunChild::stop)
     }
 
     private fun complete(passed: Boolean) {
@@ -212,8 +249,23 @@ internal class AffectedRunPresentation(
                 emptyList()
             }
         }
-        aggregateHandler.finish(if (passed) 0 else 1)
-        owned.forEach(AffectedRunChild::dispose)
+        try {
+            aggregateHandler.finish(if (passed) 0 else 1)
+        } finally {
+            forEachChild(owned, AffectedRunChild::dispose)
+        }
+    }
+
+    private fun forEachChild(owned: List<AffectedRunChild>, action: (AffectedRunChild) -> Unit) {
+        var failure: Throwable? = null
+        owned.forEach { child ->
+            try {
+                action(child)
+            } catch (error: Throwable) {
+                failure?.addSuppressed(error) ?: run { failure = error }
+            }
+        }
+        failure?.let { throw it }
     }
 }
 
