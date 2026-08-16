@@ -1,0 +1,1 @@
+- Name every Affected-owned Gradle Run session `Affected` instead of deriving an unbounded tab and test-history name from the project and task paths.
