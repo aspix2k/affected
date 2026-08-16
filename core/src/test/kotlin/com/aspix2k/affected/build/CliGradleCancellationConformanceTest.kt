@@ -40,6 +40,22 @@ import kotlin.test.assertTrue
 
 class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
 
+    private lateinit var originalUserDirectory: String
+
+    override fun setUp() {
+        originalUserDirectory = System.getProperty("user.dir")
+        super.setUp()
+    }
+
+    override fun tearDown() {
+        val userDirectory = originalUserDirectory
+        try {
+            super.tearDown()
+        } finally {
+            System.setProperty("user.dir", userDirectory)
+        }
+    }
+
     override fun runInDispatchThread(): Boolean = false
 
     fun testOwnedGradleCancellationLeavesAnUnrelatedIdeTaskRunning() = runBlocking {
