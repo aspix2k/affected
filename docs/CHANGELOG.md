@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.4] - 2026-08-16
+
+### Fixed
+
+- Revalidate every CLI working directory against its planned filesystem identity before command resolution and process launch, refusing missing, re-created, unreadable, linked or out-of-project roots instead of executing through stale paths.
+
 ## [3.13.3] - 2026-08-16
 
 ### Fixed
@@ -515,7 +521,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.13.3...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.13.4...HEAD
+[3.13.4]: https://github.com/aspix2k/affected/compare/v3.13.3...v3.13.4
 [3.13.3]: https://github.com/aspix2k/affected/compare/v3.13.2...v3.13.3
 [3.13.2]: https://github.com/aspix2k/affected/compare/v3.13.1...v3.13.2
 [3.13.1]: https://github.com/aspix2k/affected/compare/v3.13.0...v3.13.1
