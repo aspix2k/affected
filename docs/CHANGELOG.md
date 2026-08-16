@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.6] - 2026-08-16
+
+### Fixed
+
+- Prevented Stop Affected Run from starting queued task groups or pending Maven launches, while leaving unrelated IDE runs untouched.
+
 ## [3.13.5] - 2026-08-16
 
 ### Fixed
@@ -527,7 +533,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.13.5...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.13.6...HEAD
+[3.13.6]: https://github.com/aspix2k/affected/compare/v3.13.5...v3.13.6
 [3.13.5]: https://github.com/aspix2k/affected/compare/v3.13.4...v3.13.5
 [3.13.4]: https://github.com/aspix2k/affected/compare/v3.13.3...v3.13.4
 [3.13.3]: https://github.com/aspix2k/affected/compare/v3.13.2...v3.13.3
