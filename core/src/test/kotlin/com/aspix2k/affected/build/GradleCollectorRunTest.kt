@@ -1,18 +1,25 @@
 package com.aspix2k.affected.build
 
 import com.aspix2k.affected.impact.DependencyMapStore
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.runBlocking
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.Base64
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 
 class GradleCollectorRunTest {
 
@@ -67,6 +74,36 @@ class GradleCollectorRunTest {
 
         assertEquals(previous, DependencyMapStore(cache.resolve("maps")).read(taskKey))
         assertFalse(Files.exists(cancelled.outputRoot))
+    }
+
+    @Test
+    fun `collector remains published when cancellation wins the dispatcher return`() = runBlocking {
+        val root = createTempDirectory("affected-gradle-run-publish-test-")
+        val published = AtomicReference<GradleCollectorRun?>()
+        val created = CompletableDeferred<GradleCollectorRun>()
+        val release = CompletableDeferred<Unit>()
+        try {
+            val task = async {
+                publishGradleCollector(published) {
+                    assertNotNull(GradleCollectorRun.create(root.resolve("cache"), artifacts(root))).also {
+                        created.complete(it)
+                        runBlocking { release.await() }
+                    }
+                }
+            }
+            val run = created.await()
+
+            task.cancel()
+            release.complete(Unit)
+
+            assertFailsWith<CancellationException> { task.await() }
+            assertSame(run, published.get())
+            run.complete(passed = false)
+            assertFalse(Files.exists(run.outputRoot))
+        } finally {
+            release.complete(Unit)
+            root.toFile().deleteRecursively()
+        }
     }
 
     @Test

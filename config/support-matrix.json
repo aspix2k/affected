@@ -132,7 +132,7 @@
       "id": "linux",
       "name": "Linux",
       "support": "native",
-      "fixtures": ["conformance/cli-fixtures", "core/src/test/kotlin/com/aspix2k/affected/build/SequentialProcessHandlerTest.kt", "collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java"],
+      "fixtures": ["conformance/cli-fixtures", "core/src/test/kotlin/com/aspix2k/affected/build/SequentialProcessHandlerTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleCancellationConformanceTest.kt", "collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java"],
       "gates": [".github/workflows/conformance.yml", ".github/workflows/ci.yml"]
     },
     {
@@ -180,7 +180,7 @@
       ],
       "versions": "Gradle 8–9; JDK 17, 21 and 26",
       "support": "supported",
-      "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java"],
+      "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java", "conformance/cli-fixtures/gradle-cancellation", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleCancellationConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml", ".github/workflows/ci.yml"]
     },
     {

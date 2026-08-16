@@ -2,28 +2,36 @@ package com.aspix2k.affected.build
 
 import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.AffectedSettings
+import com.aspix2k.affected.OwnedExternalTaskExecution
+import com.aspix2k.affected.monitorGradleCancellation
+import com.aspix2k.affected.runPreparedOwnedExternalTask
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.externalSystem.model.ProjectKeys
 import com.intellij.openapi.externalSystem.model.execution.ExternalSystemTaskExecutionSettings
 import com.intellij.openapi.externalSystem.model.project.ModuleData
+import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskId
+import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskNotificationListener
 import com.intellij.openapi.externalSystem.model.task.TaskData
 import com.intellij.openapi.externalSystem.service.execution.ProgressExecutionMode
+import com.intellij.openapi.externalSystem.service.internal.ExternalSystemProcessingManager
 import com.intellij.openapi.externalSystem.service.project.ExternalSystemModuleDataIndex
 import com.intellij.openapi.externalSystem.task.TaskCallback
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil
 import com.intellij.openapi.externalSystem.util.ExternalSystemUtil
+import com.intellij.openapi.externalSystem.util.task.TaskExecutionSpec
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.module.ModuleManager
+import com.intellij.openapi.progress.EmptyProgressIndicator
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ModuleRootManager
+import com.intellij.openapi.util.Computable
 import com.intellij.util.execution.ParametersListUtil
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import org.jetbrains.plugins.gradle.settings.GradleSettings
 import org.jetbrains.plugins.gradle.util.GradleConstants
@@ -31,8 +39,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
-import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.coroutines.resume
+import java.util.concurrent.atomic.AtomicReference
 
 class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
 
@@ -123,58 +130,45 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
         changes: BuildChanges,
     ): Boolean {
         if (project.isDisposed) return false
-        val collector = withContext(Dispatchers.IO) { collectorRun(project) }
-        val taskNames = withContext(Dispatchers.IO) { gradleTaskNames(tasks, changes) }
-        val arguments = gradleInvocationArguments(
-            collector?.arguments.orEmpty(),
-            AffectedSettings.getInstance().stopAfterFirstFailure,
+        val sessions = AffectedRunSessions.getInstance(project)
+        val collector = AtomicReference<GradleCollectorRun?>()
+        val execution = OwnedExternalTaskExecution(
+            cancelTask = { id, onTerminated, onMonitoringStopped, onCancelAttemptsExhausted ->
+                cancelExternalTask(id, onTerminated, onMonitoringStopped, onCancelAttemptsExhausted)
+            },
+            onCancel = { collector.get()?.cancel() },
         )
-
-        val settings = ExternalSystemTaskExecutionSettings().apply {
-            externalProjectPath = root
-            this.taskNames = taskNames
-            externalSystemIdString = GradleConstants.SYSTEM_ID.id
-            if (arguments.isNotEmpty()) scriptParameters = ParametersListUtil.join(arguments)
-        }
-
-        return suspendCancellableCoroutine { continuation ->
-            val completed = AtomicBoolean(false)
-            val sessions = AffectedRunSessions.getInstance(project)
-            sessions.expectExternal()
-
-            fun complete(passed: Boolean) {
-                if (!completed.compareAndSet(false, true)) return
-                val scope = if (continuation.isActive) {
-                    CoroutineScope(continuation.context)
-                } else {
-                    CoroutineScope(Dispatchers.IO)
-                }
-                scope.launch(Dispatchers.IO) {
-                    runCatching { collector?.complete(passed) }
-                    if (continuation.isActive) continuation.resume(passed)
-                }
-            }
-
-            continuation.invokeOnCancellation {
-                collector?.cancel()
-            }
-
-            runCatching {
-                ExternalSystemUtil.runTask(
-                    settings,
-                    DefaultRunExecutor.EXECUTOR_ID,
-                    project,
-                    GradleConstants.SYSTEM_ID,
-                    object : TaskCallback {
-                        override fun onSuccess() = complete(true)
-
-                        override fun onFailure() = complete(false)
-                    },
-                    ProgressExecutionMode.IN_BACKGROUND_ASYNC,
-                )
-            }.onFailure {
-                sessions.claimExternal()
-                complete(false)
+        lateinit var settings: ExternalSystemTaskExecutionSettings
+        var passed = false
+        try {
+            passed = runPreparedOwnedExternalTask(
+                sessions = sessions,
+                execution = execution,
+                prepare = {
+                    val preparedCollector = publishGradleCollector(collector) { collectorRun(project) }
+                    if (execution.isCancellationRequested()) preparedCollector?.cancel()
+                    val taskNames = withContext(Dispatchers.IO) { gradleTaskNames(tasks, changes) }
+                    val arguments = gradleInvocationArguments(
+                        preparedCollector?.arguments.orEmpty(),
+                        AffectedSettings.getInstance().stopAfterFirstFailure,
+                    )
+                    settings = ExternalSystemTaskExecutionSettings().apply {
+                        externalProjectPath = root
+                        this.taskNames = taskNames
+                        externalSystemIdString = GradleConstants.SYSTEM_ID.id
+                        if (arguments.isNotEmpty()) scriptParameters = ParametersListUtil.join(arguments)
+                    }
+                },
+                launch = { listener ->
+                    ExternalSystemUtil.runTask(
+                        gradleTaskExecutionSpec(project, settings, listener, execution.callback),
+                    )
+                },
+            )
+            return passed
+        } finally {
+            withContext(NonCancellable + Dispatchers.IO) {
+                runCatching { collector.get()?.complete(passed) }
             }
         }
     }
@@ -323,6 +317,50 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
 
         const val CACHE_DIRECTORY = "affected"
     }
+}
+
+internal suspend fun publishGradleCollector(
+    target: AtomicReference<GradleCollectorRun?>,
+    create: () -> GradleCollectorRun?,
+): GradleCollectorRun? = withContext(Dispatchers.IO) {
+    create().also(target::set)
+}
+
+internal fun gradleTaskExecutionSpec(
+    project: Project,
+    settings: ExternalSystemTaskExecutionSettings,
+    listener: ExternalSystemTaskNotificationListener,
+    callback: TaskCallback,
+): TaskExecutionSpec = TaskExecutionSpec.create()
+    .withProject(project)
+    .withSystemId(GradleConstants.SYSTEM_ID)
+    .withExecutorId(DefaultRunExecutor.EXECUTOR_ID)
+    .withSettings(settings)
+    .withListener(listener)
+    .withCallback(callback)
+    .withProgressExecutionMode(ProgressExecutionMode.NO_PROGRESS_SYNC)
+    .build()
+
+internal fun cancelExternalTask(
+    id: ExternalSystemTaskId,
+    onTerminated: () -> Unit,
+    onMonitoringStopped: () -> Unit,
+    onCancelAttemptsExhausted: () -> Unit,
+): Boolean {
+    val manager = ExternalSystemProcessingManager.getInstance()
+    val task = manager.findTask(id) ?: return false
+    return monitorGradleCancellation(
+        cancel = {
+            ProgressManager.getInstance().runProcess(
+                Computable { task.cancel(ExternalSystemTaskNotificationListener.NULL_OBJECT) },
+                EmptyProgressIndicator(),
+            )
+        },
+        terminated = { task.state.isStopped && manager.findTask(id) == null },
+        onTerminated = onTerminated,
+        onMonitoringStopped = onMonitoringStopped,
+        onCancelAttemptsExhausted = onCancelAttemptsExhausted,
+    )
 }
 
 internal val JVM_SOURCE_EXTENSIONS = setOf("kt", "java", "scala", "groovy")
