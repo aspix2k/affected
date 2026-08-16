@@ -41,6 +41,52 @@ public class GradleInjectionTest {
     @Rule
     public final TemporaryFolder temporary = new TemporaryFolder();
 
+    @Test(timeout = 120_000L)
+    public void affectedStopStrategyOverridesAnIdeContinueArgument() throws Exception {
+        Path project = temporary.newFolder("stop-after-first-project").toPath();
+        Path markers = temporary.newFolder("stop-after-first-markers").toPath();
+        write(project.resolve("settings.gradle"), "rootProject.name = 'stop-after-first'\n");
+        write(
+            project.resolve("build.gradle"),
+            "tasks.register('first') { doLast { file('" +
+                markers.resolve("first.marker").toString().replace("\\", "\\\\") +
+                "').text = 'first'; throw new GradleException('requested failure') } }\n" +
+                "tasks.register('second') { doLast { file('" +
+                markers.resolve("second.marker").toString().replace("\\", "\\\\") +
+                "').text = 'second' } }\n"
+        );
+
+        BuildResult continued = runBounded(
+            GRADLE_HANG_BUDGET_MILLIS,
+            () -> GradleRunner.create()
+                .withProjectDir(project.toFile())
+                .withArguments("first", "second", "--continue")
+                .buildAndFail()
+        );
+
+        assertTrue(continued.getOutput(), Files.isRegularFile(markers.resolve("first.marker")));
+        assertTrue(continued.getOutput(), Files.isRegularFile(markers.resolve("second.marker")));
+        Files.delete(markers.resolve("first.marker"));
+        Files.delete(markers.resolve("second.marker"));
+
+        BuildResult result = runBounded(
+            GRADLE_HANG_BUDGET_MILLIS,
+            () -> GradleRunner.create()
+                .withProjectDir(project.toFile())
+                .withArguments(
+                    "first",
+                    "second",
+                    "--init-script",
+                    required("affected.test.failureStrategyScript"),
+                    "--continue"
+                )
+                .buildAndFail()
+        );
+
+        assertTrue(result.getOutput(), Files.isRegularFile(markers.resolve("first.marker")));
+        assertFalse(result.getOutput(), Files.exists(markers.resolve("second.marker")));
+    }
+
     @Test(timeout = COMPLETE_MAP_SCENARIO_TIMEOUT_MILLIS)
     public void realGradleWorkersProduceCompleteMapsAndReuseConfigurationCache() throws Exception {
         Path project = temporary.newFolder("project").toPath();

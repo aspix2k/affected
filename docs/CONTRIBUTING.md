@@ -86,7 +86,8 @@ each group. Gradle and Maven keep their native IDE views; CLI adapters keep each
 root's command sequence behind one process handler. Direct build-system actions
 remain independent. With Stop after first failure disabled, CLI sequences
 continue, Gradle adds `--continue`, and Maven adds `--fail-at-end`. Stop mode
-uses Gradle's native default and adds Maven `--fail-fast`. A project-level
+uses a bundled Gradle init script to enforce `continueOnFailure=false` after
+IDE-provided command-line arguments and adds Maven `--fail-fast`. A project-level
 `.mvn/maven.config` `--fail-fast` remains native Maven policy and can override
 the full-plan behavior. A Gradle module without test sources is compiled, not
 dropped, so Kotlin Multiplatform libraries do not become an empty plan.

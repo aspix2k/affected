@@ -150,6 +150,25 @@ class GradleCollectorRunTest {
         assertNull(findGradleCollectorArtifacts(classDirectory))
     }
 
+    @Test
+    fun `failure strategy script is resolved only from the bounded installed layout`() = withDirectory { root ->
+        val plugin = root.resolve("affected")
+        val agent = Files.createDirectories(plugin.resolve("agent"))
+        val modules = Files.createDirectories(plugin.resolve("lib/modules"))
+        val script = Files.writeString(agent.resolve("affected-failure-strategy.init.gradle"), "strategy")
+        val classPath = Files.writeString(modules.resolve("affected.core.jar"), "core")
+
+        assertEquals(script, findGradleFailureStrategyScript(classPath))
+
+        Files.delete(script)
+        val outside = Files.writeString(root.resolve("outside.gradle"), "outside")
+        if (runCatching { Files.createSymbolicLink(script, outside) }.isSuccess) {
+            assertNull(findGradleFailureStrategyScript(classPath))
+        }
+        val deep = Files.createDirectories(root.resolve("one/two/three/four/five/classes"))
+        assertNull(findGradleFailureStrategyScript(deep))
+    }
+
     private fun artifacts(root: Path): GradleCollectorArtifacts {
         Files.createDirectories(root)
         val agent = Files.writeString(root.resolve("agent.jar"), "agent")

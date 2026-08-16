@@ -1,7 +1,9 @@
 package com.aspix2k.affected.build
 
+import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -26,11 +28,28 @@ class FailureStrategyTest {
     }
 
     @Test
-    fun `Gradle stop strategy keeps the native default`() {
+    fun `Gradle stop strategy overrides later IDE continue arguments`() {
+        val script = Path.of("/plugin/agent/affected-failure-strategy.init.gradle")
+
         assertEquals(
-            emptyList(),
-            gradleInvocationArguments(emptyList(), stopAfterFirstFailure = true),
+            listOf("--init-script", script.toString()),
+            gradleInvocationArguments(
+                emptyList(),
+                stopAfterFirstFailure = true,
+                failureStrategyScript = script,
+            ),
         )
+    }
+
+    @Test
+    fun `Gradle stop strategy fails closed without its packaged script`() {
+        assertFailsWith<IllegalArgumentException> {
+            gradleInvocationArguments(
+                emptyList(),
+                stopAfterFirstFailure = true,
+                failureStrategyScript = null,
+            )
+        }
     }
 
     @Test
@@ -42,8 +61,12 @@ class FailureStrategyTest {
             gradleInvocationArguments(collector, stopAfterFirstFailure = false),
         )
         assertEquals(
-            collector,
-            gradleInvocationArguments(collector, stopAfterFirstFailure = true),
+            collector + listOf("--init-script", "/plugin/agent/affected-failure-strategy.init.gradle"),
+            gradleInvocationArguments(
+                collector,
+                stopAfterFirstFailure = true,
+                failureStrategyScript = Path.of("/plugin/agent/affected-failure-strategy.init.gradle"),
+            ),
         )
     }
 

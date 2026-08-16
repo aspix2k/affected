@@ -134,6 +134,12 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
         changes: BuildChanges,
     ): Boolean {
         if (project.isDisposed) return false
+        val stopAfterFirstFailure = AffectedSettings.getInstance().stopAfterFirstFailure
+        val failureStrategyScript = if (stopAfterFirstFailure) {
+            requiredGradleFailureStrategyScript(Path.of(PathManager.getJarPathForClass(GradleBuildSystem::class.java)))
+        } else {
+            null
+        }
         val presentation = currentAffectedRunPresentation()
         val binding = presentation?.let {
             AffectedExternalRunBinding.open(
@@ -165,7 +171,8 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
                     val arguments = gradleInvocationArguments(
                         preparedCollector?.arguments.orEmpty(),
                         selection,
-                        AffectedSettings.getInstance().stopAfterFirstFailure,
+                        stopAfterFirstFailure,
+                        failureStrategyScript,
                     )
                     settings = gradleTaskExecutionSettings(root, selection.taskNames, arguments)
                 },
@@ -237,9 +244,16 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
 
     override fun run(project: Project, root: String, tasks: List<String>) {
         if (project.isDisposed) return
+        val stopAfterFirstFailure = AffectedSettings.getInstance().stopAfterFirstFailure
+        val failureStrategyScript = if (stopAfterFirstFailure) {
+            requiredGradleFailureStrategyScript(Path.of(PathManager.getJarPathForClass(GradleBuildSystem::class.java)))
+        } else {
+            null
+        }
         val arguments = gradleInvocationArguments(
             emptyList(),
-            AffectedSettings.getInstance().stopAfterFirstFailure,
+            stopAfterFirstFailure,
+            failureStrategyScript,
         )
 
         val settings = gradleTaskExecutionSettings(root, tasks, arguments)
