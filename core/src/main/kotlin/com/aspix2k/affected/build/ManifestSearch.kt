@@ -1,6 +1,8 @@
 package com.aspix2k.affected.build
 
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -41,42 +43,34 @@ internal object ManifestSearch {
         )
 
     fun fingerprint(root: File, files: List<File>): String? = runCatching {
-        if (files.size > PerformanceBudgets.MAX_FINGERPRINT_FILES) return null
-        val realRoot = root.toPath().toRealPath()
-        val digest = MessageDigest.getInstance("SHA-256")
-        var total = 0L
-        files.distinctBy { it.absoluteFile.normalize().path }.sortedBy { it.invariantSeparatorsPath }.forEach { file ->
-            val requested = file.toPath().toAbsolutePath().normalize()
-            if (Files.isSymbolicLink(requested) ||
-                !Files.isRegularFile(requested, LinkOption.NOFOLLOW_LINKS) ||
-                !Files.isReadable(requested)
-            ) {
-                return null
-            }
-            val real = requested.toRealPath()
-            if (!real.startsWith(realRoot)) return null
-            val size = Files.size(real)
-            total += size
-            if (size > PerformanceBudgets.MAX_MANIFEST_BYTES || total > PerformanceBudgets.MAX_TOTAL_BYTES) return null
-            digest.update(realRoot.relativize(real).toString().replace('\\', '/').toByteArray(StandardCharsets.UTF_8))
-            digest.update(0.toByte())
-            Files.newInputStream(real).use { input ->
-                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                while (true) {
-                    val count = input.read(buffer)
-                    if (count < 0) break
-                    digest.update(buffer, 0, count)
-                }
-            }
-            digest.update(0.toByte())
+        val unique = files.distinctBy { it.toPath().toAbsolutePath().normalize() }
+        if (unique.size > PerformanceBudgets.MAX_FINGERPRINT_FILES) return null
+        val requestedRoot = root.toPath().toAbsolutePath().normalize()
+        if (Files.isSymbolicLink(requestedRoot) ||
+            !Files.isDirectory(requestedRoot, LinkOption.NOFOLLOW_LINKS) ||
+            !Files.isReadable(requestedRoot)
+        ) {
+            return null
         }
-        digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        completeFilesFingerprint(
+            unique,
+            requestedRoot.toRealPath(),
+            System.nanoTime(),
+            PerformanceBudgets.SCAN_TIME_NS,
+        )
     }.getOrNull()
 
     fun readText(file: File): String? = runCatching {
         val path = file.toPath().toAbsolutePath().normalize()
         if (!isReadableManifest(path)) return null
-        Files.readString(path, StandardCharsets.UTF_8)
+        val limit = PerformanceBudgets.MAX_MANIFEST_BYTES.toInt()
+        val bytes = Files.newInputStream(path).use { input -> input.readNBytes(limit + 1) }
+        if (bytes.size > limit) return null
+        StandardCharsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(bytes))
+            .toString()
     }.getOrNull()
 
     fun anyFile(
@@ -207,6 +201,7 @@ private fun scanCompleteTree(
     queue += requestedRoot.toFile() to 0
     val completeRoot = realRoot.takeIf { requireCompleteDepth }
     val visitedDirectories = LinkedHashMap<File, CompleteDirectoryIdentity>()
+    val context = CompleteScanContext(limit, completeRoot, started, budgetNanos, matches, found, queue)
     var visited = 0
 
     while (queue.isNotEmpty()) {
@@ -214,7 +209,7 @@ private fun scanCompleteTree(
         if (visited++ >= PerformanceBudgets.MAX_DIRECTORIES) return null
         val (directory, depth) = queue.removeFirst()
         val before = completeRoot?.let { completeDirectoryIdentity(directory, it) ?: return null }
-        if (!scanComplete(directory, depth, limit, completeRoot, matches, found, queue)) return null
+        if (!context.scan(directory, depth)) return null
         if (before != null) {
             if (before != completeDirectoryIdentity(directory, requireNotNull(completeRoot))) return null
             visitedDirectories[directory] = before
@@ -307,25 +302,6 @@ private fun updateCompleteFileFingerprint(
     digest.update(0.toByte())
     after.size()
 }.getOrNull()
-
-private fun scanComplete(
-    directory: File,
-    depth: Int,
-    limit: Int,
-    completeRoot: java.nio.file.Path?,
-    matches: (File) -> Boolean,
-    found: MutableList<File>,
-    queue: ArrayDeque<Pair<File, Int>>,
-): Boolean {
-    val children = directory.listFiles() ?: return false
-    if (children.size > PerformanceBudgets.MAX_DIRECTORIES) return false
-
-    for (child in children) {
-        if (found.size >= limit) break
-        if (!processCompleteChild(child, depth, completeRoot, matches, found, queue)) return false
-    }
-    return true
-}
 
 private fun processCompleteChild(
     child: File,
@@ -473,6 +449,31 @@ private data class CompleteDirectoryIdentity(
     val modifiedAt: java.nio.file.attribute.FileTime,
     val size: Long,
 )
+
+private class CompleteScanContext(
+    private val limit: Int,
+    private val completeRoot: java.nio.file.Path?,
+    private val started: Long,
+    private val budgetNanos: Long,
+    private val matches: (File) -> Boolean,
+    private val found: MutableList<File>,
+    private val queue: ArrayDeque<Pair<File, Int>>,
+) {
+    fun scan(directory: File, depth: Int): Boolean = runCatching {
+        Files.newDirectoryStream(directory.toPath()).use { children ->
+            var count = 0
+            for (path in children) {
+                if (++count > PerformanceBudgets.MAX_DIRECTORIES || expired()) return false
+                if (found.size >= limit) break
+                if (!processCompleteChild(path.toFile(), depth, completeRoot, matches, found, queue)) return false
+            }
+        }
+        true
+    }.getOrDefault(false)
+
+    private fun expired(): Boolean =
+        System.nanoTime() - started >= budgetNanos || Thread.currentThread().isInterrupted
+}
 
 private data class CompleteScanResult(
     val files: List<File>,

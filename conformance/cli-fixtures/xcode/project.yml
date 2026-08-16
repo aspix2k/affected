@@ -1,0 +1,29 @@
+name: App
+options:
+  createIntermediateGroups: true
+targets:
+  App:
+    type: tool
+    platform: macOS
+    sources:
+      - Sources
+  AppTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  App:
+    build:
+      targets:
+        App: all
+  AppTests:
+    build:
+      targets:
+        AppTests: test
+    test:
+      targets:
+        - AppTests

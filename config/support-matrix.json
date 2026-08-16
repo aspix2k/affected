@@ -780,18 +780,18 @@
       "selectionProofs": [
         {
           "units": ["project"],
-          "path": "core/src/test/kotlin/com/aspix2k/affected/build/XcodeCommandTest.kt",
-          "marker": "an Xcode root runs one project test command",
-          "gate": ".github/workflows/ci.yml",
-          "gateMarker": "koverVerify",
-          "gateJob": "plugin",
-          "gateStep": "Analyze, test, package and verify"
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/XcodeNativeTest.kt",
+          "marker": "Xcode runs proven tests and builds schemes without runnable tests",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "XcodeNativeTest",
+          "gateJob": "cross-platform-paths",
+          "gateStep": "Run platform-specific core tests"
         }
       ],
-      "versions": "Xcode; a single shared scheme is selected, several schemes keep xcodebuild test; native xcodebuild stays unclaimed",
+      "versions": "the default Xcode selected by macos-latest; one proven testable scheme runs xcodebuild test, build-only and empty-TestAction schemes run a signing-independent xcodebuild build, and incomplete or conflicting metadata stays fail-closed",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/xcode"],
-      "gates": [".github/workflows/ci.yml"]
+      "gates": [".github/workflows/conformance.yml"]
     },
     {
       "id": "DBT",

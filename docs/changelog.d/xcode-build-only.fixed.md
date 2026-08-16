@@ -1,0 +1,1 @@
+- Treat Xcode schemes without runnable tests as build-only so Affected avoids the guaranteed `xcodebuild test` exit 66 and performs a signing-independent project build instead.
