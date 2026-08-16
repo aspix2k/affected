@@ -85,7 +85,13 @@ object Verification {
         try {
             if (plan.isEmpty) return Outcome(plan, passed = true)
             if (!claim.markRunning()) return Outcome(plan, passed = false)
-            passed = runClaimedGroups(claim, plan.groups, Dispatchers.Default) { group ->
+            val stopAfterFirstFailure = AffectedSettings.getInstance().stopAfterFirstFailure
+            passed = runClaimedGroups(
+                claim,
+                plan.groups,
+                Dispatchers.Default,
+                stopAfterFirstFailure,
+            ) { group ->
                 group.runInPlannedExecutionRoot(project) {
                     when (val system = BuildSystems.byId(group.systemId)) {
                         null -> preparedGroupPasses(adapterFound = false)

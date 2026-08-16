@@ -135,7 +135,8 @@ class AffectedToolset : McpToolset {
         }
         return try {
             val groups = TaskPlanner.groups(modules.map(AffectedModule::info), name)
-            val passed = runClaimedGroups(claim, groups, Dispatchers.IO) { group ->
+            val stopAfterFirstFailure = AffectedSettings.getInstance().stopAfterFirstFailure
+            val passed = runClaimedGroups(claim, groups, Dispatchers.IO, stopAfterFirstFailure) { group ->
                 group.runInPlannedExecutionRoot(project) {
                     runWithRequiredAdapter(BuildSystems.byId(group.systemId)) {
                         it.runAndWait(project, group.root, group.tasks)

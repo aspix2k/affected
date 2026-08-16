@@ -1,0 +1,1 @@
+- Made `Stop after the first failure` stop sibling Affected task groups across mixed projects while leaving unrelated IDE runs untouched.

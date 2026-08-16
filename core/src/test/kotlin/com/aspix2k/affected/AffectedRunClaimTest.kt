@@ -132,6 +132,21 @@ class AffectedRunClaimTest {
     }
 
     @Test
+    fun `terminating process remains owned until its terminal event`() {
+        val sessions = AffectedRunSessions()
+        val handler = RecordingProcessHandler()
+        handler.startNotify()
+
+        assertTrue(sessions.register(handler))
+        handler.destroyProcess()
+
+        assertTrue(handler.isProcessTerminating)
+        assertEquals(1, sessions.activeCount())
+        handler.finish()
+        assertEquals(0, sessions.activeCount())
+    }
+
+    @Test
     fun `stop cannot overtake owned process completion`() = runBlocking {
         val sessions = AffectedRunSessions()
         val completing = CountDownLatch(1)
@@ -184,6 +199,7 @@ class AffectedRunClaimTest {
             claim,
             listOf(TaskGroup("GRADLE", "/repo", listOf(":test"))),
             Dispatchers.Default,
+            stopAfterFirstFailure = false,
         ) {
             invoked = true
             true
@@ -210,7 +226,7 @@ class AffectedRunClaimTest {
 
         assertTrue(claim.markRunning())
         val result = async(Dispatchers.Default) {
-            runClaimedGroups(claim, groups, dispatcher) { group ->
+            runClaimedGroups(claim, groups, dispatcher, stopAfterFirstFailure = false) { group ->
                 invoked += group.root
                 if (group == groups.first()) {
                     sessions.register(running)
@@ -235,6 +251,177 @@ class AffectedRunClaimTest {
 
         assertFalse(result.await())
         assertEquals(listOf("/repo/first"), invoked)
+        assertEquals(0, sessions.activeCount())
+    }
+
+    @Test
+    fun `first failed group prevents pending sibling dispatch`() = runBlocking {
+        val sessions = AffectedRunSessions()
+        val claim = requireNotNull(sessions.claim(::claim))
+        val invoked = mutableListOf<String>()
+        val dispatcher = QueueingDispatcher()
+        val groups = listOf(
+            TaskGroup("GRADLE", "/repo/first", listOf(":first:test")),
+            TaskGroup("MAVEN", "/repo/second", listOf(":second:test")),
+        )
+
+        assertTrue(claim.markRunning())
+        val result = async(Dispatchers.Default) {
+            runClaimedGroups(claim, groups, dispatcher, stopAfterFirstFailure = true) { group ->
+                invoked += group.root
+                group != groups.first()
+            }
+        }
+        while (dispatcher.size < groups.size) yield()
+        assertTrue(dispatcher.runNext())
+        assertTrue(dispatcher.runNext())
+
+        assertFalse(result.await())
+        assertEquals(listOf("/repo/first"), invoked)
+        assertEquals(0, sessions.activeCount())
+    }
+
+    @Test
+    fun `first failed group stops running sibling and waits for its cleanup`() = runBlocking {
+        val sessions = AffectedRunSessions()
+        val claim = requireNotNull(sessions.claim(::claim))
+        val siblingStarted = CompletableDeferred<Unit>()
+        val allowSiblingCleanup = CompletableDeferred<Unit>()
+        val sibling = WaitingSession()
+        val unrelated = RecordingSession(active = true)
+        val groups = listOf(
+            TaskGroup("GRADLE", "/repo/first", listOf(":first:test")),
+            TaskGroup("MAVEN", "/repo/second", listOf(":second:test")),
+        )
+
+        assertTrue(sessions.register(unrelated))
+        assertTrue(claim.markRunning())
+        val result = async(Dispatchers.Default) {
+            runClaimedGroups(claim, groups, Dispatchers.Default, stopAfterFirstFailure = true) { group ->
+                if (group == groups.first()) {
+                    siblingStarted.await()
+                    false
+                } else {
+                    assertTrue(withContext(Dispatchers.IO) { sessions.register(sibling) })
+                    siblingStarted.complete(Unit)
+                    withContext(NonCancellable) {
+                        sibling.stopped.await()
+                        allowSiblingCleanup.await()
+                        sibling.finish()
+                        sessions.unregister(sibling)
+                    }
+                    true
+                }
+            }
+        }
+
+        sibling.stopped.await()
+        assertFalse(result.isCompleted)
+        assertFalse(unrelated.stopped)
+        allowSiblingCleanup.complete(Unit)
+
+        assertFalse(result.await())
+        assertFalse(unrelated.stopped)
+        sessions.unregister(unrelated)
+        assertEquals(0, sessions.activeCount())
+    }
+
+    @Test
+    fun `disabled fail fast lets every group finish`() = runBlocking {
+        val sessions = AffectedRunSessions()
+        val claim = requireNotNull(sessions.claim(::claim))
+        val invoked = mutableListOf<String>()
+        val dispatcher = QueueingDispatcher()
+        val groups = listOf(
+            TaskGroup("GRADLE", "/repo/first", listOf(":first:test")),
+            TaskGroup("MAVEN", "/repo/second", listOf(":second:test")),
+        )
+
+        assertTrue(claim.markRunning())
+        val result = async(Dispatchers.Default) {
+            runClaimedGroups(claim, groups, dispatcher, stopAfterFirstFailure = false) { group ->
+                invoked += group.root
+                group != groups.first()
+            }
+        }
+        while (dispatcher.size < groups.size) yield()
+        assertTrue(dispatcher.runNext())
+        assertTrue(dispatcher.runNext())
+
+        assertFalse(result.await())
+        assertEquals(groups.map(TaskGroup::root), invoked)
+        assertEquals(0, sessions.activeCount())
+    }
+
+    @Test
+    fun `failed run does not cancel the next claim`() = runBlocking {
+        val sessions = AffectedRunSessions()
+        val first = requireNotNull(sessions.claim(::claim))
+
+        assertTrue(first.markRunning())
+        assertFalse(
+            runClaimedGroups(
+                first,
+                listOf(TaskGroup("GRADLE", "/repo/first", listOf(":first:test"))),
+                Dispatchers.Default,
+                stopAfterFirstFailure = true,
+            ) { false }
+        )
+
+        val second = requireNotNull(sessions.claim(::claim))
+        assertTrue(second.markRunning())
+        assertTrue(
+            runClaimedGroups(
+                second,
+                listOf(TaskGroup("MAVEN", "/repo/second", listOf(":second:test"))),
+                Dispatchers.Default,
+                stopAfterFirstFailure = true,
+            ) { true }
+        )
+        assertEquals(0, sessions.activeCount())
+    }
+
+    @Test
+    fun `failed run does not reject an unrelated late session`() = runBlocking {
+        val sessions = AffectedRunSessions()
+        val claim = requireNotNull(sessions.claim(::claim))
+        val siblingStarted = CompletableDeferred<Unit>()
+        val allowSiblingCleanup = CompletableDeferred<Unit>()
+        val sibling = WaitingSession()
+        val groups = listOf(
+            TaskGroup("GRADLE", "/repo/first", listOf(":first:test")),
+            TaskGroup("MAVEN", "/repo/second", listOf(":second:test")),
+        )
+
+        assertTrue(claim.markRunning())
+        val result = async(Dispatchers.Default) {
+            runClaimedGroups(claim, groups, Dispatchers.Default, stopAfterFirstFailure = true) { group ->
+                if (group == groups.first()) {
+                    siblingStarted.await()
+                    false
+                } else {
+                    assertTrue(sessions.register(sibling))
+                    siblingStarted.complete(Unit)
+                    withContext(NonCancellable) {
+                        sibling.stopped.await()
+                        allowSiblingCleanup.await()
+                        sibling.finish()
+                        sessions.unregister(sibling)
+                    }
+                    true
+                }
+            }
+        }
+        sibling.stopped.await()
+        val unrelated = RecordingSession(active = true)
+
+        assertTrue(sessions.register(unrelated))
+        assertFalse(unrelated.stopped)
+        allowSiblingCleanup.complete(Unit)
+
+        assertFalse(result.await())
+        assertFalse(unrelated.stopped)
+        sessions.unregister(unrelated)
         assertEquals(0, sessions.activeCount())
     }
 
@@ -277,6 +464,8 @@ class AffectedRunClaimTest {
     private class RecordingProcessHandler : ProcessHandler() {
         var destroyed = false
 
+        fun finish() = notifyProcessTerminated(1)
+
         override fun destroyProcessImpl() {
             destroyed = true
         }
@@ -304,6 +493,7 @@ class AffectedRunClaimTest {
     }
 
     private class RecordingSession(private val active: Boolean) : AffectedOwnedSession {
+        @Volatile
         var stopped = false
 
         override fun isActive(): Boolean = active && !stopped
@@ -312,6 +502,29 @@ class AffectedRunClaimTest {
             if (!isActive()) return false
             stopped = true
             return true
+        }
+    }
+
+    private class WaitingSession : AffectedOwnedSession {
+        private val lock = Any()
+        val stopped = CompletableDeferred<Unit>()
+        private var stopping = false
+        private var finished = false
+
+        fun finish() = synchronized(lock) {
+            finished = true
+        }
+
+        override fun isActive(): Boolean = synchronized(lock) { !finished }
+
+        override fun stopIfActive(): Boolean {
+            val accepted = synchronized(lock) {
+                if (finished || stopping) return false
+                stopping = true
+                true
+            }
+            if (accepted) stopped.complete(Unit)
+            return accepted
         }
     }
 }

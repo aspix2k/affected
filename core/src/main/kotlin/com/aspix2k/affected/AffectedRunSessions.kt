@@ -11,6 +11,7 @@ import com.intellij.util.concurrency.AppExecutorUtil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.ThreadContextElement
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
@@ -19,6 +20,8 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.resume
 
 interface AffectedOwnedSession {
@@ -31,6 +34,7 @@ class AffectedRunSessions : Disposable {
 
     private val lock = Any()
     private val sessions = ConcurrentHashMap.newKeySet<AffectedOwnedSession>()
+    private val sessionOwners = HashMap<AffectedOwnedSession, AffectedRunClaim>()
     private val runs = ConcurrentHashMap.newKeySet<AffectedRunClaim>()
     private var disposed = false
 
@@ -49,15 +53,17 @@ class AffectedRunSessions : Disposable {
     }
 
     fun register(session: AffectedOwnedSession): Boolean {
+        val owner = ActiveAffectedRun.current()
         val rejected = synchronized(lock) {
             sessions.add(session)
-            disposed || runs.any(AffectedRunClaim::isCancellationRequested)
+            if (owner != null) sessionOwners[session] = owner
+            disposed || owner?.isTerminationRequested() ?: runs.any(AffectedRunClaim::isCancellationRequested)
         }
         if (rejected) {
             session.stopIfActive()
         }
         synchronized(lock) {
-            sessions.removeIf { !it.isActive() }
+            pruneSessions()
         }
         return !rejected
     }
@@ -65,7 +71,18 @@ class AffectedRunSessions : Disposable {
     fun register(handler: ProcessHandler): Boolean = register(ProcessHandlerSession(handler))
 
     fun unregister(session: AffectedOwnedSession) {
-        synchronized(lock) { sessions.remove(session) }
+        synchronized(lock) {
+            sessions.remove(session)
+            sessionOwners.remove(session)
+        }
+    }
+
+    fun unregister(handler: ProcessHandler) {
+        synchronized(lock) {
+            val owned = sessions.filterIsInstance<ProcessHandlerSession>().filterTo(HashSet()) { it.owns(handler) }
+            sessions.removeAll(owned)
+            sessionOwners.keys.removeAll(owned)
+        }
     }
 
     fun stopOwned(): Int {
@@ -77,14 +94,23 @@ class AffectedRunSessions : Disposable {
         val stopped = owned.count { it.stopIfActive() }
         return synchronized(lock) {
             runs.removeIf { !it.isActive() }
-            sessions.removeIf { !it.isActive() }
+            pruneSessions()
             if (runs.isNotEmpty() || stoppedRuns > 0) stoppedRuns else stopped
         }
     }
 
+    internal fun stopOwned(run: AffectedRunClaim): Int {
+        val owned = synchronized(lock) {
+            sessionOwners.filterValues { it === run }.keys.toList()
+        }
+        val stopped = owned.count { it.stopIfActive() }
+        synchronized(lock) { pruneSessions() }
+        return stopped
+    }
+
     fun activeCount(): Int = synchronized(lock) {
         runs.removeIf { !it.isActive() }
-        sessions.removeIf { !it.isActive() }
+        pruneSessions()
         runs.size.takeIf { it > 0 } ?: sessions.size
     }
 
@@ -93,10 +119,44 @@ class AffectedRunSessions : Disposable {
         stopOwned()
     }
 
+    private fun pruneSessions() {
+        sessions.removeIf { !it.isActive() }
+        sessionOwners.keys.retainAll(sessions)
+    }
+
     companion object {
         fun getInstance(project: Project): AffectedRunSessions =
             project.getService(AffectedRunSessions::class.java)
     }
+}
+
+internal suspend fun <T> withAffectedRun(
+    run: AffectedRunClaim,
+    block: suspend () -> T,
+): T = withContext(AffectedRunContextElement(run)) { block() }
+
+private object ActiveAffectedRun {
+    private val current = ThreadLocal<AffectedRunClaim?>()
+
+    fun current(): AffectedRunClaim? = current.get()
+
+    fun replace(run: AffectedRunClaim?): AffectedRunClaim? {
+        val previous = current.get()
+        current.set(run)
+        return previous
+    }
+}
+
+private class AffectedRunContextElement(
+    private val run: AffectedRunClaim,
+) : ThreadContextElement<AffectedRunClaim?>, AbstractCoroutineContextElement(Key) {
+    override fun updateThreadContext(context: CoroutineContext): AffectedRunClaim? = ActiveAffectedRun.replace(run)
+
+    override fun restoreThreadContext(context: CoroutineContext, oldState: AffectedRunClaim?) {
+        ActiveAffectedRun.replace(oldState)
+    }
+
+    private companion object Key : CoroutineContext.Key<AffectedRunContextElement>
 }
 
 internal class OwnedProcessExecution(
@@ -524,8 +584,9 @@ private const val GRADLE_CANCEL_MAX_SHIFT = 20
 private class ProcessHandlerSession(
     private val handler: ProcessHandler,
 ) : AffectedOwnedSession {
-    override fun isActive(): Boolean =
-        !handler.isProcessTerminated && !handler.isProcessTerminating
+    fun owns(candidate: ProcessHandler): Boolean = handler === candidate
+
+    override fun isActive(): Boolean = !handler.isProcessTerminated
 
     override fun stopIfActive(): Boolean {
         if (!isActive()) return false
