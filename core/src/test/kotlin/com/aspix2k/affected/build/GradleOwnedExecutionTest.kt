@@ -16,6 +16,21 @@ import kotlin.test.assertTrue
 class GradleOwnedExecutionTest {
 
     @Test
+    fun `Affected Gradle execution keeps a bounded name without changing tasks`() {
+        val tasks = List(128) { index -> ":feature-with-a-long-name-$index:testDebugUnitTest" }
+        val settings = gradleTaskExecutionSettings("/fixture", tasks, listOf("--continue"))
+        val execution = OwnedExternalTaskExecution(cancelTask = { true })
+
+        val specification = gradleTaskExecutionSpec(project(), settings, execution.listener, execution.callback)
+
+        assertEquals("Affected", specification.settings.executionName)
+        assertEquals("/fixture", specification.settings.externalProjectPath)
+        assertEquals(tasks, specification.settings.taskNames)
+        assertEquals("--continue", specification.settings.scriptParameters)
+        assertEquals("GRADLE", specification.settings.externalSystemIdString)
+    }
+
+    @Test
     fun `awaited Gradle execution attaches its exact owned listener`() {
         val execution = OwnedExternalTaskExecution(cancelTask = { true })
         val settings = ExternalSystemTaskExecutionSettings().apply {

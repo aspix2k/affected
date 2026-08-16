@@ -152,12 +152,7 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
                         preparedCollector?.arguments.orEmpty(),
                         AffectedSettings.getInstance().stopAfterFirstFailure,
                     )
-                    settings = ExternalSystemTaskExecutionSettings().apply {
-                        externalProjectPath = root
-                        this.taskNames = taskNames
-                        externalSystemIdString = GradleConstants.SYSTEM_ID.id
-                        if (arguments.isNotEmpty()) scriptParameters = ParametersListUtil.join(arguments)
-                    }
+                    settings = gradleTaskExecutionSettings(root, taskNames, arguments)
                 },
                 launch = { listener ->
                     ExternalSystemUtil.runTask(
@@ -225,12 +220,7 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
             AffectedSettings.getInstance().stopAfterFirstFailure,
         )
 
-        val settings = ExternalSystemTaskExecutionSettings().apply {
-            externalProjectPath = root
-            taskNames = tasks
-            externalSystemIdString = GradleConstants.SYSTEM_ID.id
-            if (arguments.isNotEmpty()) scriptParameters = ParametersListUtil.join(arguments)
-        }
+        val settings = gradleTaskExecutionSettings(root, tasks, arguments)
         ExternalSystemUtil.runTask(
             settings,
             DefaultRunExecutor.EXECUTOR_ID,
@@ -324,6 +314,18 @@ internal suspend fun publishGradleCollector(
     create: () -> GradleCollectorRun?,
 ): GradleCollectorRun? = withContext(Dispatchers.IO) {
     create().also(target::set)
+}
+
+internal fun gradleTaskExecutionSettings(
+    root: String,
+    tasks: List<String>,
+    arguments: List<String>,
+): ExternalSystemTaskExecutionSettings = ExternalSystemTaskExecutionSettings().apply {
+    executionName = "Affected"
+    externalProjectPath = root
+    taskNames = tasks
+    externalSystemIdString = GradleConstants.SYSTEM_ID.id
+    if (arguments.isNotEmpty()) scriptParameters = ParametersListUtil.join(arguments)
 }
 
 internal fun gradleTaskExecutionSpec(
