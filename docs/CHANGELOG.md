@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.5] - 2026-08-16
+
+### Fixed
+
+- Stop only the exact Affected-owned Gradle verification task across pre-launch, late-binding and running cancellation, and wait for termination before reporting failure.
+
 ## [3.13.4] - 2026-08-16
 
 ### Fixed
@@ -521,7 +527,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.13.4...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.13.5...HEAD
+[3.13.5]: https://github.com/aspix2k/affected/compare/v3.13.4...v3.13.5
 [3.13.4]: https://github.com/aspix2k/affected/compare/v3.13.3...v3.13.4
 [3.13.3]: https://github.com/aspix2k/affected/compare/v3.13.2...v3.13.3
 [3.13.2]: https://github.com/aspix2k/affected/compare/v3.13.1...v3.13.2
