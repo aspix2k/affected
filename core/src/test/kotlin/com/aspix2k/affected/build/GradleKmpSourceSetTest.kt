@@ -75,13 +75,13 @@ class GradleKmpSourceSetTest {
             selection.reasons,
         )
         assertEquals(
-            listOf(
-                "-Daffected.selection.reasons=" +
-                    "COMMON_SOURCE_SET_FAN_OUT,KOTLIN_NATIVE_EXACT_UNSUPPORTED",
-            ),
-            selection.diagnosticArguments,
+            "[Affected] Gradle selection - COMMON_SOURCE_SET_FAN_OUT: " +
+                "common source-set change retains all target test tasks\n" +
+                "[Affected] Gradle selection - KOTLIN_NATIVE_EXACT_UNSUPPORTED: " +
+                "Kotlin/Native exact selection is unsupported; full target task retained\n",
+            selection.diagnosticOutput,
         )
-        assertFalse(selection.diagnosticArguments.joinToString().contains(file.parentFile.absolutePath))
+        assertFalse(selection.diagnosticOutput.contains(file.parentFile.absolutePath))
     }
 
     @Test
@@ -113,7 +113,7 @@ class GradleKmpSourceSetTest {
 
         assertEquals(listOf(":shared:testDebugUnitTest"), selection.taskNames)
         assertEquals(emptyList(), selection.reasons)
-        assertEquals(emptyList(), selection.diagnosticArguments)
+        assertEquals("", selection.diagnosticOutput)
     }
 
     @Test
@@ -200,7 +200,7 @@ class GradleKmpSourceSetTest {
         )
 
         assertEquals(emptyList(), selection.reasons)
-        assertEquals(emptyList(), selection.diagnosticArguments)
+        assertEquals("", selection.diagnosticOutput)
     }
 
     @Test

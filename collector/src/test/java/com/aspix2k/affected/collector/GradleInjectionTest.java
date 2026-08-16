@@ -176,13 +176,11 @@ public class GradleInjectionTest {
     }
 
     @Test(timeout = 120_000L)
-    public void staticKmpFallbackReasonsAreReportedWithoutChangingExecution() throws Exception {
-        Path project = temporary.newFolder("static-reason-project").toPath();
-        Path firstOutput = temporary.newFolder("static-reason-first-output").toPath();
-        Path cachedOutput = temporary.newFolder("static-reason-cached-output").toPath();
-        Path changedOutput = temporary.newFolder("static-reason-changed-output").toPath();
-        Path noReasonOutput = temporary.newFolder("static-reason-empty-output").toPath();
-        Path markers = temporary.newFolder("static-reason-markers").toPath();
+    public void mixedKmpTasksExecuteWithTheConfigurationCache() throws Exception {
+        Path project = temporary.newFolder("mixed-kmp-project").toPath();
+        Path firstOutput = temporary.newFolder("mixed-kmp-first-output").toPath();
+        Path cachedOutput = temporary.newFolder("mixed-kmp-cached-output").toPath();
+        Path markers = temporary.newFolder("mixed-kmp-markers").toPath();
         copyPublicFixture("gradle-kmp-fallback", project);
 
         BuildResult first = run(
@@ -193,10 +191,6 @@ public class GradleInjectionTest {
             ":shared:iosSimulatorArm64Test",
             ":shared:customTest",
             ":included:includedTest",
-            "-Daffected.selection.reasons=" +
-                "UNKNOWN_REASON,CHANGE_BASE_UNAVAILABLE,BUILD_CONFIGURATION_CHANGE," +
-                "SOURCE_IDENTITY_UNPROVEN,COMMON_SOURCE_SET_FAN_OUT,UNCLASSIFIED_SOURCE_SET," +
-                "TASK_FAMILY_UNPROVEN,KOTLIN_NATIVE_EXACT_UNSUPPORTED",
             "-Daffected.kmp.markers=" + markers
         );
         BuildResult result = run(
@@ -207,42 +201,14 @@ public class GradleInjectionTest {
             ":shared:iosSimulatorArm64Test",
             ":shared:customTest",
             ":included:includedTest",
-            "-Daffected.selection.reasons=" +
-                "UNKNOWN_REASON,CHANGE_BASE_UNAVAILABLE,BUILD_CONFIGURATION_CHANGE," +
-                "SOURCE_IDENTITY_UNPROVEN,COMMON_SOURCE_SET_FAN_OUT,UNCLASSIFIED_SOURCE_SET," +
-                "TASK_FAMILY_UNPROVEN,KOTLIN_NATIVE_EXACT_UNSUPPORTED",
             "-Daffected.kmp.markers=" + markers
         );
 
-        List<String> diagnostics = selectionDiagnostics(result);
-        assertEquals(
-            result.getOutput(),
-            Arrays.asList(
-                "[Affected] Gradle selection - CHANGE_BASE_UNAVAILABLE: " +
-                    "change base is unavailable; full target selection retained",
-                "[Affected] Gradle selection - BUILD_CONFIGURATION_CHANGE: " +
-                    "Gradle configuration changed; full target selection retained",
-                "[Affected] Gradle selection - SOURCE_IDENTITY_UNPROVEN: " +
-                    "added, deleted or otherwise unproven source keeps module-level selection",
-                "[Affected] Gradle selection - COMMON_SOURCE_SET_FAN_OUT: " +
-                    "common source-set change retains all target test tasks",
-                "[Affected] Gradle selection - UNCLASSIFIED_SOURCE_SET: " +
-                    "source set is unclassified; full target selection retained",
-                "[Affected] Gradle selection - TASK_FAMILY_UNPROVEN: " +
-                    "task family is unproven; full target selection retained",
-                "[Affected] Gradle selection - KOTLIN_NATIVE_EXACT_UNSUPPORTED: " +
-                    "Kotlin/Native exact selection is unsupported; full target task retained"
-            ),
-            diagnostics
-        );
-        assertEquals(diagnostics, selectionDiagnostics(first));
         assertTrue(result.getOutput(), result.getOutput().contains("Reusing configuration cache"));
-        assertFalse(diagnostics.toString().contains(project.toString()));
-        assertTrue(
-            result.getOutput(),
-            result.getOutput().indexOf(diagnostics.get(0)) <
-                result.getOutput().indexOf("> Task :shared:testDebugUnitTest")
-        );
+        assertEquals(TaskOutcome.SUCCESS, first.task(":shared:testDebugUnitTest").getOutcome());
+        assertEquals(TaskOutcome.SUCCESS, first.task(":shared:iosSimulatorArm64Test").getOutcome());
+        assertEquals(TaskOutcome.SUCCESS, first.task(":shared:customTest").getOutcome());
+        assertEquals(TaskOutcome.SUCCESS, first.task(":included:includedTest").getOutcome());
         assertEquals(TaskOutcome.SUCCESS, result.task(":shared:testDebugUnitTest").getOutcome());
         assertEquals(TaskOutcome.SUCCESS, result.task(":shared:iosSimulatorArm64Test").getOutcome());
         assertEquals(TaskOutcome.SUCCESS, result.task(":shared:customTest").getOutcome());
@@ -250,87 +216,6 @@ public class GradleInjectionTest {
         assertEquals("android\n", read(markers.resolve("android.marker")));
         assertEquals("ios\n", read(markers.resolve("ios.marker")));
         assertEquals("custom\n", read(markers.resolve("custom.marker")));
-        assertEquals("included\n", read(markers.resolve("included.marker")));
-
-        BuildResult changedReason = run(
-            project,
-            changedOutput,
-            ":shared:testDebugUnitTest",
-            true,
-            ":shared:iosSimulatorArm64Test",
-            ":shared:customTest",
-            ":included:includedTest",
-            "-Daffected.selection.reasons=BUILD_CONFIGURATION_CHANGE",
-            "-Daffected.kmp.markers=" + markers
-        );
-        assertEquals(
-            Collections.singletonList(
-                "[Affected] Gradle selection - BUILD_CONFIGURATION_CHANGE: " +
-                    "Gradle configuration changed; full target selection retained"
-            ),
-            selectionDiagnostics(changedReason)
-        );
-
-        BuildResult noReason = run(
-            project,
-            noReasonOutput,
-            ":shared:testDebugUnitTest",
-            true,
-            ":shared:iosSimulatorArm64Test",
-            ":shared:customTest",
-            ":included:includedTest",
-            "-Daffected.kmp.markers=" + markers
-        );
-        assertTrue(selectionDiagnostics(noReason).isEmpty());
-    }
-
-    @Test(timeout = 120_000L)
-    public void oversizedKmpFallbackDiagnosticsAreIgnoredWithoutChangingExecution() throws Exception {
-        Path project = temporary.newFolder("oversized-reason-project").toPath();
-        Path output = temporary.newFolder("oversized-reason-output").toPath();
-        Path markers = temporary.newFolder("oversized-reason-markers").toPath();
-        copyPublicFixture("gradle-kmp-fallback", project);
-        char[] oversized = new char[513];
-        Arrays.fill(oversized, 'A');
-
-        BuildResult result = run(
-            project,
-            output,
-            ":shared:customTest",
-            false,
-            "-Daffected.selection.reasons=" + new String(oversized),
-            "-Daffected.kmp.markers=" + markers
-        );
-
-        assertFalse(result.getOutput().contains("[Affected] Gradle selection - "));
-        assertEquals(TaskOutcome.SUCCESS, result.task(":shared:customTest").getOutcome());
-        assertEquals("custom\n", read(markers.resolve("custom.marker")));
-    }
-
-    @Test(timeout = 120_000L)
-    public void includedBuildFallbackIsReportedOnce() throws Exception {
-        Path project = temporary.newFolder("included-reason-project").toPath();
-        Path output = temporary.newFolder("included-reason-output").toPath();
-        Path markers = temporary.newFolder("included-reason-markers").toPath();
-        copyPublicFixture("gradle-kmp-fallback", project);
-
-        BuildResult result = run(
-            project,
-            output,
-            ":included:includedTest",
-            true,
-            "-Daffected.selection.reasons=KOTLIN_NATIVE_EXACT_UNSUPPORTED",
-            "-Daffected.kmp.markers=" + markers
-        );
-
-        assertEquals(
-            Collections.singletonList(
-                "[Affected] Gradle selection - KOTLIN_NATIVE_EXACT_UNSUPPORTED: " +
-                    "Kotlin/Native exact selection is unsupported; full target task retained"
-            ),
-            selectionDiagnostics(result)
-        );
-        assertEquals(TaskOutcome.SUCCESS, result.task(":included:includedTest").getOutcome());
         assertEquals("included\n", read(markers.resolve("included.marker")));
     }
 
@@ -451,12 +336,6 @@ public class GradleInjectionTest {
             offset += needle.length();
         }
         return count;
-    }
-
-    private static List<String> selectionDiagnostics(BuildResult result) {
-        return Arrays.stream(result.getOutput().split("\\R"))
-            .filter(line -> line.contains("[Affected] Gradle selection - "))
-            .collect(Collectors.toList());
     }
 
     private BuildResult run(Path project, Path output) throws Exception {

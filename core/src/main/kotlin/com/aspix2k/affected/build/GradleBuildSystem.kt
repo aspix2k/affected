@@ -141,15 +141,8 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
             null
         }
         val presentation = currentAffectedRunPresentation()
-        val binding = presentation?.let {
-            AffectedExternalRunBinding.open(
-                project,
-                it,
-                affectedRunLabel("Gradle", root, project.basePath),
-                matches = AffectedExternalRunBinding::matchesMarker,
-            )
-        }
-        if (presentation != null && binding == null) return false
+        if (presentation != null && !AffectedExternalRunBinding.isSupported()) return false
+        var binding: AffectedExternalRunBinding? = null
         val sessions = AffectedRunSessions.getInstance(project)
         val collector = AtomicReference<GradleCollectorRun?>()
         val execution = OwnedExternalTaskExecution(
@@ -168,9 +161,19 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
                     val preparedCollector = publishGradleCollector(collector) { collectorRun(project) }
                     if (execution.isCancellationRequested()) preparedCollector?.cancel()
                     val selection = withContext(Dispatchers.IO) { gradleTaskSelection(tasks, changes) }
+                    binding = presentation?.let {
+                        checkNotNull(
+                            AffectedExternalRunBinding.open(
+                                project,
+                                it,
+                                affectedRunLabel("Gradle", root, project.basePath),
+                                initialOutput = selection.diagnosticOutput,
+                                matches = AffectedExternalRunBinding::matchesMarker,
+                            ),
+                        )
+                    }
                     val arguments = gradleInvocationArguments(
                         preparedCollector?.arguments.orEmpty(),
-                        selection,
                         stopAfterFirstFailure,
                         failureStrategyScript,
                     )

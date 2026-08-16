@@ -19,17 +19,6 @@ internal fun gradleInvocationArguments(
     existing + "--continue"
 }
 
-internal fun gradleInvocationArguments(
-    existing: List<String>,
-    selection: GradleTaskSelection,
-    stopAfterFirstFailure: Boolean,
-    failureStrategyScript: Path? = null,
-): List<String> = gradleInvocationArguments(
-    existing + selection.diagnosticArguments,
-    stopAfterFirstFailure,
-    failureStrategyScript,
-)
-
 internal fun mavenInvocationArguments(
     existing: List<String>,
     stopAfterFirstFailure: Boolean,

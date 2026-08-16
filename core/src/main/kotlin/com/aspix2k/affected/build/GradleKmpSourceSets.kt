@@ -4,19 +4,19 @@ internal data class GradleTaskSelection(
     val taskNames: List<String>,
     val reasons: List<GradleSelectionReason>,
 ) {
-    val diagnosticArguments: List<String> = reasons.takeIf { it.isNotEmpty() }?.let { selected ->
-        listOf("-D$GRADLE_SELECTION_REASONS=${selected.joinToString(",") { it.name }}")
-    }.orEmpty()
+    val diagnosticOutput: String = reasons.joinToString(separator = "\n", postfix = "\n") { reason ->
+        "[Affected] Gradle selection - ${reason.name}: ${reason.description}"
+    }.takeIf { reasons.isNotEmpty() }.orEmpty()
 }
 
-internal enum class GradleSelectionReason {
-    CHANGE_BASE_UNAVAILABLE,
-    BUILD_CONFIGURATION_CHANGE,
-    SOURCE_IDENTITY_UNPROVEN,
-    COMMON_SOURCE_SET_FAN_OUT,
-    UNCLASSIFIED_SOURCE_SET,
-    TASK_FAMILY_UNPROVEN,
-    KOTLIN_NATIVE_EXACT_UNSUPPORTED,
+internal enum class GradleSelectionReason(val description: String) {
+    CHANGE_BASE_UNAVAILABLE("change base is unavailable; full target selection retained"),
+    BUILD_CONFIGURATION_CHANGE("Gradle configuration changed; full target selection retained"),
+    SOURCE_IDENTITY_UNPROVEN("added, deleted or otherwise unproven source keeps module-level selection"),
+    COMMON_SOURCE_SET_FAN_OUT("common source-set change retains all target test tasks"),
+    UNCLASSIFIED_SOURCE_SET("source set is unclassified; full target selection retained"),
+    TASK_FAMILY_UNPROVEN("task family is unproven; full target selection retained"),
+    KOTLIN_NATIVE_EXACT_UNSUPPORTED("Kotlin/Native exact selection is unsupported; full target task retained"),
 }
 
 internal fun gradleTaskSelection(tasks: List<String>, changes: BuildChanges?): GradleTaskSelection {
@@ -187,5 +187,3 @@ private val KOTLIN_NATIVE_FAMILIES = setOf(
     KmpFamily.MINGW,
     KmpFamily.NATIVE,
 )
-
-internal const val GRADLE_SELECTION_REASONS = "affected.selection.reasons"

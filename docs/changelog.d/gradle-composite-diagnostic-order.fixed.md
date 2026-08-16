@@ -1,0 +1,1 @@
+- Printed static Gradle fallback reasons in the owned Affected run before composite-build tasks start.
