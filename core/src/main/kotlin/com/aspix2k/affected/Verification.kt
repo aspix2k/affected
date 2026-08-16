@@ -87,6 +87,7 @@ object Verification {
             if (!claim.markRunning()) return Outcome(plan, passed = false)
             val stopAfterFirstFailure = AffectedSettings.getInstance().stopAfterFirstFailure
             passed = runClaimedGroups(
+                project,
                 claim,
                 plan.groups,
                 Dispatchers.Default,

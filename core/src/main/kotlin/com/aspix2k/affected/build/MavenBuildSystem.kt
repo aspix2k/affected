@@ -1,8 +1,12 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.AffectedExternalRunBinding
+import com.aspix2k.affected.AffectedRunPresentation
 import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.OwnedProcessExecution
+import com.aspix2k.affected.affectedRunLabel
+import com.aspix2k.affected.currentAffectedRunPresentation
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.runners.ProgramRunner
@@ -119,6 +123,8 @@ class MavenBuildSystem internal constructor(
 
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean {
         if (project.isDisposed) return false
+        val presentation = currentAffectedRunPresentation()
+        if (presentation != null && !AffectedExternalRunBinding.isSupported()) return false
 
         val collector = AtomicReference<MavenCollectorRun?>()
         val execution = OwnedProcessExecution { collector.get()?.cancel() }
@@ -141,7 +147,7 @@ class MavenBuildSystem internal constructor(
                 AffectedSettings.getInstance().stopAfterFirstFailure,
             )
             val parameters = parameters(root, tasks, arguments)
-            return awaitMavenRun(project, parameters, published, execution, launchQueued)
+            return awaitMavenRun(project, parameters, published, execution, launchQueued, presentation, root)
         } catch (cancelled: CancellationException) {
             execution.stopIfActive()
             if (launchQueued.get()) {
@@ -166,6 +172,8 @@ class MavenBuildSystem internal constructor(
         collector: MavenCollectorRun?,
         execution: OwnedProcessExecution,
         launchQueued: AtomicBoolean,
+        presentation: AffectedRunPresentation?,
+        root: String,
     ): Boolean = suspendCancellableCoroutine { continuation ->
         val completed = AtomicBoolean(false)
 
@@ -184,7 +192,15 @@ class MavenBuildSystem internal constructor(
         launchQueued.set(true)
         val scheduled = runCatching {
             ApplicationManager.getApplication().invokeLater {
-                startMavenRun(project, parameters, execution, continuation.isActive, ::complete)
+                startMavenRun(
+                    project,
+                    parameters,
+                    execution,
+                    continuation.isActive,
+                    presentation,
+                    root,
+                    ::complete,
+                )
             }
         }.isSuccess
         if (scheduled) {
@@ -200,29 +216,46 @@ class MavenBuildSystem internal constructor(
         parameters: MavenRunnerParameters,
         execution: OwnedProcessExecution,
         continuationActive: Boolean,
+        presentation: AffectedRunPresentation?,
+        root: String,
         complete: (Boolean) -> Unit,
     ) {
         if (!continuationActive || project.isDisposed || execution.isCancellationRequested()) {
             return complete(false)
         }
+        val binding = AtomicReference<AffectedExternalRunBinding?>()
+        fun finish(passed: Boolean) {
+            binding.getAndSet(null)?.dispose()
+            complete(passed)
+        }
+        val callback = object : ProgramRunner.Callback {
+            override fun processStarted(descriptor: RunContentDescriptor) {
+                val handler = descriptor.processHandler ?: return finish(false)
+                execution.bind(handler)
+                handler.addProcessListener(object : ProcessListener {
+                    override fun processTerminated(event: ProcessEvent) = finish(event.exitCode == 0)
+                })
+                if (handler.isProcessTerminated) finish(handler.exitCode == 0)
+            }
+
+            override fun processNotStarted(error: Throwable?) = finish(false)
+        }
+        if (presentation != null) {
+            val owned = AffectedExternalRunBinding.open(
+                project,
+                presentation,
+                affectedRunLabel("Maven", root, project.basePath),
+            ) { environment, _ -> environment.callback === callback }
+            if (owned == null) return finish(false)
+            binding.set(owned)
+        }
         runCatching {
             MavenRunConfigurationType.runConfiguration(
                 project,
                 parameters,
-                object : ProgramRunner.Callback {
-                    override fun processStarted(descriptor: RunContentDescriptor) {
-                        val handler = descriptor.processHandler ?: return complete(false)
-                        execution.bind(handler)
-                        handler.addProcessListener(object : ProcessListener {
-                            override fun processTerminated(event: ProcessEvent) = complete(event.exitCode == 0)
-                        })
-                        if (handler.isProcessTerminated) complete(handler.exitCode == 0)
-                    }
-
-                    override fun processNotStarted(error: Throwable?) = complete(false)
-                },
+                callback,
             )
-        }.onFailure { complete(false) }
+        }.onFailure { finish(false) }
     }
 
     private fun parameters(

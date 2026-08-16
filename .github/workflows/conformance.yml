@@ -111,6 +111,7 @@ jobs:
         run: >-
           scripts/run_gradle.sh :core:test
           --tests com.aspix2k.affected.CrossPlatformPathTest
+          --tests com.aspix2k.affected.build.AffectedMixedRunNativeTest
           --tests com.aspix2k.affected.build.XcodeNativeTest
           -Paffected.cliConformance=true
           --rerun-tasks --no-daemon --no-parallel --max-workers=1

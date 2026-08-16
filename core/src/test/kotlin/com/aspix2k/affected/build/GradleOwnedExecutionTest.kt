@@ -5,6 +5,7 @@ import com.aspix2k.affected.monitorGradleCancellation
 import com.intellij.openapi.externalSystem.model.execution.ExternalSystemTaskExecutionSettings
 import com.intellij.openapi.externalSystem.service.execution.ProgressExecutionMode
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.UserDataHolderBase
 import java.lang.reflect.Proxy
 import java.util.ArrayDeque
 import kotlin.test.Test
@@ -44,6 +45,26 @@ class GradleOwnedExecutionTest {
         assertSame(execution.callback, specification.callback)
         assertSame(settings, specification.settings)
         assertEquals(ProgressExecutionMode.NO_PROGRESS_SYNC, specification.progressExecutionMode)
+    }
+
+    @Test
+    fun `Affected Gradle execution carries the aggregate binding into its run profile`() {
+        val execution = OwnedExternalTaskExecution(cancelTask = { true })
+        val settings = ExternalSystemTaskExecutionSettings().apply {
+            externalProjectPath = "/fixture"
+            taskNames = listOf(":test")
+        }
+        val binding = UserDataHolderBase()
+
+        val specification = gradleTaskExecutionSpec(
+            project(),
+            settings,
+            execution.listener,
+            execution.callback,
+            binding,
+        )
+
+        assertSame(binding, specification.userData)
     }
 
     @Test

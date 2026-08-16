@@ -1,0 +1,22 @@
+tasks.register("test") {
+    doLast {
+        file("affected-gradle-test.marker").setText("executed\n", "UTF-8")
+    }
+}
+
+tasks.register("failingTest") {
+    doLast {
+        file("affected-gradle-failure.marker").setText("executed\n", "UTF-8")
+        throw new GradleException("requested mixed-run failure")
+    }
+}
+
+tasks.register("slowTest") {
+    doLast {
+        file("affected-gradle-started.marker").setText("started\n", "UTF-8")
+        while (!file("release-gradle.marker").isFile()) {
+            Thread.sleep(100)
+        }
+        file("affected-gradle-finished.marker").setText("finished\n", "UTF-8")
+    }
+}

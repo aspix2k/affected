@@ -1,10 +1,15 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.AffectedRunPresentation
 import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.AffectedSettings
+import com.aspix2k.affected.ProcessAffectedRunChild
+import com.aspix2k.affected.affectedRunLabel
+import com.aspix2k.affected.currentAffectedRunPresentation
 import com.intellij.execution.RunContentExecutor
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.openapi.application.ApplicationManager
@@ -67,6 +72,7 @@ object CommandRunner {
             handler.startNotify()
             return
         }
+        val presentation = currentAffectedRunPresentation()
 
         ApplicationManager.getApplication().invokeLater {
             if (project.isDisposed) {
@@ -74,11 +80,7 @@ object CommandRunner {
                 handler.startNotify()
                 return@invokeLater
             }
-            RunContentExecutor(project, handler)
-                .withTitle(title)
-                .withActivateToolWindow(true)
-                .withStop({ handler.destroyProcess() }, { !handler.isProcessTerminated })
-                .run()
+            showHandler(project, handler, title, workingDirectory, presentation)
         }
     }
 
@@ -106,6 +108,7 @@ object CommandRunner {
         val completed = AtomicBoolean(false)
         val terminated = CompletableDeferred<Unit>()
         val sessions = AffectedRunSessions.getInstance(project)
+        val presentation = currentAffectedRunPresentation()
         var registered = false
 
         try {
@@ -136,11 +139,7 @@ object CommandRunner {
                         complete(false)
                         return@invokeLater
                     }
-                    RunContentExecutor(project, handler)
-                        .withTitle(title)
-                        .withActivateToolWindow(true)
-                        .withStop({ handler.destroyProcess() }, { !handler.isProcessTerminated })
-                        .run()
+                    showHandler(project, handler, title, workingDirectory, presentation)
                 }
             }
         } catch (cancelled: CancellationException) {
@@ -152,6 +151,28 @@ object CommandRunner {
         } finally {
             if (registered) sessions.unregister(handler)
         }
+    }
+
+    private fun showHandler(
+        project: Project,
+        handler: ProcessHandler,
+        title: String,
+        workingDirectory: String,
+        presentation: AffectedRunPresentation?,
+    ) {
+        if (presentation != null) {
+            presentation.attach(
+                affectedRunLabel(title.removePrefix("Affected "), workingDirectory, project.basePath),
+                ProcessAffectedRunChild(project, handler),
+            )
+            handler.startNotify()
+            return
+        }
+        RunContentExecutor(project, handler)
+            .withTitle(title)
+            .withActivateToolWindow(true)
+            .withStop({ handler.destroyProcess() }, { !handler.isProcessTerminated })
+            .run()
     }
 
     fun capture(

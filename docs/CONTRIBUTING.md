@@ -80,15 +80,16 @@ build root belongs to every module in the deepest matching build. Gradle
 execution coordinates come from the imported model, so included builds keep
 their ownership while compatible tasks can run through the composite root.
 
-`TaskPlanner` makes one group per build system and execution root. Gradle and
-Maven use one native IDE invocation. CLI adapters put their command sequence
-behind one process handler, so one root is one Run tab. With Stop after first
-failure disabled, CLI sequences continue, Gradle adds `--continue`, and Maven
-adds `--fail-at-end`. Stop mode uses Gradle's native default and adds Maven
-`--fail-fast`. A project-level `.mvn/maven.config` `--fail-fast` remains native
-Maven policy and can override the full-plan behavior. Independent roots stay
-separate. A Gradle module without test sources is compiled, not dropped, so
-Kotlin Multiplatform libraries do not become an empty plan.
+`TaskPlanner` makes one group per build system and execution root. One claimed
+plan publishes one `Affected` Run session, with a structured child section for
+each group. Gradle and Maven keep their native IDE views; CLI adapters keep each
+root's command sequence behind one process handler. Direct build-system actions
+remain independent. With Stop after first failure disabled, CLI sequences
+continue, Gradle adds `--continue`, and Maven adds `--fail-at-end`. Stop mode
+uses Gradle's native default and adds Maven `--fail-fast`. A project-level
+`.mvn/maven.config` `--fail-fast` remains native Maven policy and can override
+the full-plan behavior. A Gradle module without test sources is compiled, not
+dropped, so Kotlin Multiplatform libraries do not become an empty plan.
 
 Cargo keeps the validated nextest profile, required version and executable
 identity, while the Affected failure strategy overrides profile `fail-fast`
