@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.7] - 2026-08-16
+
+### Fixed
+
+- Treat Xcode schemes without runnable tests as build-only so Affected avoids the guaranteed `xcodebuild test` exit 66 and performs a signing-independent project build instead.
+- Recalculate affected modules after commits, branch changes, and Git repository refreshes even when no source-file event is emitted.
+
 ## [3.13.6] - 2026-08-16
 
 ### Fixed
@@ -533,7 +540,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.13.6...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.13.7...HEAD
+[3.13.7]: https://github.com/aspix2k/affected/compare/v3.13.6...v3.13.7
 [3.13.6]: https://github.com/aspix2k/affected/compare/v3.13.5...v3.13.6
 [3.13.5]: https://github.com/aspix2k/affected/compare/v3.13.4...v3.13.5
 [3.13.4]: https://github.com/aspix2k/affected/compare/v3.13.3...v3.13.4
