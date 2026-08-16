@@ -334,9 +334,9 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "Current stable Python; pytest 8–9; standard-library unittest",
+      "versions": "Current stable Python; pytest 8–9; standard-library unittest exact files only when every selected module contributes owned tests; zero-test, import, load_tests, or content drift widens to bounded package discovery in the same process, while unsafe layouts or incomplete runner discovery fail visibly",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/python"],
+      "fixtures": ["conformance/cli-fixtures/python", "conformance/cli-fixtures/unittest"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
