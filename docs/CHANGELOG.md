@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.3] - 2026-08-16
+
+### Fixed
+
+- Make Python unittest exact selection verify that every selected module contributes owned tests, widening zero-test and ambiguous selections to bounded package discovery in the same process and failing visibly when runner or symlink safety cannot be proven.
+
 ## [3.13.2] - 2026-08-16
 
 ### Fixed
@@ -509,7 +515,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.13.2...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.13.3...HEAD
+[3.13.3]: https://github.com/aspix2k/affected/compare/v3.13.2...v3.13.3
 [3.13.2]: https://github.com/aspix2k/affected/compare/v3.13.1...v3.13.2
 [3.13.1]: https://github.com/aspix2k/affected/compare/v3.13.0...v3.13.1
 [3.13.0]: https://github.com/aspix2k/affected/compare/v3.12.0...v3.13.0
