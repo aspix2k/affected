@@ -72,7 +72,6 @@
         <notificationGroup id="AffectedTests" displayType="BALLOON" bundle="messages.AffectedBundle"
                            key="group.title"/>
         <externalSystemTaskNotificationListener implementation="com.aspix2k.affected.ExternalSystemRefreshListener"/>
-        <externalSystemTaskNotificationListener implementation="com.aspix2k.affected.AffectedExecuteTaskListener"/>
         <postStartupActivity implementation="com.aspix2k.affected.StartupRefresh"/>
         <checkinHandlerFactory implementation="com.aspix2k.affected.AffectedCheckinHandlerFactory"/>
         <errorHandler implementation="com.aspix2k.affected.AffectedErrorReportSubmitter"/>

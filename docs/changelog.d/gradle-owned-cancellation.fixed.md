@@ -1,0 +1,1 @@
+- Stop only the exact Affected-owned Gradle verification task across pre-launch, late-binding and running cancellation, and wait for termination before reporting failure.
