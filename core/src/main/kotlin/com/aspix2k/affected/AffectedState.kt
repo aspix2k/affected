@@ -228,6 +228,7 @@ class AffectedRunClaim internal constructor(
     private var cancellationRequested = false
     private var failureDetected = false
     private var sessions: AffectedRunSessions? = null
+    private var completionListener: ((Boolean) -> Unit)? = null
 
     fun markRunning(): Boolean = synchronized(lock) {
         !closed.get() && !cancellationRequested && markRunning.invoke()
@@ -237,6 +238,12 @@ class AffectedRunClaim internal constructor(
         check(!closed.get())
         check(this.sessions == null)
         this.sessions = sessions
+    }
+
+    internal fun bindCompletion(listener: (Boolean) -> Unit) = synchronized(lock) {
+        check(!closed.get())
+        check(completionListener == null)
+        completionListener = listener
     }
 
     internal fun isCancellationRequested(): Boolean = synchronized(lock) { cancellationRequested }
@@ -278,13 +285,19 @@ class AffectedRunClaim internal constructor(
     }
 
     internal fun complete(passed: Boolean): Boolean {
-        val owner = synchronized(lock) { sessions }
+        val (owner, listener) = synchronized(lock) { sessions to completionListener }
         val completion = if (owner == null) {
             synchronized(lock) { completeLocked(passed) }
         } else {
             owner.complete(this, passed)
         }
-        if (completion.released) release()
+        if (completion.released) {
+            try {
+                listener?.invoke(completion.passed)
+            } finally {
+                release()
+            }
+        }
         return completion.passed
     }
 
@@ -319,10 +332,42 @@ suspend fun runClaimedGroups(
     context: CoroutineContext,
     stopAfterFirstFailure: Boolean,
     run: suspend (TaskGroup) -> Boolean,
+): Boolean = runClaimedGroupsWithPresentation(
+    claim,
+    groups,
+    context,
+    stopAfterFirstFailure,
+    presentation = null,
+    run,
+)
+
+suspend fun runClaimedGroups(
+    project: Project,
+    claim: AffectedRunClaim,
+    groups: List<TaskGroup>,
+    context: CoroutineContext,
+    stopAfterFirstFailure: Boolean,
+    run: suspend (TaskGroup) -> Boolean,
+): Boolean = runClaimedGroupsWithPresentation(
+    claim,
+    groups,
+    context,
+    stopAfterFirstFailure,
+    presentation = AffectedRunPresentation.open(project, claim),
+    run,
+)
+
+internal suspend fun runClaimedGroupsWithPresentation(
+    claim: AffectedRunClaim,
+    groups: List<TaskGroup>,
+    context: CoroutineContext,
+    stopAfterFirstFailure: Boolean,
+    presentation: AffectedRunPresentation?,
+    run: suspend (TaskGroup) -> Boolean,
 ): Boolean = coroutineScope {
     val jobs = groups.map { group ->
         async(context, start = CoroutineStart.LAZY) {
-            val passed = withAffectedRun(claim) { run(group) }
+            val passed = withAffectedRun(claim, presentation) { run(group) }
             if (!passed && stopAfterFirstFailure) {
                 claim.failFast(requireNotNull(coroutineContext[Job]))
             }

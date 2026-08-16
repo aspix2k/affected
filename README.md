@@ -33,7 +33,7 @@ Built for multi-module projects and monorepos across 27 supported build ecosyste
 
 - **Less waiting.** Run checks for affected parts of the repository.
 - **One action.** Cover supported ecosystems together.
-- **One Run session per build-system root.** Commands stay together in the IDE.
+- **One Run session per affected plan.** Build-system roots keep their own structured sections inside it.
 - **Smaller test runs.** Narrow to the smallest unit whose relationship can be
   proven by the native build system or test runner.
 - **Consumer checks.** Optionally verify direct dependents after a public API

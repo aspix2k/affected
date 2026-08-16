@@ -45,7 +45,7 @@ abstract class RunCheckAction(
             if (projectBusy(project)) return@launchClaimed
             if (!claim.markRunning()) return@launchClaimed
             val stopAfterFirstFailure = AffectedSettings.getInstance().stopAfterFirstFailure
-            runClaimedGroups(claim, groups, Dispatchers.IO, stopAfterFirstFailure) { group ->
+            runClaimedGroups(project, claim, groups, Dispatchers.IO, stopAfterFirstFailure) { group ->
                 group.runInPlannedExecutionRoot(project) {
                     runWithRequiredAdapter(BuildSystems.byId(group.systemId)) {
                         it.runAndWait(project, group.root, group.tasks)

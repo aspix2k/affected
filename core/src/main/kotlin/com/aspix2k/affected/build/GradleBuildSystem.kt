@@ -1,8 +1,11 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.AffectedExternalRunBinding
 import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.OwnedExternalTaskExecution
+import com.aspix2k.affected.affectedRunLabel
+import com.aspix2k.affected.currentAffectedRunPresentation
 import com.aspix2k.affected.monitorGradleCancellation
 import com.aspix2k.affected.runPreparedOwnedExternalTask
 import com.intellij.execution.executors.DefaultRunExecutor
@@ -29,6 +32,7 @@ import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.util.Computable
+import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.util.execution.ParametersListUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -130,6 +134,16 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
         changes: BuildChanges,
     ): Boolean {
         if (project.isDisposed) return false
+        val presentation = currentAffectedRunPresentation()
+        val binding = presentation?.let {
+            AffectedExternalRunBinding.open(
+                project,
+                it,
+                affectedRunLabel("Gradle", root, project.basePath),
+                matches = AffectedExternalRunBinding::matchesMarker,
+            )
+        }
+        if (presentation != null && binding == null) return false
         val sessions = AffectedRunSessions.getInstance(project)
         val collector = AtomicReference<GradleCollectorRun?>()
         val execution = OwnedExternalTaskExecution(
@@ -157,7 +171,13 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
                 },
                 launch = { listener ->
                     ExternalSystemUtil.runTask(
-                        gradleTaskExecutionSpec(project, settings, listener, execution.callback),
+                        gradleTaskExecutionSpec(
+                            project,
+                            settings,
+                            listener,
+                            execution.callback,
+                            binding?.userData,
+                        ),
                     )
                 },
             )
@@ -166,6 +186,7 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
             withContext(NonCancellable + Dispatchers.IO) {
                 runCatching { collector.get()?.complete(passed) }
             }
+            binding?.dispose()
         }
     }
 
@@ -334,15 +355,19 @@ internal fun gradleTaskExecutionSpec(
     settings: ExternalSystemTaskExecutionSettings,
     listener: ExternalSystemTaskNotificationListener,
     callback: TaskCallback,
-): TaskExecutionSpec = TaskExecutionSpec.create()
-    .withProject(project)
-    .withSystemId(GradleConstants.SYSTEM_ID)
-    .withExecutorId(DefaultRunExecutor.EXECUTOR_ID)
-    .withSettings(settings)
-    .withListener(listener)
-    .withCallback(callback)
-    .withProgressExecutionMode(ProgressExecutionMode.NO_PROGRESS_SYNC)
-    .build()
+    userData: UserDataHolderBase? = null,
+): TaskExecutionSpec {
+    val builder = TaskExecutionSpec.create()
+        .withProject(project)
+        .withSystemId(GradleConstants.SYSTEM_ID)
+        .withExecutorId(DefaultRunExecutor.EXECUTOR_ID)
+        .withSettings(settings)
+        .withListener(listener)
+        .withCallback(callback)
+        .withProgressExecutionMode(ProgressExecutionMode.NO_PROGRESS_SYNC)
+    if (userData != null) builder.withUserData(userData)
+    return builder.build()
+}
 
 internal fun cancelExternalTask(
     id: ExternalSystemTaskId,

@@ -53,7 +53,7 @@ class AffectedRunSessions : Disposable {
     }
 
     fun register(session: AffectedOwnedSession): Boolean {
-        val owner = ActiveAffectedRun.current()
+        val owner = ActiveAffectedRun.current()?.run
         val rejected = synchronized(lock) {
             sessions.add(session)
             if (owner != null) sessionOwners[session] = owner
@@ -132,15 +132,24 @@ class AffectedRunSessions : Disposable {
 
 internal suspend fun <T> withAffectedRun(
     run: AffectedRunClaim,
+    presentation: AffectedRunPresentation? = null,
     block: suspend () -> T,
-): T = withContext(AffectedRunContextElement(run)) { block() }
+): T = withContext(AffectedRunContextElement(ActiveAffectedRunState(run, presentation))) { block() }
+
+internal fun currentAffectedRunPresentation(): AffectedRunPresentation? =
+    ActiveAffectedRun.current()?.presentation
+
+private data class ActiveAffectedRunState(
+    val run: AffectedRunClaim,
+    val presentation: AffectedRunPresentation?,
+)
 
 private object ActiveAffectedRun {
-    private val current = ThreadLocal<AffectedRunClaim?>()
+    private val current = ThreadLocal<ActiveAffectedRunState?>()
 
-    fun current(): AffectedRunClaim? = current.get()
+    fun current(): ActiveAffectedRunState? = current.get()
 
-    fun replace(run: AffectedRunClaim?): AffectedRunClaim? {
+    fun replace(run: ActiveAffectedRunState?): ActiveAffectedRunState? {
         val previous = current.get()
         current.set(run)
         return previous
@@ -148,11 +157,13 @@ private object ActiveAffectedRun {
 }
 
 private class AffectedRunContextElement(
-    private val run: AffectedRunClaim,
-) : ThreadContextElement<AffectedRunClaim?>, AbstractCoroutineContextElement(Key) {
-    override fun updateThreadContext(context: CoroutineContext): AffectedRunClaim? = ActiveAffectedRun.replace(run)
+    private val run: ActiveAffectedRunState,
+) : ThreadContextElement<ActiveAffectedRunState?>, AbstractCoroutineContextElement(Key) {
+    override fun updateThreadContext(
+        context: CoroutineContext,
+    ): ActiveAffectedRunState? = ActiveAffectedRun.replace(run)
 
-    override fun restoreThreadContext(context: CoroutineContext, oldState: AffectedRunClaim?) {
+    override fun restoreThreadContext(context: CoroutineContext, oldState: ActiveAffectedRunState?) {
         ActiveAffectedRun.replace(oldState)
     }
 
