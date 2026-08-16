@@ -134,6 +134,8 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
         changes: BuildChanges,
     ): Boolean {
         if (project.isDisposed) return false
+        val stopAfterFirstFailure = AffectedSettings.getInstance().stopAfterFirstFailure
+        val failureStrategyScript = if (stopAfterFirstFailure) requiredGradleFailureStrategyScript() else null
         val presentation = currentAffectedRunPresentation()
         val binding = presentation?.let {
             AffectedExternalRunBinding.open(
@@ -165,7 +167,8 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
                     val arguments = gradleInvocationArguments(
                         preparedCollector?.arguments.orEmpty(),
                         selection,
-                        AffectedSettings.getInstance().stopAfterFirstFailure,
+                        stopAfterFirstFailure,
+                        failureStrategyScript,
                     )
                     settings = gradleTaskExecutionSettings(root, selection.taskNames, arguments)
                 },
@@ -237,9 +240,12 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
 
     override fun run(project: Project, root: String, tasks: List<String>) {
         if (project.isDisposed) return
+        val stopAfterFirstFailure = AffectedSettings.getInstance().stopAfterFirstFailure
+        val failureStrategyScript = if (stopAfterFirstFailure) requiredGradleFailureStrategyScript() else null
         val arguments = gradleInvocationArguments(
             emptyList(),
-            AffectedSettings.getInstance().stopAfterFirstFailure,
+            stopAfterFirstFailure,
+            failureStrategyScript,
         )
 
         val settings = gradleTaskExecutionSettings(root, tasks, arguments)
@@ -456,6 +462,29 @@ internal fun findGradleCollectorArtifacts(classPath: Path): GradleCollectorArtif
     return null
 }
 
+internal fun findGradleFailureStrategyScript(classPath: Path): Path? {
+    var directory = classPath.toAbsolutePath().normalize().let {
+        if (Files.isDirectory(it, LinkOption.NOFOLLOW_LINKS)) it else it.parent
+    } ?: return null
+    repeat(MAX_PLUGIN_PARENT_DEPTH) {
+        val script = directory.resolve(FAILURE_STRATEGY_SCRIPT_PATH)
+        if (Files.isRegularFile(script, LinkOption.NOFOLLOW_LINKS) && Files.isReadable(script)) return script
+        directory = directory.parent ?: return null
+    }
+    return null
+}
+
+private fun requiredGradleFailureStrategyScript(): Path {
+    val configured = System.getProperty(FAILURE_STRATEGY_SCRIPT_PROPERTY)
+        ?.let(Path::of)
+        ?.toAbsolutePath()
+        ?.normalize()
+        ?.takeIf { Files.isRegularFile(it, LinkOption.NOFOLLOW_LINKS) && Files.isReadable(it) }
+    if (configured != null) return configured
+    return findGradleFailureStrategyScript(Path.of(PathManager.getJarPathForClass(GradleBuildSystem::class.java)))
+        ?: error("Affected Gradle failure strategy script is unavailable; reinstall the plugin")
+}
+
 internal fun gradleProjectPath(externalId: String, buildName: String?, sourceSet: Boolean): String {
     val parts = externalId.removePrefix(":").split(':').toMutableList()
     if (parts.firstOrNull() == buildName) parts.removeFirst()
@@ -611,3 +640,5 @@ private const val MAX_PLUGIN_PARENT_DEPTH = 5
 private const val AGENT_PATH = "agent/affected-collector-agent.jar"
 private const val LISTENER_PATH = "agent/affected-collector-listener.jar"
 private const val INIT_SCRIPT_PATH = "agent/affected-collector.init.gradle"
+private const val FAILURE_STRATEGY_SCRIPT_PATH = "agent/affected-failure-strategy.init.gradle"
+private const val FAILURE_STRATEGY_SCRIPT_PROPERTY = "affected.test.gradleFailureStrategy"

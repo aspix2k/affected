@@ -209,6 +209,8 @@ val collectorListenerArchive = collectorListenerArtifact.elements.map { it.singl
 val mavenAgentArchive = mavenAgentArtifact.elements.map { it.single().asFile }
 val mavenExtensionArchive = mavenExtensionArtifact.elements.map { it.single().asFile }
 val collectorInitScript = project(":collector").layout.projectDirectory.file("src/main/gradle/affected-collector.init.gradle")
+val failureStrategyInitScript = project(":collector").layout.projectDirectory
+    .file("src/main/gradle/affected-failure-strategy.init.gradle")
 val pytestAdapter = project(":core").layout.projectDirectory.file("src/main/python/affected_pytest.py")
 val unittestAdapter = project(":core").layout.projectDirectory.file("src/main/python/affected_unittest.py")
 val phpunitAdapter = project(":core").layout.projectDirectory.file("src/main/php/affected_phpunit.php")
@@ -216,6 +218,7 @@ val dotnetAnalyzer = project(":core").layout.projectDirectory.dir("src/main/dotn
 val collectorAgentPath = "$pluginDirectory/agent/affected-collector-agent.jar"
 val collectorListenerPath = "$pluginDirectory/agent/affected-collector-listener.jar"
 val collectorInitScriptPath = "$pluginDirectory/agent/affected-collector.init.gradle"
+val failureStrategyInitScriptPath = "$pluginDirectory/agent/affected-failure-strategy.init.gradle"
 val mavenAgentPath = "$pluginDirectory/agent/affected-maven-agent.jar"
 val mavenExtensionPath = "$pluginDirectory/agent/affected-maven-extension.jar"
 val pytestAdapterPath = "$pluginDirectory/agent/affected-pytest.py"
@@ -239,6 +242,9 @@ tasks.named<BuildPluginTask>("buildPlugin") {
         into("agent")
     }
     from(collectorInitScript) {
+        into("agent")
+    }
+    from(failureStrategyInitScript) {
         into("agent")
     }
     from(pytestAdapter) {
@@ -317,6 +323,18 @@ tasks.named<BuildPluginTask>("buildPlugin") {
             val packagedScript = archive.getInputStream(packagedScripts.single()).use { it.readBytes() }
             check(packagedScript.contentEquals(collectorInitScript.asFile.readBytes())) {
                 "Packaged collector init script must match the collector module source"
+            }
+
+            val packagedFailureStrategyScripts = archive.entries().asSequence()
+                .filter { it.name == failureStrategyInitScriptPath }
+                .toList()
+            check(packagedFailureStrategyScripts.size == 1) {
+                "Plugin distribution must contain exactly one $failureStrategyInitScriptPath"
+            }
+            val packagedFailureStrategyScript = archive.getInputStream(packagedFailureStrategyScripts.single())
+                .use { it.readBytes() }
+            check(packagedFailureStrategyScript.contentEquals(failureStrategyInitScript.asFile.readBytes())) {
+                "Packaged failure strategy init script must match the collector module source"
             }
 
             val packagedPytestAdapters = archive.entries().asSequence()

@@ -59,6 +59,11 @@ tasks.test {
         layout.projectDirectory.file("src/main/php/affected_phpunit.php").asFile.absolutePath,
     )
     systemProperty(
+        "affected.test.gradleFailureStrategy",
+        project(":collector").layout.projectDirectory
+            .file("src/main/gradle/affected-failure-strategy.init.gradle").asFile.absolutePath,
+    )
+    systemProperty(
         "affected.cliConformance",
         providers.gradleProperty("affected.cliConformance").orElse("false").get(),
     )
