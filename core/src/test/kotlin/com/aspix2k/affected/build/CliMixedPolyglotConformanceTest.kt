@@ -171,7 +171,7 @@ class CliMixedPolyglotConformanceTest : BasePlatformTestCase() {
         runPrepared(project, root, *paths)
 
     private fun mixedRepo(): File {
-        val source = repositoryFile("conformance/cli-fixtures/mixed-cmake-dotnet")
+        val source = CliConformanceRepository.configured.fixture("mixed-cmake-dotnet")
         val root = File(requireNotNull(project.basePath))
         GENERATED_PATHS.forEach { path -> check(File(root, path).deleteRecursively()) }
         copyFixtureTo(root, source)
@@ -180,7 +180,7 @@ class CliMixedPolyglotConformanceTest : BasePlatformTestCase() {
 
     private fun copyFixtureTo(
         root: File,
-        source: File = repositoryFile("conformance/cli-fixtures/mixed-cmake-dotnet"),
+        source: File = CliConformanceRepository.configured.fixture("mixed-cmake-dotnet"),
     ) {
         source.listFiles().orEmpty().forEach { child ->
             check(child.copyRecursively(File(root, child.name), overwrite = true))
@@ -248,10 +248,7 @@ class CliMixedPolyglotConformanceTest : BasePlatformTestCase() {
         }
     }
 
-    private fun repositoryFile(path: String): File =
-        generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
-            .map { File(it, path) }
-            .first { it.exists() }
+    private fun repositoryFile(path: String): File = CliConformanceRepository.configured.repositoryFile(path)
 
     private fun projectAt(root: File): Project {
         val delegate = project

@@ -39,6 +39,10 @@ kotlin { jvmToolchain(21) }
 tasks.test {
     useJUnit()
     systemProperty(
+        "affected.test.repositoryRoot",
+        rootProject.layout.projectDirectory.asFile.absolutePath,
+    )
+    systemProperty(
         "affected.test.pytestAdapter",
         layout.projectDirectory.file("src/main/python/affected_pytest.py").asFile.absolutePath,
     )

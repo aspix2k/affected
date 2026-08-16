@@ -143,10 +143,7 @@ class DotnetMtpCliConformanceTest {
         comparedToBase = true,
     )
 
-    private fun fixtureRoot(): File = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
-        .map { File(it, "conformance/cli-fixtures") }
-        .firstOrNull(File::isDirectory)
-        ?: error("conformance fixtures not found")
+    private fun fixtureRoot(): File = CliConformanceRepository.configured.fixturesRoot()
 
     private data class Result(val passed: Boolean, val output: String)
 

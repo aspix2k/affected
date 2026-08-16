@@ -34,10 +34,7 @@ class CliAntImportConformanceTest {
         }
     }
 
-    private fun fixtureRoot(): File = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
-        .map { File(it, "conformance/cli-fixtures") }
-        .firstOrNull(File::isDirectory)
-        ?: File(System.getProperty("user.dir"), "conformance/cli-fixtures")
+    private fun fixtureRoot(): File = CliConformanceRepository.configured.fixturesRoot()
 
     private fun execute(directory: File, arguments: List<String>): String {
         val output = File.createTempFile("affected-cli-output", ".log")

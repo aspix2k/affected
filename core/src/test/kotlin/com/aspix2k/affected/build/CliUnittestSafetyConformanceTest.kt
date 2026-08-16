@@ -227,15 +227,10 @@ class CliUnittestSafetyConformanceTest {
         }
     }
 
-    private fun fixtureRoot(): File = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
-        .map { File(it, "conformance/cli-fixtures") }
-        .firstOrNull(File::isDirectory)
-        ?: File(System.getProperty("user.dir"), "conformance/cli-fixtures")
+    private fun fixtureRoot(): File = CliConformanceRepository.configured.fixturesRoot()
 
-    private fun unittestAdapter(): File = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
-        .map { File(it, "core/src/main/python/affected_unittest.py") }
-        .firstOrNull(File::isFile)
-        ?: File(System.getProperty("user.dir"), "core/src/main/python/affected_unittest.py")
+    private fun unittestAdapter(): File =
+        CliConformanceRepository.configured.repositoryFile("core/src/main/python/affected_unittest.py")
 
     private fun unittestCommand(root: File, vararg changed: File): CliCommand {
         val modules = PythonProjects.parse(root)
