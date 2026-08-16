@@ -171,7 +171,7 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
             GradleProjectSettings().apply {
                 externalProjectPath = root.path
                 distributionType = DistributionType.DEFAULT_WRAPPED
-                gradleJvm = ExternalSystemJdkUtil.USE_JAVA_HOME
+                gradleJvm = ExternalSystemJdkUtil.USE_INTERNAL_JAVA
             },
         )
     }
