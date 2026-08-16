@@ -1,0 +1,1 @@
+- Recalculate affected modules after commits, branch changes, and Git repository refreshes even when no source-file event is emitted.

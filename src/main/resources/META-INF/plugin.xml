@@ -27,6 +27,7 @@
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
+    <depends optional="true" config-file="affected-git.xml">Git4Idea</depends>
     <depends optional="true" config-file="affected-gradle.xml">com.intellij.gradle</depends>
     <depends optional="true" config-file="affected-maven.xml">org.jetbrains.idea.maven</depends>
 

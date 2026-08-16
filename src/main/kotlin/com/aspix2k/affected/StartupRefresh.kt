@@ -9,6 +9,7 @@ class StartupRefresh : ProjectActivity {
         if (!shouldRefreshOnStartup(remoteFrontendProven())) return
         val state = project.service<AffectedState>()
         state.watchDumbMode()
+        state.watchVcsChanges()
         state.invalidate()
     }
 }
