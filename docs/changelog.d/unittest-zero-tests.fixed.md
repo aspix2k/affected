@@ -1,1 +1,0 @@
-- Make Python unittest exact selection verify that every selected module contributes owned tests, widening zero-test and ambiguous selections to bounded package discovery in the same process and failing visibly when runner or symlink safety cannot be proven.
