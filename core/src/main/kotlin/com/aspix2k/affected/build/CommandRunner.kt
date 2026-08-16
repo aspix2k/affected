@@ -11,7 +11,10 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
@@ -101,38 +104,53 @@ object CommandRunner {
         )
         ProcessTerminatedListener.attach(handler)
         val completed = AtomicBoolean(false)
+        val terminated = CompletableDeferred<Unit>()
+        val sessions = AffectedRunSessions.getInstance(project)
+        var registered = false
 
-        return suspendCancellableCoroutine { continuation ->
-            fun complete(passed: Boolean) {
-                if (completed.compareAndSet(false, true) && continuation.isActive) continuation.resume(passed)
-            }
-
-            handler.addProcessListener(object : ProcessListener {
-                override fun processTerminated(event: ProcessEvent) {
-                    complete(event.exitCode == 0)
+        try {
+            return suspendCancellableCoroutine { continuation ->
+                fun complete(passed: Boolean) {
+                    if (completed.compareAndSet(false, true) && continuation.isActive) continuation.resume(passed)
                 }
-            })
-            if (!AffectedRunSessions.getInstance(project).register(handler)) {
-                handler.startNotify()
-                return@suspendCancellableCoroutine
-            }
-            continuation.invokeOnCancellation {
-                if (!handler.isProcessTerminated) handler.destroyProcess()
-            }
 
-            ApplicationManager.getApplication().invokeLater {
-                if (!continuation.isActive || project.isDisposed) {
-                    if (!handler.isProcessTerminated) handler.destroyProcess()
+                handler.addProcessListener(object : ProcessListener {
+                    override fun processTerminated(event: ProcessEvent) {
+                        terminated.complete(Unit)
+                        complete(event.exitCode == 0)
+                    }
+                })
+                registered = sessions.register(handler)
+                if (!registered) {
                     handler.startNotify()
-                    complete(false)
-                    return@invokeLater
+                    return@suspendCancellableCoroutine
                 }
-                RunContentExecutor(project, handler)
-                    .withTitle(title)
-                    .withActivateToolWindow(true)
-                    .withStop({ handler.destroyProcess() }, { !handler.isProcessTerminated })
-                    .run()
+                continuation.invokeOnCancellation {
+                    if (!handler.isProcessTerminated) handler.destroyProcess()
+                }
+
+                ApplicationManager.getApplication().invokeLater {
+                    if (!continuation.isActive || project.isDisposed) {
+                        if (!handler.isProcessTerminated) handler.destroyProcess()
+                        handler.startNotify()
+                        complete(false)
+                        return@invokeLater
+                    }
+                    RunContentExecutor(project, handler)
+                        .withTitle(title)
+                        .withActivateToolWindow(true)
+                        .withStop({ handler.destroyProcess() }, { !handler.isProcessTerminated })
+                        .run()
+                }
             }
+        } catch (cancelled: CancellationException) {
+            withContext(NonCancellable) {
+                if (!handler.isProcessTerminated) handler.destroyProcess()
+                terminated.await()
+            }
+            throw cancelled
+        } finally {
+            if (registered) sessions.unregister(handler)
         }
     }
 

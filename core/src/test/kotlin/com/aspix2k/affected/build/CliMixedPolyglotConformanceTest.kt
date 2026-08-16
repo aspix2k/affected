@@ -112,6 +112,23 @@ class CliMixedPolyglotConformanceTest : BasePlatformTestCase() {
         assertTrue(".NET group did not finish after the CMake failure", markerExists(root, DOTNET_MARKER))
     }
 
+    fun testStopAfterFirstFailureCancelsTheRunningSiblingGroup() {
+        if (!nativeEnabled()) return
+        val root = mixedRepo()
+        File(root, FAIL_FAST_CONTROL).writeText("enabled\n")
+        configureCmake(root)
+        AffectedSettings.getInstance().stopAfterFirstFailure = true
+
+        val outcome = runBlocking { runPrepared(root, "native/alpha_test.c", "Lib.Tests/ValueTest.cs") }
+
+        assertFalse(outcome.passed)
+        assertTrue(".NET sibling did not start", File(root, DOTNET_STARTED_MARKER).isFile)
+        assertFalse(".NET sibling was not cancelled", markerExists(root, DOTNET_MARKER))
+        val siblingPid = File(root, DOTNET_PID_MARKER).readText().trim().toLong()
+        val siblingAlive = ProcessHandle.of(siblingPid).map { it.isAlive }.orElse(false)
+        assertFalse(".NET sibling was still alive after the outcome", siblingAlive)
+    }
+
     fun testSpaceUnicodeAndLeadingDashRootRunsBothGroups() {
         if (!nativeEnabled()) return
         val parent = createTempDirectory("affected mixed ü ").toFile()
@@ -272,6 +289,9 @@ class CliMixedPolyglotConformanceTest : BasePlatformTestCase() {
         val BUILD_SYSTEM_POINT = ExtensionPointName.create<BuildSystem>("com.aspix2k.affected.buildSystem")
         const val CMAKE_MARKER = "mixed-cmake.marker"
         const val DOTNET_MARKER = "mixed-dotnet.marker"
+        const val DOTNET_PID_MARKER = "mixed-dotnet.pid"
+        const val DOTNET_STARTED_MARKER = "mixed-dotnet.started"
+        const val FAIL_FAST_CONTROL = "mixed-fail-fast"
         const val COMMAND_TIMEOUT_SECONDS = 180L
         const val SESSION_TIMEOUT_MILLIS = 300_000L
         const val MAX_MARKER_DEPTH = 12

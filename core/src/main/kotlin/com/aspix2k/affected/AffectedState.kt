@@ -226,6 +226,7 @@ class AffectedRunClaim internal constructor(
     private val closed = AtomicBoolean()
     private val groupJobs = HashSet<Job>()
     private var cancellationRequested = false
+    private var failureDetected = false
     private var sessions: AffectedRunSessions? = null
 
     fun markRunning(): Boolean = synchronized(lock) {
@@ -240,6 +241,10 @@ class AffectedRunClaim internal constructor(
 
     internal fun isCancellationRequested(): Boolean = synchronized(lock) { cancellationRequested }
 
+    internal fun isTerminationRequested(): Boolean = synchronized(lock) {
+        cancellationRequested || failureDetected
+    }
+
     internal fun registerGroupJobs(jobs: Collection<Job>): Boolean = synchronized(lock) {
         if (closed.get() || cancellationRequested) return false
         groupJobs.addAll(jobs)
@@ -248,6 +253,16 @@ class AffectedRunClaim internal constructor(
 
     internal fun unregisterGroupJobs(jobs: Collection<Job>) = synchronized(lock) {
         groupJobs.removeAll(jobs.toSet())
+    }
+
+    internal fun failFast(failedJob: Job) {
+        val (siblings, owner) = synchronized(lock) {
+            if (closed.get() || failureDetected) return
+            failureDetected = true
+            groupJobs.filterNot { it === failedJob } to sessions
+        }
+        siblings.forEach(Job::cancel)
+        owner?.stopOwned(this)
     }
 
     override fun isActive(): Boolean = synchronized(lock) { !closed.get() }
@@ -286,7 +301,10 @@ class AffectedRunClaim internal constructor(
     private fun completeLocked(passed: Boolean): AffectedRunCompletion {
         if (!closed.compareAndSet(false, true)) return AffectedRunCompletion(released = false, passed = false)
         groupJobs.clear()
-        return AffectedRunCompletion(released = true, passed = passed && !cancellationRequested)
+        return AffectedRunCompletion(
+            released = true,
+            passed = passed && !cancellationRequested && !failureDetected,
+        )
     }
 }
 
@@ -299,11 +317,16 @@ suspend fun runClaimedGroups(
     claim: AffectedRunClaim,
     groups: List<TaskGroup>,
     context: CoroutineContext,
+    stopAfterFirstFailure: Boolean,
     run: suspend (TaskGroup) -> Boolean,
 ): Boolean = coroutineScope {
     val jobs = groups.map { group ->
         async(context, start = CoroutineStart.LAZY) {
-            run(group)
+            val passed = withAffectedRun(claim) { run(group) }
+            if (!passed && stopAfterFirstFailure) {
+                claim.failFast(requireNotNull(coroutineContext[Job]))
+            }
+            passed
         }
     }
     if (!claim.registerGroupJobs(jobs)) {
@@ -316,7 +339,7 @@ suspend fun runClaimedGroups(
             try {
                 job.await()
             } catch (cancelled: CancellationException) {
-                if (!claim.isCancellationRequested()) throw cancelled
+                if (!claim.isTerminationRequested()) throw cancelled
                 false
             }
         }.all { it }
