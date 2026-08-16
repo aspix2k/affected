@@ -10,7 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-GATES = ("plugin", "health", "codeql", "dependencies")
+GATES = ("plugin", "health", "codeql", "dependencies", "exact")
 SHA = re.compile(r"^[0-9a-f]{40}$")
 ZERO_SHA = "0" * 40
 PRODUCT_PREFIXES = ("src/", "core/", "mcp/", "collector/")
@@ -28,6 +28,15 @@ DOC_FILES = frozenset(
     }
 )
 HYGIENE_FILES = frozenset({".gitignore", ".gitattributes"})
+EXACT_EVIDENCE_FILES = frozenset(
+    {
+        "config/support-matrix.json",
+        "docs/SUPPORT.md",
+        "scripts/support_matrix.py",
+        "scripts/tests/test_support_matrix.py",
+        "src/main/resources/META-INF/plugin.xml",
+    }
+)
 SCRIPT_ONLY_FILES = frozenset(
     {
         "scripts/ci_contracts.py",
@@ -47,7 +56,6 @@ SCRIPT_ONLY_FILES = frozenset(
 )
 SAFE_WORKFLOWS = frozenset(
     {
-        ".github/workflows/conformance.yml",
         ".github/workflows/mutation.yml",
         ".github/workflows/queue.yml",
         ".github/workflows/release.yml",
@@ -77,12 +85,17 @@ class CiScopeError(RuntimeError):
 
 def empty_scope() -> dict[str, bool]:
     """Return every expensive gate turned off."""
-    return {gate: False for gate in GATES}
+    return selected_scope()
 
 
 def full_scope() -> dict[str, bool]:
     """Return every expensive gate turned on."""
-    return {gate: True for gate in GATES}
+    return selected_scope(*GATES)
+
+
+def selected_scope(*enabled: str) -> dict[str, bool]:
+    """Return a gate map with only the named entries enabled."""
+    return {gate: gate in enabled for gate in GATES}
 
 
 def normalize(path: str) -> str:
@@ -114,6 +127,8 @@ def flags_for(path: str) -> dict[str, bool] | None:
     if not path or path.endswith("/"):
         return None
     name = path.rsplit("/", 1)[-1]
+    if path in EXACT_EVIDENCE_FILES:
+        return selected_scope("plugin", "exact") if path.startswith("src/") else selected_scope("exact")
     if path in DOC_FILES or path.startswith("docs/") or is_github_doc(path):
         return empty_scope()
     if path in HYGIENE_FILES:
@@ -122,28 +137,33 @@ def flags_for(path: str) -> dict[str, bool] | None:
         return empty_scope()
     if path in SAFE_WORKFLOWS:
         return empty_scope()
+    if path == ".github/workflows/conformance.yml":
+        return selected_scope("exact")
     if path == ".github/workflows/ci.yml":
-        return {"plugin": True, "health": True, "codeql": False, "dependencies": False}
+        return selected_scope("plugin", "health")
     if path == ".github/workflows/codeql.yml":
-        return {"plugin": False, "health": False, "codeql": True, "dependencies": False}
+        return selected_scope("codeql")
     if path == ".github/workflows/dependency-review.yml":
-        return {"plugin": False, "health": False, "codeql": False, "dependencies": True}
+        return selected_scope("dependencies")
     if path in {
         "scripts/run_gradle.sh",
         "scripts/fetch_gradle.py",
         ".github/changelog-section.sh",
     }:
-        return {"plugin": True, "health": True, "codeql": True, "dependencies": False}
+        return selected_scope("plugin", "health", "codeql", "exact")
     if path == "config/detekt.yml":
-        return {"plugin": True, "health": False, "codeql": False, "dependencies": False}
+        return selected_scope("plugin")
     if is_dependency_path(path, name):
         return full_scope()
     if path.startswith(PRODUCT_PREFIXES):
+        enabled = ["plugin"]
         if path.endswith(JVM_SUFFIXES):
-            return {"plugin": True, "health": False, "codeql": True, "dependencies": False}
-        return {"plugin": True, "health": False, "codeql": False, "dependencies": False}
+            enabled.append("codeql")
+        if path.startswith(("core/", "collector/")):
+            enabled.append("exact")
+        return selected_scope(*enabled)
     if path.startswith(("conformance/", "fixtures/")):
-        return {"plugin": True, "health": False, "codeql": False, "dependencies": False}
+        return selected_scope("plugin", "exact")
     return None
 
 
@@ -191,7 +211,16 @@ def git_changed_files(root: Path, base: str, head: str) -> list[str]:
     ensure_commit(root, base)
     ensure_commit(root, head)
     result = subprocess.run(
-        ["git", "-C", str(root), "diff", "--name-only", "-z", f"{base}...{head}"],
+        [
+            "git",
+            "-C",
+            str(root),
+            "diff",
+            "--no-renames",
+            "--name-only",
+            "-z",
+            f"{base}...{head}",
+        ],
         check=False,
         capture_output=True,
     )

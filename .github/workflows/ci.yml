@@ -255,7 +255,7 @@ jobs:
 
   verify:
     name: verify
-    if: ${{ always() && !cancelled() }}
+    if: ${{ always() }}
     needs: [scope, scripts, plugin, health]
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -280,12 +280,15 @@ jobs:
           }
           require_when() {
             local name=$1 required=$2 result=$3
-            if [ "${required:-true}" = true ]; then
-              require_success "$name" "$result"
-            elif [ "$result" != success ] && [ "$result" != skipped ]; then
+            if [ "$required" = false ]; then
+              if [ "$result" = success ] || [ "$result" = skipped ]; then
+                return
+              fi
               echo "::error::Optional job $name finished as $result."
               failed=1
+              return
             fi
+            require_success "$name" "$result"
           }
           require_success scope "$SCOPE_RESULT"
           require_success scripts "$SCRIPT_RESULT"

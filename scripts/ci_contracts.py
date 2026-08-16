@@ -24,6 +24,14 @@ PLUGIN_TASKS = (
     ":collector:spotbugsMain",
     ":collector:spotbugsMaven",
 )
+EXACT_IMPACT_JOBS = (
+    "scope",
+    "exact-impact",
+    "cross-platform-paths",
+    "cli-native",
+    "dotnet-sdks",
+    "phpunit-versions",
+)
 
 
 class CiContractError(RuntimeError):
@@ -51,8 +59,11 @@ def check(root: Path = ROOT) -> None:
         if dependabot.exists() or dependabot.is_symlink():
             raise CiContractError("Dependabot version-update pull requests must remain disabled")
 
-    if "needs:" not in ci or "if: ${{ always() && !cancelled() }}" not in ci:
-        raise CiContractError("verify must aggregate required jobs even when one failed")
+    verify = slice_job(ci, "verify")
+    if not re.search(r"(?m)^    name: verify$", verify):
+        raise CiContractError("The required verify context name must remain stable")
+    if not has_line(verify, "if: ${{ always() }}"):
+        raise CiContractError("verify must always aggregate required jobs")
     if not re.search(r"^  verify:\n(?:.*\n)*?    needs:", ci, re.MULTILINE):
         raise CiContractError("The required verify job must depend on every fast gate")
 
@@ -102,6 +113,8 @@ def check(root: Path = ROOT) -> None:
         raise CiContractError("CONTRIBUTING must document hook installation")
     if "docs/changelog.d" not in contributing or "docs/CHANGELOG.md" not in contributing:
         raise CiContractError("CONTRIBUTING must tell pull requests to use changelog fragments")
+    if "required checks `verify` and `exact-impact`" not in contributing:
+        raise CiContractError("CONTRIBUTING must document every required aggregate check")
 
     if "buildHealth" not in slice_job(ci, "health"):
         raise CiContractError("buildHealth must remain a required CI job")
@@ -116,6 +129,7 @@ def check(root: Path = ROOT) -> None:
         raise CiContractError("Native CLI fixtures must keep the conformance flag")
     if "CrossPlatformPathTest" not in conformance:
         raise CiContractError("macOS and Windows must still run CrossPlatformPathTest")
+    check_conformance(conformance)
 
     pins = GRADLE_ACTION.findall(ci + conformance + codeql + mutation)
     if not pins or len(set(pins)) != 1:
@@ -161,7 +175,7 @@ def check(root: Path = ROOT) -> None:
     if bound is None or int(bound.group(1)) < 60:
         raise CiContractError("Kover line floor must stay at least 60")
 
-    check_merge_queue(root, ci, codeql)
+    check_merge_queue(root, ci, codeql, conformance)
     check_wrapper(root)
 
 
@@ -176,10 +190,46 @@ def check_scope(root: Path, ci: str, codeql: str) -> None:
     if 'if: needs.scope.outputs.health == \'true\'' not in slice_job(ci, "health"):
         raise CiContractError("health must run only when ci_scope asks for it")
     verify = slice_job(ci, "verify")
-    if "PLUGIN_REQUIRED" not in verify or "skipped" not in verify:
+    if 'if [ "$required" = false ]' not in verify or "skipped" not in verify:
         raise CiContractError("verify must accept a scoped skip and fail a required skip")
-    if "needs.scope.result" not in verify:
-        raise CiContractError("verify must fail when scope classification fails")
+    verify_bindings = (
+        (
+            "scope",
+            "SCOPE_RESULT",
+            "needs.scope.result",
+            'require_success scope "$SCOPE_RESULT"',
+        ),
+        (
+            "scripts",
+            "SCRIPT_RESULT",
+            "needs.scripts.result",
+            'require_success scripts "$SCRIPT_RESULT"',
+        ),
+        (
+            "plugin",
+            "PLUGIN_RESULT",
+            "needs.plugin.result",
+            'require_when plugin "${PLUGIN_REQUIRED:-true}" "$PLUGIN_RESULT"',
+        ),
+        (
+            "health",
+            "HEALTH_RESULT",
+            "needs.health.result",
+            'require_when health "${HEALTH_REQUIRED:-true}" "$HEALTH_RESULT"',
+        ),
+    )
+    for name, variable, source, invocation in verify_bindings:
+        if not has_line(verify, f"{variable}: ${{{{ {source} }}}}") or not has_line(
+            verify,
+            invocation,
+        ):
+            raise CiContractError(f"verify must bind and check the {name} result")
+    for variable, source in (
+        ("PLUGIN_REQUIRED", "needs.scope.outputs.plugin"),
+        ("HEALTH_REQUIRED", "needs.scope.outputs.health"),
+    ):
+        if not has_line(verify, f"{variable}: ${{{{ {source} }}}}"):
+            raise CiContractError(f"verify must bind {source}")
     if "paths:" in (has_on_block(ci) or ""):
         raise CiContractError("ci.yml must not path-filter required checks")
     if "scripts/ci_scope.py" not in codeql or "steps.scope.outputs.codeql" not in codeql:
@@ -196,13 +246,75 @@ def check_scope(root: Path, ci: str, codeql: str) -> None:
         raise CiContractError("Generate must require a complete snapshot artifact")
 
 
+def check_conformance(conformance: str) -> None:
+    """Require one fail-closed aggregate for every exact-impact lane."""
+    if "paths:" in (has_on_block(conformance) or ""):
+        raise CiContractError(
+            "conformance.yml must report its required aggregate on every pull request"
+        )
+    scope = slice_job(conformance, "scope")
+    classifier = re.search(
+        r'(?m)^      - id: classify\n        run: python3 scripts/ci_scope\.py --github-output "\$GITHUB_OUTPUT"$',
+        scope,
+    )
+    if not has_line(scope, "exact: ${{ steps.classify.outputs.exact }}") or classifier is None:
+        raise CiContractError("conformance scope must publish the classifier exact-impact decision")
+    for name in EXACT_IMPACT_JOBS[1:]:
+        job = slice_job(conformance, name)
+        if (
+            "needs: [scope]" not in job
+            or "needs.scope.outputs.exact == 'true'" not in job
+        ):
+            raise CiContractError(f"{name} must follow the exact-impact scope")
+    required = slice_job(conformance, "required")
+    if not re.search(r"(?m)^    name: exact-impact$", required):
+        raise CiContractError("The required exact-impact context name must remain stable")
+    expected_needs = f"needs: [{', '.join(EXACT_IMPACT_JOBS)}]"
+    if expected_needs not in required:
+        raise CiContractError("The required aggregate must depend on every exact-impact lane")
+    if "if: ${{ always() }}" not in required:
+        raise CiContractError("The required exact-impact aggregate must always report")
+    if 'if [ "$required" = false ]' not in required or "skipped" not in required:
+        raise CiContractError(
+            "The required exact-impact aggregate must fail a skipped required lane"
+        )
+    if not has_line(required, "SCOPE_RESULT: ${{ needs.scope.result }}") or not has_line(
+        required,
+        'require_success scope "$SCOPE_RESULT"',
+    ):
+        raise CiContractError("The required exact-impact aggregate must bind and check scope")
+    if not has_line(required, "EXACT_REQUIRED: ${{ needs.scope.outputs.exact }}"):
+        raise CiContractError("The required exact-impact aggregate must bind the exact scope")
+    result_bindings = (
+        ("exact-impact", "EXACT_RESULT", "needs.exact-impact.result"),
+        ("cross-platform-paths", "PATHS_RESULT", "needs.cross-platform-paths.result"),
+        ("cli-native", "CLI_RESULT", "needs.cli-native.result"),
+        ("dotnet-sdks", "DOTNET_RESULT", "needs.dotnet-sdks.result"),
+        ("phpunit-versions", "PHPUNIT_RESULT", "needs.phpunit-versions.result"),
+    )
+    for name, variable, source in result_bindings:
+        invocation = f'require_when {name} "${{EXACT_REQUIRED:-true}}" "${variable}"'
+        if not has_line(required, f"{variable}: ${{{{ {source} }}}}") or not has_line(
+            required,
+            invocation,
+        ):
+            raise CiContractError(
+                f"The required exact-impact aggregate must bind and check {name}"
+            )
+
+
 def has_on_block(workflow: str) -> str:
     """Return the top-level on: block of a workflow."""
     match = re.search(r"(?ms)^on:\n(.*?)(?=^[A-Za-z]|\Z)", workflow)
     return match.group(1) if match else ""
 
 
-def check_merge_queue(root: Path, ci: str, codeql: str) -> None:
+def has_line(block: str, line: str) -> bool:
+    """Return whether a job block contains one exact YAML or shell line."""
+    return bool(re.search(rf"(?m)^\s*{re.escape(line)}$", block))
+
+
+def check_merge_queue(root: Path, ci: str, codeql: str, conformance: str) -> None:
     """Required checks must report on merge_group or the merge queue hangs."""
     review = read(root / ".github/workflows/dependency-review.yml")
     queue = read(root / ".github/workflows/queue.yml")
@@ -210,6 +322,7 @@ def check_merge_queue(root: Path, ci: str, codeql: str) -> None:
         ("ci.yml", ci),
         ("codeql.yml", codeql),
         ("dependency-review.yml", review),
+        ("conformance.yml", conformance),
     ):
         if not has_on_trigger(text, "merge_group"):
             raise CiContractError(f"{name} must trigger on merge_group so the merge queue can report required checks")

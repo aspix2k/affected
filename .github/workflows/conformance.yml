@@ -2,21 +2,7 @@ name: Exact-impact conformance
 
 on:
   pull_request:
-    paths:
-      - ".github/workflows/conformance.yml"
-      - "config/support-matrix.json"
-      - "collector/**"
-      - "conformance/**"
-      - "core/**"
-      - "gradle/**"
-      - "gradlew"
-      - "gradlew.bat"
-      - "build.gradle.kts"
-      - "settings.gradle.kts"
-      - "scripts/support_matrix.py"
-      - "scripts/tests/test_support_matrix.py"
-      - "docs/SUPPORT.md"
-      - "src/main/resources/META-INF/plugin.xml"
+  merge_group:
   schedule:
     - cron: "23 4 * * 1"
   workflow_dispatch:
@@ -29,8 +15,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  scope:
+    name: Exact-impact scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      exact: ${{ steps.classify.outputs.exact }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: classify
+        run: python3 scripts/ci_scope.py --github-output "$GITHUB_OUTPUT"
+
   exact-impact:
     name: ${{ matrix.os }} / JDK ${{ matrix.java }}
+    needs: [scope]
+    if: needs.scope.outputs.exact == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -90,6 +92,8 @@ jobs:
 
   cross-platform-paths:
     name: Cross-platform paths / ${{ matrix.os }}
+    needs: [scope]
+    if: needs.scope.outputs.exact == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
@@ -127,6 +131,8 @@ jobs:
 
   cli-native:
     name: CLI native fixtures / Linux
+    needs: [scope]
+    if: needs.scope.outputs.exact == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -274,6 +280,8 @@ jobs:
 
   dotnet-sdks:
     name: .NET exact / SDK ${{ matrix.dotnet-sdk }}
+    needs: [scope]
+    if: needs.scope.outputs.exact == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -302,6 +310,8 @@ jobs:
 
   phpunit-versions:
     name: PHPUnit exact / ${{ matrix.phpunit }}
+    needs: [scope]
+    if: needs.scope.outputs.exact == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -338,3 +348,49 @@ jobs:
           -Paffected.cliConformance=true
           -Daffected.phpunitVersion=${{ matrix.phpunit }}
           --rerun-tasks --no-daemon --no-parallel --max-workers=1
+
+  required:
+    name: exact-impact
+    if: ${{ always() }}
+    needs: [scope, exact-impact, cross-platform-paths, cli-native, dotnet-sdks, phpunit-versions]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every exact-impact lane
+        env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          EXACT_REQUIRED: ${{ needs.scope.outputs.exact }}
+          EXACT_RESULT: ${{ needs.exact-impact.result }}
+          PATHS_RESULT: ${{ needs.cross-platform-paths.result }}
+          CLI_RESULT: ${{ needs.cli-native.result }}
+          DOTNET_RESULT: ${{ needs.dotnet-sdks.result }}
+          PHPUNIT_RESULT: ${{ needs.phpunit-versions.result }}
+        run: |
+          set -euo pipefail
+          failed=0
+          require_success() {
+            local name=$1 result=$2
+            if [ "$result" != success ]; then
+              echo "::error::Required job $name finished as $result."
+              failed=1
+            fi
+          }
+          require_when() {
+            local name=$1 required=$2 result=$3
+            if [ "$required" = false ]; then
+              if [ "$result" = success ] || [ "$result" = skipped ]; then
+                return
+              fi
+              echo "::error::Optional job $name finished as $result."
+              failed=1
+              return
+            fi
+            require_success "$name" "$result"
+          }
+          require_success scope "$SCOPE_RESULT"
+          require_when exact-impact "${EXACT_REQUIRED:-true}" "$EXACT_RESULT"
+          require_when cross-platform-paths "${EXACT_REQUIRED:-true}" "$PATHS_RESULT"
+          require_when cli-native "${EXACT_REQUIRED:-true}" "$CLI_RESULT"
+          require_when dotnet-sdks "${EXACT_REQUIRED:-true}" "$DOTNET_RESULT"
+          require_when phpunit-versions "${EXACT_REQUIRED:-true}" "$PHPUNIT_RESULT"
+          exit "$failed"

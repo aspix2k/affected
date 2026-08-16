@@ -57,8 +57,8 @@ class CiContractsTest(unittest.TestCase):
             path = root / ".github/workflows/conformance.yml"
             path.write_text(
                 path.read_text(encoding="utf-8").replace(
-                    '- "docs/SUPPORT.md"\n',
-                    '- "docs/SUPPORT.md"\n      - "README.md"\n',
+                    "  pull_request:\n",
+                    "  pull_request:\n    paths:\n      - \"README.md\"\n",
                     1,
                 ),
                 encoding="utf-8",
@@ -77,6 +77,230 @@ class CiContractsTest(unittest.TestCase):
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(ci_contracts.CiContractError, "merge_group"):
+                ci_contracts.check(root)
+
+    def test_exact_impact_must_run_on_merge_group(self) -> None:
+        """The native aggregate must report on the exact merge-queue commit."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/conformance.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace("  merge_group:\n", "", 1),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                ci_contracts.CiContractError,
+                "conformance.yml must trigger on merge_group",
+            ):
+                ci_contracts.check(root)
+
+    def test_exact_impact_aggregate_must_keep_every_lane(self) -> None:
+        """A green aggregate cannot omit the slow native fixture lane."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/conformance.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "needs: [scope, exact-impact, cross-platform-paths, cli-native, "
+                    "dotnet-sdks, phpunit-versions]",
+                    "needs: [scope, exact-impact, cross-platform-paths, dotnet-sdks, "
+                    "phpunit-versions]",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                ci_contracts.CiContractError, "every exact-impact lane"
+            ):
+                ci_contracts.check(root)
+
+    def test_exact_impact_aggregate_must_fail_closed_on_cancellation(self) -> None:
+        """Cancelling a current-head lane cannot turn its required check into skipped success."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/conformance.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "if: ${{ always() }}",
+                    "if: ${{ always() && !cancelled() }}",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "always"):
+                ci_contracts.check(root)
+
+    def test_exact_impact_aggregate_must_fail_closed_on_unknown_scope(self) -> None:
+        """Only an explicit false scope may accept a skipped exact-impact lane."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/conformance.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    'if [ "$required" = false ]; then',
+                    'if [ "${required:-true}" = true ]; then',
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "required"):
+                ci_contracts.check(root)
+
+    def test_exact_impact_scope_must_publish_the_classifier_result(self) -> None:
+        """A constant false scope must not skip every exact-impact lane."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/conformance.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "exact: ${{ steps.classify.outputs.exact }}",
+                    "exact: false",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "classifier"):
+                ci_contracts.check(root)
+
+    def test_exact_impact_aggregate_must_check_the_cli_result(self) -> None:
+        """A failed native CLI lane must reach the required aggregate."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/conformance.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    '          require_when cli-native "${EXACT_REQUIRED:-true}" "$CLI_RESULT"\n',
+                    "",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "cli-native"):
+                ci_contracts.check(root)
+
+    def test_exact_impact_aggregate_must_not_miswire_the_cli_result(self) -> None:
+        """The CLI lane must not accidentally check another lane twice."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/conformance.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    'require_when cli-native "${EXACT_REQUIRED:-true}" "$CLI_RESULT"',
+                    'require_when cli-native "${EXACT_REQUIRED:-true}" "$PATHS_RESULT"',
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "cli-native"):
+                ci_contracts.check(root)
+
+    def test_verify_aggregate_must_check_the_scripts_result(self) -> None:
+        """A failed scripts lane must reach the required verify aggregate."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/ci.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    '          require_success scripts "$SCRIPT_RESULT"\n',
+                    "",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "scripts"):
+                ci_contracts.check(root)
+
+    def test_verify_aggregate_must_always_report(self) -> None:
+        """Cancelling a fast lane must not skip the required verify context."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/ci.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "  verify:\n    name: verify\n    if: ${{ always() }}",
+                    "  verify:\n    name: verify\n    if: ${{ !cancelled() }}",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "always"):
+                ci_contracts.check(root)
+
+    def test_verify_aggregate_must_not_miswire_the_plugin_result(self) -> None:
+        """The plugin lane must not accidentally check the health result."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/ci.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    'require_when plugin "${PLUGIN_REQUIRED:-true}" "$PLUGIN_RESULT"',
+                    'require_when plugin "${PLUGIN_REQUIRED:-true}" "$HEALTH_RESULT"',
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "plugin"):
+                ci_contracts.check(root)
+
+    def test_required_aggregate_documentation_must_include_exact_impact(self) -> None:
+        """The documented ruleset contexts must not drift from the workflow aggregate."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / "docs/CONTRIBUTING.md"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "required checks `verify` and `exact-impact`",
+                    "required check `verify`",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "every required aggregate"):
+                ci_contracts.check(root)
+
+    def test_verify_required_context_name_must_remain_stable(self) -> None:
+        """Renaming a required display name must fail before the ruleset waits forever."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/ci.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "    name: verify\n",
+                    "    name: verify-renamed\n",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "verify context name"):
+                ci_contracts.check(root)
+
+    def test_exact_impact_required_context_name_must_remain_stable(self) -> None:
+        """The native aggregate display name is the live ruleset context."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/conformance.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "    name: exact-impact\n",
+                    "    name: exact-impact-renamed\n",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "exact-impact context name"):
                 ci_contracts.check(root)
 
     def test_plugin_must_stay_scoped(self) -> None:

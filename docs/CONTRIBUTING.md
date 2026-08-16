@@ -40,9 +40,9 @@ and test failures still run once.
 
 Pull-request `CI` is the required fast gate. `scripts` always run. Plugin work
 and `buildHealth` run only when `scripts/ci_scope.py` says the diff can affect
-them. The required check `verify` always reports. CodeQL `pull-request` and
-dependency `review` keep their names. Unknown paths fail closed. Weekly `pitest`
-fails on meaningful survivors.
+them. The required checks `verify` and `exact-impact` always report. CodeQL
+`pull-request` and dependency `review` keep their names. Unknown paths fail
+closed. Weekly `pitest` fails on meaningful survivors.
 
 Enqueue ready PRs with `gh pr merge --auto --squash`. Do not merge by hand.
 Keep GitHub "Automatically delete head branches" on. After a squash lands,
