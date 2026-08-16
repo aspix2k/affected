@@ -8,9 +8,12 @@ import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -18,6 +21,7 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.resume
 
 enum class VerificationStatus {
@@ -216,14 +220,109 @@ class AffectedRunClaim internal constructor(
     val prepared: Verification.Prepared?,
     private val markRunning: () -> Boolean,
     private val release: () -> Unit,
-) : AutoCloseable {
+) : AutoCloseable, AffectedOwnedSession {
+    private val lock = Any()
     private val closed = AtomicBoolean()
+    private val groupJobs = HashSet<Job>()
+    private var cancellationRequested = false
+    private var sessions: AffectedRunSessions? = null
 
-    fun markRunning(): Boolean = !closed.get() && markRunning.invoke()
+    fun markRunning(): Boolean = synchronized(lock) {
+        !closed.get() && !cancellationRequested && markRunning.invoke()
+    }
+
+    internal fun bind(sessions: AffectedRunSessions) = synchronized(lock) {
+        check(!closed.get())
+        check(this.sessions == null)
+        this.sessions = sessions
+    }
+
+    internal fun isCancellationRequested(): Boolean = synchronized(lock) { cancellationRequested }
+
+    internal fun registerGroupJobs(jobs: Collection<Job>): Boolean = synchronized(lock) {
+        if (closed.get() || cancellationRequested) return false
+        groupJobs.addAll(jobs)
+        true
+    }
+
+    internal fun unregisterGroupJobs(jobs: Collection<Job>) = synchronized(lock) {
+        groupJobs.removeAll(jobs.toSet())
+    }
+
+    override fun isActive(): Boolean = synchronized(lock) { !closed.get() }
+
+    override fun stopIfActive(): Boolean {
+        val jobs = synchronized(lock) {
+            if (closed.get() || cancellationRequested) return false
+            cancellationRequested = true
+            groupJobs.toList()
+        }
+        jobs.forEach(Job::cancel)
+        return true
+    }
+
+    internal fun complete(passed: Boolean): Boolean {
+        val owner = synchronized(lock) { sessions }
+        val completion = if (owner == null) {
+            synchronized(lock) { completeLocked(passed) }
+        } else {
+            owner.complete(this, passed)
+        }
+        if (completion.released) release()
+        return completion.passed
+    }
 
     override fun close() {
-        if (closed.compareAndSet(false, true)) release()
+        complete(passed = false)
     }
+
+    internal fun completeFrom(owner: AffectedRunSessions, passed: Boolean): AffectedRunCompletion = synchronized(lock) {
+        if (sessions !== owner) return AffectedRunCompletion(released = false, passed = false)
+        sessions = null
+        completeLocked(passed)
+    }
+
+    private fun completeLocked(passed: Boolean): AffectedRunCompletion {
+        if (!closed.compareAndSet(false, true)) return AffectedRunCompletion(released = false, passed = false)
+        groupJobs.clear()
+        return AffectedRunCompletion(released = true, passed = passed && !cancellationRequested)
+    }
+}
+
+internal data class AffectedRunCompletion(
+    val released: Boolean,
+    val passed: Boolean,
+)
+
+suspend fun runClaimedGroups(
+    claim: AffectedRunClaim,
+    groups: List<TaskGroup>,
+    context: CoroutineContext,
+    run: suspend (TaskGroup) -> Boolean,
+): Boolean = coroutineScope {
+    val jobs = groups.map { group ->
+        async(context, start = CoroutineStart.LAZY) {
+            run(group)
+        }
+    }
+    if (!claim.registerGroupJobs(jobs)) {
+        jobs.forEach(Job::cancel)
+        return@coroutineScope claim.complete(passed = false)
+    }
+    jobs.forEach(Job::start)
+    val passed = try {
+        jobs.map { job ->
+            try {
+                job.await()
+            } catch (cancelled: CancellationException) {
+                if (!claim.isCancellationRequested()) throw cancelled
+                false
+            }
+        }.all { it }
+    } finally {
+        claim.unregisterGroupJobs(jobs)
+    }
+    claim.complete(passed)
 }
 
 fun launchClaimed(
@@ -298,10 +397,13 @@ class AffectedState(
     val verificationStatus: VerificationStatus get() = snapshot().verificationStatus
     val isRunning: Boolean get() = verificationStatus != VerificationStatus.IDLE
 
-    fun tryClaimReadyRun(): AffectedRunClaim? =
+    fun tryClaimReadyRun(): AffectedRunClaim? = AffectedRunSessions.getInstance(project).claim {
         state.tryClaimReadyRun(AffectedSettings.getInstance().checkConsumers)
+    }
 
-    fun tryClaimVerification(): AffectedRunClaim? = state.tryClaimVerification()
+    fun tryClaimVerification(): AffectedRunClaim? = AffectedRunSessions.getInstance(project).claim {
+        state.tryClaimVerification()
+    }
 
     fun invalidate() {
         state.invalidate()

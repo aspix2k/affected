@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.impact.DependencyMapStore
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
@@ -7,10 +8,30 @@ import java.security.MessageDigest
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class MavenCollectorRunTest {
+
+    @Test
+    fun `a cancelled successful Maven process cannot replace the previous map`() = withDirectory { root ->
+        val artifacts = artifacts(root.resolve("artifacts"))
+        val cache = root.resolve("cache")
+        val taskKey = "file:///fixture/|:app:test"
+        val first = assertNotNull(MavenCollectorRun.create(cache, artifacts))
+        writeCollectorTask(first.outputRoot, taskKey, "AlphaTest", "alpha-1")
+        first.complete(passed = true)
+        val previous = assertNotNull(DependencyMapStore(cache.resolve(MAPS_DIRECTORY)).read(taskKey))
+        val cancelled = assertNotNull(MavenCollectorRun.create(cache, artifacts))
+        writeCollectorTask(cancelled.outputRoot, taskKey, "AlphaTest", "alpha-2")
+
+        cancelled.cancel()
+        cancelled.complete(passed = true)
+
+        assertEquals(previous, DependencyMapStore(cache.resolve(MAPS_DIRECTORY)).read(taskKey))
+        assertFalse(Files.exists(cancelled.outputRoot))
+    }
 
     @Test
     fun `collector arguments preserve paths and use one shared run`() = withDirectory { root ->

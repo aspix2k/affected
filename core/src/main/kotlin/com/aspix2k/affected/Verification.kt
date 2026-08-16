@@ -9,9 +9,6 @@ import com.aspix2k.affected.build.selectAndroidTestTask
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 
 object Verification {
@@ -88,23 +85,19 @@ object Verification {
         try {
             if (plan.isEmpty) return Outcome(plan, passed = true)
             if (!claim.markRunning()) return Outcome(plan, passed = false)
-            passed = coroutineScope {
-                plan.groups.map { group ->
-                    async(Dispatchers.Default) {
-                        group.runInPlannedExecutionRoot(project) {
-                            when (val system = BuildSystems.byId(group.systemId)) {
-                                null -> preparedGroupPasses(adapterFound = false)
-                                is ChangeAwareSuspendingBuildSystem ->
-                                    system.runAndWaitSuspending(project, group.root, group.tasks, prepared.changes)
-                                is SuspendingBuildSystem ->
-                                    system.runAndWaitSuspending(project, group.root, group.tasks)
-                                else -> withContext(Dispatchers.IO) {
-                                    system.runAndWait(project, group.root, group.tasks)
-                                }
-                            }
+            passed = runClaimedGroups(claim, plan.groups, Dispatchers.Default) { group ->
+                group.runInPlannedExecutionRoot(project) {
+                    when (val system = BuildSystems.byId(group.systemId)) {
+                        null -> preparedGroupPasses(adapterFound = false)
+                        is ChangeAwareSuspendingBuildSystem ->
+                            system.runAndWaitSuspending(project, group.root, group.tasks, prepared.changes)
+                        is SuspendingBuildSystem ->
+                            system.runAndWaitSuspending(project, group.root, group.tasks)
+                        else -> withContext(Dispatchers.IO) {
+                            system.runAndWait(project, group.root, group.tasks)
                         }
                     }
-                }.awaitAll().all { it }
+                }
             }
             return Outcome(plan, passed)
         } finally {

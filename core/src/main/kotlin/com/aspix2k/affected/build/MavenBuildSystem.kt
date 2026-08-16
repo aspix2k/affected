@@ -2,6 +2,7 @@ package com.aspix2k.affected.build
 
 import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.AffectedSettings
+import com.aspix2k.affected.OwnedProcessExecution
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.runners.ProgramRunner
@@ -12,8 +13,10 @@ import com.intellij.openapi.application.readAction
 import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
 import com.intellij.util.execution.ParametersListUtil
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -25,9 +28,18 @@ import org.jetbrains.idea.maven.project.MavenProjectsManager
 import java.io.File
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 
-class MavenBuildSystem : SuspendingBuildSystem {
+class MavenBuildSystem internal constructor(
+    private val collectorFactory: ((Project) -> MavenCollectorRun?)?,
+    private val onCollectorPublished: (MavenCollectorRun?) -> Unit,
+    private val onLaunchQueued: () -> Unit,
+) : SuspendingBuildSystem {
+
+    constructor() : this(null, {}, {})
+
+    internal constructor(onLaunchQueued: () -> Unit) : this(null, {}, onLaunchQueued)
 
     override val id: String = "MAVEN"
 
@@ -108,49 +120,109 @@ class MavenBuildSystem : SuspendingBuildSystem {
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean {
         if (project.isDisposed) return false
 
-        val collector = withContext(Dispatchers.IO) { collectorRun(project) }
-        val arguments = mavenInvocationArguments(
-            collector?.arguments.orEmpty(),
-            AffectedSettings.getInstance().stopAfterFirstFailure,
-        )
-        val parameters = parameters(root, tasks, arguments)
-        return suspendCancellableCoroutine { continuation ->
-            val completed = AtomicBoolean(false)
-
-            fun complete(passed: Boolean) {
-                if (!completed.compareAndSet(false, true)) return
-                CoroutineScope(Dispatchers.IO).launch {
-                    runCatching { collector?.complete(passed) }
-                    if (continuation.isActive) continuation.resume(passed)
+        val collector = AtomicReference<MavenCollectorRun?>()
+        val execution = OwnedProcessExecution { collector.get()?.cancel() }
+        val sessions = AffectedRunSessions.getInstance(project)
+        val launchQueued = AtomicBoolean()
+        if (!sessions.register(execution)) {
+            execution.finish()
+            return false
+        }
+        try {
+            val published = withContext(Dispatchers.IO) {
+                (collectorFactory?.invoke(project) ?: collectorRun(project)).also { created ->
+                    collector.set(created)
+                    onCollectorPublished(created)
                 }
             }
+            if (execution.isCancellationRequested()) published?.cancel()
+            val arguments = mavenInvocationArguments(
+                published?.arguments.orEmpty(),
+                AffectedSettings.getInstance().stopAfterFirstFailure,
+            )
+            val parameters = parameters(root, tasks, arguments)
+            return awaitMavenRun(project, parameters, published, execution, launchQueued)
+        } catch (cancelled: CancellationException) {
+            execution.stopIfActive()
+            if (launchQueued.get()) {
+                withContext(NonCancellable) { execution.awaitFinished() }
+            }
+            throw cancelled
+        } finally {
+            if (!launchQueued.get()) {
+                withContext(NonCancellable + Dispatchers.IO) {
+                    execution.finish {
+                        collector.get()?.complete(passed = false)
+                    }
+                }
+            }
+            sessions.unregister(execution)
+        }
+    }
 
-            continuation.invokeOnCancellation { collector?.cancel() }
-            ApplicationManager.getApplication().invokeLater {
-                if (!continuation.isActive || project.isDisposed) return@invokeLater complete(false)
-                runCatching {
-                    MavenRunConfigurationType.runConfiguration(
-                        project,
-                        parameters,
-                        object : ProgramRunner.Callback {
-                            override fun processStarted(descriptor: RunContentDescriptor) {
-                                val handler = descriptor.processHandler ?: return complete(false)
-                                AffectedRunSessions.getInstance(project).register(handler)
-                                continuation.invokeOnCancellation {
-                                    if (!handler.isProcessTerminated) handler.destroyProcess()
-                                }
-                                handler.addProcessListener(object : ProcessListener {
-                                    override fun processTerminated(event: ProcessEvent) = complete(event.exitCode == 0)
-                                })
-                                if (handler.isProcessTerminated) complete(handler.exitCode == 0)
-                            }
+    private suspend fun awaitMavenRun(
+        project: Project,
+        parameters: MavenRunnerParameters,
+        collector: MavenCollectorRun?,
+        execution: OwnedProcessExecution,
+        launchQueued: AtomicBoolean,
+    ): Boolean = suspendCancellableCoroutine { continuation ->
+        val completed = AtomicBoolean(false)
 
-                            override fun processNotStarted(error: Throwable?) = complete(false)
-                        },
-                    )
-                }.onFailure { complete(false) }
+        fun complete(passed: Boolean) {
+            if (!completed.compareAndSet(false, true)) return
+            CoroutineScope(Dispatchers.IO).launch {
+                var cleaned = true
+                val active = execution.finish { accepted ->
+                    cleaned = runCatching { collector?.complete(passed && accepted) }.isSuccess
+                }
+                if (continuation.isActive) continuation.resume(passed && active && cleaned)
             }
         }
+
+        continuation.invokeOnCancellation { execution.stopIfActive() }
+        launchQueued.set(true)
+        val scheduled = runCatching {
+            ApplicationManager.getApplication().invokeLater {
+                startMavenRun(project, parameters, execution, continuation.isActive, ::complete)
+            }
+        }.isSuccess
+        if (scheduled) {
+            onLaunchQueued()
+        } else {
+            launchQueued.set(false)
+            complete(false)
+        }
+    }
+
+    private fun startMavenRun(
+        project: Project,
+        parameters: MavenRunnerParameters,
+        execution: OwnedProcessExecution,
+        continuationActive: Boolean,
+        complete: (Boolean) -> Unit,
+    ) {
+        if (!continuationActive || project.isDisposed || execution.isCancellationRequested()) {
+            return complete(false)
+        }
+        runCatching {
+            MavenRunConfigurationType.runConfiguration(
+                project,
+                parameters,
+                object : ProgramRunner.Callback {
+                    override fun processStarted(descriptor: RunContentDescriptor) {
+                        val handler = descriptor.processHandler ?: return complete(false)
+                        execution.bind(handler)
+                        handler.addProcessListener(object : ProcessListener {
+                            override fun processTerminated(event: ProcessEvent) = complete(event.exitCode == 0)
+                        })
+                        if (handler.isProcessTerminated) complete(handler.exitCode == 0)
+                    }
+
+                    override fun processNotStarted(error: Throwable?) = complete(false)
+                },
+            )
+        }.onFailure { complete(false) }
     }
 
     private fun parameters(

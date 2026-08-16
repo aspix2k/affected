@@ -13,8 +13,33 @@ import kotlinx.coroutines.yield
 import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 class AffectedStateTest {
+
+    @Test
+    fun `a project claim is owned before it can be dispatched`() {
+        val sessions = AffectedRunSessions()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val state = AffectedState(
+            project = project(sessions),
+            scope = scope,
+            debounceMs = 0,
+            awaitSmart = {},
+            analyzeProject = { error("analysis is not expected") },
+        )
+        try {
+            val claim = requireNotNull(state.tryClaimVerification())
+
+            assertEquals(1, sessions.activeCount())
+            assertEquals(1, sessions.stopOwned())
+            assertFalse(claim.markRunning())
+            claim.close()
+            assertEquals(0, sessions.activeCount())
+        } finally {
+            scope.cancel()
+        }
+    }
 
     @Test
     fun `an oversized published snapshot fails closed`() {
@@ -138,10 +163,14 @@ class AffectedStateTest {
         return Verification.PreparedPlans(prepared, prepared)
     }
 
-    private fun project(): Project = Proxy.newProxyInstance(
+    private fun project(sessions: AffectedRunSessions? = null): Project = Proxy.newProxyInstance(
         Project::class.java.classLoader,
         arrayOf(Project::class.java),
     ) { _, method, _ ->
-        if (method.name == "isDisposed") false else error("Unexpected Project call: ${method.name}")
+        when (method.name) {
+            "isDisposed" -> false
+            "getService" -> sessions
+            else -> error("Unexpected Project call: ${method.name}")
+        }
     } as Project
 }
