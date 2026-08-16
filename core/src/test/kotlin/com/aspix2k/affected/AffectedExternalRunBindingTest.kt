@@ -1,5 +1,6 @@
 package com.aspix2k.affected
 
+import com.intellij.execution.ExecutionManager
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.runners.ProgramRunner
@@ -63,6 +64,24 @@ class AffectedExternalRunBindingTest : BasePlatformTestCase() {
                 enableHeadless = null,
             ) { _, _ -> true },
         )
+    }
+
+    fun testHeadlessFailureSkipsOwnedExecutionBeforeItCanPublishContent() {
+        val presentation = AffectedRunPresentation(claim(), RecordingView())
+        val owned = ExecutionEnvironment()
+        val binding = checkNotNull(
+            AffectedExternalRunBinding.open(
+                project,
+                presentation,
+                "Gradle · app",
+                enableHeadless = { false },
+            ) { environment, _ -> environment === owned },
+        )
+
+        binding.processStartScheduled("Run", owned)
+
+        assertEquals(true, owned.getUserData(ExecutionManager.EXECUTION_SKIP_RUN))
+        assertFalse(owned.isHeadless)
     }
 
     fun testMavenBindingMatchesOnlyItsExactProgramRunnerCallback() {

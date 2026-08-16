@@ -36,6 +36,7 @@ internal class AffectedExternalRunBinding private constructor(
         environment.contentToReuse = null
         if (!claimed.compareAndSet(false, true) || !enableHeadless(environment)) {
             environment.putUserData(FAILED, true)
+            environment.putUserData(ExecutionManager.EXECUTION_SKIP_RUN, true)
         }
         environment.putUserData(OWNED, this)
     }
