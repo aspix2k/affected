@@ -1,5 +1,6 @@
 import info.solidsoft.gradle.pitest.PitestTask
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
+import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.tasks.BuildPluginTask
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel
 import java.io.ByteArrayInputStream
@@ -70,6 +71,8 @@ dependencies {
             intellijIdea(providers.gradleProperty("affected.idea.version").get())
         }
         bundledModule("intellij.platform.vcs.dvcs.impl")
+        bundledPlugin("Git4Idea")
+        testFramework(TestFrameworkType.Platform)
         pluginComposedModule(api(project(":core")))
         pluginModule(runtimeOnly(project(":mcp")))
     }

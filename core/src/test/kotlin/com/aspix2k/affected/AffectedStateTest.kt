@@ -143,6 +143,46 @@ class AffectedStateTest {
         }
     }
 
+    @Test
+    fun `a completed VCS refresh recomputes a ready snapshot without a VFS event`() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        var nextModule = module(":before")
+        var analyses = 0
+        val state = AffectedState(
+            project = project(),
+            scope = scope,
+            debounceMs = 10,
+            awaitSmart = {},
+            analyzeProject = {
+                analyses++
+                AffectedAnalysis(
+                    modules = listOf(nextModule),
+                    changes = ProjectChanges.Result(emptyList(), emptySet(), emptySet(), comparedToBase = true),
+                    plans = emptyPlans(),
+                )
+            },
+        )
+        try {
+            state.invalidate()
+            withTimeout(1_000) {
+                while (!state.ready) yield()
+            }
+
+            nextModule = module(":after")
+            val listener = AffectedVcsChangeListener(state::invalidate)
+            listener.changeListUpdateDone()
+            listener.changeListUpdateDone()
+            withTimeout(1_000) {
+                while (state.modules.singleOrNull()?.id != ":after") yield()
+            }
+
+            assertEquals(2, analyses)
+            assertEquals(":after", state.modules.single().id)
+        } finally {
+            scope.cancel()
+        }
+    }
+
     private fun module(id: String = ":ready") = AffectedModule(
         id = id,
         systemId = "GRADLE",

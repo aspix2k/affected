@@ -1,0 +1,6 @@
+<idea-plugin>
+    <projectListeners>
+        <listener class="com.aspix2k.affected.GitRepositoryRefreshListener"
+                  topic="git4idea.repo.GitRepositoryChangeListener"/>
+    </projectListeners>
+</idea-plugin>

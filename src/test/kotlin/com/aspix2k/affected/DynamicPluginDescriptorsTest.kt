@@ -190,6 +190,20 @@ class DynamicPluginDescriptorsTest {
         val problems = DynamicPluginDescriptors.problems(DynamicPluginDescriptors.repository())
         assertEquals(emptyList(), problems)
     }
+
+    @Test
+    fun `Git repository refresh stays an optional integration`() {
+        val descriptors = DynamicPluginDescriptors.repository()
+
+        assertTrue(
+            descriptors.getValue("META-INF/plugin.xml")
+                .contains("config-file=\"affected-git.xml\">Git4Idea</depends>"),
+        )
+        assertTrue(
+            descriptors.getValue("META-INF/affected-git.xml")
+                .contains("git4idea.repo.GitRepositoryChangeListener"),
+        )
+    }
 }
 
 object DynamicPluginDescriptors {
@@ -205,6 +219,7 @@ object DynamicPluginDescriptors {
         val files = listOf(
             File(root, "src/main/resources/META-INF/plugin.xml"),
             File(root, "src/main/resources/META-INF/affected-gradle.xml"),
+            File(root, "src/main/resources/META-INF/affected-git.xml"),
             File(root, "src/main/resources/META-INF/affected-maven.xml"),
             File(root, "mcp/src/main/resources/affected.mcp.xml"),
         )

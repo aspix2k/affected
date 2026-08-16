@@ -6,6 +6,7 @@ import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vcs.changes.ChangeListListener
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -365,6 +366,7 @@ class AffectedState(
     val ready: Boolean get() = analysisStatus == AnalysisStatus.READY
 
     private val watchingDumbMode = AtomicBoolean()
+    private val watchingVcsChanges = AtomicBoolean()
     private val invalidations = Channel<Unit>(Channel.CONFLATED)
 
     internal constructor(
@@ -415,6 +417,14 @@ class AffectedState(
         project.messageBus.connect(scope).subscribe(
             DumbService.DUMB_MODE,
             AffectedDumbModeListener(::invalidate),
+        )
+    }
+
+    fun watchVcsChanges() {
+        if (!watchingVcsChanges.compareAndSet(false, true)) return
+        project.messageBus.connect(scope).subscribe(
+            ChangeListListener.TOPIC,
+            AffectedVcsChangeListener(::invalidate),
         )
     }
 
@@ -482,4 +492,10 @@ internal class AffectedDumbModeListener(
     override fun enteredDumbMode() = invalidate()
 
     override fun exitDumbMode() = invalidate()
+}
+
+internal class AffectedVcsChangeListener(
+    private val invalidate: () -> Unit,
+) : ChangeListListener {
+    override fun changeListUpdateDone() = invalidate()
 }
