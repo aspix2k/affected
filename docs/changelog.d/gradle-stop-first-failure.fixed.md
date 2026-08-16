@@ -1,1 +1,0 @@
-- Made `Stop after the first failure` authoritative for Gradle runs even when the IDE adds its own `--continue` argument.

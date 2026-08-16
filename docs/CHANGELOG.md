@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.15.0] - 2026-08-17
+
+### Fixed
+
+- Printed static Gradle fallback reasons in the owned Affected run before composite-build tasks start.
+- Made `Stop after the first failure` authoritative for Gradle runs even when the IDE adds its own `--continue` argument.
+
+### Added
+
+- Present every build-system root from one affected plan in a single `Affected` Run session while preserving structured Gradle and Maven views, CLI output, failure propagation and owned cancellation.
+
 ## [3.14.0] - 2026-08-16
 
 ### Added
@@ -558,7 +569,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.14.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.0...HEAD
+[3.15.0]: https://github.com/aspix2k/affected/compare/v3.14.0...v3.15.0
 [3.14.0]: https://github.com/aspix2k/affected/compare/v3.13.9...v3.14.0
 [3.13.9]: https://github.com/aspix2k/affected/compare/v3.13.8...v3.13.9
 [3.13.8]: https://github.com/aspix2k/affected/compare/v3.13.7...v3.13.8
