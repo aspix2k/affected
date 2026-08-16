@@ -212,7 +212,7 @@
       ],
       "versions": "Maven 3.9.x; Maven 4 RC keeps the full goal",
       "support": "supported",
-      "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/MavenInjectionTest.java"],
+      "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/MavenInjectionTest.java", "conformance/cli-fixtures/maven-cancellation", "core/src/test/kotlin/com/aspix2k/affected/build/CliMavenCancellationConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {

@@ -10,9 +10,6 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.currentThreadCoroutineScope
 import com.intellij.openapi.project.DumbAware
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 
 abstract class RunCheckAction(
     private val taskName: String,
@@ -47,16 +44,12 @@ abstract class RunCheckAction(
             val groups = TaskPlanner.groups(modules.map(AffectedModule::info), taskName)
             if (projectBusy(project)) return@launchClaimed
             if (!claim.markRunning()) return@launchClaimed
-            coroutineScope {
-                groups.map { group ->
-                    async(Dispatchers.IO) {
-                        group.runInPlannedExecutionRoot(project) {
-                            runWithRequiredAdapter(BuildSystems.byId(group.systemId)) {
-                                it.runAndWait(project, group.root, group.tasks)
-                            }
-                        }
+            runClaimedGroups(claim, groups, Dispatchers.IO) { group ->
+                group.runInPlannedExecutionRoot(project) {
+                    runWithRequiredAdapter(BuildSystems.byId(group.systemId)) {
+                        it.runAndWait(project, group.root, group.tasks)
                     }
-                }.awaitAll()
+                }
             }
         }
     }

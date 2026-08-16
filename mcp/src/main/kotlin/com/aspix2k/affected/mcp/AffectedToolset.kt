@@ -12,6 +12,7 @@ import com.aspix2k.affected.TaskPlanner
 import com.aspix2k.affected.Verification
 import com.aspix2k.affected.build.BuildSystems
 import com.aspix2k.affected.projectBusy
+import com.aspix2k.affected.runClaimedGroups
 import com.aspix2k.affected.runWithRequiredAdapter
 import com.intellij.mcpserver.McpToolCallResult
 import com.intellij.mcpserver.McpToolset
@@ -26,9 +27,6 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -137,16 +135,12 @@ class AffectedToolset : McpToolset {
         }
         return try {
             val groups = TaskPlanner.groups(modules.map(AffectedModule::info), name)
-            val passed = coroutineScope {
-                groups.map { group ->
-                    async(Dispatchers.IO) {
-                        group.runInPlannedExecutionRoot(project) {
-                            runWithRequiredAdapter(BuildSystems.byId(group.systemId)) {
-                                it.runAndWait(project, group.root, group.tasks)
-                            }
-                        }
+            val passed = runClaimedGroups(claim, groups, Dispatchers.IO) { group ->
+                group.runInPlannedExecutionRoot(project) {
+                    runWithRequiredAdapter(BuildSystems.byId(group.systemId)) {
+                        it.runAndWait(project, group.root, group.tasks)
                     }
-                }.awaitAll().all { it }
+                }
             }
             validation.copy(
                 text = "${if (passed) "Passed" else "Failed"}. ${validation.text}",

@@ -29,13 +29,13 @@ class GradleCollectorRunTest {
         val cache = root.resolve("cache")
         val run = assertNotNull(GradleCollectorRun.create(cache, artifacts))
         val taskKey = "file:///fixture/|:app:test"
-        task(run.outputRoot, taskKey, "AlphaTest", "alpha-1")
+        writeCollectorTask(run.outputRoot, taskKey, "AlphaTest", "alpha-1")
 
         run.complete(passed = true)
 
         val map = assertNotNull(DependencyMapStore(cache.resolve("maps")).read(taskKey))
         assertEquals(setOf("AlphaTest"), map.records.mapTo(HashSet()) { it.testClass.value })
-        assertEquals(sha256("alpha-1"), map.artifacts.single().sha256)
+        assertEquals(collectorSha256("alpha-1"), map.artifacts.single().sha256)
         assertFalse(Files.exists(run.outputRoot))
     }
 
@@ -45,11 +45,11 @@ class GradleCollectorRunTest {
         val cache = root.resolve("cache")
         val taskKey = "file:///fixture/|:app:test"
         val first = assertNotNull(GradleCollectorRun.create(cache, artifacts))
-        task(first.outputRoot, taskKey, "AlphaTest", "alpha-1")
+        writeCollectorTask(first.outputRoot, taskKey, "AlphaTest", "alpha-1")
         first.complete(passed = true)
         val previous = assertNotNull(DependencyMapStore(cache.resolve("maps")).read(taskKey))
         val failed = assertNotNull(GradleCollectorRun.create(cache, artifacts))
-        task(failed.outputRoot, taskKey, "AlphaTest", "alpha-2")
+        writeCollectorTask(failed.outputRoot, taskKey, "AlphaTest", "alpha-2")
 
         failed.complete(passed = false)
 
@@ -63,11 +63,11 @@ class GradleCollectorRunTest {
         val cache = root.resolve("cache")
         val taskKey = "file:///fixture/|:app:test"
         val first = assertNotNull(GradleCollectorRun.create(cache, artifacts))
-        task(first.outputRoot, taskKey, "AlphaTest", "alpha-1")
+        writeCollectorTask(first.outputRoot, taskKey, "AlphaTest", "alpha-1")
         first.complete(passed = true)
         val previous = assertNotNull(DependencyMapStore(cache.resolve("maps")).read(taskKey))
         val cancelled = assertNotNull(GradleCollectorRun.create(cache, artifacts))
-        task(cancelled.outputRoot, taskKey, "AlphaTest", "alpha-2")
+        writeCollectorTask(cancelled.outputRoot, taskKey, "AlphaTest", "alpha-2")
 
         cancelled.cancel()
         cancelled.complete(passed = true)
@@ -167,48 +167,12 @@ class GradleCollectorRunTest {
         )
     }
 
-    private fun task(root: Path, taskKey: String, test: String, hashSeed: String) {
-        val task = Files.createDirectory(root.resolve("task-${sha256(taskKey)}"))
-        Files.writeString(
-            task.resolve("task.manifest"),
-            "format=1\ntask=${encode(taskKey)}\nruntime=${encode("runtime-1")}\ninput=${encode("input-1")}\nall=true\n",
-        )
-        Files.writeString(
-            task.resolve("expected.manifest"),
-            "format=1\nsupported=true\ntest=${encode(test)}\n",
-        )
-        Files.writeString(
-            task.resolve("catalog.manifest"),
-            "format=1\n" +
-                "artifact=${encode("Alpha")}|${encode("file:///classes/")}|${sha256(hashSeed)}\n",
-        )
-        val worker = "worker-1"
-        val directory = Files.createDirectory(task.resolve("worker-${sha256(worker)}"))
-        Files.writeString(directory.resolve("started.manifest"), "format=1\nworker=${encode(worker)}\n")
-        Files.writeString(
-            directory.resolve("complete.manifest"),
-            "format=1\nworker=${encode(worker)}\nsupported=true\ntest=${encode(test)}\n",
-        )
-        Files.writeString(
-            directory.resolve("test-${sha256(test)}.map"),
-            "format=1\ntest=${encode(test)}\n" +
-                "dependency=${encode("Alpha")}|${encode("file:///classes/")}|${sha256(hashSeed)}\n",
-        )
-    }
-
-    private fun encode(value: String): String = Base64.getUrlEncoder().withoutPadding()
-        .encodeToString(value.toByteArray(StandardCharsets.UTF_8))
-
     private fun artifactVersion(artifacts: GradleCollectorArtifacts): String {
         val digest = MessageDigest.getInstance("SHA-256")
         listOf(artifacts.agent, artifacts.listener, artifacts.initScript)
             .forEach { path -> digest.update(Files.readAllBytes(path)) }
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
-
-    private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
-        .digest(value.toByteArray(StandardCharsets.UTF_8))
-        .joinToString("") { "%02x".format(it) }
 
     private fun withDirectory(block: (Path) -> Unit) {
         val directory = createTempDirectory("affected-gradle-run-test-")
@@ -219,3 +183,44 @@ class GradleCollectorRunTest {
         }
     }
 }
+
+internal fun writeCollectorTask(root: Path, taskKey: String, test: String, hashSeed: String) {
+    val task = Files.createDirectory(root.resolve("task-${collectorSha256(taskKey)}"))
+    Files.writeString(
+        task.resolve("task.manifest"),
+        "format=1\ntask=${collectorEncode(taskKey)}\nruntime=${collectorEncode("runtime-1")}" +
+            "\ninput=${collectorEncode("input-1")}\nall=true\n",
+    )
+    Files.writeString(
+        task.resolve("expected.manifest"),
+        "format=1\nsupported=true\ntest=${collectorEncode(test)}\n",
+    )
+    Files.writeString(
+        task.resolve("catalog.manifest"),
+        "format=1\nartifact=${collectorEncode("Alpha")}|${collectorEncode("file:///classes/")}" +
+            "|${collectorSha256(hashSeed)}\n",
+    )
+    val worker = "worker-1"
+    val directory = Files.createDirectory(task.resolve("worker-${collectorSha256(worker)}"))
+    Files.writeString(
+        directory.resolve("started.manifest"),
+        "format=1\nworker=${collectorEncode(worker)}\n",
+    )
+    Files.writeString(
+        directory.resolve("complete.manifest"),
+        "format=1\nworker=${collectorEncode(worker)}\nsupported=true\ntest=${collectorEncode(test)}\n",
+    )
+    Files.writeString(
+        directory.resolve("test-${collectorSha256(test)}.map"),
+        "format=1\ntest=${collectorEncode(test)}\n" +
+            "dependency=${collectorEncode("Alpha")}|${collectorEncode("file:///classes/")}" +
+            "|${collectorSha256(hashSeed)}\n",
+    )
+}
+
+private fun collectorEncode(value: String): String = Base64.getUrlEncoder().withoutPadding()
+    .encodeToString(value.toByteArray(StandardCharsets.UTF_8))
+
+internal fun collectorSha256(value: String): String = MessageDigest.getInstance("SHA-256")
+    .digest(value.toByteArray(StandardCharsets.UTF_8))
+    .joinToString("") { "%02x".format(it) }

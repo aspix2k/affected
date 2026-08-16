@@ -1,6 +1,7 @@
 package com.aspix2k.affected
 
 import com.intellij.execution.process.ProcessHandler
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskId
 import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskNotificationListener
@@ -26,37 +27,131 @@ interface AffectedOwnedSession {
 }
 
 @Service(Service.Level.PROJECT)
-class AffectedRunSessions {
+class AffectedRunSessions : Disposable {
 
+    private val lock = Any()
     private val sessions = ConcurrentHashMap.newKeySet<AffectedOwnedSession>()
+    private val runs = ConcurrentHashMap.newKeySet<AffectedRunClaim>()
+    private var disposed = false
 
-    fun register(session: AffectedOwnedSession) {
-        sessions.add(session)
+    internal fun claim(create: () -> AffectedRunClaim?): AffectedRunClaim? = synchronized(lock) {
+        if (disposed) return null
+        create()?.also { run ->
+            run.bind(this)
+            runs.add(run)
+        }
     }
 
-    fun register(handler: ProcessHandler) {
-        register(ProcessHandlerSession(handler))
+    internal fun complete(run: AffectedRunClaim, passed: Boolean): AffectedRunCompletion = synchronized(lock) {
+        run.completeFrom(this, passed).also { completion ->
+            if (completion.released) runs.remove(run)
+        }
     }
+
+    fun register(session: AffectedOwnedSession): Boolean {
+        val rejected = synchronized(lock) {
+            sessions.add(session)
+            disposed || runs.any(AffectedRunClaim::isCancellationRequested)
+        }
+        if (rejected) {
+            session.stopIfActive()
+        }
+        synchronized(lock) {
+            sessions.removeIf { !it.isActive() }
+        }
+        return !rejected
+    }
+
+    fun register(handler: ProcessHandler): Boolean = register(ProcessHandlerSession(handler))
 
     fun unregister(session: AffectedOwnedSession) {
-        sessions.remove(session)
+        synchronized(lock) { sessions.remove(session) }
     }
 
     fun stopOwned(): Int {
-        val owned = sessions.toList()
+        var stoppedRuns = 0
+        val owned = synchronized(lock) {
+            stoppedRuns = runs.count { it.stopIfActive() }
+            sessions.toList()
+        }
         val stopped = owned.count { it.stopIfActive() }
-        sessions.removeIf { !it.isActive() }
-        return stopped
+        return synchronized(lock) {
+            runs.removeIf { !it.isActive() }
+            sessions.removeIf { !it.isActive() }
+            if (runs.isNotEmpty() || stoppedRuns > 0) stoppedRuns else stopped
+        }
     }
 
-    fun activeCount(): Int {
+    fun activeCount(): Int = synchronized(lock) {
+        runs.removeIf { !it.isActive() }
         sessions.removeIf { !it.isActive() }
-        return sessions.size
+        runs.size.takeIf { it > 0 } ?: sessions.size
+    }
+
+    override fun dispose() {
+        synchronized(lock) { disposed = true }
+        stopOwned()
     }
 
     companion object {
         fun getInstance(project: Project): AffectedRunSessions =
             project.getService(AffectedRunSessions::class.java)
+    }
+}
+
+internal class OwnedProcessExecution(
+    private val onCancel: () -> Unit = {},
+) : AffectedOwnedSession {
+    private val lock = Any()
+    private val completion = CompletableDeferred<Boolean>()
+    private var handler: ProcessHandler? = null
+    private var cancellationRequested = false
+    private var finished = false
+
+    fun bind(handler: ProcessHandler) {
+        val stop = synchronized(lock) {
+            if (this.handler != null) return
+            this.handler = handler
+            cancellationRequested || finished
+        }
+        if (stop && !handler.isProcessTerminated) handler.destroyProcess()
+    }
+
+    fun isCancellationRequested(): Boolean = synchronized(lock) { cancellationRequested }
+
+    fun finish(action: (Boolean) -> Unit = {}): Boolean {
+        var completed = false
+        var accepted = false
+        try {
+            synchronized(lock) {
+                if (finished) return false
+                accepted = !cancellationRequested
+                try {
+                    action(accepted)
+                } finally {
+                    finished = true
+                    completed = true
+                }
+            }
+        } finally {
+            if (completed) completion.complete(accepted)
+        }
+        return accepted
+    }
+
+    suspend fun awaitFinished(): Boolean = completion.await()
+
+    override fun isActive(): Boolean = synchronized(lock) { !finished }
+
+    override fun stopIfActive(): Boolean {
+        val process = synchronized(lock) {
+            if (finished || cancellationRequested) return false
+            cancellationRequested = true
+            handler
+        }
+        runCatching(onCancel)
+        if (process != null && !process.isProcessTerminated) process.destroyProcess()
+        return true
     }
 }
 
@@ -330,7 +425,7 @@ internal suspend fun runPreparedOwnedExternalTask(
     prepare: suspend () -> Unit,
     launch: (ExternalSystemTaskNotificationListener) -> Unit,
 ): Boolean {
-    sessions.register(execution)
+    if (!sessions.register(execution)) return false
     try {
         currentCoroutineContext().ensureActive()
         prepare()

@@ -1,0 +1,1 @@
+- Prevented Stop Affected Run from starting queued task groups or pending Maven launches, while leaving unrelated IDE runs untouched.

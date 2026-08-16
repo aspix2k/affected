@@ -60,11 +60,15 @@ object CommandRunner {
             ),
         )
         ProcessTerminatedListener.attach(handler)
-        AffectedRunSessions.getInstance(project).register(handler)
+        if (!AffectedRunSessions.getInstance(project).register(handler)) {
+            handler.startNotify()
+            return
+        }
 
         ApplicationManager.getApplication().invokeLater {
             if (project.isDisposed) {
                 handler.destroyProcess()
+                handler.startNotify()
                 return@invokeLater
             }
             RunContentExecutor(project, handler)
@@ -96,7 +100,6 @@ object CommandRunner {
             ),
         )
         ProcessTerminatedListener.attach(handler)
-        AffectedRunSessions.getInstance(project).register(handler)
         val completed = AtomicBoolean(false)
 
         return suspendCancellableCoroutine { continuation ->
@@ -109,6 +112,10 @@ object CommandRunner {
                     complete(event.exitCode == 0)
                 }
             })
+            if (!AffectedRunSessions.getInstance(project).register(handler)) {
+                handler.startNotify()
+                return@suspendCancellableCoroutine
+            }
             continuation.invokeOnCancellation {
                 if (!handler.isProcessTerminated) handler.destroyProcess()
             }
@@ -116,6 +123,7 @@ object CommandRunner {
             ApplicationManager.getApplication().invokeLater {
                 if (!continuation.isActive || project.isDisposed) {
                     if (!handler.isProcessTerminated) handler.destroyProcess()
+                    handler.startNotify()
                     complete(false)
                     return@invokeLater
                 }
