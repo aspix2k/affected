@@ -132,8 +132,8 @@
       "id": "linux",
       "name": "Linux",
       "support": "native",
-      "fixtures": ["conformance/cli-fixtures", "collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java"],
-      "gates": [".github/workflows/conformance.yml"]
+      "fixtures": ["conformance/cli-fixtures", "core/src/test/kotlin/com/aspix2k/affected/build/SequentialProcessHandlerTest.kt", "collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java"],
+      "gates": [".github/workflows/conformance.yml", ".github/workflows/ci.yml"]
     },
     {
       "id": "macos",

@@ -204,9 +204,10 @@ internal fun analyzeDotnetProject(
     metadata: DotnetProjectMetadata,
     classes: Set<String>,
     cache: Path,
+    executionRoot: Path? = null,
 ): DotnetAnalyzedState? = runCatching {
     require(classes.size <= MAX_DOTNET_CLASSES && classes.all(DOTNET_CLASS_NAME::matches))
-    val analyzer = prepareDotnetAnalyzer(cache, metadata.sdkMajor) ?: return null
+    val analyzer = prepareDotnetAnalyzer(cache, metadata.sdkMajor, executionRoot) ?: return null
     val runs = secureDotnetDirectory(cache.resolve("runs"))
     val request = Files.createTempFile(runs, "analyzer-", ".json")
     val response = request.resolveSibling("${request.fileName}.response")
@@ -366,7 +367,11 @@ private fun parseDotnetAnalysis(
     return DotnetAnalyzedState(metadata.identity, testAssembly, artifacts, classes)
 }
 
-private fun prepareDotnetAnalyzer(cache: Path, sdkMajor: Int): Path? = synchronized(DOTNET_ANALYZER_LOCK) {
+private fun prepareDotnetAnalyzer(
+    cache: Path,
+    sdkMajor: Int,
+    executionRoot: Path?,
+): Path? = synchronized(DOTNET_ANALYZER_LOCK) {
     runCatching {
         val source = configuredDotnetAnalyzer() ?: findDotnetAnalyzer(
             Path.of(PathManager.getJarPathForClass(DotnetBuildSystem::class.java)),
@@ -383,7 +388,7 @@ private fun prepareDotnetAnalyzer(cache: Path, sdkMajor: Int): Path? = synchroni
         if (executable.isSecureRegularFile()) return executable
         val intermediate = secureDotnetDirectory(directory.resolve("obj"))
         val build = CommandRunner.capture(
-            source.toString(),
+            (executionRoot ?: source).toString(),
             listOf(
                 "dotnet",
                 "build",

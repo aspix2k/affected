@@ -91,14 +91,16 @@ object Verification {
             passed = coroutineScope {
                 plan.groups.map { group ->
                     async(Dispatchers.Default) {
-                        when (val system = BuildSystems.byId(group.systemId)) {
-                            null -> preparedGroupPasses(adapterFound = false)
-                            is ChangeAwareSuspendingBuildSystem ->
-                                system.runAndWaitSuspending(project, group.root, group.tasks, prepared.changes)
-                            is SuspendingBuildSystem ->
-                                system.runAndWaitSuspending(project, group.root, group.tasks)
-                            else -> withContext(Dispatchers.IO) {
-                                system.runAndWait(project, group.root, group.tasks)
+                        group.runInPlannedExecutionRoot(project) {
+                            when (val system = BuildSystems.byId(group.systemId)) {
+                                null -> preparedGroupPasses(adapterFound = false)
+                                is ChangeAwareSuspendingBuildSystem ->
+                                    system.runAndWaitSuspending(project, group.root, group.tasks, prepared.changes)
+                                is SuspendingBuildSystem ->
+                                    system.runAndWaitSuspending(project, group.root, group.tasks)
+                                else -> withContext(Dispatchers.IO) {
+                                    system.runAndWait(project, group.root, group.tasks)
+                                }
                             }
                         }
                     }

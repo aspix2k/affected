@@ -10,6 +10,7 @@ import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.io.path.createDirectory
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -17,6 +18,164 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class SequentialProcessHandlerTest {
+
+    @Test
+    fun `a replaced direct command root fails before the child starts`() {
+        val project = createTempDirectory("sequential-root-direct")
+        val root = project.resolve("module")
+        val outside = createTempDirectory("sequential-root-direct-outside")
+        Files.createDirectory(root)
+        val marker = outside.resolve("started.marker")
+        val temporary = Files.createTempDirectory("affected-handler-stale-root-")
+        val handler = SequentialProcessHandler(
+            root.toFile(),
+            listOf(
+                CliCommand(
+                    "direct",
+                    markerCommand(marker),
+                    ownedTemporaryDirectories = listOf(temporary),
+                ),
+            ),
+            executionRootGuard = PlannedExecutionRoot.capture(root).bind(project),
+        )
+        Files.delete(root)
+        assumeTrue(runCatching { Files.createSymbolicLink(root, outside) }.isSuccess)
+        val output = StringBuilder()
+        handler.addProcessListener(listener(output))
+
+        handler.startNotify()
+
+        assertTrue(handler.waitFor(5_000))
+        assertTrue(handler.exitCode != 0)
+        assertFalse(Files.exists(marker))
+        assertFalse(Files.exists(temporary))
+        assertTrue(output.contains("planned working directory"), output.toString())
+    }
+
+    @Test
+    fun `a deferred command revalidates its root after resolution`() {
+        val project = createTempDirectory("sequential-root-deferred")
+        val root = project.resolve("module")
+        val outside = createTempDirectory("sequential-root-deferred-outside")
+        Files.createDirectory(root)
+        val marker = outside.resolve("started.marker")
+        val handler = SequentialProcessHandler(
+            root.toFile(),
+            listOf(
+                DeferredCliCommand.command {
+                    Files.delete(root)
+                    Files.createSymbolicLink(root, outside)
+                    CliCommand("deferred", markerCommand(marker))
+                },
+            ),
+            executionRootGuard = PlannedExecutionRoot.capture(root).bind(project),
+        )
+        val output = StringBuilder()
+        handler.addProcessListener(listener(output))
+
+        handler.startNotify()
+
+        assertTrue(handler.waitFor(5_000))
+        assertTrue(handler.exitCode != 0)
+        assertFalse(Files.exists(marker))
+        assertTrue(output.contains("planned working directory"), output.toString())
+    }
+
+    @Test
+    fun `a deferred metadata child inherits the planned root identity`() {
+        val project = createTempDirectory("sequential-root-capture")
+        val root = project.resolve("module")
+        val outside = createTempDirectory("sequential-root-capture-outside")
+        Files.createDirectory(root)
+        val marker = outside.resolve("captured.marker")
+        val handler = SequentialProcessHandler(
+            root.toFile(),
+            listOf(
+                DeferredCliCommand.command {
+                    Files.delete(root)
+                    Files.createSymbolicLink(root, outside)
+                    val captured = CommandRunner.capture(root.toString(), markerCommand(marker))
+                    check(captured == null)
+                    CliCommand("deferred capture", markerCommand(marker))
+                },
+            ),
+            executionRootGuard = PlannedExecutionRoot.capture(root).bind(project),
+        )
+
+        handler.startNotify()
+
+        assertTrue(handler.waitFor(5_000))
+        assertTrue(handler.exitCode != 0)
+        assertFalse(Files.exists(marker))
+    }
+
+    @Test
+    fun `a final root check runs after command listeners`() {
+        val project = createTempDirectory("sequential-root-listener")
+        val root = project.resolve("module")
+        val outside = createTempDirectory("sequential-root-listener-outside")
+        Files.createDirectory(root)
+        val marker = outside.resolve("started.marker")
+        val handler = SequentialProcessHandler(
+            root.toFile(),
+            listOf(CliCommand("listener swap", markerCommand(marker))),
+            executionRootGuard = PlannedExecutionRoot.capture(root).bind(project),
+        )
+        handler.addProcessListener(object : ProcessListener {
+            override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
+                if (event.text.contains("> listener swap")) {
+                    Files.delete(root)
+                    Files.createSymbolicLink(root, outside)
+                }
+            }
+        })
+
+        handler.startNotify()
+
+        assertTrue(handler.waitFor(5_000))
+        assertTrue(handler.exitCode != 0)
+        assertFalse(Files.exists(marker))
+    }
+
+    @Test
+    fun `stopping root refusal waits for pending cleanup`() {
+        val project = createTempDirectory("sequential-root-cleanup")
+        val root = project.resolve("module").createDirectory()
+        val guard = PlannedExecutionRoot.capture(root).bind(project)
+        val temporary = Files.createTempDirectory("affected-handler-root-refusal-")
+        val cleanupStarted = CountDownLatch(1)
+        val releaseCleanup = CountDownLatch(1)
+        Files.delete(root)
+        Files.createDirectory(root)
+        val handler = SequentialProcessHandler(
+            root.toFile(),
+            listOf(
+                CliCommand(
+                    "pending cleanup",
+                    listOf(java(), "-version"),
+                    ownedTemporaryDirectories = listOf(temporary),
+                ),
+            ),
+            executionRootGuard = guard,
+            ownedTemporaryDirectoryCleanup = { directory ->
+                cleanupStarted.countDown()
+                releaseCleanup.await()
+                Files.delete(directory)
+                true
+            },
+        )
+
+        handler.startNotify()
+        assertTrue(cleanupStarted.await(5, TimeUnit.SECONDS))
+        handler.destroyProcess()
+
+        assertFalse(handler.waitFor(100))
+        assertTrue(Files.isDirectory(temporary))
+        releaseCleanup.countDown()
+        assertTrue(handler.waitFor(5_000))
+        assertTrue(handler.exitCode != 0)
+        assertFalse(Files.exists(temporary))
+    }
 
     @Test
     fun `commands share one handler and run in order`() {
@@ -454,6 +613,14 @@ class SequentialProcessHandlerTest {
         if (System.getProperty("os.name").startsWith("Windows")) "bin/java.exe" else "bin/java",
     ).absolutePath
 
+    private fun markerCommand(marker: java.nio.file.Path): List<String> = listOf(
+        java(),
+        "-cp",
+        System.getProperty("java.class.path"),
+        MarkerWriter::class.java.name,
+        marker.toString(),
+    )
+
     private fun javac(): String = File(
         System.getProperty("java.home"),
         if (System.getProperty("os.name").startsWith("Windows")) "bin/javac.exe" else "bin/javac",
@@ -490,4 +657,11 @@ class SequentialProcessHandlerTest {
             }
         }
         """.trimIndent()
+}
+
+private object MarkerWriter {
+    @JvmStatic
+    fun main(arguments: Array<String>) {
+        Files.writeString(java.nio.file.Path.of(arguments.single()), "started")
+    }
 }

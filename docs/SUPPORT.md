@@ -69,7 +69,7 @@ relationship. Otherwise **Affected** keeps the larger unit shown in the same row
 
 | Operating system | Evidence level | Evidence |
 |---|---|---|
-| Linux | Native fixtures | [cli-fixtures](../conformance/cli-fixtures) · [GradleInjectionTest.java](../collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java) · [conformance.yml](../.github/workflows/conformance.yml) |
+| Linux | Native fixtures | [cli-fixtures](../conformance/cli-fixtures) · [SequentialProcessHandlerTest.kt](../core/src/test/kotlin/com/aspix2k/affected/build/SequentialProcessHandlerTest.kt) · [GradleInjectionTest.java](../collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java) · [conformance.yml](../.github/workflows/conformance.yml) · [ci.yml](../.github/workflows/ci.yml) |
 | macOS | Cross-platform contracts | [CrossPlatformPathTest.kt](../core/src/test/kotlin/com/aspix2k/affected/CrossPlatformPathTest.kt) · [GradleInjectionTest.java](../collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java) · [conformance.yml](../.github/workflows/conformance.yml) |
 | Windows | Cross-platform contracts | [CrossPlatformPathTest.kt](../core/src/test/kotlin/com/aspix2k/affected/CrossPlatformPathTest.kt) · [GradleInjectionTest.java](../collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java) · [conformance.yml](../.github/workflows/conformance.yml) |
 

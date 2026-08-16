@@ -65,7 +65,9 @@ internal class SequentialProcessHandler(
     private val commands: List<CliStep>,
     private val unresolvedMessage: String = DEFAULT_UNRESOLVED_MESSAGE,
     private val continueAfterFailure: Boolean = false,
+    private val executionRootGuard: ExecutionRootGuard = executionRootGuard(workingDirectory.toPath()),
     private val processHandlerFactory: (GeneralCommandLine) -> OSProcessHandler = { OSProcessHandler(it) },
+    private val ownedTemporaryDirectoryCleanup: (Path) -> Boolean = ::deleteOwnedTemporaryDirectory,
     private val afterInitialProcessTermination: () -> Unit = {},
     private val processTerminationStarted: () -> Unit = {},
 ) : ProcessHandler() {
@@ -76,6 +78,7 @@ internal class SequentialProcessHandler(
     private var next = 0
     private var recordedExitCode = 0
     private var activeCommand: CliCommand? = null
+    private var lifecycleActive = false
     private var terminationSetup: CountDownLatch? = null
     private var terminatingProcesses = emptyList<ProcessHandle>()
 
@@ -103,7 +106,7 @@ internal class SequentialProcessHandler(
                 initiate = true
             }
             resolverThread?.interrupt()
-            hasActiveLifecycle = resolverThread != null || activeCommand != null
+            hasActiveLifecycle = resolverThread != null || activeCommand != null || lifecycleActive
         }
         if (!initiate) return
         when {
@@ -127,19 +130,13 @@ internal class SequentialProcessHandler(
     override fun getProcessInput(): OutputStream = current?.processInput ?: OutputStream.nullOutputStream()
 
     private fun startNext() {
-        if (stopped.get()) return finish(1)
-        val step = synchronized(lock) {
-            commands.getOrNull(next)?.also { next += 1 }
-        } ?: return if (next == 0) {
-            notifyTextAvailable(
-                "$unresolvedMessage\n",
-                ProcessOutputTypes.STDERR,
-            )
-            finish(1)
-        } else {
-            finish(synchronized(lock) { recordedExitCode })
-        }
+        if (!beginLifecycle()) return finish(1)
+        executionRootGuard.validationFailure()?.let { return failExecutionRoot(it) }
+        val step = nextStep() ?: return finishWithoutStep()
+        resolve(step)
+    }
 
+    private fun resolve(step: CliStep) {
         val mayResolve = synchronized(lock) {
             if (stopped.get()) {
                 false
@@ -148,16 +145,21 @@ internal class SequentialProcessHandler(
                 true
             }
         }
-        if (!mayResolve) return finish(1)
-        val resolved = runCatching(step::resolve)
+        if (!mayResolve) {
+            endLifecycle()
+            return finish(1)
+        }
+        val resolved = executionRootGuard.withResolverContext { runCatching(step::resolve) }
         val command = resolved.getOrNull()
         synchronized(lock) {
             if (resolverThread === Thread.currentThread()) {
                 if (resolved.isSuccess && command != null) activeCommand = command
                 resolverThread = null
+                if (command != null) lifecycleActive = false
             }
         }
         resolved.exceptionOrNull()?.let { error ->
+            endLifecycle()
             notifyTextAvailable(
                 "Affected could not resolve the next command: ${error.message.orEmpty()}\n",
                 ProcessOutputTypes.STDERR,
@@ -165,11 +167,30 @@ internal class SequentialProcessHandler(
             return finish(1)
         }
         if (command == null) {
+            endLifecycle()
             if (stopped.get()) return finish(1)
             AppExecutorUtil.getAppExecutorService().execute(::startNext)
             return
         }
         start(command)
+    }
+
+    private fun beginLifecycle(): Boolean = synchronized(lock) {
+        if (stopped.get()) false else true.also { lifecycleActive = it }
+    }
+
+    private fun nextStep(): CliStep? = synchronized(lock) {
+        commands.getOrNull(next)?.also { next += 1 }
+    }
+
+    private fun finishWithoutStep() {
+        endLifecycle()
+        if (next == 0) {
+            notifyTextAvailable("$unresolvedMessage\n", ProcessOutputTypes.STDERR)
+            finish(1)
+        } else {
+            finish(synchronized(lock) { recordedExitCode })
+        }
     }
 
     private fun start(command: CliCommand) {
@@ -179,18 +200,34 @@ internal class SequentialProcessHandler(
             finish(1)
             return
         }
+        executionRootGuard.validationFailure()?.let { failure ->
+            failExecutionRoot(failure, command)
+            return
+        }
 
         notifyTextAvailable("\n> ${command.title}\n", ProcessOutputTypes.SYSTEM)
-        val handler = runCatching {
+        val commandLine = runCatching {
             val arguments = command.arguments.toMutableList()
             arguments[0] = resolveExecutable(arguments[0])
-            processHandlerFactory(
-                GeneralCommandLine(arguments)
-                    .withWorkDirectory(workingDirectory)
-                    .withCharset(Charsets.UTF_8)
-                    .withEnvironment(command.environment),
-            )
+            GeneralCommandLine(arguments)
+                .withWorkDirectory(workingDirectory)
+                .withCharset(Charsets.UTF_8)
+                .withEnvironment(command.environment)
         }.getOrElse { error ->
+            notifyTextAvailable(
+                "Affected could not start ${command.title}: ${error.message.orEmpty()}\n",
+                ProcessOutputTypes.STDERR,
+            )
+            cleanup(command)
+            release(command)
+            finish(1)
+            return
+        }
+        executionRootGuard.validationFailure()?.let { failure ->
+            failExecutionRoot(failure, command)
+            return
+        }
+        val handler = runCatching { processHandlerFactory(commandLine) }.getOrElse { error ->
             notifyTextAvailable(
                 "Affected could not start ${command.title}: ${error.message.orEmpty()}\n",
                 ProcessOutputTypes.STDERR,
@@ -256,16 +293,39 @@ internal class SequentialProcessHandler(
     private fun shouldContinueAfterFailure(command: CliCommand, exitCode: Int): Boolean =
         exitCode != 0 && !stopped.get() && (command.continueOnFailure || continueAfterFailure)
 
+    private fun failExecutionRoot(failure: String, currentCommand: CliCommand? = null) {
+        val pending = synchronized(lock) {
+            lifecycleActive = true
+            commands.drop(next).filterIsInstance<CliCommand>().also { next = commands.size }
+        }
+        currentCommand?.let(::cleanup)
+        pending.forEach(::cleanup)
+        synchronized(lock) {
+            if (activeCommand === currentCommand) activeCommand = null
+            lifecycleActive = false
+        }
+        notifyTextAvailable(
+            "Affected refused to start commands because the planned working directory $failure. " +
+                "Refresh the project model and run again.\n",
+            ProcessOutputTypes.STDERR,
+        )
+        finish(1)
+    }
+
     private fun release(command: CliCommand) {
         synchronized(lock) {
             if (activeCommand === command) activeCommand = null
         }
     }
 
+    private fun endLifecycle() {
+        synchronized(lock) { lifecycleActive = false }
+    }
+
     private fun cleanup(command: CliCommand): Boolean {
         val interrupted = Thread.interrupted()
         return try {
-            val failed = command.ownedTemporaryDirectories.filterNot(::deleteOwnedTemporaryDirectory)
+            val failed = command.ownedTemporaryDirectories.filterNot(ownedTemporaryDirectoryCleanup)
             if (failed.isEmpty()) {
                 true
             } else {

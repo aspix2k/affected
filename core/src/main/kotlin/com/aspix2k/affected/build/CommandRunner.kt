@@ -16,12 +16,17 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
+import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.resume
 
 object CommandRunner {
+
+    internal fun refuseInvalidExecutionRoot(project: Project, workingDirectory: String, title: String) {
+        runBatch(project, workingDirectory, emptyList(), title)
+    }
 
     fun run(project: Project, workingDirectory: String, command: List<String>, title: String) {
         runBatch(project, workingDirectory, listOf(CliCommand(title, command)), title)
@@ -49,6 +54,10 @@ object CommandRunner {
             commands,
             unresolvedMessage ?: DEFAULT_UNRESOLVED_MESSAGE,
             continueAfterFailure = continueAfterFailure,
+            executionRootGuard = projectExecutionRootGuard(
+                Path.of(workingDirectory),
+                project.basePath?.let(Path::of),
+            ),
         )
         ProcessTerminatedListener.attach(handler)
         AffectedRunSessions.getInstance(project).register(handler)
@@ -81,6 +90,10 @@ object CommandRunner {
             commands,
             unresolvedMessage ?: DEFAULT_UNRESOLVED_MESSAGE,
             continueAfterFailure = continueAfterFailure,
+            executionRootGuard = projectExecutionRootGuard(
+                Path.of(workingDirectory),
+                project.basePath?.let(Path::of),
+            ),
         )
         ProcessTerminatedListener.attach(handler)
         AffectedRunSessions.getInstance(project).register(handler)
@@ -124,10 +137,13 @@ object CommandRunner {
     ): String? = try {
         val directory = File(workingDirectory).takeIf(File::isDirectory) ?: return null
         if (command.isEmpty() || timeoutSeconds <= 0 || maxBytes <= 0) return null
+        val guard = executionRootGuard(directory.toPath())
+        if (guard.validationFailure() != null) return null
         val commandLine = GeneralCommandLine(command)
             .withWorkDirectory(directory)
             .withCharset(Charsets.UTF_8)
             .withEnvironment(environment)
+        if (guard.validationFailure() != null) return null
         capture(commandLine.createProcess(), timeoutSeconds, maxBytes)
     } catch (error: CancellationException) {
         throw error

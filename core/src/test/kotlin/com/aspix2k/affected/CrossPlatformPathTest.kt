@@ -1,9 +1,16 @@
 package com.aspix2k.affected
 
 import com.aspix2k.affected.build.CargoMetadata
+import com.aspix2k.affected.build.PlannedExecutionRoot
+import org.junit.Assume.assumeTrue
 import java.io.File
+import java.nio.file.Files
+import kotlin.io.path.createDirectory
+import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CrossPlatformPathTest {
@@ -89,5 +96,42 @@ class CrossPlatformPathTest {
         assertFalse('\\' in normalized)
         assertTrue("affected path проверка" in normalized)
         assertTrue(normalized.endsWith("модуль/src/Главный.kt"))
+    }
+
+    @Test
+    fun `execution root identity is stable for platform paths`() {
+        val project = createTempDirectory("affected platform root")
+        val root = project.resolve("-модуль проверка").createDirectory()
+        val guard = PlannedExecutionRoot.capture(root).bind(project)
+        val creationTime = Files.readAttributes(
+            root,
+            java.nio.file.attribute.BasicFileAttributes::class.java,
+        ).creationTime()
+
+        assertNull(guard.validationFailure())
+
+        Files.delete(root)
+        Files.createDirectory(root)
+        if (System.getProperty("os.name").startsWith("Windows")) {
+            Files.setAttribute(root, "basic:creationTime", creationTime)
+        }
+        assertNotNull(guard.validationFailure())
+    }
+
+    @Test
+    fun `a Windows directory junction is not an execution root`() {
+        assumeTrue(System.getProperty("os.name").startsWith("Windows"))
+        val project = createTempDirectory("affected-junction-project")
+        val target = createTempDirectory("affected-junction-target")
+        val junction = project.resolve("junction")
+        val process = ProcessBuilder("cmd", "/c", "mklink", "/J", junction.toString(), target.toString())
+            .redirectErrorStream(true)
+            .start()
+        assumeTrue(process.waitFor() == 0)
+        try {
+            assertNotNull(PlannedExecutionRoot.capture(junction).bind(project).validationFailure())
+        } finally {
+            Files.deleteIfExists(junction)
+        }
     }
 }

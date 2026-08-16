@@ -98,6 +98,9 @@ in the generated run snapshot. The same setting controls Cargo's native
 A `BuildSystem` registers through `com.aspix2k.affected.buildSystem`. Missing
 tools, malformed metadata, stale task identities, symlinks and discovery bounds
 fail closed to a visible root command or an explicit unresolved Run.
+Each CLI execution root keeps its planned filesystem identity and is checked
+again before deferred resolution and immediately before every child process.
+Missing, re-created, unreadable, linked or out-of-project roots fail visibly.
 
 Native adapter projects live under `conformance/cli-fixtures` and run with
 `./gradlew :core:test --tests '*CliAdapterConformanceTest' -Paffected.cliConformance=true`.
