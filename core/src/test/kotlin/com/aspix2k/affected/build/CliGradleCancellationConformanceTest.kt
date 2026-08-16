@@ -193,12 +193,12 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
     }
 
     private fun installWrapper(root: File) {
-        val repository = repositoryRoot()
-        File(repository, "gradlew").copyTo(File(root, "gradlew"), overwrite = true).setExecutable(true)
+        val repository = CliConformanceRepository.configured
+        repository.repositoryFile("gradlew").copyTo(File(root, "gradlew"), overwrite = true).setExecutable(true)
         val wrapper = File(root, "gradle/wrapper").apply { mkdirs() }
-        File(repository, "gradle/wrapper/gradle-wrapper.jar")
+        repository.repositoryFile("gradle/wrapper/gradle-wrapper.jar")
             .copyTo(File(wrapper, "gradle-wrapper.jar"), overwrite = true)
-        File(repository, "gradle/wrapper/gradle-wrapper.properties")
+        repository.repositoryFile("gradle/wrapper/gradle-wrapper.properties")
             .copyTo(File(wrapper, "gradle-wrapper.properties"), overwrite = true)
     }
 
@@ -211,7 +211,7 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
         }
     }
 
-    private fun fixtureRoot(): File = File(repositoryRoot(), "conformance/cli-fixtures/gradle-cancellation")
+    private fun fixtureRoot(): File = CliConformanceRepository.configured.fixture("gradle-cancellation")
 
     private fun nativeEnabled(): Boolean = System.getProperty(CONFORMANCE_PROPERTY) == "true"
 
@@ -233,10 +233,6 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
             factory.allEditors.filterNot(existingEditors::contains).forEach(factory::releaseEditor)
         }
     }
-
-    private fun repositoryRoot(): File = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
-        .firstOrNull { File(it, "gradlew").isFile && File(it, "conformance/cli-fixtures").isDirectory }
-        ?: error("Affected repository root is missing")
 
     private companion object {
         const val CONFORMANCE_PROPERTY = "affected.cliConformance"

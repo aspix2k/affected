@@ -181,10 +181,7 @@ class CargoNextestCliAdapterConformanceTest {
         }
     }
 
-    private fun fixtureRoot(): File = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
-        .map { File(it, "conformance/cli-fixtures/cargo") }
-        .firstOrNull(File::isDirectory)
-        ?: File(System.getProperty("user.dir"), "conformance/cli-fixtures/cargo")
+    private fun fixtureRoot(): File = CliConformanceRepository.configured.fixture("cargo")
 
     private fun execute(
         directory: File,

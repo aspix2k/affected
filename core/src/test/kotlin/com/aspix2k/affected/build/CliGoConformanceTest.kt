@@ -65,10 +65,7 @@ class CliGoConformanceTest {
         }
     }
 
-    private fun fixtureRoot(): File = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
-        .map { File(it, "conformance/cli-fixtures/go") }
-        .firstOrNull(File::isDirectory)
-        ?: File(System.getProperty("user.dir"), "conformance/cli-fixtures/go")
+    private fun fixtureRoot(): File = CliConformanceRepository.configured.fixture("go")
 
     private fun execute(
         directory: File,

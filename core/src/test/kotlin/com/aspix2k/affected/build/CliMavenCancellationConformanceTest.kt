@@ -78,7 +78,7 @@ class CliMavenCancellationConformanceTest : BasePlatformTestCase() {
 
     fun testMavenCancellationBeforeLaunchDoesNotStartTask() = runBlocking {
         if (System.getProperty(CONFORMANCE_PROPERTY) != "true") return@runBlocking
-        val source = File(repositoryRoot(), "conformance/cli-fixtures/maven-cancellation")
+        val source = CliConformanceRepository.configured.fixture("maven-cancellation")
         assertTrue(source.isDirectory, "Missing CLI conformance fixture: $source")
         val target = File(checkNotNull(project.basePath), "maven-cancellation")
         val existingDescriptors = currentDescriptors()
@@ -166,10 +166,6 @@ class CliMavenCancellationConformanceTest : BasePlatformTestCase() {
         }
         return editors
     }
-
-    private fun repositoryRoot(): File = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
-        .firstOrNull { File(it, "gradlew").isFile && File(it, "conformance/cli-fixtures").isDirectory }
-        ?: error("Affected repository root is missing")
 
     private fun assertDeleted(file: File) {
         assertTrue(!file.exists() || file.deleteRecursively(), "Failed to delete $file")
