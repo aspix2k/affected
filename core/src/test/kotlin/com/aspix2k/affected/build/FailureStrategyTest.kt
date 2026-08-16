@@ -71,22 +71,6 @@ class FailureStrategyTest {
     }
 
     @Test
-    fun `Gradle strategy carries static selection diagnostics into the owned invocation`() {
-        val collector = listOf("--init-script", "/tmp/affected.gradle")
-        val selection = GradleTaskSelection(
-            listOf(":shared:iosSimulatorArm64Test"),
-            listOf(GradleSelectionReason.KOTLIN_NATIVE_EXACT_UNSUPPORTED),
-        )
-
-        assertEquals(
-            collector +
-                "-Daffected.selection.reasons=KOTLIN_NATIVE_EXACT_UNSUPPORTED" +
-                "--continue",
-            gradleInvocationArguments(collector, selection, stopAfterFirstFailure = false),
-        )
-    }
-
-    @Test
     fun `Maven full plan fails at the end`() {
         assertEquals(
             listOf("--fail-at-end"),

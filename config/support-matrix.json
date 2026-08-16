@@ -132,7 +132,7 @@
       "id": "linux",
       "name": "Linux",
       "support": "native",
-      "fixtures": ["conformance/cli-fixtures", "core/src/test/kotlin/com/aspix2k/affected/build/SequentialProcessHandlerTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleCancellationConformanceTest.kt", "collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java"],
+      "fixtures": ["conformance/cli-fixtures", "core/src/test/kotlin/com/aspix2k/affected/build/SequentialProcessHandlerTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleCancellationConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleSelectionDiagnosticsConformanceTest.kt", "collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java"],
       "gates": [".github/workflows/conformance.yml", ".github/workflows/ci.yml"]
     },
     {
@@ -180,7 +180,7 @@
       ],
       "versions": "Gradle 8–9; JDK 17, 21 and 26; in change-aware Affected test runs, exact KMP target narrowing is retained for proven platform source sets; common sources keep every target, Kotlin/Native stays task-level, and missing/stale JVM baselines or class-set drift keep the whole task; fallbacks report fixed reason codes without paths",
       "support": "supported",
-      "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java", "conformance/cli-fixtures/gradle-cancellation", "conformance/cli-fixtures/gradle-kmp-fallback", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleCancellationConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/GradleKmpSourceSetTest.kt"],
+      "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java", "conformance/cli-fixtures/gradle-cancellation", "conformance/cli-fixtures/gradle-kmp-fallback", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleCancellationConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleSelectionDiagnosticsConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/GradleKmpSourceSetTest.kt"],
       "gates": [".github/workflows/conformance.yml", ".github/workflows/ci.yml"]
     },
     {

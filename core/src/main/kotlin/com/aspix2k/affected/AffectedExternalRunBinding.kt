@@ -2,7 +2,10 @@ package com.aspix2k.affected
 
 import com.intellij.execution.ExecutionListener
 import com.intellij.execution.ExecutionManager
+import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessHandler
+import com.intellij.execution.process.ProcessListener
+import com.intellij.execution.process.ProcessOutputTypes
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.openapi.Disposable
@@ -17,6 +20,7 @@ internal class AffectedExternalRunBinding private constructor(
     project: Project,
     private val presentation: AffectedRunPresentation,
     private val label: String,
+    private val initialOutput: String,
     private val enableHeadless: (ExecutionEnvironment) -> Boolean,
     private val matches: (ExecutionEnvironment, Any) -> Boolean,
 ) : ExecutionListener, Disposable {
@@ -58,10 +62,20 @@ internal class AffectedExternalRunBinding private constructor(
                 return
             }
             val child = DescriptorAffectedRunChild(descriptor, handler)
-            presentation.attach(label, child)
+            if (presentation.attach(label, child)) installInitialOutput(handler)
         } finally {
             dispose()
         }
+    }
+
+    private fun installInitialOutput(handler: ProcessHandler) {
+        if (initialOutput.isEmpty()) return
+        handler.addProcessListener(object : ProcessListener {
+            override fun startNotified(event: ProcessEvent) {
+                event.processHandler.removeProcessListener(this)
+                event.processHandler.notifyTextAvailable(initialOutput, ProcessOutputTypes.SYSTEM)
+            }
+        })
     }
 
     override fun processNotStarted(executorId: String, environment: ExecutionEnvironment) {
@@ -87,11 +101,12 @@ internal class AffectedExternalRunBinding private constructor(
             project: Project,
             presentation: AffectedRunPresentation,
             label: String,
+            initialOutput: String = "",
             enableHeadless: ((ExecutionEnvironment) -> Boolean)? = AffectedHeadlessExecution.enable,
             matches: (ExecutionEnvironment, Any) -> Boolean,
         ): AffectedExternalRunBinding? {
             val enable = enableHeadless ?: return null
-            return AffectedExternalRunBinding(project, presentation, label, enable, matches)
+            return AffectedExternalRunBinding(project, presentation, label, initialOutput, enable, matches)
         }
 
         fun isSupported(): Boolean = AffectedHeadlessExecution.enable != null

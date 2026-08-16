@@ -1,7 +1,10 @@
 package com.aspix2k.affected
 
 import com.intellij.execution.ExecutionManager
+import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessHandler
+import com.intellij.execution.process.ProcessListener
+import com.intellij.execution.process.ProcessOutputTypes
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.runners.ProgramRunner
 import com.intellij.execution.ui.RunContentDescriptor
@@ -33,6 +36,42 @@ class AffectedExternalRunBindingTest : BasePlatformTestCase() {
 
         assertEquals(listOf("Gradle · app"), view.labels)
         assertFalse(handler.destroyed)
+    }
+
+    fun testOwnedExecutionPrintsInitialOutputBeforeProcessOutput() {
+        val presentation = AffectedRunPresentation(claim(), RecordingView())
+        val owned = ExecutionEnvironment()
+        val binding = checkNotNull(
+            AffectedExternalRunBinding.open(
+                project,
+                presentation,
+                "Gradle · app",
+                initialOutput = "[Affected] Gradle selection - COMMON_SOURCE_SET_FAN_OUT\n",
+            ) { environment, _ -> environment === owned },
+        )
+        val output = mutableListOf<String>()
+        val handler = RecordingHandler().apply {
+            addProcessListener(object : ProcessListener {
+                override fun onTextAvailable(event: ProcessEvent, outputType: com.intellij.openapi.util.Key<*>) {
+                    output += event.text
+                }
+            })
+        }
+
+        binding.processStartScheduled("Run", owned)
+        owned.contentToReuse = RunContentDescriptor(null, handler, JPanel(), "Gradle")
+        binding.processStarting("Run", owned, handler)
+
+        assertTrue(output.isEmpty())
+        handler.startNotify()
+        handler.notifyTextAvailable("> Task :shared:testDebugUnitTest\n", ProcessOutputTypes.STDOUT)
+        assertEquals(
+            listOf(
+                "[Affected] Gradle selection - COMMON_SOURCE_SET_FAN_OUT\n",
+                "> Task :shared:testDebugUnitTest\n",
+            ),
+            output,
+        )
     }
 
     fun testOwnedExecutionCannotReuseAnExistingDirectRunDescriptor() {
