@@ -1,1 +1,0 @@
-- Present every build-system root from one affected plan in a single `Affected` Run session while preserving structured Gradle and Maven views, CLI output, failure propagation and owned cancellation.
