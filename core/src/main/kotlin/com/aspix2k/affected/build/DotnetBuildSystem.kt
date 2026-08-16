@@ -203,7 +203,7 @@ private class DotnetProjectRun(
             return mtpOrFullTestArguments()
         }
         val baseline = store.read()
-        val before = analyzeDotnetProject(metadata, baseline?.classes?.keys.orEmpty(), directory)
+        val before = analyzeDotnetProject(metadata, baseline?.classes?.keys.orEmpty(), directory, root)
         if (before == null) {
             state = DotnetRunState.Unsupported
             return mtpOrFullTestArguments()
@@ -265,7 +265,7 @@ private class DotnetProjectRun(
             )
             DotnetTestSelection.Full -> {
                 val metadata = readDotnetProjectMetadata(root, project, productionProjects)
-                val after = metadata?.let { analyzeDotnetProject(it, report.tests.values.toSet(), directory) }
+                val after = metadata?.let { analyzeDotnetProject(it, report.tests.values.toSet(), directory, root) }
                 promoteDotnetBaseline(
                     store,
                     resolved.before,
@@ -281,7 +281,7 @@ private class DotnetProjectRun(
 
     private fun analyzedNow(classes: Set<String>): DotnetAnalyzedState? {
         val metadata = readDotnetProjectMetadata(root, project, productionProjects) ?: return null
-        return analyzeDotnetProject(metadata, classes, directory)
+        return analyzeDotnetProject(metadata, classes, directory, root)
     }
 }
 

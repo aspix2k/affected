@@ -140,8 +140,10 @@ class AffectedToolset : McpToolset {
             val passed = coroutineScope {
                 groups.map { group ->
                     async(Dispatchers.IO) {
-                        runWithRequiredAdapter(BuildSystems.byId(group.systemId)) {
-                            it.runAndWait(project, group.root, group.tasks)
+                        group.runInPlannedExecutionRoot(project) {
+                            runWithRequiredAdapter(BuildSystems.byId(group.systemId)) {
+                                it.runAndWait(project, group.root, group.tasks)
+                            }
                         }
                     }
                 }.awaitAll().all { it }

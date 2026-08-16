@@ -1,0 +1,1 @@
+- Revalidate every CLI working directory against its planned filesystem identity before command resolution and process launch, refusing missing, re-created, unreadable, linked or out-of-project roots instead of executing through stale paths.
