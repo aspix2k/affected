@@ -6,8 +6,10 @@ def markerTask = { String taskName, String markerName ->
                 throw new GradleException("affected.kmp.markers is required")
             }
             def directory = new File(configured)
-            if (!directory.isDirectory() && !directory.mkdirs()) {
-                throw new GradleException("Cannot create marker directory")
+            try {
+                java.nio.file.Files.createDirectories(directory.toPath())
+            } catch (IOException failure) {
+                throw new GradleException("Cannot create marker directory", failure)
             }
             new File(directory, markerName).setText(markerName.substring(0, markerName.indexOf('.')) + "\n", "UTF-8")
         }
