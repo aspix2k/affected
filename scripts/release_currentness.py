@@ -62,6 +62,14 @@ SHA = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 SECURITY_PREVIEW = re.compile(r"^(\d+)\.(\d+)\.(\d+)-(Alpha|Beta|RC)([1-9]\d*)?$")
 STABLE_RELEASE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+KOTLIN_SECURITY = {
+    "advisory": "GHSA-r937-wjx7-w2jp",
+    "cve": "CVE-2026-53914",
+    "repository": "JetBrains/kotlin",
+    "package": "org.jetbrains.kotlin:kotlin-gradle-plugin",
+    "fixCommit": "bf51df665b458fda7c3eaf436c4d88dc119d7ec6",
+}
+KOTLIN_PLUGIN_ID = "org.jetbrains.kotlin.jvm"
 
 
 class CurrentnessError(RuntimeError):
@@ -432,6 +440,122 @@ def metadata_versions(transport: Transport, base: str, name: str) -> list[str]:
     return metadata_version_state(transport, base, name)[0]
 
 
+def github_tag_commit(transport: Transport, repository: str, version: str) -> str:
+    """Resolve one exact GitHub tag ref to its bounded, peeled commit SHA."""
+    expected_ref = f"refs/tags/v{version}"
+    data = transport.json(f"https://api.github.com/repos/{repository}/git/ref/tags/v{version}")
+    if not isinstance(data, dict) or data.get("ref") != expected_ref:
+        raise CurrentnessError(f"Invalid exact GitHub tag ref {expected_ref}")
+    obj = data.get("object")
+    seen: set[str] = set()
+    for _ in range(4):
+        if not isinstance(obj, dict):
+            raise CurrentnessError(f"Invalid GitHub tag object for {expected_ref}")
+        kind = obj.get("type")
+        sha = obj.get("sha")
+        if type(sha) is not str or not SHA.fullmatch(sha) or sha in seen:
+            raise CurrentnessError(f"Invalid GitHub tag identity for {expected_ref}")
+        if kind == "commit":
+            return sha
+        if kind != "tag":
+            raise CurrentnessError(f"Invalid GitHub tag object type for {expected_ref}")
+        seen.add(sha)
+        tag = transport.json(f"https://api.github.com/repos/{repository}/git/tags/{sha}")
+        if not isinstance(tag, dict) or tag.get("sha") != sha:
+            raise CurrentnessError(f"Invalid annotated GitHub tag for {expected_ref}")
+        obj = tag.get("object")
+    raise CurrentnessError(f"Annotated GitHub tag chain is too deep for {expected_ref}")
+
+
+def validate_fix_ancestry(
+    transport: Transport,
+    repository: str,
+    fix_commit: str,
+    tag_commit: str,
+) -> None:
+    """Require GitHub to prove that an official release tag contains the exact fix."""
+    data = transport.json(
+        f"https://api.github.com/repos/{repository}/compare/"
+        f"{fix_commit}...{tag_commit}?per_page=1"
+    )
+    if not isinstance(data, dict):
+        raise CurrentnessError(f"Invalid GitHub ancestry response for {tag_commit}")
+    status = data.get("status")
+    ahead = data.get("ahead_by")
+    behind = data.get("behind_by")
+    base = data.get("base_commit")
+    merge_base = data.get("merge_base_commit")
+    valid_distance = (
+        status == "ahead"
+        and type(ahead) is int
+        and ahead > 0
+        and type(behind) is int
+        and behind == 0
+    ) or (
+        status == "identical"
+        and tag_commit == fix_commit
+        and type(ahead) is int
+        and ahead == 0
+        and type(behind) is int
+        and behind == 0
+    )
+    if (
+        not valid_distance
+        or not isinstance(base, dict)
+        or base.get("sha") != fix_commit
+        or not isinstance(merge_base, dict)
+        or merge_base.get("sha") != fix_commit
+    ):
+        raise CurrentnessError(f"GitHub does not prove fix {fix_commit} is an ancestor of {tag_commit}")
+
+
+def validate_kotlin_security_proof(
+    entry: dict[str, Any],
+    minimum: str,
+    expected: str,
+    transport: Transport,
+) -> None:
+    """Bind the reviewed Kotlin advisory to the exact fix and official release tags."""
+    security = entry.get("security")
+    if security != KOTLIN_SECURITY:
+        raise CurrentnessError("Kotlin security preview lacks the exact reviewed proof metadata")
+    advisory = transport.json(f"https://api.github.com/advisories/{KOTLIN_SECURITY['advisory']}")
+    if not isinstance(advisory, dict):
+        raise CurrentnessError("Invalid reviewed Kotlin advisory response")
+    vulnerabilities = advisory.get("vulnerabilities")
+    references = advisory.get("references")
+    expected_vulnerability = {
+        "package": {"ecosystem": "maven", "name": KOTLIN_SECURITY["package"]},
+        "vulnerable_version_range": f"< {minimum}",
+        "first_patched_version": minimum,
+    }
+    if (
+        advisory.get("ghsa_id") != KOTLIN_SECURITY["advisory"]
+        or advisory.get("cve_id") != KOTLIN_SECURITY["cve"]
+        or advisory.get("type") != "reviewed"
+        or "withdrawn_at" not in advisory
+        or advisory.get("withdrawn_at") is not None
+        or not isinstance(vulnerabilities, list)
+        or len(vulnerabilities) != 1
+        or not isinstance(vulnerabilities[0], dict)
+        or any(vulnerabilities[0].get(key) != value for key, value in expected_vulnerability.items())
+        or not isinstance(references, list)
+        or any(type(reference) is not str for reference in references)
+    ):
+        raise CurrentnessError("Reviewed Kotlin advisory no longer establishes the declared patched floor")
+    repository = KOTLIN_SECURITY["repository"]
+    fix_commit = KOTLIN_SECURITY["fixCommit"]
+    required_references = {
+        f"https://github.com/{repository}/commit/{fix_commit}",
+        f"https://github.com/{repository}/releases/tag/v{minimum}",
+    }
+    if not required_references.issubset(set(references)):
+        raise CurrentnessError("Reviewed Kotlin advisory lacks the exact fix and patched release references")
+    for version in (minimum, expected):
+        tag_commit = github_tag_commit(transport, repository, version)
+        validate_fix_ancestry(transport, repository, fix_commit, tag_commit)
+
+
 def validate_security_preview(
     entry: dict[str, Any],
     local: str,
@@ -450,6 +574,7 @@ def validate_security_preview(
         or not isinstance(local_config, dict)
         or source.get("type") != "gradle-plugin"
         or source.get("name") != local_config.get("name")
+        or source.get("name") != KOTLIN_PLUGIN_ID
     ):
         raise CurrentnessError("Security preview policy has invalid version or source metadata")
     expected_key = security_preview_key(expected)
@@ -462,6 +587,8 @@ def validate_security_preview(
         raise CurrentnessError(f"Security preview {expected} is below patched minimum {minimum}")
     if local != expected:
         raise CurrentnessError(f"Security preview pin drifted: local {local}, approved {expected}")
+
+    validate_kotlin_security_proof(entry, minimum, expected, transport)
 
     name = str(source.get("name"))
     versions, header_groups = metadata_version_state(
