@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -32,6 +33,8 @@ EXACT_IMPACT_JOBS = (
     "dotnet-sdks",
     "phpunit-versions",
 )
+CODEQL_KOTLIN_COMPAT_SHA256 = "d934807f5c469f8f1d494a53ea54de114b4c8f95e7bd370868065eefc035fa73"
+CODEQL_KOTLIN_PROBE_SHA256 = "c2466a058bb8191dce7c14619d13ba6c2e6341ef4a01417fc746bac5a73458ab"
 
 
 class CiContractError(RuntimeError):
@@ -91,6 +94,7 @@ def check(root: Path = ROOT) -> None:
         "scripts.tests.test_changelog_fragments",
         "scripts.tests.test_ci_contracts",
         "scripts.tests.test_ci_scope",
+        "scripts.tests.test_codeql_kotlin_compat_probe",
         "scripts.tests.test_docs_layout",
         "scripts.tests.test_fetch_gradle",
         "scripts.tests.test_local_gate",
@@ -153,6 +157,7 @@ def check(root: Path = ROOT) -> None:
         raise CiContractError("Plugin resolution must prefer the JetBrains Maven Central mirror")
     if "AFFECTED_PREFER_MAVEN_CENTRAL" not in read(root / "settings.gradle.kts"):
         raise CiContractError("Gradle must be able to prefer Maven Central after a cache-redirector 5xx")
+    check_codeql_compatibility(root, codeql)
     if "actions/cache@" not in read(root / ".github/workflows/dependency-graph.yml"):
         raise CiContractError("Dependency graph must cache the Gradle wrapper distribution")
     submit = read(root / ".github/workflows/dependency-graph-submit.yml")
@@ -177,6 +182,93 @@ def check(root: Path = ROOT) -> None:
 
     check_merge_queue(root, ci, codeql, conformance)
     check_wrapper(root)
+
+
+def check_codeql_compatibility(
+    root: Path,
+    codeql: str,
+) -> None:
+    """Keep the temporary Kotlin compiler shim isolated to complete CodeQL builds."""
+    relative = "scripts/codeql-kotlin-compat.init.gradle"
+    probe_relative = "scripts/codeql_kotlin_compat_probe.py"
+    compatibility = read(root / relative)
+    digest = hashlib.sha256(compatibility.encode()).hexdigest()
+    if digest != CODEQL_KOTLIN_COMPAT_SHA256:
+        raise CiContractError("The CodeQL Kotlin compatibility shim changed without review")
+    probe = read(root / probe_relative)
+    probe_digest = hashlib.sha256(probe.encode()).hexdigest()
+    if probe_digest != CODEQL_KOTLIN_PROBE_SHA256:
+        raise CiContractError("The CodeQL Kotlin compatibility probe changed without review")
+    compatibility_tokens = (
+        relative,
+        "-Paffected.codeql.kotlinPluginVersion=2.4.10",
+    )
+    for workflow_relative, workflow in workflow_inventory(root).items():
+        if workflow_relative == ".github/workflows/codeql.yml":
+            continue
+        if any(token in workflow for token in compatibility_tokens):
+            raise CiContractError(
+                f"The CodeQL Kotlin compatibility shim must stay analysis-only: {workflow_relative}"
+            )
+    runner = read(root / "scripts/run_gradle.sh")
+    if any(token in runner for token in compatibility_tokens):
+        raise CiContractError(
+            "The analysis-only CodeQL Kotlin compatibility shim must stay out of the shared Gradle runner"
+        )
+    local_gate = read(root / "scripts/local_gate.py")
+    if any(token in local_gate for token in compatibility_tokens):
+        raise CiContractError(
+            "The analysis-only CodeQL Kotlin compatibility shim must stay out of local product gates"
+        )
+    for job_name in ("pull-request", "main"):
+        job = slice_job(codeql, job_name)
+        if job.count(f"--init-script {relative}") != 1 or job.count(
+            "-Paffected.codeql.kotlinPluginVersion=2.4.10"
+        ) != 1:
+            raise CiContractError(
+                f"CodeQL {job_name} must use the Kotlin compatibility shim exactly once"
+            )
+        if job.count("--no-build-cache") != 1 or "--build-cache" in job:
+            raise CiContractError(
+                f"CodeQL {job_name} Kotlin compatibility must disable the build cache"
+            )
+        probe_invocation = f"run: python3 {probe_relative}"
+        if job.count(probe_invocation) != 1 or job.find(probe_invocation) > job.find(
+            "github/codeql-action/init@"
+        ):
+            raise CiContractError(
+                f"CodeQL {job_name} must run the Kotlin compatibility behavioral probe before init"
+            )
+        for token in (
+            "languages: java-kotlin",
+            "build-mode: manual",
+            "clean classes :core:classes :mcp:classes :collector:classes "
+            ":collector:mavenClasses",
+        ):
+            if token not in job:
+                raise CiContractError(
+                    f"CodeQL {job_name} Kotlin compatibility must keep {token}"
+                )
+
+
+def workflow_inventory(root: Path) -> dict[str, str]:
+    """Read a bounded inventory of every GitHub Actions workflow."""
+    directory = root / ".github/workflows"
+    if not directory.is_dir() or directory.is_symlink():
+        raise CiContractError("Missing workflow directory")
+    paths: list[Path] = []
+    entries = 0
+    for path in directory.iterdir():
+        entries += 1
+        if entries > 64:
+            raise CiContractError("Too many workflow directory entries to validate safely")
+        if path.suffix not in {".yml", ".yaml"}:
+            continue
+        paths.append(path)
+    return {
+        path.relative_to(root).as_posix(): read(path)
+        for path in sorted(paths, key=lambda candidate: candidate.name)
+    }
 
 
 def check_scope(root: Path, ci: str, codeql: str) -> None:

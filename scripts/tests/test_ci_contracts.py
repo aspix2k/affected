@@ -303,6 +303,140 @@ class CiContractsTest(unittest.TestCase):
             with self.assertRaisesRegex(ci_contracts.CiContractError, "exact-impact context name"):
                 ci_contracts.check(root)
 
+    def test_codeql_must_use_the_kotlin_compatibility_shim_twice(self) -> None:
+        """Both CodeQL builds must keep the bounded Kotlin compiler compatibility seam."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/codeql.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "          --init-script scripts/codeql-kotlin-compat.init.gradle\n",
+                    "",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "Kotlin compatibility"):
+                ci_contracts.check(root)
+
+    def test_codeql_kotlin_compatibility_forbids_the_build_cache(self) -> None:
+        """The analysis-only older compiler must never deserialize a shared build cache."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/codeql.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "--no-build-cache",
+                    "--build-cache",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "build cache"):
+                ci_contracts.check(root)
+
+    def test_codeql_kotlin_compatibility_rejects_property_drift(self) -> None:
+        """The workflow cannot silently select an unreviewed analysis compiler."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/codeql.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "-Paffected.codeql.kotlinPluginVersion=2.4.10",
+                    "-Paffected.codeql.kotlinPluginVersion=2.4.20-RC",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "Kotlin compatibility"):
+                ci_contracts.check(root)
+
+    def test_codeql_kotlin_compatibility_rejects_shim_drift(self) -> None:
+        """Changing the bounded version map requires an explicit contract review."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / "scripts/codeql-kotlin-compat.init.gradle"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    'details.requested.version != "2.4.20-RC"',
+                    'details.requested.version != "2.4.20"',
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "changed without review"):
+                ci_contracts.check(root)
+
+    def test_codeql_kotlin_compatibility_rejects_probe_drift(self) -> None:
+        """The executed behavioral proof cannot silently become a no-op."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / "scripts/codeql_kotlin_compat_probe.py"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "require_success(project)",
+                    "logging.info('skipped')",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "probe changed"):
+                ci_contracts.check(root)
+
+    def test_codeql_kotlin_compatibility_stays_out_of_dependency_graph(self) -> None:
+        """Dependency resolution must never inherit the analysis-only compiler."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/dependency-graph.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8")
+                + "\n  # --init-script scripts/codeql-kotlin-compat.init.gradle\n"
+                + "  # -Paffected.codeql.kotlinPluginVersion=2.4.10\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "analysis-only"):
+                ci_contracts.check(root)
+
+    def test_codeql_kotlin_compatibility_stays_out_of_shared_gradle_runner(self) -> None:
+        """The shared runner must preserve the requested production compiler."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / "scripts/run_gradle.sh"
+            path.write_text(
+                path.read_text(encoding="utf-8")
+                + "\n# --init-script scripts/codeql-kotlin-compat.init.gradle\n"
+                + "# -Paffected.codeql.kotlinPluginVersion=2.4.10\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "analysis-only"):
+                ci_contracts.check(root)
+
+    def test_codeql_must_run_the_kotlin_compatibility_probe_before_init(self) -> None:
+        """The real RC rewrite must be proven before CodeQL starts recording product code."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/codeql.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "      - name: Verify Kotlin compatibility shim\n"
+                    "        if: steps.scope.outputs.codeql == 'true'\n"
+                    "        run: python3 scripts/codeql_kotlin_compat_probe.py\n\n",
+                    "",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "behavioral probe"):
+                ci_contracts.check(root)
+
     def test_plugin_must_stay_scoped(self) -> None:
         """A required plugin job without a scope condition re-downloads IDEs for docs."""
         with TemporaryDirectory() as directory:
@@ -482,6 +616,9 @@ class CiContractsTest(unittest.TestCase):
             ".github/workflows/dependency-graph-submit.yml",
             ".github/workflows/queue.yml",
             "scripts/ci_scope.py",
+            "scripts/codeql-kotlin-compat.init.gradle",
+            "scripts/codeql_kotlin_compat_probe.py",
+            "scripts/local_gate.py",
             "scripts/release_currentness.py",
             "scripts/run_gradle.sh",
             ".githooks/pre-commit",
