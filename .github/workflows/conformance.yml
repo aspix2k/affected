@@ -257,10 +257,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ant ant-optional meson ninja-build gcc make r-base r-cran-testthat
 
-      - name: Check Python adapter
+      - name: Check Python adapters
         run: |
-          python -m ruff check core/src/main/python/affected_pytest.py
-          python -m ruff format --check core/src/main/python/affected_pytest.py
+          python -m ruff check core/src/main/python
+          python -m ruff format --check core/src/main/python
 
       - name: Run native CLI fixtures
         run: >-

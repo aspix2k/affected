@@ -351,6 +351,14 @@ def check_conformance(conformance: str) -> None:
     )
     if not has_line(scope, "exact: ${{ steps.classify.outputs.exact }}") or classifier is None:
         raise CiContractError("conformance scope must publish the classifier exact-impact decision")
+    cli_native = slice_job(conformance, "cli-native")
+    adapter_directory = "core/src/main/python"
+    for command in (
+        f"python -m ruff check {adapter_directory}",
+        f"python -m ruff format --check {adapter_directory}",
+    ):
+        if cli_native.count(command) != 1 or not has_line(cli_native, command):
+            raise CiContractError("Native CLI must lint all bundled Python adapters")
     for name in EXACT_IMPACT_JOBS[1:]:
         job = slice_job(conformance, name)
         if (
