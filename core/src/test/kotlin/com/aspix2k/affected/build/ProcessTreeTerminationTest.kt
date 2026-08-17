@@ -2,9 +2,11 @@ package com.aspix2k.affected.build
 
 import java.io.File
 import java.io.IOException
+import java.lang.reflect.Proxy
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -45,7 +47,7 @@ class ProcessTreeTerminationTest {
             termination.request()
 
             assertTrue(termination.await())
-            assertFalse(root.isAlive)
+            assertFalse(root.toHandle().isAlive)
             assertFalse(child?.isAlive ?: true)
         } finally {
             stop(root)
@@ -62,7 +64,7 @@ class ProcessTreeTerminationTest {
 
             assertTrue(ProcessTreeTermination(root.toHandle(), executor = executor).await())
             assertTrue(Thread.interrupted())
-            assertFalse(root.isAlive)
+            assertFalse(root.toHandle().isAlive)
         } finally {
             Thread.interrupted()
             stop(root)
@@ -120,7 +122,7 @@ class ProcessTreeTerminationTest {
         )
         try {
             assertFalse(termination.await())
-            assertFalse(root.isAlive)
+            assertFalse(root.toHandle().isAlive)
         } finally {
             stop(root)
         }
@@ -141,11 +143,87 @@ class ProcessTreeTerminationTest {
         )
         try {
             assertFalse(termination.await())
-            assertFalse(root.isAlive)
+            assertFalse(root.toHandle().isAlive)
         } finally {
             stop(root)
             stop(first)
             stop(second)
+        }
+    }
+
+    @Test
+    fun `parent remains alive until its force killed child becomes terminal`() {
+        val parentAlive = AtomicBoolean(true)
+        val childAlive = AtomicBoolean(true)
+        val childKillRequested = AtomicBoolean()
+        val parent = processHandle(
+            pid = 1,
+            alive = parentAlive::get,
+            destroy = { parentAlive.getAndSet(false) },
+        )
+        val child = processHandle(
+            pid = 2,
+            alive = {
+                if (childKillRequested.get() && parentAlive.get()) childAlive.set(false)
+                childAlive.get()
+            },
+            destroy = {
+                childKillRequested.set(true)
+                true
+            },
+        )
+        val termination = ProcessTreeTermination(
+            root = parent,
+            childSnapshot = { process -> if (process == parent) listOf(child) else emptyList() },
+            timeoutNanos = TimeUnit.MILLISECONDS.toNanos(250),
+            executor = executor,
+        )
+
+        assertTrue(termination.await())
+        assertFalse(parentAlive.get())
+        assertFalse(childAlive.get())
+    }
+
+    @Test
+    fun `request continues from a terminated child to its living parent`() {
+        val parentAlive = AtomicBoolean(true)
+        val childAlive = AtomicBoolean(true)
+        val childKillRequested = AtomicBoolean()
+        val initialPass = CountDownLatch(1)
+        val parent = processHandle(
+            pid = 1,
+            alive = parentAlive::get,
+            destroy = { parentAlive.getAndSet(false) },
+        )
+        val child = processHandle(
+            pid = 2,
+            alive = {
+                if (childKillRequested.get() && parentAlive.get()) childAlive.set(false)
+                childAlive.get()
+            },
+            destroy = {
+                childKillRequested.set(true)
+                true
+            },
+        )
+        val termination = ProcessTreeTermination(
+            root = parent,
+            childSnapshot = { process -> if (process == parent) listOf(child) else emptyList() },
+            afterInitialPass = initialPass::countDown,
+            timeoutNanos = TimeUnit.MILLISECONDS.toNanos(250),
+            executor = executor,
+        )
+
+        try {
+            termination.request()
+            assertTrue(initialPass.await(1, TimeUnit.SECONDS))
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1)
+            while (parentAlive.get() && System.nanoTime() < deadline) Thread.sleep(10)
+
+            assertFalse(parentAlive.get())
+            assertFalse(childAlive.get())
+        } finally {
+            termination.close()
         }
     }
 
@@ -157,6 +235,25 @@ class ProcessTreeTerminationTest {
         }
         return ProcessBuilder(command).directory(File(System.getProperty("java.io.tmpdir"))).start()
     }
+
+    private fun processHandle(
+        pid: Long,
+        alive: () -> Boolean,
+        destroy: () -> Boolean,
+    ): ProcessHandle = Proxy.newProxyInstance(
+        ProcessHandle::class.java.classLoader,
+        arrayOf(ProcessHandle::class.java),
+    ) { proxy, method, arguments ->
+        when (method.name) {
+            "pid" -> pid
+            "isAlive" -> alive()
+            "destroy", "destroyForcibly" -> destroy()
+            "equals" -> proxy === arguments?.singleOrNull()
+            "hashCode" -> System.identityHashCode(proxy)
+            "toString" -> "ProcessHandle[$pid]"
+            else -> error("Unexpected ProcessHandle call: ${method.name}")
+        }
+    } as ProcessHandle
 
     private fun javaProcess(mainClass: String, vararg arguments: String): Process {
         if (!System.getProperty("os.name").startsWith("Windows")) {
