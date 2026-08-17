@@ -1,1 +1,0 @@
-- Build Affected with a Kotlin preview that contains JetBrains' KAPT cache-deserialization fix for CVE-2026-53914.

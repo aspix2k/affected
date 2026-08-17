@@ -6,6 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.15.1] - 2026-08-17
+
+### Fixed
+
+- Affected now waits for observed CLI and Maven child processes to stop before removing owned runtime files after cancellation.
+- Affected now stops observed CLI children before their parents so cancellation can remove temporary output reliably on Linux.
+
+### Changed
+
+- Update the enforced Jackson platform to 2.22.2 for current MCP Server compatibility.
+
+### Security
+
+- Build Affected with a Kotlin preview that contains JetBrains' KAPT cache-deserialization fix for CVE-2026-53914.
+
 ## [3.15.0] - 2026-08-17
 
 ### Fixed
@@ -569,7 +584,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.1...HEAD
+[3.15.1]: https://github.com/aspix2k/affected/compare/v3.15.0...v3.15.1
 [3.15.0]: https://github.com/aspix2k/affected/compare/v3.14.0...v3.15.0
 [3.14.0]: https://github.com/aspix2k/affected/compare/v3.13.9...v3.14.0
 [3.13.9]: https://github.com/aspix2k/affected/compare/v3.13.8...v3.13.9
