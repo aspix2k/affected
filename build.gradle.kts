@@ -2,6 +2,7 @@ import info.solidsoft.gradle.pitest.PitestTask
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.tasks.BuildPluginTask
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel
 import java.io.ByteArrayInputStream
 import java.util.Properties
@@ -62,6 +63,13 @@ val localProperties = Properties().apply {
 val localIde: String? = providers.gradleProperty("affected.ide.path").orNull
     ?: providers.environmentVariable("AFFECTED_IDE_PATH").orNull
     ?: localProperties.getProperty("ide.path")
+val verifierType = providers.gradleProperty("affected.verifier.type")
+val verifierVersion = providers.gradleProperty("affected.verifier.version")
+val verifierArchive = providers.gradleProperty("affected.verifier.archive")
+val configuredVerifierProperties = listOf(verifierType, verifierVersion, verifierArchive).count { it.isPresent }
+require(configuredVerifierProperties == 0 || configuredVerifierProperties == 3) {
+    "affected.verifier.type, affected.verifier.version and affected.verifier.archive must be set together"
+}
 
 dependencies {
     intellijPlatform {
@@ -112,16 +120,25 @@ intellijPlatform {
 
     pluginVerification {
         failureLevel = listOf(
+            FailureLevel.COMPATIBILITY_PROBLEMS,
             FailureLevel.INVALID_PLUGIN,
             FailureLevel.EXPERIMENTAL_API_USAGES,
         )
         ides {
-            create(IntelliJPlatformType.IntellijIdea, "2025.3")
-            create(IntelliJPlatformType.IntellijIdea, "2026.2")
-            create(IntelliJPlatformType.AndroidStudio, providers.gradleProperty("affected.studio.version"))
-            create(IntelliJPlatformType.Rider, "2025.3.5")
-            create(IntelliJPlatformType.GoLand, "2025.3.5.1")
+            if (verifierType.isPresent) {
+                create(IntelliJPlatformType.valueOf(verifierType.get()), verifierVersion.get())
+            } else {
+                create(IntelliJPlatformType.IntellijIdea, "2025.3")
+                create(IntelliJPlatformType.IntellijIdea, "2026.2")
+                create(IntelliJPlatformType.AndroidStudio, providers.gradleProperty("affected.studio.version"))
+            }
         }
+    }
+}
+
+tasks.named<VerifyPluginTask>("verifyPlugin") {
+    if (verifierArchive.isPresent) {
+        archiveFile.set(layout.projectDirectory.file(verifierArchive.get()))
     }
 }
 

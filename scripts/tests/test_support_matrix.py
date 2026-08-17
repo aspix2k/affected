@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import io
 import json
 import unittest
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -318,6 +320,343 @@ class SupportMatrixTest(unittest.TestCase):
             ):
                 support_matrix.check(root)
 
+    def test_platform_product_requires_product_specific_verifier_endpoints(self) -> None:
+        """Reject a platform claim without its own minimum and current IDE cells."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            matrix["products"][0]["support"] = "platform"
+
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError, "verifier endpoints"
+            ):
+                support_matrix.validated(root, matrix)
+
+    def test_platform_product_verifier_type_is_bound_to_the_claimed_product(self) -> None:
+        """Reject an IntelliJ IDEA or sibling result substituted for the product."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            product = matrix["products"][0]
+            product.update(
+                {
+                    "id": "rider",
+                    "name": "Rider",
+                    "support": "platform",
+                    "verifier": {
+                        "type": "GoLand",
+                        "endpoints": [
+                            {
+                                "id": "minimum",
+                                "version": "2025.3.5",
+                                "build": "253.33813.59",
+                                "gradle": "present",
+                                "maven": "unavailable",
+                            },
+                            {
+                                "id": "current",
+                                "version": "2026.2.0.2",
+                                "build": "262.8665.400",
+                                "gradle": "present",
+                                "maven": "unavailable",
+                            },
+                        ],
+                    },
+                }
+            )
+
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError, "verifier product type"
+            ):
+                support_matrix.validated(root, matrix)
+
+    def test_platform_product_requires_exactly_minimum_and_current_endpoints(self) -> None:
+        """Reject a platform claim that omits either governed release boundary."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            product = matrix["products"][0]
+            product.update(
+                {
+                    "id": "rider",
+                    "name": "Rider",
+                    "support": "platform",
+                    "verifier": {
+                        "type": "Rider",
+                        "endpoints": [
+                            {
+                                "id": "minimum",
+                                "version": "2025.3.5",
+                                "build": "253.33813.59",
+                                "gradle": "present",
+                                "maven": "unavailable",
+                            }
+                        ],
+                    },
+                }
+            )
+
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError, "minimum and current"
+            ):
+                support_matrix.validated(root, matrix)
+
+    def test_product_verifier_rejects_unknown_optional_descriptor_state(self) -> None:
+        """Keep Gradle and Maven descriptor expectations closed and executable."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            product = matrix["products"][0]
+            product.update(
+                {
+                    "id": "rider",
+                    "name": "Rider",
+                    "support": "platform",
+                    "verifier": {
+                        "type": "Rider",
+                        "endpoints": [
+                            {
+                                "id": "minimum",
+                                "version": "2025.3.5",
+                                "build": "253.33813.59",
+                                "gradle": "sometimes",
+                                "maven": "unavailable",
+                            },
+                            {
+                                "id": "current",
+                                "version": "2026.2.0.2",
+                                "build": "262.8665.400",
+                                "gradle": "present",
+                                "maven": "unavailable",
+                            },
+                        ],
+                    },
+                }
+            )
+
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError, "descriptor state"
+            ):
+                support_matrix.validated(root, matrix)
+
+    def test_product_verifier_minimum_must_match_the_claimed_platform_line(self) -> None:
+        """Reject a minimum verifier cell outside the advertised support line."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            product = matrix["products"][0]
+            product.update(
+                {
+                    "id": "rider",
+                    "name": "Rider",
+                    "support": "platform",
+                    "verifier": {
+                        "type": "Rider",
+                        "endpoints": [
+                            {
+                                "id": "minimum",
+                                "version": "2025.2.9",
+                                "build": "252.1.9",
+                                "gradle": "present",
+                                "maven": "unavailable",
+                            },
+                            {
+                                "id": "current",
+                                "version": "2026.2.0.2",
+                                "build": "262.8665.400",
+                                "gradle": "present",
+                                "maven": "unavailable",
+                            },
+                        ],
+                    },
+                }
+            )
+
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError, "minimum verifier version"
+            ):
+                support_matrix.validated(root, matrix)
+
+    def test_product_verifier_current_must_follow_its_minimum(self) -> None:
+        """Reject a current endpoint that is older than the supported minimum."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            product = matrix["products"][0]
+            product.update(
+                {
+                    "id": "rider",
+                    "name": "Rider",
+                    "support": "platform",
+                    "since": "2025.3",
+                    "verifier": {
+                        "type": "Rider",
+                        "endpoints": [
+                            {
+                                "id": "minimum",
+                                "version": "2025.3.5",
+                                "build": "253.33813.59",
+                                "gradle": "present",
+                                "maven": "unavailable",
+                            },
+                            {
+                                "id": "current",
+                                "version": "2025.3.4",
+                                "build": "253.33813.58",
+                                "gradle": "present",
+                                "maven": "unavailable",
+                            },
+                        ],
+                    },
+                }
+            )
+
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError, "current verifier version"
+            ):
+                support_matrix.validated(root, matrix)
+
+    def test_product_verifier_matrix_expands_each_governed_endpoint(self) -> None:
+        """Render one deterministic CI cell for every product release boundary."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            product = matrix["products"][0]
+            product.update(
+                {
+                    "id": "rider",
+                    "name": "Rider",
+                    "support": "platform",
+                    "verifier": {
+                        "type": "Rider",
+                        "endpoints": [
+                            {
+                                "id": "minimum",
+                                "version": "2025.3.5",
+                                "build": "253.33813.59",
+                                "gradle": "present",
+                                "maven": "unavailable",
+                            },
+                            {
+                                "id": "current",
+                                "version": "2026.2.0.2",
+                                "build": "262.8665.400",
+                                "gradle": "present",
+                                "maven": "unavailable",
+                            },
+                        ],
+                    },
+                }
+            )
+            validated = support_matrix.validated(root, matrix)
+            builder = getattr(support_matrix, "verifier_matrix", None)
+
+            self.assertIsNotNone(builder)
+            if builder is not None:
+                self.assertEqual(
+                    [
+                        {
+                            "product": "rider",
+                            "type": "Rider",
+                            "code": "RD",
+                            "endpoint": "minimum",
+                            "version": "2025.3.5",
+                            "build": "253.33813.59",
+                            "gradle": "present",
+                            "maven": "unavailable",
+                        },
+                        {
+                            "product": "rider",
+                            "type": "Rider",
+                            "code": "RD",
+                            "endpoint": "current",
+                            "version": "2026.2.0.2",
+                            "build": "262.8665.400",
+                            "gradle": "present",
+                            "maven": "unavailable",
+                        },
+                    ],
+                    builder(validated),
+                )
+
+    def test_repository_product_verifier_matrix_has_all_governed_cells(self) -> None:
+        """Pin the complete production matrix and its exceptional descriptor state."""
+        root = Path(__file__).resolve().parents[2]
+        matrix = support_matrix.validated(
+            root,
+            json.loads(
+                (root / "config/support-matrix.json").read_text(encoding="utf-8")
+            ),
+        )
+        cells = support_matrix.verifier_matrix(matrix)
+
+        self.assertEqual(18, len(cells))
+        self.assertEqual(9, len({cell["product"] for cell in cells}))
+        self.assertTrue(all(cell["maven"] == "unavailable" for cell in cells))
+        self.assertEqual(
+            ["unavailable"],
+            [
+                cell["gradle"]
+                for cell in cells
+                if cell["product"] == "dataspell" and cell["endpoint"] == "current"
+            ],
+        )
+
+    def test_product_verifier_matrix_cli_emits_bounded_json(self) -> None:
+        """Expose the validated cells without teaching the workflow the schema."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            matrix["products"][0].update(
+                {
+                    "id": "rider",
+                    "name": "Rider",
+                    "support": "platform",
+                    "verifier": {
+                        "type": "Rider",
+                        "endpoints": [
+                            {
+                                "id": "minimum",
+                                "version": "2025.3.5",
+                                "build": "253.33813.59",
+                                "gradle": "present",
+                                "maven": "unavailable",
+                            },
+                            {
+                                "id": "current",
+                                "version": "2026.2.0.2",
+                                "build": "262.8665.400",
+                                "gradle": "present",
+                                "maven": "unavailable",
+                            },
+                        ],
+                    },
+                }
+            )
+            self.write(root / "config/support-matrix.json", json.dumps(matrix))
+            output = io.StringIO()
+
+            try:
+                with redirect_stdout(output):
+                    result = support_matrix.main(
+                        ["--verifier-matrix", "--root", str(root)]
+                    )
+            except SystemExit as error:
+                self.fail(f"verifier matrix CLI is unavailable: {error}")
+
+            self.assertEqual(0, result)
+            cells = json.loads(output.getvalue())
+            self.assertEqual(2, len(cells))
+            self.assertEqual("RD", cells[0]["code"])
+
     def test_selection_unit_must_be_a_closed_machine_value(self) -> None:
         """Reject new precision claims until the validator understands their semantics."""
         with TemporaryDirectory() as directory:
@@ -411,20 +750,33 @@ class SupportMatrixTest(unittest.TestCase):
 
     def test_repository_matrix_is_complete_and_current(self) -> None:
         """Validate the real production registrations and generated support page."""
-        support_matrix.check(Path(__file__).resolve().parents[2])
+        root = Path(__file__).resolve().parents[2]
+        support_matrix.check(root)
+        support = (root / "docs/SUPPORT.md").read_text(encoding="utf-8")
+        self.assertIn("static product-specific Plugin Verifier", support)
+        self.assertIn("does not claim the installed IDE lifecycle", support)
 
-    def test_rider_and_goland_use_their_own_verifier_product_types(self) -> None:
-        """Keep the first product-specific verifier cells bound to claimed IDEs."""
+    def test_product_verifier_uses_matrix_selected_type_archive_and_failure_levels(
+        self,
+    ) -> None:
+        """Bind every matrix cell to one archive and fail on compatibility problems."""
         root = Path(__file__).resolve().parents[2]
         gradle = (root / "build.gradle.kts").read_text(encoding="utf-8")
-        self.assertIn('create(IntelliJPlatformType.Rider, "2025.3.5")', gradle)
-        self.assertIn('create(IntelliJPlatformType.GoLand, "2025.3.5.1")', gradle)
-        matrix = json.loads((root / "config/support-matrix.json").read_text(encoding="utf-8"))
+        self.assertIn('gradleProperty("affected.verifier.type")', gradle)
+        self.assertIn('gradleProperty("affected.verifier.version")', gradle)
+        self.assertIn('gradleProperty("affected.verifier.archive")', gradle)
+        self.assertIn("IntelliJPlatformType.valueOf(verifierType.get())", gradle)
+        self.assertIn("archiveFile.set", gradle)
+        self.assertIn("FailureLevel.COMPATIBILITY_PROBLEMS", gradle)
+        self.assertNotIn('create(IntelliJPlatformType.Rider, "2025.3.5")', gradle)
+        self.assertNotIn('create(IntelliJPlatformType.GoLand, "2025.3.5.1")', gradle)
+        matrix = json.loads(
+            (root / "config/support-matrix.json").read_text(encoding="utf-8")
+        )
         products = {product["id"]: product for product in matrix["products"]}
-        self.assertEqual(["build.gradle.kts"], products["rider"]["fixtures"])
-        self.assertEqual(["build.gradle.kts"], products["goland"]["fixtures"])
-        self.assertEqual("platform", products["rider"]["support"])
-        self.assertEqual("platform", products["goland"]["support"])
+        self.assertEqual("Rider", products["rider"]["verifier"]["type"])
+        self.assertEqual("GoLand", products["goland"]["verifier"]["type"])
+        self.assertEqual("CLion", products["clion"]["verifier"]["type"])
         self.assertEqual("planned", products["datagrip"]["support"])
 
     def test_conformance_workflow_runs_for_support_claim_changes(self) -> None:

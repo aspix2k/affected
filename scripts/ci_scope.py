@@ -7,7 +7,6 @@ import json
 import os
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 GATES = ("plugin", "health", "codeql", "dependencies", "exact")
@@ -32,9 +31,17 @@ EXACT_EVIDENCE_FILES = frozenset(
     {
         "config/support-matrix.json",
         "docs/SUPPORT.md",
+        "scripts/plugin_verifier_reports.py",
         "scripts/support_matrix.py",
         "scripts/tests/test_support_matrix.py",
         "src/main/resources/META-INF/plugin.xml",
+    }
+)
+PRODUCT_VERIFIER_MATRIX_FILES = frozenset(
+    {
+        "config/support-matrix.json",
+        "scripts/plugin_verifier_reports.py",
+        "scripts/support_matrix.py",
     }
 )
 SCRIPT_ONLY_FILES = frozenset(
@@ -128,7 +135,11 @@ def flags_for(path: str) -> dict[str, bool] | None:
         return None
     name = path.rsplit("/", 1)[-1]
     if path in EXACT_EVIDENCE_FILES:
-        return selected_scope("plugin", "exact") if path.startswith("src/") else selected_scope("exact")
+        return (
+            selected_scope("plugin", "exact")
+            if path.startswith("src/") or path in PRODUCT_VERIFIER_MATRIX_FILES
+            else selected_scope("exact")
+        )
     if path in DOC_FILES or path.startswith("docs/") or is_github_doc(path):
         return empty_scope()
     if path in HYGIENE_FILES:

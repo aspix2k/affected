@@ -100,6 +100,23 @@ def maven_metadata_with_header(
     ).encode()
 
 
+def jetbrains_updates(*products: tuple[str, str, tuple[str, ...]]) -> bytes:
+    """Build a bounded official product release feed fixture."""
+    rows = []
+    for name, code, versions in products:
+        builds = "".join(
+            f'<build number="{index}.0" fullNumber="{index}.0.0" version="{version}"/>'
+            for index, version in enumerate(versions, start=1)
+        )
+        rows.append(
+            f'<product name="{name}"><code>{code}</code>'
+            f'<channel id="{code}-RELEASE-licensing-RELEASE" '
+            f'name="{name} RELEASE" status="release" licensing="release">'
+            f"{builds}</channel></product>"
+        )
+    return f"<products>{''.join(rows)}</products>".encode()
+
+
 KOTLIN_PLUGIN_METADATA = (
     "https://plugins.gradle.org/m2/org/jetbrains/kotlin/jvm/"
     "org.jetbrains.kotlin.jvm.gradle.plugin/maven-metadata.xml"
@@ -724,6 +741,389 @@ class ReleaseCurrentnessTest(unittest.TestCase):
         """Select the newest patch only within the requested compatibility line."""
         self.assertEqual("11.5.56", currentness.newest(["11.5.55", "11.5.56", "12.0.1"], "11.5"))
 
+    def test_support_matrix_verifier_reads_the_exact_product_endpoint(self) -> None:
+        """Read one product slot without collapsing equal versions across products."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / "config"
+            config.mkdir()
+            (config / "support-matrix.json").write_text(
+                json.dumps(
+                    {
+                        "schema": 1,
+                        "products": [
+                            {
+                                "name": "Rider",
+                                "support": "platform",
+                                "since": "2025.3",
+                                "verifier": {
+                                    "type": "Rider",
+                                    "endpoints": [
+                                        {
+                                            "id": "minimum",
+                                            "version": "2025.3.5",
+                                            "build": "253.33813.59",
+                                        },
+                                        {
+                                            "id": "current",
+                                            "version": "2026.2.0.2",
+                                            "build": "262.8665.400",
+                                        },
+                                    ],
+                                },
+                            },
+                            {
+                                "name": "GoLand",
+                                "support": "platform",
+                                "since": "2025.3",
+                                "verifier": {
+                                    "type": "GoLand",
+                                    "endpoints": [
+                                        {
+                                            "id": "minimum",
+                                            "version": "2025.3.5.1",
+                                            "build": "253.33813.70",
+                                        },
+                                        {
+                                            "id": "current",
+                                            "version": "2026.2.1",
+                                            "build": "262.9437.195",
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(currentness, "ROOT", root.resolve()):
+                self.assertEqual(
+                    ("2025.3.5", "253.33813.59"),
+                    currentness.local_version(
+                        {
+                            "type": "support-matrix-verifier",
+                            "path": "config/support-matrix.json",
+                            "product": "Rider",
+                            "endpoint": "minimum",
+                        }
+                    ),
+                )
+
+    def test_jetbrains_updates_selects_the_exact_product_current_release(self) -> None:
+        """Ignore sibling products while selecting the current stable release channel."""
+        url = "https://www.jetbrains.com/updates/updates.xml"
+        transport = RecordingReadTransport(
+            {
+                url: jetbrains_updates(
+                    ("Rider", "RD", ("2025.3.5", "2026.2.0.2")),
+                    ("GoLand", "GO", ("2025.3.5.1", "2026.2.1")),
+                )
+            }
+        )
+
+        version, builds = currentness.remote_version(
+            {"type": "jetbrains-updates", "name": "Rider", "code": "RD"},
+            "latest",
+            None,
+            transport,
+        )
+
+        self.assertEqual("2026.2.0.2", version)
+        self.assertEqual({"2.0.0"}, builds)
+        self.assertEqual([url], transport.reads)
+
+    def test_jetbrains_updates_selects_latest_patch_inside_supported_series(self) -> None:
+        """Keep the minimum boundary on the newest patch of its declared line."""
+        transport = RecordingReadTransport(
+            {
+                "https://www.jetbrains.com/updates/updates.xml": jetbrains_updates(
+                    ("Rider", "RD", ("2025.3.4.1", "2025.3.5", "2026.2.0.2")),
+                )
+            }
+        )
+
+        version, builds = currentness.remote_version(
+            {"type": "jetbrains-updates", "name": "Rider", "code": "RD"},
+            "series",
+            "2025.3",
+            transport,
+        )
+
+        self.assertEqual("2025.3.5", version)
+        self.assertEqual({"2.0.0"}, builds)
+
+    def test_jetbrains_updates_fails_closed_on_product_or_channel_drift(self) -> None:
+        """Reject ambiguous products, non-release channels, and malformed versions."""
+        valid = jetbrains_updates(("Rider", "RD", ("2025.3.5", "2026.2.0.2")))
+        duplicate_channel_id = valid.replace(
+            b"</product>",
+            b'<channel id="RD-RELEASE-licensing-RELEASE" '
+            b'name="Rider RELEASE" status="eap" licensing="release">'
+            b'<build number="3" version="2026.3-EAP"/>'
+            b"</channel></product>",
+        )
+        cases = {
+            "wrong code": valid.replace(b"<code>RD</code>", b"<code>GO</code>"),
+            "duplicate product": valid.replace(b"</products>", valid[10:-11] + b"</products>"),
+            "EAP channel": valid.replace(b'status="release"', b'status="eap"'),
+            "duplicate channel id": duplicate_channel_id,
+            "missing selected full build": valid.replace(
+                b' fullNumber="2.0.0"', b""
+            ),
+            "duplicate version": jetbrains_updates(
+                ("Rider", "RD", ("2025.3.5", "2025.3.5"))
+            ),
+            "unstable release": jetbrains_updates(
+                ("Rider", "RD", ("2026.2-RC1",))
+            ),
+            "malformed XML": b"<products>",
+        }
+        for name, document in cases.items():
+            with self.subTest(name=name), self.assertRaises(
+                currentness.CurrentnessError
+            ):
+                currentness.remote_version(
+                    {"type": "jetbrains-updates", "name": "Rider", "code": "RD"},
+                    "latest",
+                    None,
+                    RecordingReadTransport(
+                        {"https://www.jetbrains.com/updates/updates.xml": document}
+                    ),
+                )
+
+    def test_jetbrains_updates_accepts_one_exact_code_among_official_aliases(self) -> None:
+        """PyCharm may publish PYA beside the exact PY verifier product code."""
+        document = jetbrains_updates(("PyCharm", "PY", ("2025.3.6.1",))).replace(
+            b"<code>PY</code>", b"<code>PY</code><code>PYA</code>"
+        )
+
+        version, _ = currentness.remote_version(
+            {"type": "jetbrains-updates", "name": "PyCharm", "code": "PY"},
+            "series",
+            "2025.3",
+            RecordingReadTransport(
+                {"https://www.jetbrains.com/updates/updates.xml": document}
+            ),
+        )
+
+        self.assertEqual("2025.3.6.1", version)
+
+    def test_product_verifier_local_slot_is_bound_to_its_official_product(self) -> None:
+        """Reject a Rider local cell checked against a sibling product feed."""
+        entry = {
+            "id": "rider-verifier-current",
+            "local": {
+                "type": "support-matrix-verifier",
+                "path": "config/support-matrix.json",
+                "product": "Rider",
+                "endpoint": "current",
+            },
+            "source": {"type": "jetbrains-updates", "name": "GoLand", "code": "GO"},
+            "policy": "latest",
+        }
+
+        with (
+            patch.object(currentness, "local_version", return_value=("2026.2.1", None)),
+            patch.object(currentness, "remote_version", return_value=("2026.2.1", None)),
+            self.assertRaisesRegex(currentness.CurrentnessError, "product"),
+        ):
+            currentness.validate_entry(entry, EmptyTransport())
+
+    def test_product_verifier_inventory_is_product_and_endpoint_qualified(self) -> None:
+        """Shared IDE versions must not collapse independently governed cells."""
+        rider = currentness.inventory_keys(
+            {
+                "type": "support-matrix-verifier",
+                "path": "config/support-matrix.json",
+                "product": "Rider",
+                "endpoint": "current",
+            }
+        )
+        goland = currentness.inventory_keys(
+            {
+                "type": "support-matrix-verifier",
+                "path": "config/support-matrix.json",
+                "product": "GoLand",
+                "endpoint": "current",
+            }
+        )
+
+        self.assertEqual(
+            {"support-matrix-verifier:config/support-matrix.json:Rider:current"},
+            rider,
+        )
+        self.assertEqual(
+            {"support-matrix-verifier:config/support-matrix.json:GoLand:current"},
+            goland,
+        )
+        self.assertTrue(rider.isdisjoint(goland))
+
+    def test_product_verifier_endpoint_is_bound_to_its_release_policy(self) -> None:
+        """Minimum means a declared series and current means latest, never vice versa."""
+        cases = (("minimum", "latest", None), ("current", "series", "2025.3"))
+        for endpoint, policy, series in cases:
+            with self.subTest(endpoint=endpoint):
+                entry = {
+                    "id": f"rider-verifier-{endpoint}",
+                    "local": {
+                        "type": "support-matrix-verifier",
+                        "path": "config/support-matrix.json",
+                        "product": "Rider",
+                        "endpoint": endpoint,
+                    },
+                    "source": {
+                        "type": "jetbrains-updates",
+                        "name": "Rider",
+                        "code": "RD",
+                    },
+                    "policy": policy,
+                }
+                if series is not None:
+                    entry.update(
+                        {
+                            "series": series,
+                            "reason": "The supported release line remains explicitly bounded.",
+                            "evidence": ["config/support-matrix.json"],
+                        }
+                    )
+                with (
+                    patch.object(
+                        currentness, "local_version", return_value=("2025.3.5", None)
+                    ),
+                    patch.object(
+                        currentness,
+                        "remote_version",
+                        return_value=("2025.3.5", None),
+                    ),
+                    self.assertRaisesRegex(currentness.CurrentnessError, "endpoint"),
+                ):
+                    currentness.validate_entry(entry, EmptyTransport())
+
+    def test_product_verifier_minimum_series_matches_the_support_claim(self) -> None:
+        """Reject narrower or broader currentness series than the platform since line."""
+        for declared_series in ("2025.3.5", "2025"):
+            with self.subTest(series=declared_series), TemporaryDirectory() as directory:
+                root = Path(directory)
+                config = root / "config"
+                config.mkdir()
+                (config / "support-matrix.json").write_text(
+                    json.dumps(
+                        {
+                            "schema": 1,
+                            "products": [
+                                {
+                                    "name": "Rider",
+                                    "support": "platform",
+                                    "since": "2025.3",
+                                    "verifier": {
+                                        "type": "Rider",
+                                        "endpoints": [
+                                            {
+                                                "id": "minimum",
+                                                "version": "2025.3.5",
+                                                "build": "253.33813.59",
+                                            }
+                                        ],
+                                    },
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                entry = {
+                    "id": "rider-verifier-minimum",
+                    "local": {
+                        "type": "support-matrix-verifier",
+                        "path": "config/support-matrix.json",
+                        "product": "Rider",
+                        "endpoint": "minimum",
+                    },
+                    "source": {
+                        "type": "jetbrains-updates",
+                        "name": "Rider",
+                        "code": "RD",
+                    },
+                    "policy": "series",
+                    "series": declared_series,
+                    "reason": "The minimum product verifier tracks the supported IDE line.",
+                    "evidence": ["config/support-matrix.json"],
+                }
+
+                with patch.object(currentness, "ROOT", root.resolve()), self.assertRaisesRegex(
+                    currentness.CurrentnessError, "support series"
+                ):
+                    currentness.validate_entry(entry, EmptyTransport())
+
+    def test_product_verifier_current_rejects_a_series_override(self) -> None:
+        """Keep the current endpoint on the global latest release policy."""
+        entry = {
+            "id": "rider-verifier-current",
+            "local": {
+                "type": "support-matrix-verifier",
+                "path": "config/support-matrix.json",
+                "product": "Rider",
+                "endpoint": "current",
+            },
+            "source": {
+                "type": "jetbrains-updates",
+                "name": "Rider",
+                "code": "RD",
+            },
+            "policy": "latest",
+            "series": "2025.3",
+        }
+
+        with (
+            patch.object(
+                currentness,
+                "support_matrix_verifier_slot",
+                return_value=("2025.3.5", "2025.3", "253.33813.59"),
+            ),
+            patch.object(
+                currentness,
+                "remote_version",
+                return_value=("2025.3.5", None),
+            ),
+            self.assertRaisesRegex(currentness.CurrentnessError, "series"),
+        ):
+            currentness.validate_entry(entry, EmptyTransport())
+
+    def test_product_verifier_build_matches_the_official_release(self) -> None:
+        """Reject the right marketing version paired with another product build."""
+        entry = {
+            "id": "rider-verifier-current",
+            "local": {
+                "type": "support-matrix-verifier",
+                "path": "config/support-matrix.json",
+                "product": "Rider",
+                "endpoint": "current",
+            },
+            "source": {
+                "type": "jetbrains-updates",
+                "name": "Rider",
+                "code": "RD",
+            },
+            "policy": "latest",
+        }
+
+        with (
+            patch.object(
+                currentness,
+                "support_matrix_verifier_slot",
+                return_value=("2026.2.0.2", "2025.3", "262.8665.399"),
+            ),
+            patch.object(
+                currentness,
+                "remote_version",
+                return_value=("2026.2.0.2", {"262.8665.400"}),
+            ),
+            self.assertRaisesRegex(currentness.CurrentnessError, "build"),
+        ):
+            currentness.validate_entry(entry, EmptyTransport())
+
     def test_php_latest_is_selected_across_stable_major_lines(self) -> None:
         """Do not freeze the latest PHP policy to today's major or minor line."""
         transport = FakeTransport(
@@ -739,6 +1139,7 @@ class ReleaseCurrentnessTest(unittest.TestCase):
 
     def test_untrusted_request_and_redirect_hosts_are_rejected(self) -> None:
         """Reject credentials, HTTP, and hosts outside the official allowlist."""
+        currentness.validate_url("https://www.jetbrains.com/updates/updates.xml")
         for url in ("http://pypi.org/simple", "https://example.test/data", "https://token@api.github.com/repos"):
             with self.subTest(url=url), self.assertRaises(currentness.CurrentnessError):
                 currentness.validate_url(url)

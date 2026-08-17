@@ -16,13 +16,20 @@ import kotlin.test.assertTrue
 
 class GradleOwnedExecutionTest {
 
+    private val buildSystem = GradleBuildSystem()
+
     @Test
     fun `Affected Gradle execution keeps a bounded name without changing tasks`() {
         val tasks = List(128) { index -> ":feature-with-a-long-name-$index:testDebugUnitTest" }
-        val settings = gradleTaskExecutionSettings("/fixture", tasks, listOf("--continue"))
+        val settings = buildSystem.gradleTaskExecutionSettings("/fixture", tasks, listOf("--continue"))
         val execution = OwnedExternalTaskExecution(cancelTask = { true })
 
-        val specification = gradleTaskExecutionSpec(project(), settings, execution.listener, execution.callback)
+        val specification = buildSystem.gradleTaskExecutionSpec(
+            project(),
+            settings,
+            execution.listener,
+            execution.callback,
+        )
 
         assertEquals("Affected", specification.settings.executionName)
         assertEquals("/fixture", specification.settings.externalProjectPath)
@@ -39,7 +46,12 @@ class GradleOwnedExecutionTest {
             taskNames = listOf(":test")
         }
 
-        val specification = gradleTaskExecutionSpec(project(), settings, execution.listener, execution.callback)
+        val specification = buildSystem.gradleTaskExecutionSpec(
+            project(),
+            settings,
+            execution.listener,
+            execution.callback,
+        )
 
         assertSame(execution.listener, specification.listener)
         assertSame(execution.callback, specification.callback)
@@ -56,7 +68,7 @@ class GradleOwnedExecutionTest {
         }
         val binding = UserDataHolderBase()
 
-        val specification = gradleTaskExecutionSpec(
+        val specification = buildSystem.gradleTaskExecutionSpec(
             project(),
             settings,
             execution.listener,

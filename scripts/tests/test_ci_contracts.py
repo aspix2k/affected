@@ -483,6 +483,108 @@ class CiContractsTest(unittest.TestCase):
             with self.assertRaisesRegex(ci_contracts.CiContractError, "plugin must run only"):
                 ci_contracts.check(root)
 
+    def test_product_verifier_matrix_is_a_required_plugin_gate(self) -> None:
+        """A plugin change cannot merge without every product verifier cell."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/ci.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "  product-verifier:\n", "  product-verifier-removed:\n", 1
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ci_contracts.CiContractError, "product verifier"
+            ):
+                ci_contracts.check(root)
+
+    def test_product_verifier_matrix_keeps_provenance_and_bounded_execution(self) -> None:
+        """Reject matrix drift that rebuilds, substitutes, or stops validating evidence."""
+        cases = {
+            "source": (
+                "matrix=$(python3 scripts/support_matrix.py --verifier-matrix)",
+                "matrix=[]",
+            ),
+            "matrix": (
+                "include: ${{ fromJSON(needs.scope.outputs.verifier) }}",
+                "include: []",
+            ),
+            "parallelism": ("max-parallel: 4", "max-parallel: 18"),
+            "timeout": ("timeout-minutes: 30", "timeout-minutes: 60"),
+            "download": (
+                "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+                "actions/download-artifact@main",
+            ),
+            "provenance": (
+                "python3 scripts/plugin_verifier_reports.py artifact",
+                "echo skipped-artifact-validation",
+            ),
+            "archive": (
+                '"-Paffected.verifier.archive=${{ steps.artifact.outputs.archive }}"',
+                '"-Paffected.verifier.archive=build/distributions/unreviewed.zip"',
+            ),
+            "product": (
+                '"-Paffected.verifier.type=${{ matrix.type }}"',
+                '"-Paffected.verifier.type=IntellijIdea"',
+            ),
+            "rebuild": ("verifyPlugin -x buildPlugin", "verifyPlugin"),
+            "report": (
+                "python3 scripts/plugin_verifier_reports.py report",
+                "echo skipped-report-validation",
+            ),
+            "report-state": (
+                '"--gradle=${{ matrix.gradle }}"',
+                '"--gradle=present"',
+            ),
+            "report-build": (
+                '"--build=${{ matrix.build }}"',
+                '"--build=253.33813.59"',
+            ),
+            "failure-artifact": (
+                "        if: always()\n        with:\n          name: product-verifier-",
+                "        if: success()\n        with:\n          name: product-verifier-",
+            ),
+        }
+        for name, (required, weakened) in cases.items():
+            with self.subTest(name=name), TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.copy_workflows(root)
+                path = root / ".github/workflows/ci.yml"
+                workflow = path.read_text(encoding="utf-8")
+                self.assertIn(required, workflow)
+                path.write_text(workflow.replace(required, weakened, 1), encoding="utf-8")
+
+                with self.assertRaisesRegex(
+                    ci_contracts.CiContractError, "product verifier"
+                ):
+                    ci_contracts.check(root)
+
+    def test_verify_aggregate_checks_the_product_verifier_result(self) -> None:
+        """A failed product cell must reach the required verify context."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/ci.yml"
+            workflow = path.read_text(encoding="utf-8")
+            path.write_text(
+                workflow.replace(
+                    'require_when product-verifier "${PLUGIN_REQUIRED:-true}" '
+                    '"$PRODUCT_VERIFIER_RESULT"',
+                    'require_when product-verifier "${PLUGIN_REQUIRED:-true}" '
+                    '"$PLUGIN_RESULT"',
+                    1,
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(
+                ci_contracts.CiContractError, "product-verifier"
+            ):
+                ci_contracts.check(root)
+
     def test_queue_must_not_merge_immediately(self) -> None:
         """Agents enqueue. GitHub merges after required checks."""
         with TemporaryDirectory() as directory:
