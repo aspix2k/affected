@@ -1,0 +1,36 @@
+def compatibilityVersion =
+    gradle.startParameter.projectProperties["affected.codeql.kotlinPluginVersion"]
+if (compatibilityVersion != "2.4.10") {
+    throw new GradleException("CodeQL Kotlin compatibility version must be 2.4.10")
+}
+if (gradle.startParameter.buildCacheEnabled) {
+    throw new GradleException("CodeQL Kotlin compatibility requires the build cache to be disabled")
+}
+
+def kotlinRequestSeen = false
+gradle.settingsEvaluated { settings ->
+    settings.pluginManagement.resolutionStrategy.eachPlugin { details ->
+        if (details.requested.id.id != "org.jetbrains.kotlin.jvm" || details.requested.version == null) {
+            return
+        }
+        kotlinRequestSeen = true
+        if (details.requested.version == compatibilityVersion) {
+            return
+        }
+        if (details.requested.version != "2.4.20-RC") {
+            throw new GradleException(
+                "Unsupported Kotlin version for CodeQL compatibility: ${details.requested.version}"
+            )
+        }
+        details.useVersion(compatibilityVersion)
+        logger.lifecycle(
+            "CodeQL Kotlin compatibility: analyzing ${details.requested.version} with ${compatibilityVersion}"
+        )
+    }
+}
+
+gradle.projectsEvaluated {
+    if (!kotlinRequestSeen) {
+        throw new GradleException("CodeQL Kotlin compatibility did not observe the root Kotlin plugin")
+    }
+}

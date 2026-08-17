@@ -35,6 +35,10 @@ jobs:
           java-version: "21"
       - uses: gradle/actions/setup-gradle@67621b124fd2e251c5e8a0e6e3b91318f2287669 # v6.3.0
         if: steps.scope.outputs.codeql == 'true'
+      - name: Verify Kotlin compatibility shim
+        if: steps.scope.outputs.codeql == 'true'
+        run: python3 scripts/codeql_kotlin_compat_probe.py
+
       - uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         if: steps.scope.outputs.codeql == 'true'
         with:
@@ -54,7 +58,10 @@ jobs:
         if: steps.scope.outputs.codeql == 'true'
         run: >-
           /usr/bin/time --verbose
-          scripts/run_gradle.sh --no-daemon --no-build-cache --no-parallel --max-workers=1
+          scripts/run_gradle.sh
+          --init-script scripts/codeql-kotlin-compat.init.gradle
+          -Paffected.codeql.kotlinPluginVersion=2.4.10
+          --no-daemon --no-build-cache --no-parallel --max-workers=1
           clean classes :core:classes :mcp:classes :collector:classes :collector:mavenClasses
 
       - uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
@@ -89,6 +96,10 @@ jobs:
           java-version: "21"
       - uses: gradle/actions/setup-gradle@67621b124fd2e251c5e8a0e6e3b91318f2287669 # v6.3.0
         if: steps.scope.outputs.codeql == 'true'
+      - name: Verify Kotlin compatibility shim
+        if: steps.scope.outputs.codeql == 'true'
+        run: python3 scripts/codeql_kotlin_compat_probe.py
+
       - uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         if: steps.scope.outputs.codeql == 'true'
         with:
@@ -108,7 +119,10 @@ jobs:
         if: steps.scope.outputs.codeql == 'true'
         run: >-
           /usr/bin/time --verbose
-          scripts/run_gradle.sh --no-daemon --no-build-cache --no-parallel --max-workers=1
+          scripts/run_gradle.sh
+          --init-script scripts/codeql-kotlin-compat.init.gradle
+          -Paffected.codeql.kotlinPluginVersion=2.4.10
+          --no-daemon --no-build-cache --no-parallel --max-workers=1
           clean classes :core:classes :mcp:classes :collector:classes :collector:mavenClasses
 
       - uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7

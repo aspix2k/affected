@@ -133,6 +133,11 @@ def flags_for(path: str) -> dict[str, bool] | None:
         return empty_scope()
     if path in HYGIENE_FILES:
         return empty_scope()
+    if path in {
+        "scripts/codeql-kotlin-compat.init.gradle",
+        "scripts/codeql_kotlin_compat_probe.py",
+    }:
+        return selected_scope("codeql")
     if path in SCRIPT_ONLY_FILES or path.startswith("scripts/tests/") or path.startswith(".githooks/"):
         return empty_scope()
     if path in SAFE_WORKFLOWS:

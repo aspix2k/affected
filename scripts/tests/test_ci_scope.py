@@ -82,6 +82,24 @@ class CiScopeTest(unittest.TestCase):
             {"plugin": False, "health": False, "codeql": False, "dependencies": False, "exact": True},
         )
 
+    def test_codeql_kotlin_compatibility_runs_only_codeql(self) -> None:
+        """The analysis compiler shim and probe must not affect product builds."""
+        self.assertEqual(
+            ci_scope.scope_for(
+                [
+                    "scripts/codeql-kotlin-compat.init.gradle",
+                    "scripts/codeql_kotlin_compat_probe.py",
+                ]
+            ),
+            {
+                "plugin": False,
+                "health": False,
+                "codeql": True,
+                "dependencies": False,
+                "exact": False,
+            },
+        )
+
     def test_plugin_descriptor_keeps_plugin_and_exact_verification(self) -> None:
         """Adding native evidence must not erase the existing plugin gate."""
         self.assertEqual(
