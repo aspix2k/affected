@@ -94,6 +94,7 @@ class CliMavenCancellationConformanceTest : BasePlatformTestCase() {
         val releaseEdt = CountDownLatch(1)
         val launchQueued = CompletableDeferred<Unit>()
         val collectorPublished = CompletableDeferred<File?>()
+        val artifactsDirectory = File(target, "cancellation-artifacts")
         var cancellationDescriptors = emptySet<RunContentDescriptor>()
         var collectorOutput: File? = null
         var cancelled: Deferred<Boolean>? = null
@@ -108,6 +109,11 @@ class CliMavenCancellationConformanceTest : BasePlatformTestCase() {
             )
             assertEquals(0, sessions.activeCount())
             cancellationDescriptors = currentDescriptors()
+            assertTrue(artifactsDirectory.mkdirs())
+            val artifacts = MavenCollectorArtifacts(
+                File(artifactsDirectory, "agent.jar").apply { writeText("agent") }.toPath(),
+                File(artifactsDirectory, "extension.jar").apply { writeText("extension") }.toPath(),
+            )
 
             val edtBlocked = CompletableDeferred<Unit>()
             ApplicationManager.getApplication().invokeLater {
@@ -117,7 +123,9 @@ class CliMavenCancellationConformanceTest : BasePlatformTestCase() {
             edtBlocked.await()
             cancelled = async(Dispatchers.Default) {
                 MavenBuildSystem(
-                    collectorFactory = null,
+                    collectorFactory = {
+                        MavenCollectorRun.create(File(target, "cancellation-cache").toPath(), artifacts)
+                    },
                     onCollectorPublished = { collector ->
                         collectorPublished.complete(collector?.outputRoot?.toFile())
                     },
