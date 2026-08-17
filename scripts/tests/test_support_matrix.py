@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from scripts import ci_scope
 from scripts import support_matrix
 
 
@@ -182,6 +183,23 @@ class SupportMatrixTest(unittest.TestCase):
                 workflow.replace(
                     "  verify:\n",
                     "  verify:\n    if: needs.scope.outputs.plugin == 'true'\n",
+                    1,
+                ),
+            )
+            support_matrix.check(root)
+
+    def test_selection_proof_allows_fail_closed_exact_scope(self) -> None:
+        """ci_scope may skip native proof for unrelated changes without weakening it."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            workflow_path = root / ".github/workflows/conformance.yml"
+            workflow = workflow_path.read_text(encoding="utf-8")
+            self.write(
+                workflow_path,
+                workflow.replace(
+                    "  verify:\n",
+                    "  verify:\n    if: needs.scope.outputs.exact == 'true'\n",
                     1,
                 ),
             )
@@ -411,9 +429,6 @@ class SupportMatrixTest(unittest.TestCase):
 
     def test_conformance_workflow_runs_for_support_claim_changes(self) -> None:
         """Keep support claims inside the pull-request conformance trigger."""
-        workflow = (
-            Path(__file__).resolve().parents[2] / ".github/workflows/conformance.yml"
-        ).read_text(encoding="utf-8")
         for path in (
             "config/support-matrix.json",
             "scripts/support_matrix.py",
@@ -421,7 +436,8 @@ class SupportMatrixTest(unittest.TestCase):
             "docs/SUPPORT.md",
             "src/main/resources/META-INF/plugin.xml",
         ):
-            self.assertIn(f'- "{path}"', workflow)
+            with self.subTest(path=path):
+                self.assertTrue(ci_scope.scope_for([path])["exact"])
 
     def write_repository(
         self, root: Path, adapters: list[dict[str, object]] | None = None

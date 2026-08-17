@@ -47,14 +47,21 @@ class CiScopeTest(unittest.TestCase):
         self.assertEqual(ci_scope.scope_for([".gitignore"]), ci_scope.empty_scope())
         self.assertEqual(
             ci_scope.scope_for([".gitignore", "core/src/main/kotlin/Foo.kt"]),
-            {"plugin": True, "health": False, "codeql": True, "dependencies": False},
+            {"plugin": True, "health": False, "codeql": True, "dependencies": False, "exact": True},
         )
 
     def test_kotlin_source_runs_plugin_and_codeql(self) -> None:
         """Product JVM source still pays for verification and CodeQL."""
         self.assertEqual(
             ci_scope.scope_for(["core/src/main/kotlin/Foo.kt"]),
-            {"plugin": True, "health": False, "codeql": True, "dependencies": False},
+            {"plugin": True, "health": False, "codeql": True, "dependencies": False, "exact": True},
+        )
+
+    def test_root_ui_source_does_not_start_native_adapter_fixtures(self) -> None:
+        """Keep the exact matrix at its previous product boundary."""
+        self.assertEqual(
+            ci_scope.scope_for(["src/main/kotlin/Action.kt"]),
+            {"plugin": True, "health": False, "codeql": True, "dependencies": False, "exact": False},
         )
 
     def test_gradle_lock_runs_every_expensive_gate(self) -> None:
@@ -65,7 +72,21 @@ class CiScopeTest(unittest.TestCase):
         """Editing the aggregator must still run plugin and health."""
         self.assertEqual(
             ci_scope.scope_for([".github/workflows/ci.yml"]),
-            {"plugin": True, "health": True, "codeql": False, "dependencies": False},
+            {"plugin": True, "health": True, "codeql": False, "dependencies": False, "exact": False},
+        )
+
+    def test_conformance_workflow_runs_its_required_gate(self) -> None:
+        """Changing the gate itself must execute every exact-impact lane."""
+        self.assertEqual(
+            ci_scope.scope_for([".github/workflows/conformance.yml"]),
+            {"plugin": False, "health": False, "codeql": False, "dependencies": False, "exact": True},
+        )
+
+    def test_plugin_descriptor_keeps_plugin_and_exact_verification(self) -> None:
+        """Adding native evidence must not erase the existing plugin gate."""
+        self.assertEqual(
+            ci_scope.scope_for(["src/main/resources/META-INF/plugin.xml"]),
+            {"plugin": True, "health": False, "codeql": False, "dependencies": False, "exact": True},
         )
 
     def test_unknown_path_is_fail_closed(self) -> None:
@@ -79,8 +100,8 @@ class CiScopeTest(unittest.TestCase):
     def test_mixed_docs_and_source_keeps_source_gates(self) -> None:
         """A docs file cannot turn off a product change in the same diff."""
         self.assertEqual(
-            ci_scope.scope_for(["README.md", "src/main/kotlin/Bar.kt"]),
-            {"plugin": True, "health": False, "codeql": True, "dependencies": False},
+            ci_scope.scope_for(["README.md", "core/src/main/kotlin/Bar.kt"]),
+            {"plugin": True, "health": False, "codeql": True, "dependencies": False, "exact": True},
         )
 
     def test_merge_group_uses_group_shas(self) -> None:
@@ -108,7 +129,7 @@ class CiScopeTest(unittest.TestCase):
             ci_scope.write_github_output(path, ci_scope.empty_scope())
             self.assertEqual(
                 path.read_text(encoding="utf-8"),
-                "plugin=false\nhealth=false\ncodeql=false\ndependencies=false\n",
+                "plugin=false\nhealth=false\ncodeql=false\ndependencies=false\nexact=false\n",
             )
 
     def test_git_diff_classifies_a_readme_commit(self) -> None:
@@ -127,6 +148,38 @@ class CiScopeTest(unittest.TestCase):
             head = self.run_git(root, ["rev-parse", "HEAD"])
             self.assertEqual(ci_scope.git_changed_files(root, base, head), ["README.md"])
             self.assertEqual(ci_scope.scope_for(["README.md"]), ci_scope.empty_scope())
+
+    def test_git_diff_keeps_both_sides_of_a_product_rename(self) -> None:
+        """Moving product source into docs must still run its deletion gates."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.run_git(root, ["init", "-b", "main"])
+            self.run_git(root, ["config", "user.email", "ci@example.com"])
+            self.run_git(root, ["config", "user.name", "CI"])
+            source = root / "core/src/main/kotlin/Foo.kt"
+            source.parent.mkdir(parents=True)
+            (root / "docs").mkdir()
+            source.write_text("class Foo\n", encoding="utf-8")
+            self.run_git(root, ["add", "."])
+            self.run_git(root, ["commit", "-m", "base"])
+            base = self.run_git(root, ["rev-parse", "HEAD"])
+            self.run_git(root, ["mv", "core/src/main/kotlin/Foo.kt", "docs/Foo.kt"])
+            self.run_git(root, ["commit", "-m", "move source"])
+            head = self.run_git(root, ["rev-parse", "HEAD"])
+
+            paths = ci_scope.git_changed_files(root, base, head)
+
+            self.assertEqual(paths, ["core/src/main/kotlin/Foo.kt", "docs/Foo.kt"])
+            self.assertEqual(
+                ci_scope.scope_for(paths),
+                {
+                    "plugin": True,
+                    "health": False,
+                    "codeql": True,
+                    "dependencies": False,
+                    "exact": True,
+                },
+            )
 
     def run_git(self, root: Path, arguments: list[str]) -> str:
         """Run one git command in a temporary repository."""

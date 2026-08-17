@@ -161,9 +161,12 @@ def disabled_condition(value: str) -> bool:
     }
 
 
-def scoped_plugin_condition(value: str) -> bool:
-    """Allow only the fail-closed ci_scope plugin output as a job or step if."""
-    return without_yaml_comment(value) == "needs.scope.outputs.plugin == 'true'"
+def scoped_proof_condition(value: str) -> bool:
+    """Allow only a fail-closed ci_scope proof output as a job or step if."""
+    return without_yaml_comment(value) in {
+        "needs.scope.outputs.exact == 'true'",
+        "needs.scope.outputs.plugin == 'true'",
+    }
 
 
 def supported_workflow_jobs(workflow: str, field: str) -> dict[str, dict[str, Any]]:
@@ -285,7 +288,7 @@ def require_proof_execution(
     job = jobs.get(job_name)
     if job is None:
         raise SupportMatrixError(f"{field} gate job is missing: {job_name}")
-    if job["condition"] is not None and not scoped_plugin_condition(job["condition"]):
+    if job["condition"] is not None and not scoped_proof_condition(job["condition"]):
         state = "disabled" if disabled_condition(job["condition"]) else "conditional"
         raise SupportMatrixError(f"{field} gate job is {state}: {job_name}")
     steps = [step for step in job["steps"] if step["name"] == step_name]
@@ -294,7 +297,7 @@ def require_proof_execution(
             f"{field} gate step must occur exactly once: {step_name}"
         )
     step = steps[0]
-    if step["condition"] is not None and not scoped_plugin_condition(step["condition"]):
+    if step["condition"] is not None and not scoped_proof_condition(step["condition"]):
         state = "disabled" if disabled_condition(step["condition"]) else "conditional"
         raise SupportMatrixError(f"{field} gate step is {state}: {step_name}")
     executable = step.get("run") or step.get("uses")
