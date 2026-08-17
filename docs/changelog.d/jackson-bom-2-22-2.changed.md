@@ -1,1 +1,0 @@
-- Update the enforced Jackson platform to 2.22.2 for current MCP Server compatibility.
