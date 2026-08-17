@@ -2,7 +2,7 @@
   "schema": 1,
   "entries": [
     {"id":"gradle","local":{"type":"gradle-wrapper"},"source":{"type":"gradle"},"policy":"latest"},
-    {"id":"kotlin","local":{"type":"gradle-plugin","path":"build.gradle.kts","name":"org.jetbrains.kotlin.jvm"},"source":{"type":"gradle-plugin","name":"org.jetbrains.kotlin.jvm"},"policy":"latest"},
+    {"id":"kotlin","local":{"type":"gradle-plugin","path":"build.gradle.kts","name":"org.jetbrains.kotlin.jvm"},"source":{"type":"gradle-plugin","name":"org.jetbrains.kotlin.jvm"},"policy":"security-preview","expected":"2.4.20-RC","minimumPatched":"2.4.20-Beta1","stableReplacement":"2.4.20","security":{"advisory":"GHSA-r937-wjx7-w2jp","cve":"CVE-2026-53914","repository":"JetBrains/kotlin","package":"org.jetbrains.kotlin:kotlin-gradle-plugin","fixCommit":"bf51df665b458fda7c3eaf436c4d88dc119d7ec6"},"reason":"The latest stable Kotlin plugin remains vulnerable to CVE-2026-53914 until the patched 2.4.20 line is stable.","evidence":["build.gradle.kts","scripts/tests/test_release_currentness.py"]},
     {"id":"intellij-platform-gradle-plugin","local":{"type":"gradle-plugin","path":"build.gradle.kts","name":"org.jetbrains.intellij.platform"},"source":{"type":"gradle-plugin","name":"org.jetbrains.intellij.platform"},"policy":"latest"},
     {"id":"kover","local":{"type":"gradle-plugin","path":"build.gradle.kts","name":"org.jetbrains.kotlinx.kover"},"source":{"type":"gradle-plugin","name":"org.jetbrains.kotlinx.kover"},"policy":"latest"},
     {"id":"pitest-gradle","local":{"type":"gradle-plugin","path":"build.gradle.kts","name":"info.solidsoft.pitest"},"source":{"type":"gradle-plugin","name":"info.solidsoft.pitest"},"policy":"latest"},

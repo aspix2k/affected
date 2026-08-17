@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 import urllib.error
 from pathlib import Path
@@ -61,15 +62,160 @@ class RecordingReadTransport:
         except KeyError as error:
             raise AssertionError(f"Unexpected URL: {url}") from error
 
+    def json(self, url: str) -> object:
+        """Decode one recorded JSON fixture through the same exact URL boundary."""
+        return json.loads(self.read(url))
+
 
 def maven_metadata(*versions: str) -> bytes:
     """Build a minimal Maven metadata document for the given versions."""
+    header = versions[-1] if versions else ""
     items = "".join(f"<version>{version}</version>" for version in versions)
     return (
-        "<metadata><versioning><versions>"
+        f"<metadata><version>{header}</version><versioning>"
+        f"<latest>{header}</latest><release>{header}</release><versions>"
         f"{items}"
         "</versions></versioning></metadata>"
     ).encode()
+
+
+def maven_metadata_with_header(
+    header: str,
+    *versions: str,
+    latest: str | None = None,
+    release: str | None = None,
+) -> bytes:
+    """Build Maven metadata whose top-level release state can contradict its list."""
+    items = "".join(f"<version>{version}</version>" for version in versions)
+    latest_value = header if latest is None else latest
+    release_value = header if release is None else release
+    return (
+        "<metadata>"
+        f"<version>{header}</version>"
+        "<versioning>"
+        f"<latest>{latest_value}</latest><release>{release_value}</release>"
+        f"<versions>{items}</versions>"
+        "</versioning>"
+        "</metadata>"
+    ).encode()
+
+
+KOTLIN_PLUGIN_METADATA = (
+    "https://plugins.gradle.org/m2/org/jetbrains/kotlin/jvm/"
+    "org.jetbrains.kotlin.jvm.gradle.plugin/maven-metadata.xml"
+)
+KOTLIN_ADVISORY = "GHSA-r937-wjx7-w2jp"
+KOTLIN_CVE = "CVE-2026-53914"
+KOTLIN_REPOSITORY = "JetBrains/kotlin"
+KOTLIN_PACKAGE = "org.jetbrains.kotlin:kotlin-gradle-plugin"
+KOTLIN_FIX_COMMIT = "bf51df665b458fda7c3eaf436c4d88dc119d7ec6"
+KOTLIN_MINIMUM = "2.4.20-Beta1"
+KOTLIN_MINIMUM_COMMIT = "adf58296cf6637999310c497834b3d97516abf5f"
+KOTLIN_EXPECTED = "2.4.20-RC"
+KOTLIN_EXPECTED_COMMIT = "2b6fec71675fc8b671376a92be7fb9d0e6da24b2"
+
+
+def json_document(value: object) -> bytes:
+    """Encode one deterministic GitHub API fixture."""
+    return json.dumps(value, separators=(",", ":")).encode()
+
+
+def kotlin_advisory_document() -> dict[str, object]:
+    """Build the reviewed advisory that establishes the patched Kotlin floor."""
+    return {
+        "ghsa_id": KOTLIN_ADVISORY,
+        "cve_id": KOTLIN_CVE,
+        "type": "reviewed",
+        "withdrawn_at": None,
+        "vulnerabilities": [
+            {
+                "package": {"ecosystem": "maven", "name": KOTLIN_PACKAGE},
+                "vulnerable_version_range": f"< {KOTLIN_MINIMUM}",
+                "first_patched_version": KOTLIN_MINIMUM,
+            }
+        ],
+        "references": [
+            f"https://github.com/{KOTLIN_REPOSITORY}/commit/{KOTLIN_FIX_COMMIT}",
+            f"https://github.com/{KOTLIN_REPOSITORY}/releases/tag/v{KOTLIN_MINIMUM}",
+        ],
+    }
+
+
+def kotlin_ref_document(version: str, commit: str) -> dict[str, object]:
+    """Build one exact official Kotlin tag-ref response."""
+    return {
+        "ref": f"refs/tags/v{version}",
+        "object": {"type": "commit", "sha": commit},
+    }
+
+
+def kotlin_compare_document(commit: str) -> dict[str, object]:
+    """Build one GitHub comparison proving the fix is an ancestor."""
+    return {
+        "status": "ahead",
+        "ahead_by": 1,
+        "behind_by": 0,
+        "base_commit": {"sha": KOTLIN_FIX_COMMIT},
+        "merge_base_commit": {"sha": KOTLIN_FIX_COMMIT},
+        "commits": [{"sha": commit}],
+    }
+
+
+def kotlin_security_documents(
+    metadata: bytes | None = None,
+    advisory: dict[str, object] | None = None,
+) -> dict[str, bytes]:
+    """Build all official-source fixtures required by the Kotlin security policy."""
+    documents = {
+        KOTLIN_PLUGIN_METADATA: metadata
+        if metadata is not None
+        else maven_metadata("2.4.10", KOTLIN_MINIMUM, "2.4.20-Beta2", KOTLIN_EXPECTED),
+        f"https://api.github.com/advisories/{KOTLIN_ADVISORY}": json_document(
+            advisory if advisory is not None else kotlin_advisory_document()
+        ),
+    }
+    for version, commit in (
+        (KOTLIN_MINIMUM, KOTLIN_MINIMUM_COMMIT),
+        (KOTLIN_EXPECTED, KOTLIN_EXPECTED_COMMIT),
+    ):
+        documents[f"https://api.github.com/repos/{KOTLIN_REPOSITORY}/git/ref/tags/v{version}"] = (
+            json_document(kotlin_ref_document(version, commit))
+        )
+        documents[
+            f"https://api.github.com/repos/{KOTLIN_REPOSITORY}/compare/"
+            f"{KOTLIN_FIX_COMMIT}...{commit}?per_page=1"
+        ] = json_document(kotlin_compare_document(commit))
+    return documents
+
+
+def kotlin_security_entry(
+    expected: str = "2.4.20-RC",
+    minimum_patched: str = "2.4.20-Beta1",
+    stable_replacement: str = "2.4.20",
+) -> dict[str, object]:
+    """Build one governed Kotlin security-preview policy fixture."""
+    return {
+        "id": "kotlin",
+        "local": {
+            "type": "gradle-plugin",
+            "path": "build.gradle.kts",
+            "name": "org.jetbrains.kotlin.jvm",
+        },
+        "source": {"type": "gradle-plugin", "name": "org.jetbrains.kotlin.jvm"},
+        "policy": "security-preview",
+        "expected": expected,
+        "minimumPatched": minimum_patched,
+        "stableReplacement": stable_replacement,
+        "security": {
+            "advisory": KOTLIN_ADVISORY,
+            "cve": KOTLIN_CVE,
+            "repository": KOTLIN_REPOSITORY,
+            "package": KOTLIN_PACKAGE,
+            "fixCommit": KOTLIN_FIX_COMMIT,
+        },
+        "reason": "The stable Kotlin plugin is vulnerable until the patched release line becomes stable.",
+        "evidence": ["build.gradle.kts"],
+    }
 
 
 class FakeResponse:
@@ -118,6 +264,461 @@ class ReleaseCurrentnessTest(unittest.TestCase):
         self.assertEqual("2.4.10", currentness.newest(["2.4.9", "2.4.20-RC", "3.0.0-M1", "2.4.10"]))
         with self.assertRaises(currentness.CurrentnessError):
             currentness.newest(["3.0.0-beta.1", "3.0.0-rc-1"])
+
+    def test_repository_kotlin_pin_uses_the_current_patched_preview(self) -> None:
+        """Reject a repository pin that remains on the vulnerable stable Kotlin plugin."""
+        entry = next(item for item in currentness.load_config() if item["id"] == "kotlin")
+        transport = RecordingReadTransport(
+            kotlin_security_documents(
+                maven_metadata(
+                    "2.4.10",
+                    "2.4.19",
+                    "2.4.20-Beta1",
+                    "2.4.20-Beta2",
+                    "2.4.20-RC",
+                )
+            )
+        )
+
+        result = currentness.validate_entry(entry, transport)
+
+        self.assertEqual(
+            "kotlin: 2.4.20-RC (security preview until stable 2.4.20)",
+            result,
+        )
+        self.assertEqual(set(transport.documents), set(transport.reads))
+
+    def test_security_preview_rejects_unbound_proof_configuration(self) -> None:
+        """Reject repository-owned proof metadata that does not match the reviewed Kotlin fix."""
+        cases: dict[str, object] = {
+            "missing security proof": None,
+            "wrong advisory": {"advisory": "GHSA-xxxx-xxxx-xxxx"},
+            "wrong CVE": {"cve": "CVE-2026-00000"},
+            "wrong repository": {"repository": "example/kotlin"},
+            "wrong package": {"package": "org.jetbrains.kotlin:kotlin-stdlib"},
+            "wrong fix": {"fixCommit": "0" * 40},
+        }
+        for name, replacement in cases.items():
+            entry = kotlin_security_entry()
+            if replacement is None:
+                entry["security"] = None
+            else:
+                security = dict(entry["security"])
+                security.update(replacement)
+                entry["security"] = security
+            with self.subTest(name=name), patch.object(
+                currentness,
+                "local_version",
+                return_value=(KOTLIN_EXPECTED, None),
+            ), self.assertRaises(currentness.CurrentnessError):
+                currentness.validate_entry(
+                    entry,
+                    RecordingReadTransport(kotlin_security_documents()),
+                )
+
+    def test_security_preview_rejects_advisory_drift(self) -> None:
+        """Reject an advisory that no longer establishes the exact package and patched floor."""
+        cases: dict[str, object] = {
+            "wrong id": ("ghsa_id", "GHSA-xxxx-xxxx-xxxx"),
+            "not reviewed": ("type", "unreviewed"),
+            "withdrawn": ("withdrawn_at", "2026-08-13T00:00:00Z"),
+            "wrong CVE": ("cve_id", "CVE-2026-00000"),
+            "wrong range": ("vulnerable_version_range", "< 2.4.20"),
+            "wrong floor": ("first_patched_version", "2.4.20"),
+            "wrong package": ("package", {"ecosystem": "maven", "name": "kotlin-stdlib"}),
+            "missing fix reference": ("references", []),
+        }
+        for name, (field, value) in cases.items():
+            advisory = kotlin_advisory_document()
+            if field in {"vulnerable_version_range", "first_patched_version", "package"}:
+                vulnerability = dict(advisory["vulnerabilities"][0])
+                vulnerability[field] = value
+                advisory["vulnerabilities"] = [vulnerability]
+            else:
+                advisory[field] = value
+            with self.subTest(name=name), patch.object(
+                currentness,
+                "local_version",
+                return_value=(KOTLIN_EXPECTED, None),
+            ), self.assertRaises(currentness.CurrentnessError):
+                currentness.validate_entry(
+                    kotlin_security_entry(),
+                    RecordingReadTransport(kotlin_security_documents(advisory=advisory)),
+                )
+
+    def test_security_preview_requires_explicit_non_withdrawn_advisory_state(self) -> None:
+        """Reject an advisory response that omits its reviewed withdrawal state."""
+        advisory = kotlin_advisory_document()
+        advisory.pop("withdrawn_at")
+        with patch.object(
+            currentness,
+            "local_version",
+            return_value=(KOTLIN_EXPECTED, None),
+        ), self.assertRaises(currentness.CurrentnessError):
+            currentness.validate_entry(
+                kotlin_security_entry(),
+                RecordingReadTransport(kotlin_security_documents(advisory=advisory)),
+            )
+
+    def test_security_preview_rejects_invalid_tag_or_non_ancestor_fix(self) -> None:
+        """Reject malformed official tags and comparisons that do not prove fix ancestry."""
+        ref_url = f"https://api.github.com/repos/{KOTLIN_REPOSITORY}/git/ref/tags/v{KOTLIN_EXPECTED}"
+        compare_url = (
+            f"https://api.github.com/repos/{KOTLIN_REPOSITORY}/compare/"
+            f"{KOTLIN_FIX_COMMIT}...{KOTLIN_EXPECTED_COMMIT}?per_page=1"
+        )
+        cases: dict[str, tuple[str, dict[str, object]]] = {
+            "wrong ref": (ref_url, kotlin_ref_document(KOTLIN_MINIMUM, KOTLIN_EXPECTED_COMMIT)),
+            "wrong object type": (
+                ref_url,
+                {
+                    "ref": f"refs/tags/v{KOTLIN_EXPECTED}",
+                    "object": {"type": "blob", "sha": KOTLIN_EXPECTED_COMMIT},
+                },
+            ),
+            "invalid object SHA": (
+                ref_url,
+                {
+                    "ref": f"refs/tags/v{KOTLIN_EXPECTED}",
+                    "object": {"type": "commit", "sha": "invalid"},
+                },
+            ),
+            "diverged": (compare_url, {**kotlin_compare_document(KOTLIN_EXPECTED_COMMIT), "status": "diverged"}),
+            "behind": (compare_url, {**kotlin_compare_document(KOTLIN_EXPECTED_COMMIT), "behind_by": 1}),
+            "wrong base": (
+                compare_url,
+                {**kotlin_compare_document(KOTLIN_EXPECTED_COMMIT), "base_commit": {"sha": "0" * 40}},
+            ),
+            "wrong merge base": (
+                compare_url,
+                {**kotlin_compare_document(KOTLIN_EXPECTED_COMMIT), "merge_base_commit": {"sha": "0" * 40}},
+            ),
+        }
+        for name, (url, response) in cases.items():
+            documents = kotlin_security_documents()
+            documents[url] = json_document(response)
+            with self.subTest(name=name), patch.object(
+                currentness,
+                "local_version",
+                return_value=(KOTLIN_EXPECTED, None),
+            ), self.assertRaises(currentness.CurrentnessError):
+                currentness.validate_entry(
+                    kotlin_security_entry(),
+                    RecordingReadTransport(documents),
+                )
+
+    def test_security_preview_peels_an_exact_annotated_tag(self) -> None:
+        """Accept an exact official tag only after its bounded annotation chain reaches a commit."""
+        annotation = "1" * 40
+        ref_url = f"https://api.github.com/repos/{KOTLIN_REPOSITORY}/git/ref/tags/v{KOTLIN_EXPECTED}"
+        tag_url = f"https://api.github.com/repos/{KOTLIN_REPOSITORY}/git/tags/{annotation}"
+        documents = kotlin_security_documents()
+        documents[ref_url] = json_document(
+            {
+                "ref": f"refs/tags/v{KOTLIN_EXPECTED}",
+                "object": {"type": "tag", "sha": annotation},
+            }
+        )
+        documents[tag_url] = json_document(
+            {
+                "sha": annotation,
+                "object": {"type": "commit", "sha": KOTLIN_EXPECTED_COMMIT},
+            }
+        )
+        transport = RecordingReadTransport(documents)
+
+        with patch.object(
+            currentness,
+            "local_version",
+            return_value=(KOTLIN_EXPECTED, None),
+        ):
+            currentness.validate_entry(kotlin_security_entry(), transport)
+
+        self.assertIn(tag_url, transport.reads)
+
+    def test_security_preview_rejects_unbound_annotation_identity(self) -> None:
+        """Reject a peeled tag response that omits the requested annotation identity."""
+        annotation = "1" * 40
+        ref_url = f"https://api.github.com/repos/{KOTLIN_REPOSITORY}/git/ref/tags/v{KOTLIN_EXPECTED}"
+        tag_url = f"https://api.github.com/repos/{KOTLIN_REPOSITORY}/git/tags/{annotation}"
+        documents = kotlin_security_documents()
+        documents[ref_url] = json_document(
+            {
+                "ref": f"refs/tags/v{KOTLIN_EXPECTED}",
+                "object": {"type": "tag", "sha": annotation},
+            }
+        )
+        documents[tag_url] = json_document(
+            {"object": {"type": "commit", "sha": KOTLIN_EXPECTED_COMMIT}}
+        )
+
+        with patch.object(
+            currentness,
+            "local_version",
+            return_value=(KOTLIN_EXPECTED, None),
+        ), self.assertRaises(currentness.CurrentnessError):
+            currentness.validate_entry(
+                kotlin_security_entry(),
+                RecordingReadTransport(documents),
+            )
+
+    def test_security_preview_rejects_malformed_annotated_tag(self) -> None:
+        """Reject an annotated tag whose peeled object is not an immutable commit identity."""
+        annotation = "1" * 40
+        ref_url = f"https://api.github.com/repos/{KOTLIN_REPOSITORY}/git/ref/tags/v{KOTLIN_EXPECTED}"
+        tag_url = f"https://api.github.com/repos/{KOTLIN_REPOSITORY}/git/tags/{annotation}"
+        documents = kotlin_security_documents()
+        documents[ref_url] = json_document(
+            {
+                "ref": f"refs/tags/v{KOTLIN_EXPECTED}",
+                "object": {"type": "tag", "sha": annotation},
+            }
+        )
+        documents[tag_url] = json_document({"object": {"type": "blob", "sha": "2" * 40}})
+
+        with patch.object(
+            currentness,
+            "local_version",
+            return_value=(KOTLIN_EXPECTED, None),
+        ), self.assertRaises(currentness.CurrentnessError):
+            currentness.validate_entry(
+                kotlin_security_entry(),
+                RecordingReadTransport(documents),
+            )
+
+    def test_security_preview_requires_official_current_patched_release(self) -> None:
+        """Accept only the newest officially published preview at or above the advisory floor."""
+        transport = RecordingReadTransport(
+            kotlin_security_documents(
+                maven_metadata(
+                    "2.4.10",
+                    "2.4.19",
+                    "2.4.20-Beta1",
+                    "2.4.20-Beta2",
+                    "2.4.20-RC",
+                )
+            )
+        )
+        with patch.object(currentness, "local_version", return_value=("2.4.20-RC", None)):
+            result = currentness.validate_entry(kotlin_security_entry(), transport)
+
+        self.assertEqual(
+            "kotlin: 2.4.20-RC (security preview until stable 2.4.20)",
+            result,
+        )
+
+    def test_security_preview_rejects_local_pin_drift(self) -> None:
+        """Reject a local plugin pin that differs from the reviewed security preview."""
+        with patch.object(
+            currentness,
+            "local_version",
+            return_value=("2.4.20-Beta2", None),
+        ), self.assertRaises(currentness.CurrentnessError):
+            currentness.validate_entry(
+                kotlin_security_entry(),
+                RecordingReadTransport(
+                    kotlin_security_documents(
+                        maven_metadata(
+                            "2.4.20-Beta1",
+                            "2.4.20-Beta2",
+                            "2.4.20-RC",
+                        )
+                    )
+                ),
+            )
+
+    def test_security_preview_fails_closed_for_unpublished_or_superseded_preview(self) -> None:
+        """Reject missing expected publication and any newer preview on the patched line."""
+        cases = {
+            "unpublished": ("2.4.20-RC", ("2.4.20-Beta1", "2.4.20-Beta2")),
+            "superseded": (
+                "2.4.20-RC",
+                ("2.4.20-Beta1", "2.4.20-Beta2", "2.4.20-RC", "2.4.20-RC2"),
+            ),
+        }
+        for name, (local, versions) in cases.items():
+            with self.subTest(name=name), patch.object(
+                currentness,
+                "local_version",
+                return_value=(local, None),
+            ), self.assertRaises(currentness.CurrentnessError):
+                currentness.validate_entry(
+                    kotlin_security_entry(),
+                    RecordingReadTransport(kotlin_security_documents(maven_metadata(*versions))),
+                )
+
+    def test_security_preview_rejects_below_advisory_floor(self) -> None:
+        """Reject a published preview whose order is below the declared patched minimum."""
+        entry = kotlin_security_entry(expected="2.4.20-Alpha1")
+        with patch.object(
+            currentness,
+            "local_version",
+            return_value=("2.4.20-Alpha1", None),
+        ), self.assertRaises(currentness.CurrentnessError):
+            currentness.validate_entry(
+                entry,
+                RecordingReadTransport(
+                    kotlin_security_documents(
+                        maven_metadata(
+                            "2.4.20-Alpha1",
+                            "2.4.20-Beta1",
+                        )
+                    )
+                ),
+            )
+
+    def test_security_preview_expires_when_the_patched_stable_is_published(self) -> None:
+        """Reject the temporary preview policy as soon as its stable replacement exists."""
+        for stable in ("2.4.20", "2.4.21", "2.5.0"):
+            with self.subTest(stable=stable), patch.object(
+                currentness,
+                "local_version",
+                return_value=("2.4.20-RC", None),
+            ), self.assertRaises(currentness.CurrentnessError):
+                currentness.validate_entry(
+                    kotlin_security_entry(),
+                    RecordingReadTransport(
+                        kotlin_security_documents(
+                            maven_metadata(
+                                "2.4.10",
+                                "2.4.20-Beta1",
+                                "2.4.20-RC",
+                                stable,
+                            )
+                        )
+                    ),
+                )
+
+    def test_security_preview_rejects_malformed_or_ambiguous_policy(self) -> None:
+        """Reject policy shapes whose provenance, release line, or ordering is ambiguous."""
+        cases: dict[str, dict[str, object]] = {
+            "missing expected": {"expected": None},
+            "missing minimum": {"minimumPatched": None},
+            "missing replacement": {"stableReplacement": None},
+            "boolean expected": {"expected": True},
+            "boolean minimum": {"minimumPatched": True},
+            "boolean replacement": {"stableReplacement": True},
+            "stable expected": {"expected": "2.4.20"},
+            "stable minimum": {"minimumPatched": "2.4.20"},
+            "unnumbered beta": {"expected": "2.4.20-Beta"},
+            "zero sequence": {"expected": "2.4.20-RC0"},
+            "padded sequence": {"expected": "2.4.20-RC01"},
+            "preview replacement": {"stableReplacement": "2.4.20-RC"},
+            "four-part replacement": {"stableReplacement": "2.4.20.1"},
+            "different release line": {"expected": "2.4.21-RC"},
+            "invalid local metadata": {"local": "build.gradle.kts"},
+            "wrong source type": {"source": {"type": "maven", "name": "org.jetbrains.kotlin.jvm"}},
+            "wrong source name": {
+                "source": {"type": "gradle-plugin", "name": "org.jetbrains.kotlin.android"}
+            },
+        }
+        for name, changes in cases.items():
+            entry = kotlin_security_entry()
+            entry.update(changes)
+            with self.subTest(name=name), patch.object(
+                currentness,
+                "local_version",
+                return_value=(str(entry.get("expected")), None),
+            ), self.assertRaises(currentness.CurrentnessError):
+                currentness.validate_entry(
+                    entry,
+                    RecordingReadTransport(
+                        kotlin_security_documents(
+                            maven_metadata(
+                                "2.4.20-Beta1",
+                                "2.4.20-RC",
+                            )
+                        )
+                    ),
+                )
+
+    def test_security_preview_rejects_duplicate_or_unknown_release_metadata(self) -> None:
+        """Fail closed when official metadata cannot identify one ordered preview release."""
+        cases = {
+            "duplicate expected": ("2.4.20-Beta1", "2.4.20-RC", "2.4.20-RC"),
+            "duplicate minimum": ("2.4.20-Beta1", "2.4.20-Beta1", "2.4.20-RC"),
+            "ambiguous RC alias": ("2.4.20-Beta1", "2.4.20-RC", "2.4.20-RC1"),
+            "unknown same-line token": ("2.4.20-Beta1", "2.4.20-M1", "2.4.20-RC"),
+        }
+        for name, versions in cases.items():
+            with self.subTest(name=name), patch.object(
+                currentness,
+                "local_version",
+                return_value=("2.4.20-RC", None),
+            ), self.assertRaises(currentness.CurrentnessError):
+                currentness.validate_entry(
+                    kotlin_security_entry(),
+                    RecordingReadTransport(kotlin_security_documents(maven_metadata(*versions))),
+                )
+
+    def test_security_preview_rejects_contradictory_or_superseding_headers(self) -> None:
+        """Reject stale lists, missing headers and a newer declared official release."""
+        versions = ("2.4.20-Beta1", "2.4.20-RC")
+        valid = maven_metadata_with_header("2.4.20-RC", *versions)
+        documents = {
+            "superseding preview": maven_metadata_with_header("2.4.20-RC2", *versions),
+            "inconsistent headers": maven_metadata_with_header(
+                "2.4.20-RC",
+                *versions,
+                latest="2.4.20-RC2",
+            ),
+            "missing latest": maven_metadata_with_header(
+                "2.4.20-RC",
+                *versions,
+                latest="",
+            ),
+            "stable with stale list": maven_metadata_with_header("2.4.20", *versions),
+            "new release line": maven_metadata_with_header(
+                "2.5.0-Alpha1",
+                *versions,
+                "2.5.0-Alpha1",
+            ),
+            "duplicate root version": valid.replace(
+                b"<versioning>",
+                b"<version>2.4.20-RC2</version><versioning>",
+            ),
+            "duplicate latest": valid.replace(
+                b"</versioning>",
+                b"<latest>2.4.20-RC2</latest></versioning>",
+            ),
+            "duplicate release": valid.replace(
+                b"</versioning>",
+                b"<release>2.4.20-RC2</release></versioning>",
+            ),
+        }
+        for name, document in documents.items():
+            with self.subTest(name=name), patch.object(
+                currentness,
+                "local_version",
+                return_value=("2.4.20-RC", None),
+            ), self.assertRaises(currentness.CurrentnessError):
+                currentness.validate_entry(
+                    kotlin_security_entry(),
+                    RecordingReadTransport(kotlin_security_documents(document)),
+                )
+
+    def test_security_preview_rejects_empty_malformed_or_oversized_metadata(self) -> None:
+        """Bound and validate the complete official metadata document before trusting it."""
+        oversized = tuple(f"1.0.{index}" for index in range(10_001)) + (
+            "2.4.20-Beta1",
+            "2.4.20-RC",
+        )
+        documents = {
+            "empty versions": maven_metadata(),
+            "blank version": maven_metadata("", "2.4.20-Beta1", "2.4.20-RC"),
+            "malformed XML": b"<metadata>",
+            "too many versions": maven_metadata(*oversized),
+        }
+        for name, document in documents.items():
+            with self.subTest(name=name), patch.object(
+                currentness,
+                "local_version",
+                return_value=("2.4.20-RC", None),
+            ), self.assertRaises(currentness.CurrentnessError):
+                currentness.validate_entry(
+                    kotlin_security_entry(),
+                    RecordingReadTransport(kotlin_security_documents(document)),
+                )
 
     def test_series_never_escapes_declared_compatibility_line(self) -> None:
         """Select the newest patch only within the requested compatibility line."""

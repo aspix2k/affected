@@ -54,7 +54,14 @@ are generated from it: `python3 scripts/support_matrix.py --write`.
 
 `config/release-currentness.json` governs direct pins. Compatibility entries
 need an exact value, a reason and repository-owned evidence. Update the direct
-manifest and regenerate its lock; do not inventory transitive versions.
+manifest and regenerate its lock; do not inventory transitive versions. A
+temporary `security-preview` entry additionally binds the exact official
+preview, the first patched preview and the stable replacement. The gate rejects
+an unpublished or superseded preview and expires the exception when that stable
+release appears. For CVE-2026-53914, the reviewed GitHub advisory narrows the
+older CNA range to Kotlin `2.4.20-Beta1` as the first patched release. The gate
+therefore also requires the advisory's exact JetBrains fix commit to be an
+ancestor of both the minimum patched tag and the selected preview tag.
 
 Every IDE the build or verifier unpacks lives under `~/.gradle/caches`. Old
 transforms are never removed; deleting that cache is safe and it rebuilds.
