@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import subprocess
 import unittest
 from pathlib import Path
@@ -106,6 +105,25 @@ class CiScopeTest(unittest.TestCase):
             ci_scope.scope_for(["src/main/resources/META-INF/plugin.xml"]),
             {"plugin": True, "health": False, "codeql": False, "dependencies": False, "exact": True},
         )
+
+    def test_product_verifier_matrix_sources_run_the_plugin_gate(self) -> None:
+        """Changing product cells or their builder must execute the governed matrix."""
+        for path in (
+            "config/support-matrix.json",
+            "scripts/support_matrix.py",
+            "scripts/plugin_verifier_reports.py",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(
+                    ci_scope.scope_for([path]),
+                    {
+                        "plugin": True,
+                        "health": False,
+                        "codeql": False,
+                        "dependencies": False,
+                        "exact": True,
+                    },
+                )
 
     def test_unknown_path_is_fail_closed(self) -> None:
         """An unclassified file must not skip a required gate."""

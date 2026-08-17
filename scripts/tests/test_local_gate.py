@@ -37,6 +37,11 @@ class LocalGateTest(unittest.TestCase):
         push = [name for name, _command, _timeout in local_gate.checks_for("push")]
         self.assertEqual(commit + ["shell"], push)
 
+    def test_script_gate_includes_product_verifier_report_validation(self) -> None:
+        """Run the promoted-artifact and report boundary tests before publication."""
+        script_command = local_gate.checks_for("commit")[1][1]
+        self.assertIn("scripts.tests.test_plugin_verifier_reports", script_command)
+
     def test_failed_check_stops_the_gate(self) -> None:
         """The first red check is enough; later checks must not hide it."""
         calls: list[list[str]] = []

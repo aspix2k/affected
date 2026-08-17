@@ -69,6 +69,8 @@ def check(root: Path = ROOT) -> None:
         raise CiContractError("verify must always aggregate required jobs")
     if not re.search(r"^  verify:\n(?:.*\n)*?    needs:", ci, re.MULTILINE):
         raise CiContractError("The required verify job must depend on every fast gate")
+    if re.search(r"(?m)^  product-verifier:$", ci) is None or "product-verifier" not in verify:
+        raise CiContractError("The product verifier matrix must remain a required gate")
 
     plugin = slice_job(ci, "plugin")
     if plugin.count("scripts/run_gradle.sh") != 1 or "./gradlew" in plugin:
@@ -78,6 +80,7 @@ def check(root: Path = ROOT) -> None:
             raise CiContractError(f"The plugin job must keep {task}")
     if "printVersion" not in plugin and "changelog-section.sh" not in plugin:
         raise CiContractError("The plugin job must still enforce the changelog section")
+    check_product_verifier(ci)
 
     scripts = slice_job(ci, "scripts")
     for token in (
@@ -98,6 +101,7 @@ def check(root: Path = ROOT) -> None:
         "scripts.tests.test_docs_layout",
         "scripts.tests.test_fetch_gradle",
         "scripts.tests.test_local_gate",
+        "scripts.tests.test_plugin_verifier_reports",
         "scripts.tests.test_product_claims",
         "scripts.tests.test_run_gradle",
         "changelog_fragments.py check",
@@ -248,7 +252,55 @@ def check_codeql_compatibility(
             if token not in job:
                 raise CiContractError(
                     f"CodeQL {job_name} Kotlin compatibility must keep {token}"
-                )
+            )
+
+
+def check_product_verifier(ci: str) -> None:
+    """Keep every product cell bound to one promoted archive and validated report."""
+    scope = slice_job(ci, "scope")
+    job = slice_job(ci, "product-verifier")
+    for line in (
+        "verifier: ${{ steps.verifier.outputs.matrix }}",
+        "matrix=$(python3 scripts/support_matrix.py --verifier-matrix)",
+    ):
+        if not has_line(scope, line):
+            raise CiContractError("The product verifier matrix must come from support_matrix.py")
+    for line in (
+        "needs: [scope, plugin]",
+        "if: needs.scope.outputs.plugin == 'true'",
+        "timeout-minutes: 30",
+        "fail-fast: false",
+        "max-parallel: 4",
+        "include: ${{ fromJSON(needs.scope.outputs.verifier) }}",
+        "verifyPlugin -x buildPlugin",
+        "SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}",
+        '--commit "$SOURCE_COMMIT" \\',
+    ):
+        if not has_line(job, line):
+            raise CiContractError(f"The product verifier must keep {line}")
+    required_tokens = (
+        "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+        "name: plugin",
+        "path: build/verifier-input",
+        "python3 scripts/plugin_verifier_reports.py artifact",
+        "git rev-parse 'HEAD^{tree}'",
+        '"-Paffected.verifier.type=${{ matrix.type }}"',
+        '"-Paffected.verifier.version=${{ matrix.version }}"',
+        '"-Paffected.verifier.archive=${{ steps.artifact.outputs.archive }}"',
+        "python3 scripts/plugin_verifier_reports.py report",
+        '"--code=${{ matrix.code }}"',
+        '"--build=${{ matrix.build }}"',
+        '"--gradle=${{ matrix.gradle }}"',
+        '"--maven=${{ matrix.maven }}"',
+        "if: always()",
+        "name: product-verifier-${{ matrix.product }}-${{ matrix.endpoint }}",
+        "path: build/reports/pluginVerifier",
+    )
+    for token in required_tokens:
+        if job.count(token) != 1:
+            raise CiContractError(f"The product verifier must keep exactly one {token}")
+    if job.count("scripts/run_gradle.sh") != 1 or job.count("verifyPlugin") != 1:
+        raise CiContractError("The product verifier must run one isolated verifier graph")
 
 
 def workflow_inventory(root: Path) -> dict[str, str]:
@@ -302,6 +354,12 @@ def check_scope(root: Path, ci: str, codeql: str) -> None:
             "PLUGIN_RESULT",
             "needs.plugin.result",
             'require_when plugin "${PLUGIN_REQUIRED:-true}" "$PLUGIN_RESULT"',
+        ),
+        (
+            "product-verifier",
+            "PRODUCT_VERIFIER_RESULT",
+            "needs.product-verifier.result",
+            'require_when product-verifier "${PLUGIN_REQUIRED:-true}" "$PRODUCT_VERIFIER_RESULT"',
         ),
         (
             "health",

@@ -29,6 +29,8 @@ DATE = re.compile(r"20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])")
 ISSUE = re.compile(r"https://github\.com/aspix2k/affected/issues/([1-9]\d*)")
 IDENTIFIER = re.compile(r"[a-z][a-z0-9-]{1,63}")
 ADAPTER_IDENTIFIER = re.compile(r"[A-Z][A-Z0-9_]{1,31}")
+IDE_VERSION = re.compile(r"\d{4}\.\d+(?:\.\d+){0,2}")
+IDE_BUILD = re.compile(r"\d+(?:\.\d+){1,3}")
 WORKFLOW_PATH = re.compile(r"\.github/workflows/[A-Za-z0-9][A-Za-z0-9_.-]*\.yml")
 SELECTION_LABELS = {
     "test": "test",
@@ -39,6 +41,17 @@ SELECTION_LABELS = {
     "project": "project",
     "gem": "gem",
     "target": "target",
+}
+PLATFORM_VERIFIERS = {
+    "rider": ("Rider", "RD"),
+    "goland": ("GoLand", "GO"),
+    "clion": ("CLion", "CL"),
+    "pycharm": ("PyCharm", "PY"),
+    "webstorm": ("WebStorm", "WS"),
+    "phpstorm": ("PhpStorm", "PS"),
+    "rubymine": ("RubyMine", "RM"),
+    "rustrover": ("RustRover", "RR"),
+    "dataspell": ("DataSpell", "DS"),
 }
 
 
@@ -385,14 +398,82 @@ def validate_products(root: Path, products: object) -> list[dict[str, Any]]:
                     product.get("issue"), f"{identifier} issue", ISSUE
                 )
         elif support in {"verified", "platform"}:
+            allowed = {"id", "name", "support", "since", "fixtures", "gates"}
+            if support == "platform":
+                allowed.add("verifier")
             require_fields(
                 product,
-                {"id", "name", "support", "since", "fixtures", "gates"},
+                allowed,
                 "product",
             )
-            product["since"] = require_string(
-                product.get("since"), f"{identifier} since"
-            )
+            since = require_string(product.get("since"), f"{identifier} since")
+            if support == "platform" and not isinstance(product.get("verifier"), dict):
+                raise SupportMatrixError(
+                    f"{identifier} platform claim requires verifier endpoints"
+                )
+            if support == "platform":
+                verifier = product["verifier"]
+                require_fields(verifier, {"type", "endpoints"}, "product verifier")
+                expected = PLATFORM_VERIFIERS.get(identifier)
+                if expected is None or verifier.get("type") != expected[0]:
+                    raise SupportMatrixError(
+                        f"Invalid verifier product type for {identifier}"
+                    )
+                endpoints = verifier.get("endpoints")
+                endpoint_ids = (
+                    [endpoint.get("id") for endpoint in endpoints]
+                    if isinstance(endpoints, list)
+                    and all(isinstance(endpoint, dict) for endpoint in endpoints)
+                    else []
+                )
+                if endpoint_ids != ["minimum", "current"]:
+                    raise SupportMatrixError(
+                        f"{identifier} verifier must define minimum and current endpoints"
+                    )
+                for endpoint in endpoints:
+                    require_fields(
+                        endpoint,
+                        {"id", "version", "build", "gradle", "maven"},
+                        "verifier endpoint",
+                    )
+                    version = require_string(
+                        endpoint.get("version"),
+                        f"{identifier} {endpoint['id']} verifier version",
+                        IDE_VERSION,
+                    )
+                    if endpoint["id"] == "minimum" and not (
+                        version == since or version.startswith(f"{since}.")
+                    ):
+                        raise SupportMatrixError(
+                            f"Invalid minimum verifier version for {identifier}: {version}"
+                        )
+                    require_string(
+                        endpoint.get("build"),
+                        f"{identifier} {endpoint['id']} verifier build",
+                        IDE_BUILD,
+                    )
+                    for dependency in ("gradle", "maven"):
+                        state = require_string(
+                            endpoint.get(dependency),
+                            f"{identifier} {endpoint['id']} {dependency} descriptor state",
+                        )
+                        if state not in {"present", "unavailable"}:
+                            raise SupportMatrixError(
+                                f"Invalid descriptor state for {identifier} {endpoint['id']} {dependency}: {state}"
+                            )
+                minimum_parts = tuple(
+                    int(part) for part in endpoints[0]["version"].split(".")
+                )
+                current_parts = tuple(
+                    int(part) for part in endpoints[1]["version"].split(".")
+                )
+                minimum_version = minimum_parts + (0,) * (4 - len(minimum_parts))
+                current_version = current_parts + (0,) * (4 - len(current_parts))
+                if current_version < minimum_version:
+                    raise SupportMatrixError(
+                        f"Invalid current verifier version for {identifier}: {endpoints[1]['version']}"
+                    )
+            product["since"] = since
             product["fixtures"] = require_evidence(
                 root, product.get("fixtures"), f"{identifier} fixtures"
             )
@@ -617,6 +698,29 @@ def validated(root: Path, matrix: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def verifier_matrix(matrix: dict[str, Any]) -> list[dict[str, str]]:
+    """Expand validated platform claims into deterministic CI verifier cells."""
+    result: list[dict[str, str]] = []
+    for product in matrix["products"]:
+        if product["support"] != "platform":
+            continue
+        verifier = product["verifier"]
+        for endpoint in verifier["endpoints"]:
+            result.append(
+                {
+                    "product": product["id"],
+                    "type": verifier["type"],
+                    "code": PLATFORM_VERIFIERS[product["id"]][1],
+                    "endpoint": endpoint["id"],
+                    "version": endpoint["version"],
+                    "build": endpoint["build"],
+                    "gradle": endpoint["gradle"],
+                    "maven": endpoint["maven"],
+                }
+            )
+    return result
+
+
 def markdown(text: str) -> str:
     """Escape table separators and line breaks in generated Markdown cells."""
     return text.replace("|", "\\|").replace("\n", " ")
@@ -666,9 +770,10 @@ def render(matrix: dict[str, Any], mcp_section: str = "") -> str:
         )
     lines += [
         "",
-        "Product-verified entries run a product-specific verifier. Platform-compatible",
-        "entries share the supported IntelliJ Platform contract but do not yet have a",
-        "dedicated product lifecycle fixture.",
+        "Product-verified entries run a dedicated product gate. Every Platform-compatible",
+        "entry runs a static product-specific Plugin Verifier at its exact minimum and",
+        "current endpoints, including the declared optional Gradle and Maven descriptors.",
+        "This proves packaged plugin compatibility; it does not claim the installed IDE lifecycle.",
     ]
     if planned_products:
         lines += [
@@ -843,7 +948,7 @@ def write(root: Path = ROOT) -> None:
 
 
 def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
-    """Parse the single explicit check or write operation."""
+    """Parse one explicit matrix operation and its repository root."""
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument(
@@ -854,6 +959,12 @@ def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
     mode.add_argument(
         "--write", action="store_true", help="refresh generated docs after validation"
     )
+    mode.add_argument(
+        "--verifier-matrix",
+        action="store_true",
+        help="print the validated product verifier cells as compact JSON",
+    )
+    parser.add_argument("--root", type=Path, default=ROOT, help="repository root")
     return parser.parse_args(arguments)
 
 
@@ -861,11 +972,14 @@ def main(arguments: list[str] | None = None) -> int:
     """Run the selected operation with concise human-readable errors."""
     try:
         options = parse_args(arguments)
-        if options.write:
-            write()
+        if options.verifier_matrix:
+            matrix = validated(options.root, load_matrix(options.root))
+            print(json.dumps(verifier_matrix(matrix), separators=(",", ":")))
+        elif options.write:
+            write(options.root)
             print("Updated executable support documentation.")
         else:
-            check()
+            check(options.root)
             print("Support matrix is complete and current.")
         return 0
     except SupportMatrixError as error:

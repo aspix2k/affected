@@ -19,9 +19,10 @@ is tied to public repository evidence and an executable CI gate.
 | RustRover | Platform-compatible | 2025.3 | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
 | DataSpell | Platform-compatible | 2025.3 | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
 
-Product-verified entries run a product-specific verifier. Platform-compatible
-entries share the supported IntelliJ Platform contract but do not yet have a
-dedicated product lifecycle fixture.
+Product-verified entries run a dedicated product gate. Every Platform-compatible
+entry runs a static product-specific Plugin Verifier at its exact minimum and
+current endpoints, including the declared optional Gradle and Maven descriptors.
+This proves packaged plugin compatibility; it does not claim the installed IDE lifecycle.
 
 ## Planned coverage
 

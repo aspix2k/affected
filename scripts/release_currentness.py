@@ -48,6 +48,7 @@ ALLOWED_HOSTS = {
     "teamcity.jetbrains.com",
     "www.php.net",
     "www.python.org",
+    "www.jetbrains.com",
 }
 MAVEN_CENTRAL_METADATA_BASES = (
     "https://cache-redirector.jetbrains.com/repo1.maven.org/maven2",
@@ -70,6 +71,7 @@ KOTLIN_SECURITY = {
     "fixCommit": "bf51df665b458fda7c3eaf436c4d88dc119d7ec6",
 }
 KOTLIN_PLUGIN_ID = "org.jetbrains.kotlin.jvm"
+JETBRAINS_UPDATES_URL = "https://www.jetbrains.com/updates/updates.xml"
 
 
 class CurrentnessError(RuntimeError):
@@ -245,6 +247,67 @@ def stable_release_key(value: str) -> tuple[int, int, int]:
     return tuple(int(match.group(index)) for index in range(1, 4))
 
 
+def support_matrix_verifier_slot(local: dict[str, Any]) -> tuple[str, str, str]:
+    """Read one product verifier version, support series, and exact build."""
+    path = local.get("path")
+    product_name = local.get("product")
+    endpoint_id = local.get("endpoint")
+    if not all(
+        isinstance(value, str) and value
+        for value in (path, product_name, endpoint_id)
+    ):
+        raise CurrentnessError("Support matrix verifier lacks a product endpoint")
+    try:
+        matrix = json.loads(read_text(path))
+    except json.JSONDecodeError as error:
+        raise CurrentnessError(f"Invalid support matrix JSON: {error}") from error
+    products = (
+        matrix.get("products")
+        if isinstance(matrix, dict) and matrix.get("schema") == 1
+        else None
+    )
+    if not isinstance(products, list) or not products or len(products) > MAX_ENTRIES:
+        raise CurrentnessError("Invalid support matrix product inventory")
+    matches = [
+        product
+        for product in products
+        if isinstance(product, dict)
+        and product.get("name") == product_name
+        and product.get("support") == "platform"
+        and isinstance(product.get("verifier"), dict)
+        and product["verifier"].get("type") == product_name
+    ]
+    if len(matches) != 1:
+        raise CurrentnessError(
+            f"Expected one support matrix verifier product {product_name}"
+        )
+    since = matches[0].get("since")
+    if not isinstance(since, str) or re.fullmatch(r"\d{4}\.\d+", since) is None:
+        raise CurrentnessError(
+            f"Invalid support matrix verifier series for {product_name}"
+        )
+    endpoints = matches[0]["verifier"].get("endpoints")
+    if not isinstance(endpoints, list) or not endpoints or len(endpoints) > 16:
+        raise CurrentnessError(
+            f"Invalid support matrix verifier endpoints for {product_name}"
+        )
+    selected = [
+        endpoint
+        for endpoint in endpoints
+        if isinstance(endpoint, dict) and endpoint.get("id") == endpoint_id
+    ]
+    if len(selected) != 1:
+        raise CurrentnessError(
+            f"Expected one support matrix verifier endpoint {product_name}/{endpoint_id}"
+        )
+    build = selected[0].get("build")
+    if not isinstance(build, str) or re.fullmatch(r"\d+(?:\.\d+){1,3}", build) is None:
+        raise CurrentnessError(
+            f"Invalid support matrix verifier build for {product_name}/{endpoint_id}"
+        )
+    return normalize_version(str(selected[0].get("version", ""))), since, build
+
+
 def local_version(local: dict[str, Any]) -> tuple[str, str | None]:
     """Extract a governed local version and optional immutable GitHub SHA."""
     kind = local.get("type")
@@ -305,6 +368,9 @@ def local_version(local: dict[str, Any]) -> tuple[str, str | None]:
         if versions.count(value) != 1:
             raise CurrentnessError(f"Missing or duplicate verifier version {value}")
         return value, None
+    if kind == "support-matrix-verifier":
+        version, _series, build = support_matrix_verifier_slot(local)
+        return version, build
     if kind in {"maven", "maven-classifier"}:
         group, artifact = name.split(":", 1)
         classifier = local.get("classifier")
@@ -769,6 +835,67 @@ def github_release_asset_latest(
     return version, {digest.removeprefix("sha256:")}
 
 
+def jetbrains_updates_version(
+    source: dict[str, Any], series: str | None, transport: Transport
+) -> tuple[str, set[str]]:
+    """Resolve one exact product's stable release channel from updates.xml."""
+    name = source.get("name")
+    code = source.get("code")
+    if not isinstance(name, str) or not name or not isinstance(code, str) or not code:
+        raise CurrentnessError("JetBrains updates source lacks a product name or code")
+    try:
+        root = ET.fromstring(transport.read(JETBRAINS_UPDATES_URL))
+    except ET.ParseError as error:
+        raise CurrentnessError(f"Invalid JetBrains updates XML: {error}") from error
+    products = root.findall("product") if root.tag == "products" else []
+    if not products or len(products) > MAX_ENTRIES:
+        raise CurrentnessError("Invalid JetBrains updates product inventory")
+    matches = [product for product in products if product.get("name") == name]
+    if len(matches) != 1:
+        raise CurrentnessError(f"Expected one JetBrains updates product {name}")
+    product = matches[0]
+    codes = [node.text.strip() for node in product.findall("code") if node.text]
+    if (
+        not codes
+        or len(codes) > 8
+        or len(codes) != len(set(codes))
+        or any(re.fullmatch(r"[A-Z][A-Z0-9]{1,7}", value) is None for value in codes)
+        or codes.count(code) != 1
+    ):
+        raise CurrentnessError(f"JetBrains updates product code drifted for {name}")
+    channel_id = f"{code}-RELEASE-licensing-RELEASE"
+    channels = product.findall("channel")
+    if not channels or len(channels) > 32:
+        raise CurrentnessError(f"Invalid JetBrains update channels for {name}")
+    release_channels = [channel for channel in channels if channel.get("id") == channel_id]
+    if len(release_channels) != 1:
+        raise CurrentnessError(f"Expected one exact JetBrains release channel for {name}")
+    release_channel = release_channels[0]
+    if (
+        release_channel.get("name") != f"{name} RELEASE"
+        or release_channel.get("status") != "release"
+        or release_channel.get("licensing") != "release"
+    ):
+        raise CurrentnessError(f"Invalid JetBrains release channel for {name}")
+    builds = release_channel.findall("build")
+    if not builds or len(builds) > 1024:
+        raise CurrentnessError(f"Invalid JetBrains release builds for {name}")
+    versions = [normalize_version(str(build.get("version", ""))) for build in builds]
+    if len(versions) != len(set(versions)):
+        raise CurrentnessError(f"Duplicate JetBrains stable release for {name}")
+    selected = newest(versions, series)
+    matching = [
+        str(build.get("fullNumber", ""))
+        for version, build in zip(versions, builds)
+        if version == selected
+    ]
+    if len(matching) != 1:
+        raise CurrentnessError(f"Expected one JetBrains stable build for {name} {selected}")
+    if re.fullmatch(r"\d+(?:\.\d+){1,3}", matching[0]) is None:
+        raise CurrentnessError(f"Invalid JetBrains stable build identity for {name}")
+    return selected, {matching[0]}
+
+
 def remote_version(source: dict[str, Any], policy: str, series: str | None, transport: Transport) -> tuple[str, set[str] | None]:
     """Resolve the official stable version for one governed source."""
     kind = source.get("type")
@@ -790,6 +917,8 @@ def remote_version(source: dict[str, Any], policy: str, series: str | None, tran
     if kind == "jetbrains-maven":
         versions = metadata_versions(transport, "https://cache-redirector.jetbrains.com/intellij-dependencies", name)
         return newest(versions, series), None
+    if kind == "jetbrains-updates":
+        return jetbrains_updates_version(source, series, transport)
     if kind in {"github", "github-release"}:
         return github_latest(transport, name)
     if kind == "github-release-asset":
@@ -902,12 +1031,31 @@ def validate_entry(entry: dict[str, Any], transport: Transport) -> str:
     local_config = entry.get("local")
     if not isinstance(local_config, dict):
         raise CurrentnessError(f"Currentness entry {identifier} has invalid local metadata")
-    local, local_sha = local_version(local_config)
+    verifier_series = None
+    if local_config.get("type") == "support-matrix-verifier":
+        local, verifier_series, local_sha = support_matrix_verifier_slot(local_config)
+    else:
+        local, local_sha = local_version(local_config)
     policy = entry.get("policy")
     if policy not in {"latest", "series", "compatibility", "branch", "security-preview"}:
         raise CurrentnessError(f"Currentness entry {identifier} has an invalid policy: {policy!r}")
+    if local_config.get("type") == "support-matrix-verifier":
+        endpoint_policies = {"minimum": "series", "current": "latest"}
+        endpoint = local_config.get("endpoint")
+        if endpoint_policies.get(endpoint) != policy:
+            raise CurrentnessError(
+                f"Product verifier endpoint {endpoint!r} has invalid policy {policy!r}"
+            )
+        if endpoint == "minimum" and entry.get("series") != verifier_series:
+            raise CurrentnessError(
+                f"Product verifier minimum must match support series {verifier_series}"
+            )
     if policy == "series" and not isinstance(entry.get("series"), str):
         raise CurrentnessError(f"Series pin {identifier} lacks a declared series")
+    if policy != "series" and "series" in entry:
+        raise CurrentnessError(
+            f"Currentness entry {identifier} cannot narrow {policy} with a series"
+        )
     if policy in {"compatibility", "series", "security-preview"}:
         reason = entry.get("reason")
         evidence = entry.get("evidence")
@@ -925,9 +1073,17 @@ def validate_entry(entry: dict[str, Any], transport: Transport) -> str:
     source = entry.get("source")
     if not isinstance(source, dict):
         raise CurrentnessError(f"Currentness entry {identifier} has no official source")
+    if local_config.get("type") == "support-matrix-verifier" and (
+        source.get("type") != "jetbrains-updates"
+        or local_config.get("product") != source.get("name")
+    ):
+        raise CurrentnessError(
+            f"Product verifier {identifier} is not bound to its official product"
+        )
     if policy == "security-preview":
         return validate_security_preview(entry, local, source, transport)
-    expected, expected_shas = remote_version(source, str(policy), entry.get("series"), transport)
+    series = entry.get("series") if policy == "series" else None
+    expected, expected_shas = remote_version(source, str(policy), series, transport)
     if policy == "branch":
         local_shas = set(local_sha.split(",")) if local_sha else set()
         if local != expected or not local_shas or not local_shas.issubset(expected_shas or set()):
@@ -937,7 +1093,10 @@ def validate_entry(entry: dict[str, Any], transport: Transport) -> str:
             raise CurrentnessError(f"{identifier} is stale: local {local}, official {expected}")
         local_shas = set(local_sha.split(",")) if local_sha else set()
         if local_shas and not local_shas.issubset(expected_shas or set()):
-            raise CurrentnessError(f"{identifier} SHA {local_sha} does not identify official {expected}")
+            identity = "build" if local_config.get("type") == "support-matrix-verifier" else "SHA"
+            raise CurrentnessError(
+                f"{identifier} {identity} {local_sha} does not identify official {expected}"
+            )
     if identifier == "gradle":
         validate_gradle_checksum(local, transport)
     suffix = f" (compatibility: {entry['reason']})" if policy == "series" else ""
@@ -977,6 +1136,12 @@ def inventory_keys(local: dict[str, Any]) -> set[str]:
         return {f"action:{name}"}
     if kind in {"maven", "maven-classifier"}:
         return {f"maven:{name}"}
+    if kind == "support-matrix-verifier":
+        product = local.get("product")
+        endpoint = local.get("endpoint")
+        if not isinstance(path, str) or not isinstance(product, str) or not isinstance(endpoint, str):
+            raise CurrentnessError("Invalid support matrix verifier inventory key")
+        return {f"support-matrix-verifier:{path}:{product}:{endpoint}"}
     if kind == "gradle-variable":
         return {f"gradle-variable:{path}:{name}"}
     if kind == "gradle-setting":
@@ -1119,6 +1284,47 @@ def discovered_pin_keys() -> set[str]:
         read_text(verifier),
     ):
         keys.add(f"gradle-verifier:{verifier}:{value}")
+    try:
+        support_matrix = json.loads(read_text("config/support-matrix.json"))
+    except json.JSONDecodeError as error:
+        raise CurrentnessError(f"Invalid support matrix discovery JSON: {error}") from error
+    products = (
+        support_matrix.get("products")
+        if isinstance(support_matrix, dict) and support_matrix.get("schema") == 1
+        else None
+    )
+    if not isinstance(products, list) or not products or len(products) > MAX_ENTRIES:
+        raise CurrentnessError("Invalid support matrix discovery inventory")
+    verifier_slots: list[str] = []
+    for product in products:
+        if not isinstance(product, dict) or product.get("support") != "platform":
+            continue
+        verifier_config = product.get("verifier")
+        product_name = product.get("name")
+        endpoints = (
+            verifier_config.get("endpoints")
+            if isinstance(verifier_config, dict)
+            else None
+        )
+        if (
+            not isinstance(product_name, str)
+            or not isinstance(verifier_config, dict)
+            or verifier_config.get("type") != product_name
+            or not isinstance(endpoints, list)
+            or not endpoints
+            or len(endpoints) > 16
+        ):
+            raise CurrentnessError("Invalid support matrix verifier discovery slot")
+        for endpoint in endpoints:
+            endpoint_id = endpoint.get("id") if isinstance(endpoint, dict) else None
+            if not isinstance(endpoint_id, str) or not endpoint_id:
+                raise CurrentnessError("Invalid support matrix verifier endpoint discovery")
+            verifier_slots.append(
+                f"support-matrix-verifier:config/support-matrix.json:{product_name}:{endpoint_id}"
+            )
+    if not verifier_slots or len(verifier_slots) != len(set(verifier_slots)):
+        raise CurrentnessError("Duplicate or empty support matrix verifier discovery")
+    keys.update(verifier_slots)
     cmake = "conformance/cli-fixtures/cmake/CMakeLists.txt"
     if "cmake_minimum_required" in read_text(cmake):
         keys.add(f"cmake-minimum:{cmake}")
