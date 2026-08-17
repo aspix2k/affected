@@ -21,11 +21,18 @@ internal class ProcessTreeTermination(
 ) {
 
     private val requested = AtomicBoolean()
-    private val initialPass = CountDownLatch(1)
+    private val completed = AtomicBoolean()
+    private val initialPassStarted = AtomicBoolean()
+    private val completion = CountDownLatch(1)
     private val lock = Any()
     private val scanLock = Any()
     private val known = linkedSetOf(root)
+    private val childrenByParent = linkedMapOf<ProcessHandle, MutableSet<ProcessHandle>>()
     private val tracking = AtomicReference<ScheduledFuture<*>?>()
+    private val termination = AtomicReference<ScheduledFuture<*>?>()
+
+    @Volatile
+    private var terminationProven = false
 
     @Volatile
     private var deadlineNanos = Long.MAX_VALUE
@@ -45,16 +52,26 @@ internal class ProcessTreeTermination(
     }
 
     val isRequested: Boolean get() = requested.get()
-    internal val isClosed: Boolean get() = tracking.get() == null
+    internal val isClosed: Boolean get() = tracking.get() == null && termination.get() == null
 
     fun request() {
         if (!requested.compareAndSet(false, true)) return
         deadlineNanos = System.nanoTime() + timeoutNanos
         stopTracking()
-        runCatching { executor.execute(::initialTermination) }.onFailure {
+        runCatching {
+            executor.scheduleWithFixedDelay(
+                ::terminationPass,
+                0,
+                TERMINATION_POLL_MILLIS,
+                TimeUnit.MILLISECONDS,
+            )
+        }.onSuccess { scheduled ->
+            termination.set(scheduled)
+            if (completed.get()) stopTermination()
+        }.onFailure {
             scanFailed = true
-            destroyKnown()
-            initialPass.countDown()
+            destroyLeaves()
+            complete(false)
         }
     }
 
@@ -62,21 +79,14 @@ internal class ProcessTreeTermination(
         request()
         var restoreInterrupt = Thread.interrupted()
         return try {
-            if (!awaitInitialPass()) return false
-            while (remainingNanos() > 0) {
-                val added = scan(deadlineNanos)
-                destroyKnown()
-                if (!scanFailed && !added && allTerminated()) {
-                    return true
-                }
-                Thread.sleep(TERMINATION_POLL_MILLIS)
-            }
-            false
+            val remaining = remainingNanos()
+            val finished = completion.count == 0L ||
+                (remaining > 0 && completion.await(remaining, TimeUnit.NANOSECONDS))
+            finished && terminationProven
         } catch (_: InterruptedException) {
             restoreInterrupt = true
             false
         } finally {
-            stopTracking()
             if (restoreInterrupt) Thread.currentThread().interrupt()
         }
     }
@@ -85,27 +95,23 @@ internal class ProcessTreeTermination(
         stopTracking()
     }
 
-    private fun initialTermination() {
-        try {
+    private fun terminationPass() {
+        if (completed.get()) return
+        if (remainingNanos() <= 0) return complete(false)
+        val added = if (initialPassStarted.compareAndSet(false, true)) {
             scan(deadlineNanos)
             runCatching(afterInitialScan).onFailure { error ->
                 scanFailed = true
                 if (error is InterruptedException) Thread.currentThread().interrupt()
             }
-            scan(deadlineNanos)
-            destroyKnown()
-            runCatching(afterInitialPass).onFailure { error ->
-                scanFailed = true
-                if (error is InterruptedException) Thread.currentThread().interrupt()
-            }
-        } finally {
-            initialPass.countDown()
+            val discovered = scan(deadlineNanos)
+            destroyLeaves()
+            discovered
+        } else {
+            scan(deadlineNanos).also { destroyLeaves() }
         }
-    }
-
-    private fun awaitInitialPass(): Boolean {
-        val remaining = remainingNanos()
-        return remaining > 0 && initialPass.await(remaining, TimeUnit.NANOSECONDS)
+        if (!scanFailed && !added && allTerminated()) return complete(true)
+        if (remainingNanos() <= 0) complete(false)
     }
 
     private fun track() {
@@ -135,14 +141,16 @@ internal class ProcessTreeTermination(
                 if (visited.add(process)) {
                     complete = visitChildren(process, scanDeadline) { child ->
                         val wasAdded = synchronized(lock) {
-                            if (child in known) {
-                                false
-                            } else if (known.size >= maxProcesses) {
-                                scanFailed = true
-                                false
-                            } else {
-                                known.add(child)
+                            val added = when {
+                                child in known -> false
+                                known.size >= maxProcesses -> {
+                                    scanFailed = true
+                                    false
+                                }
+                                else -> known.add(child)
                             }
+                            if (child in known) childrenByParent.getOrPut(process, ::linkedSetOf).add(child)
+                            added
                         }
                         if (wasAdded) added = true
                         if (!visited.contains(child)) queue.addLast(child)
@@ -182,8 +190,16 @@ internal class ProcessTreeTermination(
 
     private fun trackedCount(): Int = synchronized(lock) { known.size }
 
-    private fun destroyKnown() {
-        synchronized(lock) { known.toList().asReversed() }.forEach { process ->
+    private fun destroyLeaves() {
+        val leaves = synchronized(lock) {
+            val alive = known.filter(::isAlive)
+            val aliveSet = alive.toSet()
+            val parents = childrenByParent
+                .filter { (parent, children) -> parent in aliveSet && children.any(aliveSet::contains) }
+                .keys
+            alive.filterNot(parents::contains).ifEmpty { alive }
+        }
+        leaves.forEach { process ->
             if (isAlive(process)) runCatching { process.destroyForcibly() }
         }
     }
@@ -197,8 +213,23 @@ internal class ProcessTreeTermination(
 
     private fun remainingNanos(): Long = deadlineNanos - System.nanoTime()
 
+    private fun complete(proven: Boolean) {
+        if (!completed.compareAndSet(false, true)) return
+        runCatching(afterInitialPass).onFailure { error ->
+            scanFailed = true
+            if (error is InterruptedException) Thread.currentThread().interrupt()
+        }
+        terminationProven = proven && !scanFailed
+        stopTermination()
+        completion.countDown()
+    }
+
     private fun stopTracking() {
         tracking.getAndSet(null)?.cancel(false)
+    }
+
+    private fun stopTermination() {
+        termination.getAndSet(null)?.cancel(false)
     }
 }
 

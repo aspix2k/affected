@@ -1,0 +1,1 @@
+- Affected now stops observed CLI children before their parents so cancellation can remove temporary output reliably on Linux.
