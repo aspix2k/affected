@@ -47,7 +47,7 @@ class ProcessTreeTerminationTest {
             termination.request()
 
             assertTrue(termination.await())
-            assertFalse(root.isAlive)
+            assertFalse(root.toHandle().isAlive)
             assertFalse(child?.isAlive ?: true)
         } finally {
             stop(root)
@@ -64,7 +64,7 @@ class ProcessTreeTerminationTest {
 
             assertTrue(ProcessTreeTermination(root.toHandle(), executor = executor).await())
             assertTrue(Thread.interrupted())
-            assertFalse(root.isAlive)
+            assertFalse(root.toHandle().isAlive)
         } finally {
             Thread.interrupted()
             stop(root)
@@ -122,7 +122,7 @@ class ProcessTreeTerminationTest {
         )
         try {
             assertFalse(termination.await())
-            assertFalse(root.isAlive)
+            assertFalse(root.toHandle().isAlive)
         } finally {
             stop(root)
         }
@@ -143,7 +143,7 @@ class ProcessTreeTerminationTest {
         )
         try {
             assertFalse(termination.await())
-            assertFalse(root.isAlive)
+            assertFalse(root.toHandle().isAlive)
         } finally {
             stop(root)
             stop(first)
