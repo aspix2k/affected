@@ -1,0 +1,1 @@
+- Kept Affected compatible with DataSpell installations that do not bundle the Gradle plugin.

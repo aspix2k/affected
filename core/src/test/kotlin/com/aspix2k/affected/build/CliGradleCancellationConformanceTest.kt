@@ -134,7 +134,12 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
                     }
                 }
                 ExternalSystemUtil.runTask(
-                    gradleTaskExecutionSpec(project, settings, stoppingListener, execution.callback),
+                    GradleBuildSystem().gradleTaskExecutionSpec(
+                        project,
+                        settings,
+                        stoppingListener,
+                        execution.callback,
+                    ),
                 )
             }
 

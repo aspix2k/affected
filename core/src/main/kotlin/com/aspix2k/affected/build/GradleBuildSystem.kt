@@ -340,6 +340,37 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
         return result
     }
 
+    internal fun gradleTaskExecutionSettings(
+        root: String,
+        tasks: List<String>,
+        arguments: List<String>,
+    ): ExternalSystemTaskExecutionSettings = ExternalSystemTaskExecutionSettings().apply {
+        executionName = "Affected"
+        externalProjectPath = root
+        taskNames = tasks
+        externalSystemIdString = GradleConstants.SYSTEM_ID.id
+        if (arguments.isNotEmpty()) scriptParameters = ParametersListUtil.join(arguments)
+    }
+
+    internal fun gradleTaskExecutionSpec(
+        project: Project,
+        settings: ExternalSystemTaskExecutionSettings,
+        listener: ExternalSystemTaskNotificationListener,
+        callback: TaskCallback,
+        userData: UserDataHolderBase? = null,
+    ): TaskExecutionSpec {
+        val builder = TaskExecutionSpec.create()
+            .withProject(project)
+            .withSystemId(GradleConstants.SYSTEM_ID)
+            .withExecutorId(DefaultRunExecutor.EXECUTOR_ID)
+            .withSettings(settings)
+            .withListener(listener)
+            .withCallback(callback)
+            .withProgressExecutionMode(ProgressExecutionMode.NO_PROGRESS_SYNC)
+        if (userData != null) builder.withUserData(userData)
+        return builder.build()
+    }
+
     private companion object {
         const val SOURCE_SET_TYPE = "sourceSet"
         val SETTINGS_FILES = listOf("settings.gradle.kts", "settings.gradle")
@@ -353,37 +384,6 @@ internal suspend fun publishGradleCollector(
     create: () -> GradleCollectorRun?,
 ): GradleCollectorRun? = withContext(Dispatchers.IO) {
     create().also(target::set)
-}
-
-internal fun gradleTaskExecutionSettings(
-    root: String,
-    tasks: List<String>,
-    arguments: List<String>,
-): ExternalSystemTaskExecutionSettings = ExternalSystemTaskExecutionSettings().apply {
-    executionName = "Affected"
-    externalProjectPath = root
-    taskNames = tasks
-    externalSystemIdString = GradleConstants.SYSTEM_ID.id
-    if (arguments.isNotEmpty()) scriptParameters = ParametersListUtil.join(arguments)
-}
-
-internal fun gradleTaskExecutionSpec(
-    project: Project,
-    settings: ExternalSystemTaskExecutionSettings,
-    listener: ExternalSystemTaskNotificationListener,
-    callback: TaskCallback,
-    userData: UserDataHolderBase? = null,
-): TaskExecutionSpec {
-    val builder = TaskExecutionSpec.create()
-        .withProject(project)
-        .withSystemId(GradleConstants.SYSTEM_ID)
-        .withExecutorId(DefaultRunExecutor.EXECUTOR_ID)
-        .withSettings(settings)
-        .withListener(listener)
-        .withCallback(callback)
-        .withProgressExecutionMode(ProgressExecutionMode.NO_PROGRESS_SYNC)
-    if (userData != null) builder.withUserData(userData)
-    return builder.build()
 }
 
 internal fun cancelExternalTask(

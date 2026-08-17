@@ -55,6 +55,16 @@ class GradleTaskPathTest {
     }
 
     @Test
+    fun `optional Gradle plugin references stay inside its extension class`() {
+        val bytecode = GradleBuildSystem::class.java
+            .getResourceAsStream("GradleBuildSystemKt.class")
+            ?.use { it.readBytes().toString(Charsets.ISO_8859_1) }
+            ?: error("GradleBuildSystemKt bytecode is missing")
+
+        assertFalse(bytecode.contains("org/jetbrains/plugins/gradle"))
+    }
+
+    @Test
     fun `an included build uses the composite execution coordinates`() {
         assertEquals(
             "/repo" to ":platform:shared-ui",
