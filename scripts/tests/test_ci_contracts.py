@@ -230,6 +230,23 @@ class CiContractsTest(unittest.TestCase):
                 with self.assertRaisesRegex(ci_contracts.CiContractError, "Python adapters"):
                     ci_contracts.check(root)
 
+    def test_native_fixture_tools_must_skip_recommended_packages(self) -> None:
+        """Optional R tooling must not consume the bounded native-fixture job."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/conformance.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "sudo apt-get install -y --no-install-recommends",
+                    "sudo apt-get install -y",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "recommended packages"):
+                ci_contracts.check(root)
+
     def test_verify_aggregate_must_check_the_scripts_result(self) -> None:
         """A failed scripts lane must reach the required verify aggregate."""
         with TemporaryDirectory() as directory:

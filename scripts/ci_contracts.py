@@ -410,6 +410,12 @@ def check_conformance(conformance: str) -> None:
     if not has_line(scope, "exact: ${{ steps.classify.outputs.exact }}") or classifier is None:
         raise CiContractError("conformance scope must publish the classifier exact-impact decision")
     cli_native = slice_job(conformance, "cli-native")
+    native_packages = (
+        "sudo apt-get install -y --no-install-recommends "
+        "ant ant-optional meson ninja-build gcc make r-base r-cran-testthat"
+    )
+    if cli_native.count(native_packages) != 1 or not has_line(cli_native, native_packages):
+        raise CiContractError("Native CLI fixture tools must skip recommended packages")
     adapter_directory = "core/src/main/python"
     for command in (
         f"python -m ruff check {adapter_directory}",
