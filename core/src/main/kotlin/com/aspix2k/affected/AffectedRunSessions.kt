@@ -171,12 +171,14 @@ private class AffectedRunContextElement(
 }
 
 internal class OwnedProcessExecution(
+    private val stopProcess: (ProcessHandler) -> Unit = { handler -> handler.destroyProcess() },
     private val onCancel: () -> Unit = {},
 ) : AffectedOwnedSession {
     private val lock = Any()
     private val completion = CompletableDeferred<Boolean>()
     private var handler: ProcessHandler? = null
     private var cancellationRequested = false
+    private var terminalAcceptance: Boolean? = null
     private var finished = false
 
     fun bind(handler: ProcessHandler) {
@@ -185,10 +187,14 @@ internal class OwnedProcessExecution(
             this.handler = handler
             cancellationRequested || finished
         }
-        if (stop && !handler.isProcessTerminated) handler.destroyProcess()
+        if (stop && !handler.isProcessTerminated) runCatching { stopProcess(handler) }
     }
 
     fun isCancellationRequested(): Boolean = synchronized(lock) { cancellationRequested }
+
+    fun seal(): Boolean = synchronized(lock) {
+        terminalAcceptance ?: (!cancellationRequested).also { terminalAcceptance = it }
+    }
 
     fun finish(action: (Boolean) -> Unit = {}): Boolean {
         var completed = false
@@ -196,7 +202,7 @@ internal class OwnedProcessExecution(
         try {
             synchronized(lock) {
                 if (finished) return false
-                accepted = !cancellationRequested
+                accepted = terminalAcceptance ?: (!cancellationRequested).also { terminalAcceptance = it }
                 try {
                     action(accepted)
                 } finally {
@@ -216,12 +222,12 @@ internal class OwnedProcessExecution(
 
     override fun stopIfActive(): Boolean {
         val process = synchronized(lock) {
-            if (finished || cancellationRequested) return false
+            if (finished || terminalAcceptance != null || cancellationRequested) return false
             cancellationRequested = true
             handler
         }
         runCatching(onCancel)
-        if (process != null && !process.isProcessTerminated) process.destroyProcess()
+        if (process != null && !process.isProcessTerminated) runCatching { stopProcess(process) }
         return true
     }
 }

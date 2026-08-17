@@ -172,6 +172,22 @@ class AffectedRunClaimTest {
     }
 
     @Test
+    fun `terminal process decision rejects a later stop until cleanup finishes`() {
+        val sessions = AffectedRunSessions()
+        val execution = OwnedProcessExecution()
+        sessions.register(execution)
+
+        assertTrue(execution.seal())
+        assertEquals(0, sessions.stopOwned())
+        assertEquals(1, sessions.activeCount())
+
+        assertTrue(execution.finish())
+        assertTrue(execution.seal())
+        sessions.unregister(execution)
+        assertEquals(0, sessions.activeCount())
+    }
+
+    @Test
     fun `cancelled process ownership remains pending until cleanup finishes`() = runBlocking {
         val sessions = AffectedRunSessions()
         val execution = OwnedProcessExecution()

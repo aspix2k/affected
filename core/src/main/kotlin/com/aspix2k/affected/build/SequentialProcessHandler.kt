@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.AffectedOwnedSession
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessEvent
@@ -15,8 +16,6 @@ import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.SimpleFileVisitor
 import java.nio.file.attribute.BasicFileAttributes
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 internal const val DEFAULT_UNRESOLVED_MESSAGE =
@@ -69,18 +68,20 @@ internal class SequentialProcessHandler(
     private val processHandlerFactory: (GeneralCommandLine) -> OSProcessHandler = { OSProcessHandler(it) },
     private val ownedTemporaryDirectoryCleanup: (Path) -> Boolean = ::deleteOwnedTemporaryDirectory,
     private val afterInitialProcessTermination: () -> Unit = {},
-    private val processTerminationStarted: () -> Unit = {},
-) : ProcessHandler() {
+    private val processTreeTerminationFactory: (ProcessHandle, () -> Unit) -> ProcessTreeTermination =
+        { root, afterInitialPass -> ProcessTreeTermination(root, afterInitialPass = afterInitialPass) },
+) : ProcessHandler(), AffectedOwnedSession {
 
     private val finished = AtomicBoolean(false)
+    private val notified = AtomicBoolean(false)
     private val stopped = AtomicBoolean(false)
     private val lock = Any()
     private var next = 0
     private var recordedExitCode = 0
     private var activeCommand: CliCommand? = null
     private var lifecycleActive = false
-    private var terminationSetup: CountDownLatch? = null
-    private var terminatingProcesses = emptyList<ProcessHandle>()
+    private var processTreeTermination: ProcessTreeTermination? = null
+    private var terminalDecision = false
 
     @Volatile
     private var current: OSProcessHandler? = null
@@ -89,40 +90,54 @@ internal class SequentialProcessHandler(
     private var resolverThread: Thread? = null
 
     override fun startNotify() {
+        if (!notified.compareAndSet(false, true)) return
         super.startNotify()
         AppExecutorUtil.getAppExecutorService().execute(::startNext)
     }
 
     override fun destroyProcessImpl() {
+        requestStop()
+    }
+
+    override fun isActive(): Boolean = !finished.get()
+
+    override fun stopIfActive(): Boolean = requestStop()
+
+    private fun requestStop(): Boolean {
         var handler: OSProcessHandler? = null
         var hasActiveLifecycle = false
-        var setup: CountDownLatch? = null
+        var termination: ProcessTreeTermination? = null
         var initiate = false
+        var pending = emptyList<CliCommand>()
         synchronized(lock) {
-            if (!stopped.get()) {
+            if (!finished.get() && !terminalDecision && !stopped.get()) {
                 handler = current
-                if (handler != null) setup = prepareTerminationLocked()
+                if (handler != null) termination = checkNotNull(processTreeTermination)
                 stopped.set(true)
                 initiate = true
             }
             resolverThread?.interrupt()
             hasActiveLifecycle = resolverThread != null || activeCommand != null || lifecycleActive
+            if (initiate && handler == null && !hasActiveLifecycle) {
+                lifecycleActive = true
+                pending = commands.drop(next).filterIsInstance<CliCommand>()
+                next = commands.size
+            }
         }
-        if (!initiate) return
+        if (!initiate) return false
         when {
-            handler != null -> destroyProcessTree(handler, setup!!)
-            !hasActiveLifecycle -> finish(1)
+            handler != null -> termination!!.request()
+            !hasActiveLifecycle -> {
+                pending.forEach(::cleanup)
+                endLifecycle()
+                finish(1)
+            }
         }
+        return true
     }
 
     override fun detachProcessImpl() {
-        stopped.set(true)
-        val handler = synchronized(lock) {
-            resolverThread?.interrupt()
-            current
-        }
-        handler?.detachProcess()
-        notifyDetached()
+        requestStop()
     }
 
     override fun detachIsDefault(): Boolean = false
@@ -130,7 +145,7 @@ internal class SequentialProcessHandler(
     override fun getProcessInput(): OutputStream = current?.processInput ?: OutputStream.nullOutputStream()
 
     private fun startNext() {
-        if (!beginLifecycle()) return finish(1)
+        if (!beginLifecycle()) return
         executionRootGuard.validationFailure()?.let { return failExecutionRoot(it) }
         val step = nextStep() ?: return finishWithoutStep()
         resolve(step)
@@ -237,8 +252,14 @@ internal class SequentialProcessHandler(
             finish(1)
             return
         }
+        val termination = processTreeTerminationFactory(
+            handler.process.toHandle(),
+            afterInitialProcessTermination,
+        )
 
         val shouldStart = synchronized(lock) {
+            processTreeTermination = termination
+            terminalDecision = false
             if (stopped.get()) {
                 false
             } else {
@@ -247,8 +268,7 @@ internal class SequentialProcessHandler(
             }
         }
         if (!shouldStart) {
-            val setup = synchronized(lock) { prepareTerminationLocked() }
-            destroyProcessTree(handler, setup)
+            termination.request()
             if (awaitTerminatingProcesses()) cleanup(command)
             release(command)
             finish(1)
@@ -260,11 +280,15 @@ internal class SequentialProcessHandler(
             }
 
             override fun processTerminated(event: ProcessEvent) {
-                synchronized(lock) {
+                val cancellationObserved = synchronized(lock) {
+                    val cancelled = stopped.get() || termination.isRequested
+                    terminalDecision = true
                     if (current === handler) current = null
+                    if (!cancelled && processTreeTermination === termination) processTreeTermination = null
+                    cancelled
                 }
-                processTerminationStarted()
-                val terminated = !stopped.get() || awaitTerminatingProcesses()
+                if (!cancellationObserved) termination.close()
+                val terminated = !cancellationObserved || awaitTerminatingProcesses()
                 if (!terminated) {
                     notifyTextAvailable(
                         "Affected could not terminate every child process before cleanup.\n",
@@ -275,12 +299,15 @@ internal class SequentialProcessHandler(
                 release(command)
                 val exitCode = if (cleaned) event.exitCode else event.exitCode.takeIf { it != 0 } ?: 1
                 when {
-                    exitCode == 0 && !stopped.get() ->
+                    exitCode == 0 && !stopped.get() -> {
+                        reopenCancellation()
                         AppExecutorUtil.getAppExecutorService().execute(::startNext)
+                    }
                     shouldContinueAfterFailure(command, exitCode) -> {
                         synchronized(lock) {
                             if (recordedExitCode == 0) recordedExitCode = exitCode
                         }
+                        reopenCancellation()
                         AppExecutorUtil.getAppExecutorService().execute(::startNext)
                     }
                     else -> finish(exitCode.takeIf { it != 0 } ?: 1)
@@ -322,6 +349,10 @@ internal class SequentialProcessHandler(
         synchronized(lock) { lifecycleActive = false }
     }
 
+    private fun reopenCancellation() {
+        synchronized(lock) { terminalDecision = false }
+    }
+
     private fun cleanup(command: CliCommand): Boolean {
         val interrupted = Thread.interrupted()
         return try {
@@ -340,67 +371,14 @@ internal class SequentialProcessHandler(
         }
     }
 
-    private fun prepareTerminationLocked(): CountDownLatch = terminationSetup ?: CountDownLatch(1).also {
-        terminationSetup = it
-        terminatingProcesses = emptyList()
-    }
-
-    private fun destroyProcessTree(handler: OSProcessHandler, setup: CountDownLatch) {
-        try {
-            val first = runCatching { handler.process.descendants().toList().asReversed() }.getOrDefault(emptyList())
-            synchronized(lock) {
-                terminatingProcesses = (first + handler.process.toHandle()).distinct()
-            }
-            first.forEach { process -> runCatching { process.destroyForcibly() } }
-            afterInitialProcessTermination()
-            val second = runCatching { handler.process.descendants().toList().asReversed() }.getOrDefault(emptyList())
-            val processes = (first + second + handler.process.toHandle()).distinct()
-            synchronized(lock) {
-                terminatingProcesses = processes
-            }
-            processes.forEach { process -> runCatching { process.destroyForcibly() } }
-            handler.destroyProcess()
-        } finally {
-            setup.countDown()
-        }
-    }
-
     private fun awaitTerminatingProcesses(): Boolean {
-        val deadline = System.nanoTime() + PROCESS_TERMINATION_TIMEOUT_NANOS
-        val setup = synchronized(lock) { terminationSetup }
-        if (setup != null) {
-            val remaining = deadline - System.nanoTime()
-            try {
-                if (remaining <= 0 || !setup.await(remaining, TimeUnit.NANOSECONDS)) return false
-            } catch (_: InterruptedException) {
-                Thread.currentThread().interrupt()
-                return false
-            }
-        }
-        val processes = synchronized(lock) { terminatingProcesses }
-        for (process in processes) {
-            while (process.isAlive && System.nanoTime() < deadline) {
-                try {
-                    Thread.sleep(PROCESS_TERMINATION_POLL_MILLIS)
-                } catch (_: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    return false
-                }
-            }
-        }
-        val terminated = processes.none(ProcessHandle::isAlive)
+        val termination = synchronized(lock) { processTreeTermination } ?: return true
+        val terminated = termination.await()
         if (!terminated) return false
         synchronized(lock) {
-            if (terminationSetup === setup) {
-                terminationSetup = null
-                terminatingProcesses = emptyList()
-            }
+            if (processTreeTermination === termination) processTreeTermination = null
         }
         return true
-    }
-
-    private fun notifyDetached() {
-        if (finished.compareAndSet(false, true)) notifyProcessDetached()
     }
 
     private fun finish(exitCode: Int) {
@@ -463,5 +441,3 @@ private const val OWNED_TEMPORARY_PREFIX = "affected-"
 private const val CLEANUP_ATTEMPTS = 3
 private const val CLEANUP_BACKOFF_MILLIS = 50L
 private const val MAX_CLEANUP_ENTRIES = 100_000
-private const val PROCESS_TERMINATION_POLL_MILLIS = 25L
-private const val PROCESS_TERMINATION_TIMEOUT_NANOS = 5_000_000_000L

@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.AffectedOwnedSession
 import com.aspix2k.affected.AffectedRunPresentation
 import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.AffectedSettings
@@ -68,7 +69,7 @@ object CommandRunner {
             ),
         )
         ProcessTerminatedListener.attach(handler)
-        if (!AffectedRunSessions.getInstance(project).register(handler)) {
+        if (!AffectedRunSessions.getInstance(project).register(handler as AffectedOwnedSession)) {
             handler.startNotify()
             return
         }
@@ -123,13 +124,16 @@ object CommandRunner {
                         complete(event.exitCode == 0)
                     }
                 })
-                registered = sessions.register(handler)
+                registered = sessions.register(handler as AffectedOwnedSession)
                 if (!registered) {
                     handler.startNotify()
                     return@suspendCancellableCoroutine
                 }
                 continuation.invokeOnCancellation {
-                    if (!handler.isProcessTerminated) handler.destroyProcess()
+                    if (!handler.isProcessTerminated) {
+                        handler.destroyProcess()
+                        handler.startNotify()
+                    }
                 }
 
                 ApplicationManager.getApplication().invokeLater {
@@ -144,12 +148,15 @@ object CommandRunner {
             }
         } catch (cancelled: CancellationException) {
             withContext(NonCancellable) {
-                if (!handler.isProcessTerminated) handler.destroyProcess()
+                if (!handler.isProcessTerminated) {
+                    handler.destroyProcess()
+                    handler.startNotify()
+                }
                 terminated.await()
             }
             throw cancelled
         } finally {
-            if (registered) sessions.unregister(handler)
+            if (registered) sessions.unregister(handler as AffectedOwnedSession)
         }
     }
 
@@ -200,34 +207,78 @@ object CommandRunner {
         null
     }
 
-    private fun capture(process: Process, timeoutSeconds: Long, maxBytes: Int): String? {
-        val state = BoundedCapture(process, maxBytes)
+    internal fun capture(process: Process, timeoutSeconds: Long, maxBytes: Int): String? {
+        val termination = ProcessTreeTermination(process.toHandle())
+        val state = BoundedCapture(termination, maxBytes)
         val stdout = state.reader(process.inputStream, collect = true)
         val stderr = state.reader(process.errorStream, collect = false)
         stdout.start()
         stderr.start()
-        return try {
+        var result: String? = null
+        var readersTimedOut = false
+        var restoreInterrupt = false
+        try {
             val completed = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
-            if (!completed) destroyProcessTree(process)
+            if (!completed) termination.request()
             stdout.join(CAPTURE_READER_TIMEOUT_MILLIS)
             stderr.join(CAPTURE_READER_TIMEOUT_MILLIS)
             if (stdout.isAlive || stderr.isAlive) {
+                readersTimedOut = true
+                termination.request()
                 stdout.interrupt()
                 stderr.interrupt()
-                null
             } else {
-                state.result().takeIf { completed && process.exitValue() == 0 }
+                result = state.result().takeIf { completed && process.exitValue() == 0 }
             }
-        } catch (error: InterruptedException) {
-            Thread.currentThread().interrupt()
-            null
+        } catch (_: InterruptedException) {
+            restoreInterrupt = true
+            termination.request()
         } finally {
-            if (process.isAlive) destroyProcessTree(process)
+            val cleanupSafe = finishCapture(process, termination, stdout, stderr, restoreInterrupt)
+            if (!cleanupSafe || readersTimedOut) result = null
         }
+        return result
     }
 }
 
-private class BoundedCapture(private val process: Process, private val limit: Int) {
+private fun finishCapture(
+    process: Process,
+    termination: ProcessTreeTermination,
+    stdout: Thread,
+    stderr: Thread,
+    restoreInitialInterrupt: Boolean,
+): Boolean {
+    var restoreInterrupt = Thread.interrupted() || restoreInitialInterrupt
+    runCatching { process.inputStream.close() }
+    runCatching { process.errorStream.close() }
+    runCatching { process.outputStream.close() }
+    stdout.interrupt()
+    stderr.interrupt()
+    try {
+        stdout.join(CAPTURE_READER_TIMEOUT_MILLIS)
+        stderr.join(CAPTURE_READER_TIMEOUT_MILLIS)
+    } catch (_: InterruptedException) {
+        restoreInterrupt = true
+        termination.request()
+    }
+    if (listOf(stdout, stderr).any(Thread::isAlive)) termination.request()
+    var terminated = if (process.isAlive || termination.isRequested) {
+        termination.await()
+    } else {
+        termination.close()
+        true
+    }
+    val interruptedDuringTermination = Thread.interrupted()
+    if (!terminated && interruptedDuringTermination) {
+        restoreInterrupt = true
+        terminated = termination.await()
+    }
+    restoreInterrupt = Thread.interrupted() || interruptedDuringTermination || restoreInterrupt
+    if (restoreInterrupt) Thread.currentThread().interrupt()
+    return terminated && listOf(stdout, stderr).none(Thread::isAlive)
+}
+
+private class BoundedCapture(private val termination: ProcessTreeTermination, private val limit: Int) {
 
     private val bytes = AtomicLong()
     private val failed = AtomicBoolean()
@@ -242,7 +293,7 @@ private class BoundedCapture(private val process: Process, private val limit: In
                     if (count < 0) return@use
                     if (bytes.addAndGet(count.toLong()) > limit) {
                         failed.set(true)
-                        destroyProcessTree(process)
+                        termination.request()
                         return@use
                     }
                     if (collect) stdout.write(buffer, 0, count)
@@ -250,7 +301,7 @@ private class BoundedCapture(private val process: Process, private val limit: In
             }
         }.onFailure {
             failed.set(true)
-            destroyProcessTree(process)
+            termination.request()
         }
     }.apply {
         isDaemon = true
@@ -258,16 +309,6 @@ private class BoundedCapture(private val process: Process, private val limit: In
     }
 
     fun result(): String? = if (failed.get()) null else stdout.toString(StandardCharsets.UTF_8)
-}
-
-private fun destroyProcessTree(process: Process) {
-    runCatching {
-        process.descendants().toList().asReversed().forEach { descendant -> descendant.destroyForcibly() }
-    }
-    runCatching { process.destroyForcibly() }
-    runCatching { process.inputStream.close() }
-    runCatching { process.errorStream.close() }
-    runCatching { process.outputStream.close() }
 }
 
 private fun planContinuesAfterFailure(): Boolean =
