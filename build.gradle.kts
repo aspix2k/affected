@@ -22,7 +22,7 @@ buildscript {
         gradlePluginPortal()
     }
     dependencies {
-        classpath(enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.1"))
+        classpath(enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.2"))
         constraints {
             classpath("org.jsoup:jsoup:1.23.1")
         }

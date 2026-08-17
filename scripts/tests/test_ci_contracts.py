@@ -236,7 +236,7 @@ class CiContractsTest(unittest.TestCase):
             path = root / "mcp/build.gradle.kts"
             path.write_text(
                 path.read_text(encoding="utf-8").replace(
-                    'add("intellijPlatformDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.1"))\n',
+                    'add("intellijPlatformDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.2"))\n',
                     "",
                     1,
                 ),

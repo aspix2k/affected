@@ -23,8 +23,8 @@ dependencies {
         plugin("com.intellij.mcpServer", providers.gradleProperty("affected.mcp.version").get())
         testFramework(TestFrameworkType.Platform)
     }
-    add("intellijPlatformDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.1"))
-    add("intellijPlatformTestDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.1"))
+    add("intellijPlatformDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.2"))
+    add("intellijPlatformTestDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.2"))
     implementation(project(":core"))
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
