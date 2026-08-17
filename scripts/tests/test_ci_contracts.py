@@ -201,6 +201,35 @@ class CiContractsTest(unittest.TestCase):
             with self.assertRaisesRegex(ci_contracts.CiContractError, "cli-native"):
                 ci_contracts.check(root)
 
+    def test_native_python_adapter_lint_must_cover_every_bundled_adapter(self) -> None:
+        """Both Ruff gates must scan the canonical adapter directory recursively."""
+        desired = "core/src/main/python"
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            ci_contracts.check(root)
+
+        cases = {
+            "check": (
+                f"python -m ruff check {desired}",
+                "python -m ruff check core/src/main/python/affected_pytest.py",
+            ),
+            "format": (
+                f"python -m ruff format --check {desired}",
+                "python -m ruff format --check core/src/main/python/affected_unittest.py",
+            ),
+        }
+        for name, (required, narrowed) in cases.items():
+            with self.subTest(name=name), TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.copy_workflows(root)
+                path = root / ".github/workflows/conformance.yml"
+                text = path.read_text(encoding="utf-8")
+                path.write_text(text.replace(required, narrowed, 1), encoding="utf-8")
+
+                with self.assertRaisesRegex(ci_contracts.CiContractError, "Python adapters"):
+                    ci_contracts.check(root)
+
     def test_verify_aggregate_must_check_the_scripts_result(self) -> None:
         """A failed scripts lane must reach the required verify aggregate."""
         with TemporaryDirectory() as directory:
