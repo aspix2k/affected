@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.15.2] - 2026-08-18
+
+### Fixed
+
+- Kept Affected compatible with DataSpell installations that do not bundle the Gradle plugin.
+
 ## [3.15.1] - 2026-08-17
 
 ### Fixed
@@ -584,7 +590,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.1...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.2...HEAD
+[3.15.2]: https://github.com/aspix2k/affected/compare/v3.15.1...v3.15.2
 [3.15.1]: https://github.com/aspix2k/affected/compare/v3.15.0...v3.15.1
 [3.15.0]: https://github.com/aspix2k/affected/compare/v3.14.0...v3.15.0
 [3.14.0]: https://github.com/aspix2k/affected/compare/v3.13.9...v3.14.0
