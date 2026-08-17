@@ -1,0 +1,1 @@
+- Affected now waits for observed CLI and Maven child processes to stop before removing owned runtime files after cancellation.
