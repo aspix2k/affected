@@ -14,8 +14,40 @@ class CliUnittestConformanceTest {
 
     @Test
     fun `unittest zero test helper falls back to package consumers in one process`() = fixture("unittest") { root ->
+        val suffixPackage = File(root, "packages/alpha/suffix").apply { mkdirs() }
+        File(suffixPackage, "__init__.py").writeText("")
+        val helper = File(suffixPackage, "helpers_test.py").apply {
+            writeText("VALUE = 'suffix-consumer'\n")
+        }
+        val suffixConsumer = File(suffixPackage, "suffix-consumer.marker")
+        File(suffixPackage, "consumer_test.py").writeText(
+            """
+            import os
+            import unittest
+            from pathlib import Path
+
+            from .helpers_test import VALUE
+
+            class SuffixConsumerTest(unittest.TestCase):
+                def test_consumer(self):
+                    Path(__file__).with_name("suffix-consumer.marker").write_text(str(os.getpid()), encoding="utf-8")
+                    self.assertEqual("suffix-consumer", VALUE)
+            """.trimIndent() + "\n",
+        )
+        val overlap = File(suffixPackage, "suffix-overlap.marker")
+        File(suffixPackage, "test_alpha_test.py").writeText(
+            """
+            import os
+            import unittest
+            from pathlib import Path
+
+            class OverlapTest(unittest.TestCase):
+                def test_overlap(self):
+                    with Path(__file__).with_name("suffix-overlap.marker").open("a", encoding="utf-8") as marker:
+                        marker.write(str(os.getpid()) + "\n")
+            """.trimIndent() + "\n",
+        )
         val alpha = PythonProjects.parse(root).single { it.id == "affected-unittest-alpha" }
-        val helper = File(root, "packages/alpha/test_helpers.py")
         val adapter = unittestAdapter().toPath()
         val command = pythonCommands(
             root.path,
@@ -36,6 +68,9 @@ class CliUnittestConformanceTest {
         val consumerPid = File(root, "packages/alpha/consumer.marker").readText()
         val otherPid = File(root, "packages/alpha/other.marker").readText()
         assertEquals(consumerPid, otherPid)
+        assertTrue(suffixConsumer.exists(), execution.output)
+        assertEquals(consumerPid, suffixConsumer.readText())
+        assertEquals(listOf(consumerPid), overlap.readLines())
         assertFalse(File(root, "packages/beta/beta.marker").exists())
     }
 
@@ -172,7 +207,11 @@ class CliUnittestConformanceTest {
     fun `unittest package load hooks widen to their full custom suite`() = fixture("unittest") { root ->
         File(root, "packages/alpha/__init__.py").writeText(
             """
+            from pathlib import Path
+
             def load_tests(loader, tests, pattern):
+                with Path(__file__).with_name("load_tests.marker").open("a", encoding="utf-8") as marker:
+                    marker.write("called\n")
                 return loader.loadTestsFromNames([
                     "packages.alpha.test_consumer.ConsumerTest",
                     "packages.alpha.test_other.OtherTest",
@@ -190,6 +229,7 @@ class CliUnittestConformanceTest {
         assertTrue(File(root, "packages/alpha/consumer.marker").exists())
         assertTrue(File(root, "packages/alpha/other.marker").exists())
         assertFalse(File(root, "packages/alpha/alpha.marker").exists())
+        assertEquals(listOf("called"), File(root, "packages/alpha/load_tests.marker").readLines())
     }
 
     @Test
@@ -276,6 +316,37 @@ class CliUnittestConformanceTest {
 
             assertTrue(execution.completed, execution.output)
             assertFalse(execution.passed, execution.output)
+            assertFalse(sentinel.exists(), execution.output)
+        } finally {
+            outside.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `unittest suffix discovery rejects a linked test before execution`() = fixture("unittest") { root ->
+        val command = unittestCommand(root, File(root, "packages/alpha/test_helpers.py"))
+        val outside = createTempDirectory("affected-unittest-suffix-link").toFile()
+        val sentinel = File(outside, "outside.marker")
+        val linked = File(outside, "linked_test.py").apply {
+            writeText(
+                """
+                import unittest
+                from pathlib import Path
+
+                class LinkedTest(unittest.TestCase):
+                    def test_linked(self):
+                        Path('${sentinel.invariantSeparatorsPath}').write_text('unsafe', encoding='utf-8')
+                """.trimIndent() + "\n",
+            )
+        }
+        Files.createSymbolicLink(File(root, "packages/alpha/linked_test.py").toPath(), linked.toPath())
+
+        try {
+            val execution = execute(root, command.arguments)
+
+            assertTrue(execution.completed, execution.output)
+            assertFalse(execution.passed, execution.output)
+            assertTrue(execution.output.contains("unsafe discovery (discovery-symlink)"), execution.output)
             assertFalse(sentinel.exists(), execution.output)
         } finally {
             outside.deleteRecursively()

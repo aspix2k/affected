@@ -20,6 +20,14 @@ class Unsupported(Exception):
     """Signal that exact selection must widen to package discovery."""
 
 
+class AffectedTestLoader(unittest.TestLoader):
+    """Discover both supported unittest module naming conventions."""
+
+    def _match_path(self, path, full_path, pattern):
+        """Match prefix or suffix unittest modules in one traversal."""
+        return super()._match_path(path, full_path, pattern) or is_suffix_test(path)
+
+
 def main(argv):
     """Run an exact owned unittest suite or discover every planned package."""
     try:
@@ -298,7 +306,7 @@ def discover_packages(root, packages):
     for package in packages:
         validate_package_initializers(root, package)
     validate_discovery_trees(root, packages)
-    loader = unittest.TestLoader()
+    loader = AffectedTestLoader()
     suites = []
     for package in packages:
         try:
@@ -375,8 +383,15 @@ def validate_discovery_trees(root, packages):
 
 
 def is_discoverable_test(name):
-    """Match unittest's default pattern and valid Python module names."""
-    return name.startswith("test") and name.endswith(".py") and name[:-3].isidentifier()
+    """Match supported unittest patterns and valid Python module names."""
+    return (
+        name.startswith("test") and name.endswith(".py") and name[:-3].isidentifier()
+    ) or is_suffix_test(name)
+
+
+def is_suffix_test(name):
+    """Match valid Python modules using unittest's suffix convention."""
+    return name.endswith("_test.py") and name[:-3].isidentifier()
 
 
 def owned_by(path, packages):
