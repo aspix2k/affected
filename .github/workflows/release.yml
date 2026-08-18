@@ -181,8 +181,11 @@ jobs:
             current_commit=$(git rev-parse HEAD)
             trusted_main=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
             if [ "$current_commit" != "$trusted_main" ]; then
-              echo "::error::A new release must use the current trusted main commit."
-              exit 1
+              if ! git merge-base --is-ancestor "$current_commit" "$trusted_main"; then
+                echo "::error::A new release must use the current trusted main commit or an ancestor of it."
+                exit 1
+              fi
+              echo "::notice::Publishing unpublished $RELEASE_TAG from ancestor $current_commit of main $trusted_main."
             fi
             echo "currentness=true" >> "$GITHUB_OUTPUT"
           fi

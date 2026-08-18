@@ -210,6 +210,8 @@ jobs:
             build/reports/tests
             build/reports/kover
             build/reports/pluginVerifier
+            collector/build/reports/tests
+            collector/build/test-results
             collector/build/reports/spotbugs
           if-no-files-found: warn
 
@@ -368,6 +370,10 @@ jobs:
           require_success scope "$SCOPE_RESULT"
           require_success scripts "$SCRIPT_RESULT"
           require_when plugin "${PLUGIN_REQUIRED:-true}" "$PLUGIN_RESULT"
-          require_when product-verifier "${PLUGIN_REQUIRED:-true}" "$PRODUCT_VERIFIER_RESULT"
+          if [ "$PLUGIN_RESULT" = success ]; then
+            require_success product-verifier "$PRODUCT_VERIFIER_RESULT"
+          else
+            require_when product-verifier false "$PRODUCT_VERIFIER_RESULT"
+          fi
           require_when health "${HEALTH_REQUIRED:-true}" "$HEALTH_RESULT"
           exit "$failed"

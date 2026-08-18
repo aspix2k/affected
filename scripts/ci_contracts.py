@@ -403,7 +403,7 @@ def check_scope(root: Path, ci: str, codeql: str) -> None:
             "product-verifier",
             "PRODUCT_VERIFIER_RESULT",
             "needs.product-verifier.result",
-            'require_when product-verifier "${PLUGIN_REQUIRED:-true}" "$PRODUCT_VERIFIER_RESULT"',
+            'require_success product-verifier "$PRODUCT_VERIFIER_RESULT"',
         ),
         (
             "health",
@@ -418,6 +418,10 @@ def check_scope(root: Path, ci: str, codeql: str) -> None:
             invocation,
         ):
             raise CiContractError(f"verify must bind and check the {name} result")
+    if 'if [ "$PLUGIN_RESULT" = success ]; then' not in verify:
+        raise CiContractError(
+            "verify must require product-verifier only after plugin success"
+        )
     for variable, source in (
         ("PLUGIN_REQUIRED", "needs.scope.outputs.plugin"),
         ("HEALTH_REQUIRED", "needs.scope.outputs.health"),

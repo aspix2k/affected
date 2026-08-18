@@ -39,10 +39,32 @@ class PythonUnittestCommandTest {
                 adapter,
             ).single().arguments
 
-            assertEquals(listOf("python", adapter.toString()), arguments.take(2))
+            assertExactUnittestSelection(arguments, adapter, "packages/a", "packages/a/test_alpha.py")
         } finally {
             assertTrue(temporary.deleteRecursively(), "Could not delete $temporary")
         }
+    }
+
+    @Test
+    fun `a real-path selected file keeps exact unittest selection on a lexical root`() {
+        val root = createTempDirectory("python-unittest-real-selected").toFile()
+        File(root, "pyproject.toml").writeText("[project]\nname = \"app\"\n")
+        val selected = File(root, "packages/a/test_alpha.py").apply {
+            parentFile.mkdirs()
+            writeText("import unittest\nclass AlphaTest(unittest.TestCase):\n    pass\n")
+        }
+        val adapter = File(root, "affected_unittest.py").apply { writeText("# adapter\n") }.toPath()
+        val canonical = selected.toPath().toRealPath().toFile()
+
+        val arguments = pythonCommands(
+            root.path,
+            listOf("pkg-a:test"),
+            modules(root, "pkg-a", "packages/a"),
+            changes(canonical),
+            adapter,
+        ).single().arguments
+
+        assertExactUnittestSelection(arguments, adapter, "packages/a", "packages/a/test_alpha.py")
     }
 
     @Test
@@ -652,6 +674,23 @@ class PythonUnittestCommandTest {
             Base64.getUrlDecoder().decode(arguments[2] + padding).toString(Charsets.UTF_8),
         ).asJsonObject
         assertEquals(emptyList(), context.getAsJsonArray("selected").map { it.asString })
+    }
+
+    private fun assertExactUnittestSelection(
+        arguments: List<String>,
+        adapter: java.nio.file.Path,
+        packageName: String,
+        selected: String,
+    ) {
+        assertEquals(listOf("python", adapter.toString()), arguments.take(2))
+        assertEquals(3, arguments.size)
+        val padding = "=".repeat((4 - arguments[2].length % 4) % 4)
+        val context = JsonParser.parseString(
+            Base64.getUrlDecoder().decode(arguments[2] + padding).toString(Charsets.UTF_8),
+        ).asJsonObject
+        assertEquals(1, context.get("schema").asInt)
+        assertEquals(listOf(packageName), context.getAsJsonArray("packages").map { it.asString })
+        assertEquals(listOf(selected), context.getAsJsonArray("selected").map { it.asString })
     }
 
     private fun modules(root: File, vararg entries: String): List<BuildModule> {

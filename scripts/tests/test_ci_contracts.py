@@ -905,10 +905,8 @@ class CiContractsTest(unittest.TestCase):
             workflow = path.read_text(encoding="utf-8")
             path.write_text(
                 workflow.replace(
-                    'require_when product-verifier "${PLUGIN_REQUIRED:-true}" '
-                    '"$PRODUCT_VERIFIER_RESULT"',
-                    'require_when product-verifier "${PLUGIN_REQUIRED:-true}" '
-                    '"$PLUGIN_RESULT"',
+                    'require_success product-verifier "$PRODUCT_VERIFIER_RESULT"',
+                    'require_success product-verifier "$PLUGIN_RESULT"',
                     1,
                 ),
                 encoding="utf-8",
