@@ -179,7 +179,7 @@ class ContainedProcessTest {
         try {
             contained.start()
             assertTrue(contained.process.waitFor(5, TimeUnit.SECONDS))
-            assertEquals("root finished\n", output.get(2, TimeUnit.SECONDS))
+            assertEquals("root finished${System.lineSeparator()}", output.get(2, TimeUnit.SECONDS))
             assertTrue(contained.close())
             child = ProcessHandle.of(Files.readString(pid).trim().toLong()).orElseThrow()
             assertTrue(child.isAlive, "Normal completion terminated the background child")
