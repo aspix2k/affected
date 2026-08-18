@@ -155,7 +155,7 @@
       "id": "windows",
       "name": "Windows",
       "support": "contract",
-      "fixtures": ["core/src/test/kotlin/com/aspix2k/affected/CrossPlatformPathTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/SequentialProcessCancellationTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/ContainedProcessTest.kt", "collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java"],
+      "fixtures": ["core/src/test/kotlin/com/aspix2k/affected/CrossPlatformPathTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/CliUnittestWindowsJunctionConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/SequentialProcessCancellationTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/ContainedProcessTest.kt", "collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java"],
       "gates": [".github/workflows/conformance.yml"]
     }
   ],
