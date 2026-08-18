@@ -9,6 +9,7 @@ import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.io.path.createTempDirectory
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -26,11 +27,13 @@ class SequentialProcessCancellationTest : BasePlatformTestCase() {
         val handler = SequentialProcessHandler(
             directory.toFile(),
             listOf(CliCommand("detached tracker", listOf(java(), "-version"))),
-            processHandlerFactory = {
-                sleeper().also { process = it }.let { OSProcessHandler(it, "detached tracker") }
-            },
-            processTreeTerminationFactory = { root, afterInitialPass ->
-                ProcessTreeTermination(root, afterInitialPass = afterInitialPass).also { termination = it }
+            processFactory = { _, afterInitialPass ->
+                val handler = sleeper().also { process = it }.let { OSProcessHandler(it, "detached tracker") }
+                val tracker = ProcessTreeTermination(
+                    handler.process.toHandle(),
+                    afterInitialPass = afterInitialPass,
+                ).also { termination = it }
+                RunningCommand(handler, tracker, {})
             },
         )
         handler.addProcessListener(listener(output))
@@ -158,6 +161,134 @@ class SequentialProcessCancellationTest : BasePlatformTestCase() {
         }
     }
 
+    fun testStopAfterRootExitTerminatesAChildThatEscapedBeforeTracking() {
+        val directory = createTempDirectory("sequential-pretracking-child")
+        val pid = directory.resolve("child.pid")
+        val rootPid = directory.resolve("root.pid")
+        val temporary = Files.createTempDirectory("affected-handler-pretracking-child-")
+        val targetExited = CountDownLatch(1)
+        val releaseTargetExit = CountDownLatch(1)
+        val cleanupSawLivingChild = AtomicBoolean()
+        var child: ProcessHandle? = null
+        val unrelated = sleeper()
+        val handler = SequentialProcessHandler(
+            directory.toFile(),
+            listOf(
+                CliCommand(
+                    "pre-tracking child",
+                    escapedChildCommand(pid, rootPid = rootPid),
+                    ownedTemporaryDirectories = listOf(temporary),
+                ),
+            ),
+            processFactory = { commandLine, _ ->
+                val contained = ContainedProcess.prepare(commandLine, afterTargetExit = {
+                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                    while (child == null && System.nanoTime() < deadline) {
+                        child = runCatching {
+                            ProcessHandle.of(Files.readString(pid).trim().toLong()).orElse(null)
+                        }.getOrNull()
+                        if (child == null) Thread.sleep(10)
+                    }
+                    checkNotNull(child)
+                    check(child?.isAlive == true)
+                    targetExited.countDown()
+                    releaseTargetExit.await()
+                })
+                val processHandler = OSProcessHandler(
+                    contained.process,
+                    commandLine.commandLineString,
+                    commandLine.charset,
+                ).apply { setShouldDestroyProcessRecursively(false) }
+                RunningCommand(processHandler, contained, contained::start)
+            },
+            ownedTemporaryDirectoryCleanup = {
+                cleanupSawLivingChild.set(child?.isAlive == true)
+                it.toFile().deleteRecursively()
+            },
+        )
+        val output = StringBuilder()
+        handler.addProcessListener(listener(output))
+
+        try {
+            handler.startNotify()
+            assertTrue(
+                targetExited.await(10, TimeUnit.SECONDS),
+                "Target exit was not observed; rootAlive=${processAlive(rootPid)}; " +
+                    "childAlive=${processAlive(pid)}; handlerTerminated=${handler.isProcessTerminated}; output=$output",
+            )
+            assertTrue(child?.isAlive == true)
+            handler.destroyProcess()
+            releaseTargetExit.countDown()
+
+            assertTrue(handler.waitFor(10_000))
+            assertTrue(handler.exitCode != 0)
+            assertFalse(cleanupSawLivingChild.get(), "Owned cleanup ran before the escaped child terminated")
+            val childDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1)
+            while (child?.isAlive == true && System.nanoTime() < childDeadline) Thread.sleep(10)
+            assertFalse(child?.isAlive == true, "Cancellation left the pre-tracking child alive")
+            assertFalse(Files.exists(temporary))
+            assertTrue(unrelated.isAlive, "Cancellation terminated an unrelated process")
+        } finally {
+            releaseTargetExit.countDown()
+            if (!handler.isProcessTerminated) handler.destroyProcess()
+            child?.takeIf(ProcessHandle::isAlive)?.destroyForcibly()
+            unrelated.destroyForcibly()
+            unrelated.waitFor(5, TimeUnit.SECONDS)
+            temporary.toFile().deleteRecursively()
+            directory.toFile().deleteRecursively()
+        }
+    }
+
+    fun testCompletedCommandReleasesAContainedBackgroundChild() {
+        val directory = createTempDirectory("sequential-contained-release")
+        val pid = directory.resolve("child.pid")
+        var child: ProcessHandle? = null
+        val handler = SequentialProcessHandler(
+            directory.toFile(),
+            listOf(CliCommand("contained release", escapedChildCommand(pid, inheritIo = false))),
+        )
+
+        try {
+            handler.startNotify()
+            assertTrue(handler.waitFor(10_000))
+            assertEquals(0, handler.exitCode)
+            child = ProcessHandle.of(Files.readString(pid).toLong()).orElseThrow()
+            assertTrue(child.isAlive, "Normal completion terminated an intentional background child")
+        } finally {
+            child?.takeIf(ProcessHandle::isAlive)?.let {
+                it.destroyForcibly()
+                runCatching { it.onExit().get(5, TimeUnit.SECONDS) }
+            }
+            directory.toFile().deleteRecursively()
+        }
+    }
+
+    fun testContainedCommandReceivesInputAfterSupervisorBootstrap() {
+        val directory = createTempDirectory("sequential-contained-input")
+        val ready = directory.resolve("ready")
+        val marker = directory.resolve("input")
+        val handler = SequentialProcessHandler(
+            directory.toFile(),
+            listOf(CliCommand("contained input", inputCommand(ready, marker))),
+        )
+
+        try {
+            handler.startNotify()
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            while (!Files.isRegularFile(ready) && System.nanoTime() < deadline) Thread.sleep(10)
+            assertTrue(Files.isRegularFile(ready), "The contained command did not start")
+            handler.processInput.write("payload\n".toByteArray())
+            handler.processInput.flush()
+
+            assertTrue(handler.waitFor(10_000))
+            assertEquals(0, handler.exitCode)
+            assertEquals("payload", Files.readString(marker))
+        } finally {
+            if (!handler.isProcessTerminated) handler.destroyProcess()
+            directory.toFile().deleteRecursively()
+        }
+    }
+
     fun testStoppingACommandReportsCleanupFailureBeforeTerminal() {
         val directory = createTempDirectory("sequential-cleanup-failure")
         val ready = directory.resolve("ready")
@@ -277,6 +408,33 @@ class SequentialProcessCancellationTest : BasePlatformTestCase() {
 
     private fun java(): String = executable("java")
 
+    private fun escapedChildCommand(
+        pid: java.nio.file.Path,
+        inheritIo: Boolean = true,
+        rootPid: java.nio.file.Path? = null,
+    ): List<String> = listOf(
+        java(),
+        "-cp",
+        System.getProperty("java.class.path"),
+        PreTrackingChildSpawner::class.java.name,
+        pid.toString(),
+        inheritIo.toString(),
+        rootPid?.toString().orEmpty(),
+    )
+
+    private fun processAlive(pid: java.nio.file.Path): Boolean = runCatching {
+        ProcessHandle.of(Files.readString(pid).toLong()).map(ProcessHandle::isAlive).orElse(false)
+    }.getOrDefault(false)
+
+    private fun inputCommand(ready: java.nio.file.Path, marker: java.nio.file.Path): List<String> = listOf(
+        java(),
+        "-cp",
+        System.getProperty("java.class.path"),
+        ContainedInputReader::class.java.name,
+        ready.toString(),
+        marker.toString(),
+    )
+
     private fun sleeper(): Process {
         val command = if (System.getProperty("os.name").startsWith("Windows")) {
             listOf("cmd.exe", "/c", "ping -n 60 127.0.0.1 > NUL")
@@ -340,5 +498,47 @@ private object CancellationMarkerWriter {
     @JvmStatic
     fun main(arguments: Array<String>) {
         Files.writeString(java.nio.file.Path.of(arguments.single()), "started")
+    }
+}
+
+private object PreTrackingChildSpawner {
+    @JvmStatic
+    fun main(arguments: Array<String>) {
+        arguments.getOrNull(2)?.takeIf(String::isNotEmpty)?.let { root ->
+            Files.writeString(java.nio.file.Path.of(root), ProcessHandle.current().pid().toString())
+        }
+        val javaExecutable = ProcessHandle.current().info().command().orElseThrow()
+        val builder = ProcessBuilder(
+            javaExecutable,
+            "-cp",
+            System.getProperty("java.class.path"),
+            PreTrackingSleeper::class.java.name,
+        )
+        if (arguments[1].toBooleanStrict()) {
+            builder.inheritIO()
+        } else {
+            builder.redirectInput(ProcessBuilder.Redirect.PIPE)
+            builder.redirectOutput(ProcessBuilder.Redirect.DISCARD)
+            builder.redirectError(ProcessBuilder.Redirect.DISCARD)
+        }
+        val child = builder.start()
+        Files.writeString(java.nio.file.Path.of(arguments[0]), child.pid().toString())
+    }
+}
+
+private object ContainedInputReader {
+    @JvmStatic
+    fun main(arguments: Array<String>) {
+        Files.writeString(java.nio.file.Path.of(arguments[0]), "ready")
+        val line = System.`in`.bufferedReader().readLine()
+        Files.writeString(java.nio.file.Path.of(arguments[1]), line)
+    }
+}
+
+private object PreTrackingSleeper {
+    @JvmStatic
+    fun main(arguments: Array<String>) {
+        check(arguments.isEmpty())
+        Thread.sleep(60_000)
     }
 }

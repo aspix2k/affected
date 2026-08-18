@@ -138,6 +138,29 @@ class SequentialProcessHandlerTest {
     }
 
     @Test
+    fun `the helper launch revalidates a root replaced after the final handler check`() {
+        val project = createTempDirectory("sequential-root-helper-launch")
+        val root = project.resolve("module").createDirectory()
+        val outside = createTempDirectory("sequential-root-helper-launch-outside")
+        val marker = java.nio.file.Path.of("started.marker")
+        val handler = SequentialProcessHandler(
+            root.toFile(),
+            listOf(CliCommand("helper launch swap", markerCommand(marker))),
+            executionRootGuard = PlannedExecutionRoot.capture(root).bind(project),
+            beforeHelperLaunch = {
+                Files.delete(root)
+                Files.createSymbolicLink(root, outside)
+            },
+        )
+
+        handler.startNotify()
+
+        assertTrue(handler.waitFor(5_000))
+        assertTrue(handler.exitCode != 0)
+        assertFalse(Files.exists(outside.resolve(marker)))
+    }
+
+    @Test
     fun `stopping root refusal waits for pending cleanup`() {
         val project = createTempDirectory("sequential-root-cleanup")
         val root = project.resolve("module").createDirectory()
@@ -451,10 +474,18 @@ class SequentialProcessHandlerTest {
                     )
                 },
             ),
-            processHandlerFactory = { commandLine ->
+            processFactory = { commandLine, afterInitialPass ->
                 starting.countDown()
                 release.await()
-                OSProcessHandler(commandLine)
+                val processHandler = OSProcessHandler(commandLine)
+                RunningCommand(
+                    processHandler,
+                    ProcessTreeTermination(
+                        processHandler.process.toHandle(),
+                        afterInitialPass = afterInitialPass,
+                    ),
+                    {},
+                )
             },
         )
 

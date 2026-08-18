@@ -135,8 +135,12 @@ def check(root: Path = ROOT) -> None:
         raise CiContractError("Do not rerun the full core suite as fake CLI contracts")
     if "-Paffected.cliConformance=true" not in conformance:
         raise CiContractError("Native CLI fixtures must keep the conformance flag")
-    if "CrossPlatformPathTest" not in conformance:
+    cross_platform = slice_job(conformance, "cross-platform-paths")
+    if "CrossPlatformPathTest" not in cross_platform:
         raise CiContractError("macOS and Windows must still run CrossPlatformPathTest")
+    for containment_test in ("ContainedProcessTest", "SequentialProcessCancellationTest"):
+        if cross_platform.count(f"--tests com.aspix2k.affected.build.{containment_test}") != 1:
+            raise CiContractError("macOS and Windows must keep the process containment proof")
     check_conformance(conformance)
 
     pins = GRADLE_ACTION.findall(ci + conformance + codeql + mutation)

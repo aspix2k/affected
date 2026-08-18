@@ -247,6 +247,23 @@ class CiContractsTest(unittest.TestCase):
             with self.assertRaisesRegex(ci_contracts.CiContractError, "recommended packages"):
                 ci_contracts.check(root)
 
+    def test_cross_platform_gate_must_prove_process_containment(self) -> None:
+        """Windows Job and POSIX session cleanup must remain in the OS matrix."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/conformance.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "          --tests com.aspix2k.affected.build.SequentialProcessCancellationTest\n",
+                    "",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "containment"):
+                ci_contracts.check(root)
+
     def test_verify_aggregate_must_check_the_scripts_result(self) -> None:
         """A failed scripts lane must reach the required verify aggregate."""
         with TemporaryDirectory() as directory:

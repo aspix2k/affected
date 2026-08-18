@@ -65,11 +65,10 @@ internal class SequentialProcessHandler(
     private val unresolvedMessage: String = DEFAULT_UNRESOLVED_MESSAGE,
     private val continueAfterFailure: Boolean = false,
     private val executionRootGuard: ExecutionRootGuard = executionRootGuard(workingDirectory.toPath()),
-    private val processHandlerFactory: (GeneralCommandLine) -> OSProcessHandler = { OSProcessHandler(it) },
+    private val processFactory: ((GeneralCommandLine, () -> Unit) -> RunningCommand)? = null,
     private val ownedTemporaryDirectoryCleanup: (Path) -> Boolean = ::deleteOwnedTemporaryDirectory,
     private val afterInitialProcessTermination: () -> Unit = {},
-    private val processTreeTerminationFactory: (ProcessHandle, () -> Unit) -> ProcessTreeTermination =
-        { root, afterInitialPass -> ProcessTreeTermination(root, afterInitialPass = afterInitialPass) },
+    private val beforeHelperLaunch: () -> Unit = {},
 ) : ProcessHandler(), AffectedOwnedSession {
 
     private val finished = AtomicBoolean(false)
@@ -80,7 +79,7 @@ internal class SequentialProcessHandler(
     private var recordedExitCode = 0
     private var activeCommand: CliCommand? = null
     private var lifecycleActive = false
-    private var processTreeTermination: ProcessTreeTermination? = null
+    private var processTermination: ProcessTermination? = null
     private var terminalDecision = false
 
     @Volatile
@@ -106,13 +105,13 @@ internal class SequentialProcessHandler(
     private fun requestStop(): Boolean {
         var handler: OSProcessHandler? = null
         var hasActiveLifecycle = false
-        var termination: ProcessTreeTermination? = null
+        var termination: ProcessTermination? = null
         var initiate = false
         var pending = emptyList<CliCommand>()
         synchronized(lock) {
             if (!finished.get() && !terminalDecision && !stopped.get()) {
                 handler = current
-                if (handler != null) termination = checkNotNull(processTreeTermination)
+                if (handler != null) termination = checkNotNull(processTermination)
                 stopped.set(true)
                 initiate = true
             }
@@ -242,7 +241,7 @@ internal class SequentialProcessHandler(
             failExecutionRoot(failure, command)
             return
         }
-        val handler = runCatching { processHandlerFactory(commandLine) }.getOrElse { error ->
+        val launched = runCatching { launch(commandLine) }.getOrElse { error ->
             notifyTextAvailable(
                 "Affected could not start ${command.title}: ${error.message.orEmpty()}\n",
                 ProcessOutputTypes.STDERR,
@@ -252,13 +251,11 @@ internal class SequentialProcessHandler(
             finish(1)
             return
         }
-        val termination = processTreeTerminationFactory(
-            handler.process.toHandle(),
-            afterInitialProcessTermination,
-        )
+        val handler = launched.handler
+        val termination = launched.termination
 
         val shouldStart = synchronized(lock) {
-            processTreeTermination = termination
+            processTermination = termination
             terminalDecision = false
             if (stopped.get()) {
                 false
@@ -284,11 +281,10 @@ internal class SequentialProcessHandler(
                     val cancelled = stopped.get() || termination.isRequested
                     terminalDecision = true
                     if (current === handler) current = null
-                    if (!cancelled && processTreeTermination === termination) processTreeTermination = null
+                    if (!cancelled && processTermination === termination) processTermination = null
                     cancelled
                 }
-                if (!cancellationObserved) termination.close()
-                val terminated = !cancellationObserved || awaitTerminatingProcesses()
+                val terminated = if (cancellationObserved) awaitTerminatingProcesses() else termination.close()
                 if (!terminated) {
                     notifyTextAvailable(
                         "Affected could not terminate every child process before cleanup.\n",
@@ -297,7 +293,11 @@ internal class SequentialProcessHandler(
                 }
                 val cleaned = terminated && cleanup(command)
                 release(command)
-                val exitCode = if (cleaned) event.exitCode else event.exitCode.takeIf { it != 0 } ?: 1
+                val exitCode = if (cleaned && !termination.isRequested) {
+                    event.exitCode
+                } else {
+                    event.exitCode.takeIf { it != 0 } ?: 1
+                }
                 when {
                     exitCode == 0 && !stopped.get() -> {
                         reopenCancellation()
@@ -315,6 +315,37 @@ internal class SequentialProcessHandler(
             }
         })
         handler.startNotify()
+        runCatching(launched.start).onFailure { error ->
+            notifyTextAvailable(
+                "Affected could not start ${command.title}: ${error.message.orEmpty()}\n",
+                ProcessOutputTypes.STDERR,
+            )
+            termination.request()
+        }
+    }
+
+    private fun launch(commandLine: GeneralCommandLine): RunningCommand {
+        processFactory?.let { return it(commandLine, afterInitialProcessTermination) }
+        val contained = ContainedProcess.prepare(
+            commandLine,
+            afterTerminationProof = afterInitialProcessTermination,
+            validateBeforeHelperLaunch = {
+                beforeHelperLaunch()
+                executionRootGuard.validationFailure()
+            },
+        )
+        return runCatching {
+            val handler = OSProcessHandler(
+                contained.process,
+                commandLine.commandLineString,
+                commandLine.charset,
+            ).apply { setShouldDestroyProcessRecursively(false) }
+            RunningCommand(handler, contained, contained::start)
+        }.getOrElse { error ->
+            contained.request()
+            contained.await()
+            throw error
+        }
     }
 
     private fun shouldContinueAfterFailure(command: CliCommand, exitCode: Int): Boolean =
@@ -372,11 +403,11 @@ internal class SequentialProcessHandler(
     }
 
     private fun awaitTerminatingProcesses(): Boolean {
-        val termination = synchronized(lock) { processTreeTermination } ?: return true
+        val termination = synchronized(lock) { processTermination } ?: return true
         val terminated = termination.await()
         if (!terminated) return false
         synchronized(lock) {
-            if (processTreeTermination === termination) processTreeTermination = null
+            if (processTermination === termination) processTermination = null
         }
         return true
     }
@@ -385,6 +416,12 @@ internal class SequentialProcessHandler(
         if (finished.compareAndSet(false, true)) notifyProcessTerminated(exitCode)
     }
 }
+
+internal data class RunningCommand(
+    val handler: OSProcessHandler,
+    val termination: ProcessTermination,
+    val start: () -> Unit,
+)
 
 private fun isOwnedTemporaryDirectory(path: Path): Boolean = runCatching {
     val normalized = path.toAbsolutePath().normalize()
