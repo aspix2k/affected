@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.15.3] - 2026-08-18
+
+### Fixed
+
+- Contain CLI processes at launch so cancellation terminates reparented children inside the Affected-owned boundary before removing temporary output.
+
 ## [3.15.2] - 2026-08-18
 
 ### Fixed
@@ -590,7 +596,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.2...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.3...HEAD
+[3.15.3]: https://github.com/aspix2k/affected/compare/v3.15.2...v3.15.3
 [3.15.2]: https://github.com/aspix2k/affected/compare/v3.15.1...v3.15.2
 [3.15.1]: https://github.com/aspix2k/affected/compare/v3.15.0...v3.15.1
 [3.15.0]: https://github.com/aspix2k/affected/compare/v3.14.0...v3.15.0
