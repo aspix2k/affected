@@ -34,7 +34,9 @@ class ContainedProcessTest {
         val root = parent.resolve("root").createDirectory()
         val original = parent.resolve("original")
         val marker = Path.of("marker.txt")
-        val contained = ContainedProcess.prepare(commandLine(root, RelativeMarkerWriter::class.java.name, marker))
+        val contained = ContainedProcess.prepare(
+            commandLine(root, RelativeMarkerWriter::class.java.name, marker.toString()),
+        )
 
         try {
             Files.move(root, original, StandardCopyOption.ATOMIC_MOVE)
@@ -62,11 +64,10 @@ class ContainedProcessTest {
             "-Djna.boot.library.path=${System.getProperty("jna.boot.library.path")}",
             "-Djna.nosys=true",
             "-Djna.noclasspath=true",
-            "-cp",
-            System.getProperty("java.class.path"),
+            testJavaClassPathArgument(directory),
             Ipv6ContainedProcessProbe::class.java.name,
             directory.toString(),
-        ).redirectErrorStream(true).start()
+        ).directory(directory.toFile()).redirectErrorStream(true).start()
 
         try {
             assertTrue(process.waitFor(20, TimeUnit.SECONDS), "The IPv6-preferred probe did not finish")
@@ -120,7 +121,12 @@ class ContainedProcessTest {
         val directory = createTempDirectory("contained-release-watchdog")
         val pid = directory.resolve("child.pid")
         val contained = ContainedProcess.prepare(
-            commandLine(directory, WatchdogChildSpawner::class.java.name, pid),
+            commandLine(
+                directory,
+                WatchdogChildSpawner::class.java.name,
+                pid.toString(),
+                testJavaClassPathArgument(directory),
+            ),
             releaseDecisionTimeoutMillis = 100,
         )
         var child: ProcessHandle? = null
@@ -149,14 +155,13 @@ class ContainedProcessTest {
         }
     }
 
-    private fun commandLine(root: Path, mainClass: String, vararg arguments: Path): GeneralCommandLine =
+    private fun commandLine(root: Path, mainClass: String, vararg arguments: String): GeneralCommandLine =
         GeneralCommandLine(
             listOf(
                 java(),
-                "-cp",
-                System.getProperty("java.class.path"),
+                testJavaClassPathArgument(root),
                 mainClass,
-            ) + arguments.map(Path::toString),
+            ) + arguments,
         ).withWorkDirectory(root.toFile())
 
     private fun java(): String = Path.of(
@@ -200,18 +205,18 @@ private object Ipv6ContainedProcessProbe {
 private object WatchdogChildSpawner {
     @JvmStatic
     fun main(arguments: Array<String>) {
+        check(arguments.size == 2)
         val java = ProcessHandle.current().info().command().orElseThrow()
         val child = ProcessBuilder(
             java,
-            "-cp",
-            System.getProperty("java.class.path"),
+            arguments[1],
             WatchdogSleeper::class.java.name,
         )
             .redirectInput(ProcessBuilder.Redirect.PIPE)
             .redirectOutput(ProcessBuilder.Redirect.DISCARD)
             .redirectError(ProcessBuilder.Redirect.DISCARD)
             .start()
-        Files.writeString(Path.of(arguments.single()), child.pid().toString())
+        Files.writeString(Path.of(arguments[0]), child.pid().toString())
     }
 }
 
@@ -251,4 +256,23 @@ private class TestSupervisorProcess : Process() {
     override fun isAlive(): Boolean = alive.get()
 
     override fun pid(): Long = 0
+}
+
+internal fun testJavaClassPathArgument(directory: Path): String {
+    val argumentFile = directory.resolve(".affected-test-java-classpath.args")
+    Files.writeString(argumentFile, "-cp\n${javaArgumentFileValue(System.getProperty("java.class.path"))}\n")
+    return "@${argumentFile.fileName}"
+}
+
+private fun javaArgumentFileValue(value: String): String = buildString {
+    append('"')
+    value.forEach { character ->
+        when (character) {
+            '\\' -> append("\\\\")
+            '"' -> append("\\\"")
+            '\n', '\r' -> error("A Java classpath cannot contain a line break")
+            else -> append(character)
+        }
+    }
+    append('"')
 }

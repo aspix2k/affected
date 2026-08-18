@@ -346,8 +346,7 @@ class SequentialProcessCancellationTest : BasePlatformTestCase() {
     private fun markerCommand(marker: java.nio.file.Path): List<String> = if (isWindows()) {
         listOf(
             java(),
-            "-cp",
-            System.getProperty("java.class.path"),
+            testJavaClassPathArgument(marker.parent),
             CancellationMarkerWriter::class.java.name,
             marker.toString(),
         )
@@ -358,8 +357,7 @@ class SequentialProcessCancellationTest : BasePlatformTestCase() {
     private fun blockingMarkerCommand(marker: java.nio.file.Path): List<String> = if (isWindows()) {
         listOf(
             java(),
-            "-cp",
-            System.getProperty("java.class.path"),
+            testJavaClassPathArgument(marker.parent),
             BlockingMarker::class.java.name,
             marker.toString(),
         )
@@ -412,15 +410,18 @@ class SequentialProcessCancellationTest : BasePlatformTestCase() {
         pid: java.nio.file.Path,
         inheritIo: Boolean = true,
         rootPid: java.nio.file.Path? = null,
-    ): List<String> = listOf(
-        java(),
-        "-cp",
-        System.getProperty("java.class.path"),
-        PreTrackingChildSpawner::class.java.name,
-        pid.toString(),
-        inheritIo.toString(),
-        rootPid?.toString().orEmpty(),
-    )
+    ): List<String> {
+        val classPathArgument = testJavaClassPathArgument(pid.parent)
+        return listOf(
+            java(),
+            classPathArgument,
+            PreTrackingChildSpawner::class.java.name,
+            pid.toString(),
+            inheritIo.toString(),
+            rootPid?.toString().orEmpty(),
+            classPathArgument,
+        )
+    }
 
     private fun processAlive(pid: java.nio.file.Path): Boolean = runCatching {
         ProcessHandle.of(Files.readString(pid).toLong()).map(ProcessHandle::isAlive).orElse(false)
@@ -428,8 +429,7 @@ class SequentialProcessCancellationTest : BasePlatformTestCase() {
 
     private fun inputCommand(ready: java.nio.file.Path, marker: java.nio.file.Path): List<String> = listOf(
         java(),
-        "-cp",
-        System.getProperty("java.class.path"),
+        testJavaClassPathArgument(ready.parent),
         ContainedInputReader::class.java.name,
         ready.toString(),
         marker.toString(),
@@ -504,14 +504,14 @@ private object CancellationMarkerWriter {
 private object PreTrackingChildSpawner {
     @JvmStatic
     fun main(arguments: Array<String>) {
+        check(arguments.size == 4)
         arguments.getOrNull(2)?.takeIf(String::isNotEmpty)?.let { root ->
             Files.writeString(java.nio.file.Path.of(root), ProcessHandle.current().pid().toString())
         }
         val javaExecutable = ProcessHandle.current().info().command().orElseThrow()
         val builder = ProcessBuilder(
             javaExecutable,
-            "-cp",
-            System.getProperty("java.class.path"),
+            arguments[3],
             PreTrackingSleeper::class.java.name,
         )
         if (arguments[1].toBooleanStrict()) {
