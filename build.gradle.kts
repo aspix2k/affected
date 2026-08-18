@@ -41,7 +41,7 @@ plugins {
 }
 
 group = "com.aspix2k"
-version = "3.15.2"
+version = "3.15.3"
 
 repositories {
     val mavenCentralMirror = "https://cache-redirector.jetbrains.com/repo1.maven.org/maven2"
