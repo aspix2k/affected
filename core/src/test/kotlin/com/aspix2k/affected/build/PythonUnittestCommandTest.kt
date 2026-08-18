@@ -3,6 +3,7 @@ package com.aspix2k.affected.build
 import com.google.gson.JsonParser
 import com.intellij.openapi.progress.ProcessCanceledException
 import kotlinx.coroutines.CancellationException
+import org.junit.Assume.assumeTrue
 import java.io.File
 import java.nio.file.Files
 import java.util.Base64
@@ -15,6 +16,34 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class PythonUnittestCommandTest {
+
+    @Test
+    fun `a case-normalized project root keeps exact unittest selection`() {
+        val temporary = createTempDirectory("python-unittest-root-alias").toFile()
+        File(temporary, "ProjectRoot").mkdirs()
+        val root = File(temporary, "projectroot")
+        assumeTrue(root.isDirectory)
+        File(root, "pyproject.toml").writeText("[project]\nname = \"app\"\n")
+        val selected = File(root, "packages/a/test_alpha.py").apply {
+            parentFile.mkdirs()
+            writeText("import unittest\nclass AlphaTest(unittest.TestCase):\n    pass\n")
+        }
+        val adapter = File(temporary, "affected_unittest.py").apply { writeText("# adapter\n") }.toPath()
+
+        try {
+            val arguments = pythonCommands(
+                root.path,
+                listOf("pkg-a:test"),
+                modules(root, "pkg-a", "packages/a"),
+                changes(selected),
+                adapter,
+            ).single().arguments
+
+            assertEquals(listOf("python", adapter.toString()), arguments.take(2))
+        } finally {
+            assertTrue(temporary.deleteRecursively(), "Could not delete $temporary")
+        }
+    }
 
     @Test
     fun `a test named helper is delegated with its package fallback context`() {

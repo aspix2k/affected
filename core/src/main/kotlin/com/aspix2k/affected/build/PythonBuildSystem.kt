@@ -236,23 +236,24 @@ private fun selectUnittestFiles(
     require(changes.files.toSet() == changes.exactSelectionEligible)
     val rootPath = Path.of(root).toAbsolutePath().normalize()
     require(Files.isDirectory(rootPath, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(rootPath))
+    val realRoot = rootPath.toRealPath(LinkOption.NOFOLLOW_LINKS)
     val roots = packages.map { packageName ->
         val directory = rootPath.resolve(packageName).normalize()
         require(directory.startsWith(rootPath))
         require(Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(directory))
         require(symlinkFreePythonPath(rootPath, directory))
-        directory
+        directory.toRealPath(LinkOption.NOFOLLOW_LINKS).also { require(it.startsWith(realRoot)) }
     }
     val selected = changes.files.map { raw ->
         val requested = Path.of(raw).toAbsolutePath().normalize()
         require(requested.startsWith(rootPath) && symlinkFreePythonPath(rootPath, requested))
         require(Files.isRegularFile(requested, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(requested))
         val real = requested.toRealPath(LinkOption.NOFOLLOW_LINKS)
-        require(real.startsWith(rootPath))
+        require(real.startsWith(realRoot))
         require(isPythonTestModule(real.toFile()))
-        require(rootPath.relativize(real).none { it.toString().lowercase() in PYTHON_GENERATED_DIRECTORIES })
+        require(realRoot.relativize(real).none { it.toString().lowercase() in PYTHON_GENERATED_DIRECTORIES })
         require(roots.count { real.startsWith(it) } == 1)
-        val relative = rootPath.relativize(real).toString().replace('\\', '/')
+        val relative = realRoot.relativize(real).toString().replace('\\', '/')
         require(relative.isNotEmpty() && !relative.startsWith("../"))
         relative
     }.distinct().sorted()

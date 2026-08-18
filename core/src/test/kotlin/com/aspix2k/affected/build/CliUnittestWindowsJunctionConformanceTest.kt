@@ -88,7 +88,10 @@ class CliUnittestWindowsJunctionConformanceTest {
 
     private fun unittestCommand(root: File, changed: File): CliCommand {
         val module = PythonProjects.parse(root).single { it.id == "affected-unittest-alpha" }
-        return pythonCommands(
+        val adapter = CliConformanceRepository.configured
+            .repositoryFile("core/src/main/python/affected_unittest.py")
+            .toPath()
+        val command = pythonCommands(
             root.path,
             listOf("${module.executionId}:test"),
             listOf(module),
@@ -97,10 +100,10 @@ class CliUnittestWindowsJunctionConformanceTest {
                 exactSelectionEligible = setOf(changed.path),
                 comparedToBase = true,
             ),
-            CliConformanceRepository.configured
-                .repositoryFile("core/src/main/python/affected_unittest.py")
-                .toPath(),
+            adapter,
         ).single()
+        assertEquals(listOf("python", adapter.toString()), command.arguments.take(2))
+        return command
     }
 
     private fun createJunction(junction: Path, target: Path) {
