@@ -188,12 +188,25 @@ class CliRConformanceTest {
             environment = mapOf("AFFECTED_R_CANCEL_MARKER" to marker.path),
         )
         val handler = SequentialProcessHandler(root, listOf(command))
+        val messages = StringBuilder()
+        handler.addProcessListener(object : com.intellij.execution.process.ProcessListener {
+            override fun onTextAvailable(
+                event: com.intellij.execution.process.ProcessEvent,
+                outputType: com.intellij.openapi.util.Key<*>,
+            ) {
+                messages.append(event.text)
+            }
+        })
 
         try {
             handler.startNotify()
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(120)
-            while (!marker.isFile && System.nanoTime() < deadline) Thread.sleep(50)
-            assertTrue(marker.isFile, "R package check did not reach the cancellation marker")
+            while (
+                !marker.isFile && !handler.isProcessTerminated && System.nanoTime() < deadline
+            ) {
+                Thread.sleep(50)
+            }
+            assertTrue(marker.isFile, "R package check did not reach the cancellation marker:\n$messages")
             handler.destroyProcess()
             assertTrue(handler.waitFor(30_000), "R package check did not stop")
             assertTrue(handler.exitCode != 0)
