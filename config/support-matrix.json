@@ -339,9 +339,30 @@
       "selection": ["file", "package"],
       "selectionProofs": [
         {
+          "runner": "pytest",
           "units": ["file", "package"],
           "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
           "marker": "pytest runs exact files and preserves full fallback",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        },
+        {
+          "runner": "unittest",
+          "units": ["file"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliUnittestConformanceTest.kt",
+          "marker": "unittest runs only the changed test modules",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        },
+        {
+          "runner": "unittest",
+          "units": ["package"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliUnittestConformanceTest.kt",
+          "marker": "unittest zero test helper falls back to package consumers in one process",
           "gate": ".github/workflows/conformance.yml",
           "gateMarker": "--tests '*Cli*ConformanceTest'",
           "gateJob": "cli-native",
