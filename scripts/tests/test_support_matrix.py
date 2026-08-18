@@ -748,6 +748,121 @@ class SupportMatrixTest(unittest.TestCase):
             ):
                 support_matrix.check(root)
 
+    def test_distinct_runners_may_prove_the_same_selection_unit(self) -> None:
+        """Allow each declared runner to carry its own proof for one unit."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            adapter = matrix["adapters"][0]
+            adapter["runners"] = ["pytest", "unittest"]
+            pytest_proof = adapter["selectionProofs"][0]
+            pytest_proof["runner"] = "pytest"
+            unittest_proof = dict(pytest_proof)
+            unittest_proof.update(
+                {"runner": "unittest", "marker": "selects one unittest package"}
+            )
+            adapter["selectionProofs"].append(unittest_proof)
+            self.write(
+                root / "fixtures/selection-test.txt",
+                "selects one package\nselects one unittest package\n",
+            )
+
+            normalized = support_matrix.validated(root, matrix)
+
+            self.assertEqual(
+                ["pytest", "unittest"],
+                [
+                    proof["runner"]
+                    for proof in normalized["adapters"][0]["selectionProofs"]
+                ],
+            )
+
+    def test_runner_scoped_proof_rejects_duplicate_runner_unit(self) -> None:
+        """Keep one authoritative proof for each runner and selection unit."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            adapter = matrix["adapters"][0]
+            adapter["runners"] = ["pytest"]
+            proof = adapter["selectionProofs"][0]
+            proof["runner"] = "pytest"
+            duplicate = dict(proof)
+            duplicate["marker"] = "duplicate pytest package proof"
+            adapter["selectionProofs"].append(duplicate)
+            self.write(
+                root / "fixtures/selection-test.txt",
+                "selects one package\nduplicate pytest package proof\n",
+            )
+
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError, "selection proofs"
+            ):
+                support_matrix.validated(root, matrix)
+
+    def test_runner_scoped_proof_requires_a_declared_runner(self) -> None:
+        """Reject proof ownership by a runner absent from the adapter contract."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            matrix["adapters"][0]["selectionProofs"][0]["runner"] = "pytest"
+
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError, "runner must be declared"
+            ):
+                support_matrix.validated(root, matrix)
+
+    def test_runner_scoped_proof_rejects_explicit_null_runner(self) -> None:
+        """Keep JSON null from silently turning scoped evidence into generic proof."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            matrix["adapters"][0]["selectionProofs"][0]["runner"] = None
+
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError, "selection proof runner"
+            ):
+                support_matrix.validated(root, matrix)
+
+    def test_generic_and_runner_scoped_proofs_cannot_be_mixed(self) -> None:
+        """Reject ambiguous proof ownership inside one adapter contract."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            adapter = matrix["adapters"][0]
+            adapter["runners"] = ["pytest"]
+            scoped = dict(adapter["selectionProofs"][0])
+            scoped.update({"runner": "pytest", "marker": "runner-owned package proof"})
+            adapter["selectionProofs"].append(scoped)
+            self.write(
+                root / "fixtures/selection-test.txt",
+                "selects one package\nrunner-owned package proof\n",
+            )
+
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError, "all declare runner"
+            ):
+                support_matrix.validated(root, matrix)
+
+    def test_runner_scoped_proof_stays_bound_to_its_gate_execution(self) -> None:
+        """Apply the executable gate contract to runner-owned evidence."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            adapter = matrix["adapters"][0]
+            adapter["selectionProofs"][0]["runner"] = adapter["runners"][0]
+            adapter["selectionProofs"][0]["gateMarker"] = "absent command"
+
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError, "gate marker"
+            ):
+                support_matrix.validated(root, matrix)
+
     def test_repository_matrix_is_complete_and_current(self) -> None:
         """Validate the real production registrations and generated support page."""
         root = Path(__file__).resolve().parents[2]
@@ -755,6 +870,7 @@ class SupportMatrixTest(unittest.TestCase):
         support = (root / "docs/SUPPORT.md").read_text(encoding="utf-8")
         self.assertIn("static product-specific Plugin Verifier", support)
         self.assertIn("does not claim the installed IDE lifecycle", support)
+        self.assertIn("CliUnittestConformanceTest.kt", support)
 
     def test_product_verifier_uses_matrix_selected_type_archive_and_failure_levels(
         self,

@@ -587,6 +587,8 @@ def validate_adapters(root: Path, adapters: object) -> list[dict[str, Any]]:
             )
         normalized_proofs: list[dict[str, Any]] = []
         covered_units: set[str] = set()
+        covered_runner_units: set[tuple[str | None, str]] = set()
+        runner_scoped: bool | None = None
         for proof in proofs:
             if not isinstance(proof, dict):
                 raise SupportMatrixError(f"Invalid {identifier} selection proof")
@@ -600,19 +602,40 @@ def validate_adapters(root: Path, adapters: object) -> list[dict[str, Any]]:
                     "gateJob",
                     "gateStep",
                     "gateMarker",
+                    "runner",
                 },
                 "selection proof",
             )
+            runner = (
+                require_string(
+                    proof.get("runner"), f"{identifier} selection proof runner"
+                )
+                if "runner" in proof
+                else None
+            )
+            if runner is not None and runner not in adapter["runners"]:
+                raise SupportMatrixError(
+                    f"{identifier} selection proof runner must be declared: {runner}"
+                )
+            scoped = runner is not None
+            if runner_scoped is None:
+                runner_scoped = scoped
+            elif runner_scoped != scoped:
+                raise SupportMatrixError(
+                    f"{identifier} selection proofs must all declare runner or all omit it"
+                )
             units = require_strings(
                 proof.get("units"), f"{identifier} selection proof units"
             )
-            if set(units) - set(adapter["selection"]) or covered_units.intersection(
-                units
-            ):
+            runner_units = {(runner, unit) for unit in units}
+            if set(units) - set(
+                adapter["selection"]
+            ) or covered_runner_units.intersection(runner_units):
                 raise SupportMatrixError(
                     f"{identifier} selection proofs must exactly match its selection units"
                 )
             covered_units.update(units)
+            covered_runner_units.update(runner_units)
             path = require_evidence(
                 root,
                 [proof.get("path")],
@@ -651,17 +674,18 @@ def validate_adapters(root: Path, adapters: object) -> list[dict[str, Any]]:
                 gate_marker,
                 f"{identifier} selection proof",
             )
-            normalized_proofs.append(
-                {
-                    "units": units,
-                    "path": path,
-                    "marker": marker,
-                    "gate": gate,
-                    "gateJob": gate_job,
-                    "gateStep": gate_step,
-                    "gateMarker": gate_marker,
-                }
-            )
+            normalized_proof = {
+                "units": units,
+                "path": path,
+                "marker": marker,
+                "gate": gate,
+                "gateJob": gate_job,
+                "gateStep": gate_step,
+                "gateMarker": gate_marker,
+            }
+            if runner is not None:
+                normalized_proof["runner"] = runner
+            normalized_proofs.append(normalized_proof)
         if covered_units != set(adapter["selection"]):
             raise SupportMatrixError(
                 f"{identifier} selection proofs must exactly match its selection units"
