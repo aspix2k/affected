@@ -576,9 +576,8 @@ private fun awaitProcess(process: Process, timeoutMillis: Long): Boolean {
 }
 
 private fun terminatePosixContainment(helper: Process, helperPid: Long): Boolean {
-    if (ProcessSupervisorMain.terminatePosixGroup(helperPid, POSIX_INITIAL_PROOF_MILLIS)) return true
-    awaitProcess(helper, POSIX_REAP_MILLIS)
-    return ProcessSupervisorMain.awaitPosixGroupTermination(helperPid, POSIX_FINAL_PROOF_MILLIS)
+    if (helper.pid() != helperPid) return false
+    return ProcessSupervisorMain.terminatePosixSession(helper.toHandle(), TERMINATION_TIMEOUT_MILLIS)
 }
 
 private fun startOwnedThread(name: String, action: () -> Unit) {
@@ -597,9 +596,6 @@ private const val HOST_RELEASE_DECISION_TIMEOUT_MILLIS = 10_000L
 private const val SUPERVISOR_EXIT_TIMEOUT_MILLIS = 5_000L
 private const val TERMINATION_TIMEOUT_MILLIS = 5_000L
 private const val TERMINATION_AWAIT_MILLIS = 6_000L
-private const val POSIX_INITIAL_PROOF_MILLIS = 250L
-private const val POSIX_REAP_MILLIS = 750L
-private const val POSIX_FINAL_PROOF_MILLIS = 4_000L
 private const val CANCEL_EXIT_CODE = 1
 private val HELPER_ENVIRONMENT_DENYLIST = setOf(
     "JAVA_TOOL_OPTIONS",

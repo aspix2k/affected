@@ -19,6 +19,7 @@ import java.nio.file.Path
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -79,7 +80,7 @@ class CommandRunnerCancellationTest : BasePlatformTestCase() {
         }
     }
 
-    fun testCaptureTerminatesTrackedDescendantHoldingOutputBeforeReturning() {
+    fun testCaptureReturnsAfterRootExitWithoutTerminatingABackgroundDescendant() {
         val workingDirectory = Files.createTempDirectory("affected-capture-work-")
         val pid = Files.createTempFile("affected-capture-child-", ".pid")
         Files.delete(pid)
@@ -91,10 +92,10 @@ class CommandRunnerCancellationTest : BasePlatformTestCase() {
                 inheritedOutputCommand(pid),
                 timeoutSeconds = 10,
             )
-            assertNull(output)
+            assertEquals("", output)
             assertTrue(Files.isRegularFile(pid), "The descendant pid was not published")
             child = ProcessHandle.of(Files.readString(pid).trim().toLong()).orElse(null)
-            assertFalse(child?.isAlive == true, "Capture returned while its tracked descendant was still alive")
+            assertTrue(child?.isAlive == true, "Normal completion terminated the background descendant")
         } finally {
             child?.takeIf(ProcessHandle::isAlive)?.destroyForcibly()
             Files.deleteIfExists(pid)

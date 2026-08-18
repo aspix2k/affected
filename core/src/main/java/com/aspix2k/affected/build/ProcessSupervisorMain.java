@@ -18,6 +18,8 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -33,6 +35,7 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 public final class ProcessSupervisorMain {
     public static final int PROTOCOL_MAGIC = 0x41464643;
@@ -51,7 +54,6 @@ public final class ProcessSupervisorMain {
     public static final int MAX_STRING_BYTES = 1024 * 1024;
     public static final int TOKEN_BYTES = 32;
 
-    private static final int SIGKILL = 9;
     private static final int ESRCH = 3;
     private static final int JOB_OBJECT_BASIC_ACCOUNTING_INFORMATION = 1;
     private static final int JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9;
@@ -61,6 +63,10 @@ public final class ProcessSupervisorMain {
     private static final int PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
     private static final int CANCEL_EXIT_CODE = 1;
     private static final long RELEASE_TIMEOUT_SECONDS = 15;
+    private static final long OUTPUT_DRAIN_TIMEOUT_MILLIS = 2_000;
+    private static final long OUTPUT_RELAY_POLL_MILLIS = 5;
+    private static final long SESSION_TERMINATION_TIMEOUT_MILLIS = 5_000;
+    private static final int MAX_SESSION_PROCESSES = 4_096;
     private static final AtomicBoolean POSIX_SESSION_ESTABLISHED = new AtomicBoolean();
 
     private ProcessSupervisorMain() {
@@ -87,32 +93,90 @@ public final class ProcessSupervisorMain {
         return InetAddress.getByAddress(new byte[]{127, 0, 0, 1});
     }
 
-    public static boolean terminatePosixGroup(long pid, long timeoutMillis) {
-        if (pid <= 0 || pid > Integer.MAX_VALUE || timeoutMillis <= 0) return false;
-        int group = -(int) pid;
-        int sent = Posix.INSTANCE.kill(group, SIGKILL);
-        if (sent != 0 && Native.getLastError() == ESRCH) return true;
-        if (sent != 0) return false;
-        return awaitPosixGroupTermination(pid, timeoutMillis);
-    }
-
-    public static boolean awaitPosixGroupTermination(long pid, long timeoutMillis) {
-        if (pid <= 0 || pid > Integer.MAX_VALUE || timeoutMillis <= 0) return false;
-        int group = -(int) pid;
+    public static boolean terminatePosixSession(ProcessHandle leader, long timeoutMillis) {
+        if (Platform.isWindows() || timeoutMillis <= 0) return false;
+        long pid = leader.pid();
+        if (pid <= 0 || pid > Integer.MAX_VALUE) return false;
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
         boolean interrupted = Thread.interrupted();
         try {
-            while (System.nanoTime() < deadline) {
-                if (Posix.INSTANCE.kill(group, 0) != 0) return Native.getLastError() == ESRCH;
-                try {
-                    Thread.sleep(25);
-                } catch (InterruptedException ignored) {
-                    interrupted = true;
-                }
-            }
-            return Posix.INSTANCE.kill(group, 0) != 0 && Native.getLastError() == ESRCH;
+            SessionDrain result = drainPosixSession(leader, deadline, true);
+            interrupted |= result.interrupted();
+            return result.proven();
         } finally {
             if (interrupted) Thread.currentThread().interrupt();
+        }
+    }
+
+    private static SessionDrain drainPosixSession(ProcessHandle leader, long deadline, boolean terminateLeader) {
+        boolean interrupted = false;
+        while (System.nanoTime() < deadline) {
+            SessionSnapshot snapshot = sessionSnapshot(leader, deadline);
+            if (snapshot == null || !snapshot.leaderPresent()) return new SessionDrain(false, interrupted);
+            if (snapshot.members().isEmpty()) {
+                if (!terminateLeader) return new SessionDrain(true, interrupted);
+                if (leader.isAlive() && !leader.destroyForcibly() && leader.isAlive()) {
+                    return new SessionDrain(false, interrupted);
+                }
+                while (leader.isAlive() && System.nanoTime() < deadline) {
+                    interrupted |= sleepForTerminationPoll();
+                }
+                if (leader.isAlive()) return new SessionDrain(false, interrupted);
+                SessionSnapshot finalSnapshot = sessionSnapshot(leader.pid(), deadline);
+                boolean empty = finalSnapshot != null && !finalSnapshot.leaderPresent()
+                    && finalSnapshot.members().isEmpty();
+                return new SessionDrain(empty, interrupted);
+            }
+            for (ProcessHandle member : snapshot.members()) {
+                if (member.isAlive() && !member.destroyForcibly() && member.isAlive()) {
+                    return new SessionDrain(false, interrupted);
+                }
+            }
+            interrupted |= sleepForTerminationPoll();
+        }
+        return new SessionDrain(false, interrupted);
+    }
+
+    private static SessionSnapshot sessionSnapshot(ProcessHandle leader, long deadline) {
+        if (!leader.isAlive() || Posix.INSTANCE.getsid((int) leader.pid()) != (int) leader.pid()) return null;
+        return sessionSnapshot(leader.pid(), deadline);
+    }
+
+    private static SessionSnapshot sessionSnapshot(long sessionId, long deadline) {
+        List<ProcessHandle> members = new ArrayList<>();
+        boolean leaderPresent = false;
+        try (var processes = ProcessHandle.allProcesses()) {
+            var iterator = processes.iterator();
+            while (iterator.hasNext()) {
+                if (System.nanoTime() >= deadline) return null;
+                ProcessHandle process = iterator.next();
+                long candidate = process.pid();
+                if (candidate <= 0 || candidate > Integer.MAX_VALUE) continue;
+                int sid = Posix.INSTANCE.getsid((int) candidate);
+                if (sid < 0) {
+                    if (Native.getLastError() != ESRCH && process.isAlive()) return null;
+                    continue;
+                }
+                if (sid != sessionId) continue;
+                if (candidate == sessionId) {
+                    leaderPresent = true;
+                } else {
+                    if (members.size() >= MAX_SESSION_PROCESSES) return null;
+                    members.add(process);
+                }
+            }
+        } catch (Throwable ignored) {
+            return null;
+        }
+        return new SessionSnapshot(leaderPresent, List.copyOf(members));
+    }
+
+    private static boolean sleepForTerminationPoll() {
+        try {
+            Thread.sleep(25);
+            return false;
+        } catch (InterruptedException ignored) {
+            return true;
         }
     }
 
@@ -150,8 +214,9 @@ public final class ProcessSupervisorMain {
                 writeError(output, "Affected could not start the contained command: " + safeMessage(error));
                 return 1;
             }
+            OutputRelay relay = OutputRelay.start(target, config.redirectErrorStream());
             writeLongFrame(output, FRAME_STARTED, target.pid());
-            closeInheritedStreams();
+            closeInheritedInput();
             AtomicBoolean targetExited = new AtomicBoolean();
             CountDownLatch release = new CountDownLatch(1);
             Thread control = new Thread(() -> watchControl(input, targetExited, released, release),
@@ -159,6 +224,10 @@ public final class ProcessSupervisorMain {
             control.setDaemon(true);
             control.start();
             int targetExit = target.waitFor();
+            if (!relay.finish(OUTPUT_DRAIN_TIMEOUT_MILLIS)) {
+                throw new IOException("Could not drain contained process output");
+            }
+            closeInheritedOutput();
             targetExited.set(true);
             writeIntFrame(output, FRAME_TARGET_EXIT, targetExit);
             if (!release.await(RELEASE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
@@ -175,7 +244,7 @@ public final class ProcessSupervisorMain {
         target.environment().clear();
         target.environment().putAll(config.environment());
         target.redirectErrorStream(config.redirectErrorStream());
-        target.inheritIO();
+        target.redirectInput(ProcessBuilder.Redirect.INHERIT);
         return target.start();
     }
 
@@ -318,11 +387,14 @@ public final class ProcessSupervisorMain {
         return message.replace('\n', ' ').replace('\r', ' ');
     }
 
-    private static void closeInheritedStreams() {
+    private static void closeInheritedInput() {
         try {
             System.in.close();
         } catch (IOException ignored) {
         }
+    }
+
+    private static void closeInheritedOutput() {
         System.out.close();
         System.err.close();
     }
@@ -330,15 +402,118 @@ public final class ProcessSupervisorMain {
     private static void emergencyStop() {
         if (!Platform.isWindows() && POSIX_SESSION_ESTABLISHED.get()) {
             try {
-                long pid = ProcessHandle.current().pid();
-                if (pid > 0 && pid <= Integer.MAX_VALUE) Posix.INSTANCE.kill(-(int) pid, SIGKILL);
+                ProcessHandle leader = ProcessHandle.current();
+                long deadline = System.nanoTime()
+                    + TimeUnit.MILLISECONDS.toNanos(SESSION_TERMINATION_TIMEOUT_MILLIS);
+                drainPosixSession(leader, deadline, false);
             } catch (Throwable ignored) {
             }
         }
         Runtime.getRuntime().halt(CANCEL_EXIT_CODE);
     }
 
+    static final class OutputRelay {
+        private final Process target;
+        private final List<Thread> threads;
+        private final AtomicBoolean closing = new AtomicBoolean();
+        private final AtomicReference<Throwable> failure = new AtomicReference<>();
+
+        private OutputRelay(Process target, List<Thread> threads) {
+            this.target = target;
+            this.threads = threads;
+        }
+
+        static OutputRelay start(Process target, boolean redirectErrorStream) {
+            List<Thread> threads = new ArrayList<>();
+            OutputRelay relay = new OutputRelay(target, threads);
+            threads.add(relay.start(target.getInputStream(), System.out, "stdout"));
+            if (!redirectErrorStream) threads.add(relay.start(target.getErrorStream(), System.err, "stderr"));
+            return relay;
+        }
+
+        private Thread start(InputStream input, OutputStream output, String stream) {
+            Thread thread = new Thread(() -> {
+                try {
+                    copyAvailable(input, output);
+                } catch (Throwable error) {
+                    if (!closing.get()) failure.compareAndSet(null, error);
+                }
+            }, "Affected process supervisor " + stream);
+            thread.setDaemon(true);
+            thread.start();
+            return thread;
+        }
+
+        private void copyAvailable(InputStream input, OutputStream output) throws IOException, InterruptedException {
+            byte[] buffer = new byte[8_192];
+            boolean rootExited = false;
+            while (!closing.get()) {
+                int available = input.available();
+                if (available > 0) {
+                    int read = input.read(buffer, 0, Math.min(buffer.length, available));
+                    if (read < 0) return;
+                    output.write(buffer, 0, read);
+                    output.flush();
+                } else if (rootExited) {
+                    output.flush();
+                    return;
+                } else if (!target.isAlive()) {
+                    rootExited = true;
+                } else {
+                    Thread.sleep(OUTPUT_RELAY_POLL_MILLIS);
+                }
+            }
+        }
+
+        boolean finish(long timeoutMillis) {
+            long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+            boolean interrupted = false;
+            try {
+                for (Thread thread : threads) {
+                    while (thread.isAlive() && System.nanoTime() < deadline) {
+                        long remaining = deadline - System.nanoTime();
+                        try {
+                            thread.join(Math.max(1, TimeUnit.NANOSECONDS.toMillis(remaining)));
+                        } catch (InterruptedException ignored) {
+                            interrupted = true;
+                        }
+                    }
+                }
+                boolean forcedClose = threads.stream().anyMatch(Thread::isAlive);
+                if (forcedClose) {
+                    closing.set(true);
+                    try {
+                        target.getInputStream().close();
+                    } catch (IOException ignored) {
+                    }
+                    try {
+                        target.getErrorStream().close();
+                    } catch (IOException ignored) {
+                    }
+                }
+                for (Thread thread : threads) {
+                    if (thread.isAlive()) {
+                        try {
+                            thread.join(250);
+                        } catch (InterruptedException ignored) {
+                            interrupted = true;
+                        }
+                    }
+                }
+                return !forcedClose && threads.stream().noneMatch(Thread::isAlive) && failure.get() == null;
+            } finally {
+                if (interrupted) Thread.currentThread().interrupt();
+            }
+        }
+    }
+
     private record Frame(int type, byte[] payload) {
+    }
+
+    private record SessionSnapshot(boolean leaderPresent, List<ProcessHandle> members) {
+    }
+
+    private record SessionDrain(boolean proven, boolean interrupted) {
     }
 
     private record TargetConfig(
@@ -357,7 +532,6 @@ public final class ProcessSupervisorMain {
 
         int getpgid(int pid);
 
-        int kill(int pid, int signal);
     }
 
     public static final class WindowsJob implements AutoCloseable {
