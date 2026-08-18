@@ -458,14 +458,34 @@ private fun supervisorClassPath(): List<Path> {
 }
 
 private fun requiredJnaNativePath(): String {
-    val nativePath = System.getProperty("jna.boot.library.path")?.takeIf(String::isNotBlank)
-        ?: supervisorFailure("The IDE JNA native library path is unavailable")
-    val invalid = nativePath.split(File.pathSeparator).any { entry ->
-        val path = Path.of(entry)
-        !Files.isDirectory(path) || !Files.isReadable(path)
-    }
+    val configured = System.getProperty(JNA_BOOT_LIBRARY_PATH_PROPERTY)?.takeIf(String::isNotBlank)
+    val paths = configured?.split(File.pathSeparator)?.map(Path::of) ?: discoverIdeJnaNativePath()
+    val invalid = paths.any { path -> !Files.isDirectory(path) || !Files.isReadable(path) }
     if (invalid) supervisorFailure("The IDE JNA native library path is unreadable")
+    val nativePath = paths.joinToString(File.pathSeparator)
+    if (configured == null) System.setProperty(JNA_BOOT_LIBRARY_PATH_PROPERTY, nativePath)
     return nativePath
+}
+
+private fun discoverIdeJnaNativePath(): List<Path> {
+    val root = Path.of(PathManager.getHomePath(), "lib", "jna").toAbsolutePath().normalize()
+    val candidates = try {
+        Files.list(root).use { entries ->
+            entries.filter { directory ->
+                Files.isDirectory(directory) && Files.isReadable(directory) &&
+                    JNA_DISPATCH_LIBRARY_NAMES.any { name ->
+                        val library = directory.resolve(name)
+                        Files.isRegularFile(library) && Files.isReadable(library)
+                    }
+            }.limit(2).toList()
+        }
+    } catch (_: IOException) {
+        emptyList()
+    } catch (_: SecurityException) {
+        emptyList()
+    }
+    if (candidates.size != 1) supervisorFailure("The IDE JNA native library path is unavailable")
+    return candidates
 }
 
 private fun readHello(input: DataInputStream, token: ByteArray, helperPid: Long): Hello {
@@ -576,9 +596,8 @@ private fun awaitProcess(process: Process, timeoutMillis: Long): Boolean {
 }
 
 private fun terminatePosixContainment(helper: Process, helperPid: Long): Boolean {
-    if (ProcessSupervisorMain.terminatePosixGroup(helperPid, POSIX_INITIAL_PROOF_MILLIS)) return true
-    awaitProcess(helper, POSIX_REAP_MILLIS)
-    return ProcessSupervisorMain.awaitPosixGroupTermination(helperPid, POSIX_FINAL_PROOF_MILLIS)
+    if (helper.pid() != helperPid) return false
+    return ProcessSupervisorMain.terminatePosixSession(helper.toHandle(), TERMINATION_TIMEOUT_MILLIS)
 }
 
 private fun startOwnedThread(name: String, action: () -> Unit) {
@@ -597,10 +616,13 @@ private const val HOST_RELEASE_DECISION_TIMEOUT_MILLIS = 10_000L
 private const val SUPERVISOR_EXIT_TIMEOUT_MILLIS = 5_000L
 private const val TERMINATION_TIMEOUT_MILLIS = 5_000L
 private const val TERMINATION_AWAIT_MILLIS = 6_000L
-private const val POSIX_INITIAL_PROOF_MILLIS = 250L
-private const val POSIX_REAP_MILLIS = 750L
-private const val POSIX_FINAL_PROOF_MILLIS = 4_000L
 private const val CANCEL_EXIT_CODE = 1
+private const val JNA_BOOT_LIBRARY_PATH_PROPERTY = "jna.boot.library.path"
+private val JNA_DISPATCH_LIBRARY_NAMES = setOf(
+    "jnidispatch.dll",
+    "libjnidispatch.jnilib",
+    "libjnidispatch.so",
+)
 private val HELPER_ENVIRONMENT_DENYLIST = setOf(
     "JAVA_TOOL_OPTIONS",
     "_JAVA_OPTIONS",
