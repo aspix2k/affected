@@ -1,0 +1,1 @@
+- Contain CLI processes at launch so cancellation terminates reparented children inside the Affected-owned boundary before removing temporary output.

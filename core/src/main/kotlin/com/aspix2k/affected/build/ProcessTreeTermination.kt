@@ -9,6 +9,16 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
+internal interface ProcessTermination {
+    val isRequested: Boolean
+
+    fun request()
+
+    fun await(): Boolean
+
+    fun close(): Boolean
+}
+
 internal class ProcessTreeTermination(
     private val root: ProcessHandle,
     private val childSnapshot: ((ProcessHandle) -> Iterable<ProcessHandle>)? = null,
@@ -18,7 +28,7 @@ internal class ProcessTreeTermination(
     private val timeoutNanos: Long = TERMINATION_TIMEOUT_NANOS,
     private val maxProcesses: Int = MAX_TRACKED_PROCESSES,
     private val executor: ScheduledExecutorService = AppExecutorUtil.getAppScheduledExecutorService(),
-) {
+) : ProcessTermination {
 
     private val requested = AtomicBoolean()
     private val completed = AtomicBoolean()
@@ -51,10 +61,10 @@ internal class ProcessTreeTermination(
         )
     }
 
-    val isRequested: Boolean get() = requested.get()
+    override val isRequested: Boolean get() = requested.get()
     internal val isClosed: Boolean get() = tracking.get() == null && termination.get() == null
 
-    fun request() {
+    override fun request() {
         if (!requested.compareAndSet(false, true)) return
         deadlineNanos = System.nanoTime() + timeoutNanos
         stopTracking()
@@ -75,7 +85,7 @@ internal class ProcessTreeTermination(
         }
     }
 
-    fun await(): Boolean {
+    override fun await(): Boolean {
         request()
         var restoreInterrupt = Thread.interrupted()
         return try {
@@ -91,8 +101,9 @@ internal class ProcessTreeTermination(
         }
     }
 
-    fun close() {
+    override fun close(): Boolean {
         stopTracking()
+        return true
     }
 
     private fun terminationPass() {

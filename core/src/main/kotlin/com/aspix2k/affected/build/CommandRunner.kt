@@ -198,7 +198,18 @@ object CommandRunner {
             .withCharset(Charsets.UTF_8)
             .withEnvironment(environment)
         if (guard.validationFailure() != null) return null
-        capture(commandLine.createProcess(), timeoutSeconds, maxBytes)
+        val contained = ContainedProcess.prepare(
+            commandLine,
+            validateBeforeHelperLaunch = guard::validationFailure,
+        )
+        try {
+            contained.start()
+            capture(contained.process, contained, timeoutSeconds, maxBytes)
+        } catch (error: Throwable) {
+            contained.request()
+            contained.await()
+            throw error
+        }
     } catch (error: CancellationException) {
         throw error
     } catch (error: ProcessCanceledException) {
@@ -209,6 +220,15 @@ object CommandRunner {
 
     internal fun capture(process: Process, timeoutSeconds: Long, maxBytes: Int): String? {
         val termination = ProcessTreeTermination(process.toHandle())
+        return capture(process, termination, timeoutSeconds, maxBytes)
+    }
+
+    private fun capture(
+        process: Process,
+        termination: ProcessTermination,
+        timeoutSeconds: Long,
+        maxBytes: Int,
+    ): String? {
         val state = BoundedCapture(termination, maxBytes)
         val stdout = state.reader(process.inputStream, collect = true)
         val stderr = state.reader(process.errorStream, collect = false)
@@ -228,7 +248,9 @@ object CommandRunner {
                 stdout.interrupt()
                 stderr.interrupt()
             } else {
-                result = state.result().takeIf { completed && process.exitValue() == 0 }
+                result = state.result().takeIf {
+                    completed && process.exitValue() == 0 && !termination.isRequested
+                }
             }
         } catch (_: InterruptedException) {
             restoreInterrupt = true
@@ -243,7 +265,7 @@ object CommandRunner {
 
 private fun finishCapture(
     process: Process,
-    termination: ProcessTreeTermination,
+    termination: ProcessTermination,
     stdout: Thread,
     stderr: Thread,
     restoreInitialInterrupt: Boolean,
@@ -266,7 +288,6 @@ private fun finishCapture(
         termination.await()
     } else {
         termination.close()
-        true
     }
     val interruptedDuringTermination = Thread.interrupted()
     if (!terminated && interruptedDuringTermination) {
@@ -278,7 +299,7 @@ private fun finishCapture(
     return terminated && listOf(stdout, stderr).none(Thread::isAlive)
 }
 
-private class BoundedCapture(private val termination: ProcessTreeTermination, private val limit: Int) {
+private class BoundedCapture(private val termination: ProcessTermination, private val limit: Int) {
 
     private val bytes = AtomicLong()
     private val failed = AtomicBoolean()
