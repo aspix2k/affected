@@ -84,6 +84,31 @@ class ContainedProcessTest {
     }
 
     @Test
+    fun `the supervisor uses the IDE JNA path when the startup property is unavailable`() {
+        val directory = createTempDirectory("contained-jna-path")
+        val property = "jna.boot.library.path"
+        val original = System.getProperty(property)
+        var contained: ContainedProcess? = null
+
+        try {
+            System.clearProperty(property)
+            contained = ContainedProcess.prepare(
+                GeneralCommandLine(listOf(java(), "-version")).withWorkDirectory(directory.toFile()),
+            )
+            contained.start()
+
+            assertTrue(contained.process.waitFor(10, TimeUnit.SECONDS))
+            assertEquals(0, contained.process.exitValue())
+            assertTrue(contained.close())
+        } finally {
+            contained?.request()
+            contained?.await()
+            if (original == null) System.clearProperty(property) else System.setProperty(property, original)
+            directory.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `the start handshake fails within its configured timeout`() {
         val server = ServerSocket(0, 1, ProcessSupervisorMain.controlAddress())
         val peer = Socket(ProcessSupervisorMain.controlAddress(), server.localPort)
