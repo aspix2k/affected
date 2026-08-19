@@ -261,8 +261,8 @@ jobs:
       - name: Install native fixture tools
         run: |
           python -m pip install cmake==4.4.2 pytest==9.1.1 ruff==0.16.3
-          sudo timeout --kill-after=30s 15m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
-          sudo timeout --kill-after=30s 15m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends ant ant-optional meson ninja-build gcc make r-base r-cran-testthat
+          sudo timeout --kill-after=30s 2m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true update
+          sudo timeout --kill-after=30s 15m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true install -y --no-install-recommends ant ant-optional meson ninja-build gcc make r-base r-cran-testthat
 
       - name: Check Python adapters
         run: |

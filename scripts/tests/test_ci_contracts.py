@@ -238,8 +238,8 @@ class CiContractsTest(unittest.TestCase):
             path = root / ".github/workflows/conformance.yml"
             path.write_text(
                 path.read_text(encoding="utf-8").replace(
-                    "sudo timeout --kill-after=30s 15m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends",
-                    "sudo timeout --kill-after=30s 15m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y",
+                    "sudo timeout --kill-after=30s 15m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true install -y --no-install-recommends",
+                    "sudo timeout --kill-after=30s 15m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true install -y",
                     1,
                 ),
                 encoding="utf-8",
@@ -255,8 +255,8 @@ class CiContractsTest(unittest.TestCase):
             path = root / ".github/workflows/conformance.yml"
             path.write_text(
                 path.read_text(encoding="utf-8").replace(
-                    "sudo timeout --kill-after=30s 15m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update",
-                    "sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update",
+                    "sudo timeout --kill-after=30s 2m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true update",
+                    "sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true update",
                     1,
                 ),
                 encoding="utf-8",
