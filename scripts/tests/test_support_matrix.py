@@ -320,6 +320,32 @@ class SupportMatrixTest(unittest.TestCase):
             ):
                 support_matrix.check(root)
 
+    def test_claimed_product_requires_a_home_adapter_with_runtime_evidence(self) -> None:
+        """A JetBrains product row cannot omit its native ecosystems."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            del matrix["products"][0]["homeAdapters"]
+
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError, "homeAdapters"
+            ):
+                support_matrix.validated(root, matrix)
+
+    def test_mixed_proofs_must_name_real_adapters(self) -> None:
+        """Mixed-build-system proofs cannot point at an unknown adapter."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            matrix["mixedProofs"][0]["adapters"] = ["MISSING"]
+
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError, "mixed adapter is missing"
+            ):
+                support_matrix.validated(root, matrix)
+
     def test_platform_product_requires_product_specific_verifier_endpoints(self) -> None:
         """Reject a platform claim without its own minimum and current IDE cells."""
         with TemporaryDirectory() as directory:
@@ -870,6 +896,9 @@ class SupportMatrixTest(unittest.TestCase):
         support = (root / "docs/SUPPORT.md").read_text(encoding="utf-8")
         self.assertIn("static product-specific Plugin Verifier", support)
         self.assertIn("does not claim the installed IDE lifecycle", support)
+        self.assertIn("Home ecosystems", support)
+        self.assertIn("Mixed build systems", support)
+        self.assertIn("Go modules", support)
         self.assertIn("CliUnittestConformanceTest.kt", support)
 
     def test_product_verifier_uses_matrix_selected_type_archive_and_failure_levels(
@@ -942,6 +971,7 @@ class SupportMatrixTest(unittest.TestCase):
                     "name": "Example IDE",
                     "support": "verified",
                     "since": "2025.3",
+                    "homeAdapters": ["EXAMPLE"],
                     "fixtures": ["fixtures/ide"],
                     "gates": [".github/workflows/ci.yml"],
                 }
@@ -956,6 +986,14 @@ class SupportMatrixTest(unittest.TestCase):
                 }
             ],
             "adapters": adapters if adapters is not None else [adapter],
+            "mixedProofs": [
+                {
+                    "id": "example-mixed",
+                    "adapters": ["EXAMPLE"],
+                    "fixtures": ["fixtures/example"],
+                    "tests": ["fixtures/selection-test.txt"],
+                }
+            ],
         }
         self.write(root / "config/support-matrix.json", json.dumps(matrix))
         self.write(
