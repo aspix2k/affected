@@ -31,7 +31,6 @@ class CiScopeTest(unittest.TestCase):
                     "scripts/local_gate.py",
                     "scripts/tests/test_ci_scope.py",
                     ".githooks/pre-commit",
-                    ".github/workflows/queue.yml",
                     ".github/dependabot.yml",
                     ".github/workflows/dependency-graph.yml",
                     ".gitignore",
