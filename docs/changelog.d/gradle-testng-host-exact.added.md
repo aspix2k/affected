@@ -1,1 +1,0 @@
-- Select exact test classes on Gradle TestNG `useTestNG()` tasks from complete class maps.
