@@ -5,24 +5,32 @@ is tied to public repository evidence and an executable CI gate.
 
 ## JetBrains products
 
-| Product | Evidence level | Minimum platform | Evidence |
-|---|---|---:|---|
-| IntelliJ IDEA | Product-verified | 2025.3 | [build.gradle.kts](../build.gradle.kts) · [ci.yml](../.github/workflows/ci.yml) |
-| Android Studio | Product-verified | 2025.3 | [build.gradle.kts](../build.gradle.kts) · [ci.yml](../.github/workflows/ci.yml) |
-| Rider | Platform-compatible | 2025.3 | [build.gradle.kts](../build.gradle.kts) · [ci.yml](../.github/workflows/ci.yml) |
-| GoLand | Platform-compatible | 2025.3 | [build.gradle.kts](../build.gradle.kts) · [ci.yml](../.github/workflows/ci.yml) |
-| CLion | Platform-compatible | 2025.3 | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
-| PyCharm | Platform-compatible | 2025.3 | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
-| WebStorm | Platform-compatible | 2025.3 | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
-| PhpStorm | Platform-compatible | 2025.3 | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
-| RubyMine | Platform-compatible | 2025.3 | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
-| RustRover | Platform-compatible | 2025.3 | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
-| DataSpell | Platform-compatible | 2025.3 | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
+| Product | Evidence level | Minimum platform | Home ecosystems | Evidence |
+|---|---|---:|---|---|
+| IntelliJ IDEA | Product-verified | 2025.3 | Gradle JVM and Android, Maven, sbt, Ant, Kotlin Toolchain | [build.gradle.kts](../build.gradle.kts) · [ci.yml](../.github/workflows/ci.yml) |
+| Android Studio | Product-verified | 2025.3 | Gradle JVM and Android | [build.gradle.kts](../build.gradle.kts) · [ci.yml](../.github/workflows/ci.yml) |
+| Rider | Platform-compatible | 2025.3 | .NET | [build.gradle.kts](../build.gradle.kts) · [ci.yml](../.github/workflows/ci.yml) |
+| GoLand | Platform-compatible | 2025.3 | Go modules | [build.gradle.kts](../build.gradle.kts) · [ci.yml](../.github/workflows/ci.yml) |
+| CLion | Platform-compatible | 2025.3 | CMake, Meson, Make, Ninja | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
+| PyCharm | Platform-compatible | 2025.3 | Python projects | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
+| WebStorm | Platform-compatible | 2025.3 | npm, Yarn and pnpm, Dart, Flutter | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
+| PhpStorm | Platform-compatible | 2025.3 | Composer | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
+| RubyMine | Platform-compatible | 2025.3 | Bundler | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
+| RustRover | Platform-compatible | 2025.3 | Cargo | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
+| DataSpell | Platform-compatible | 2025.3 | R, Python projects | [plugin.xml](../src/main/resources/META-INF/plugin.xml) · [ci.yml](../.github/workflows/ci.yml) |
 
 Product-verified entries run a dedicated product gate. Every Platform-compatible
 entry runs a static product-specific Plugin Verifier at its exact minimum and
 current endpoints, including the declared optional Gradle and Maven descriptors.
-This proves packaged plugin compatibility; it does not claim the installed IDE lifecycle.
+Home ecosystems are the native adapters that the product must keep proven at runtime;
+Plugin Verifier still does not claim the installed IDE lifecycle.
+
+## Mixed build systems
+
+| Proof | Adapters | Evidence |
+|---|---|---|
+| cmake-dotnet | CMake, .NET | [mixed-cmake-dotnet](../conformance/cli-fixtures/mixed-cmake-dotnet) · [CliMixedPolyglotConformanceTest.kt](../core/src/test/kotlin/com/aspix2k/affected/build/CliMixedPolyglotConformanceTest.kt) |
+| gradle-xcode | Gradle JVM and Android, Xcode | [mixed-gradle-xcode](../conformance/cli-fixtures/mixed-gradle-xcode) · [xcode](../conformance/cli-fixtures/xcode) · [AffectedMixedRunNativeTest.kt](../core/src/test/kotlin/com/aspix2k/affected/build/AffectedMixedRunNativeTest.kt) |
 
 ## Planned coverage
 

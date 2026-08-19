@@ -6,6 +6,7 @@
       "name": "IntelliJ IDEA",
       "support": "verified",
       "since": "2025.3",
+      "homeAdapters": ["GRADLE", "MAVEN", "SBT", "ANT", "KOTLIN_TOOLCHAIN"],
       "fixtures": ["build.gradle.kts"],
       "gates": [".github/workflows/ci.yml"]
     },
@@ -14,6 +15,7 @@
       "name": "Android Studio",
       "support": "verified",
       "since": "2025.3",
+      "homeAdapters": ["GRADLE"],
       "fixtures": ["build.gradle.kts"],
       "gates": [".github/workflows/ci.yml"]
     },
@@ -22,6 +24,7 @@
       "name": "Rider",
       "support": "platform",
       "since": "2025.3",
+      "homeAdapters": ["DOTNET"],
       "verifier": {"type": "Rider", "endpoints": [{"id": "minimum", "version": "2025.3.5", "build": "253.33813.59", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.2.1", "build": "262.9437.287", "gradle": "present", "maven": "unavailable"}]},
       "fixtures": ["build.gradle.kts"],
       "gates": [".github/workflows/ci.yml"]
@@ -31,6 +34,7 @@
       "name": "GoLand",
       "support": "platform",
       "since": "2025.3",
+      "homeAdapters": ["GO"],
       "verifier": {"type": "GoLand", "endpoints": [{"id": "minimum", "version": "2025.3.5.1", "build": "253.33813.70", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.2.1.1", "build": "262.9437.286", "gradle": "present", "maven": "unavailable"}]},
       "fixtures": ["build.gradle.kts"],
       "gates": [".github/workflows/ci.yml"]
@@ -40,6 +44,7 @@
       "name": "CLion",
       "support": "platform",
       "since": "2025.3",
+      "homeAdapters": ["CMAKE", "MESON", "MAKE", "NINJA"],
       "verifier": {"type": "CLion", "endpoints": [{"id": "minimum", "version": "2025.3.6.1", "build": "253.33813.44", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.2.1", "build": "262.9437.136", "gradle": "present", "maven": "unavailable"}]},
       "fixtures": ["src/main/resources/META-INF/plugin.xml"],
       "gates": [".github/workflows/ci.yml"]
@@ -49,6 +54,7 @@
       "name": "PyCharm",
       "support": "platform",
       "since": "2025.3",
+      "homeAdapters": ["PYTHON"],
       "verifier": {"type": "PyCharm", "endpoints": [{"id": "minimum", "version": "2025.3.6.1", "build": "253.33813.50", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.2.1", "build": "262.9437.214", "gradle": "present", "maven": "unavailable"}]},
       "fixtures": ["src/main/resources/META-INF/plugin.xml"],
       "gates": [".github/workflows/ci.yml"]
@@ -58,6 +64,7 @@
       "name": "WebStorm",
       "support": "platform",
       "since": "2025.3",
+      "homeAdapters": ["NODE", "DART", "FLUTTER"],
       "verifier": {"type": "WebStorm", "endpoints": [{"id": "minimum", "version": "2025.3.6.1", "build": "253.33813.66", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.2.1", "build": "262.9437.145", "gradle": "present", "maven": "unavailable"}]},
       "fixtures": ["src/main/resources/META-INF/plugin.xml"],
       "gates": [".github/workflows/ci.yml"]
@@ -67,6 +74,7 @@
       "name": "PhpStorm",
       "support": "platform",
       "since": "2025.3",
+      "homeAdapters": ["COMPOSER"],
       "verifier": {"type": "PhpStorm", "endpoints": [{"id": "minimum", "version": "2025.3.6.1", "build": "253.33813.65", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.2.1", "build": "262.9437.196", "gradle": "present", "maven": "unavailable"}]},
       "fixtures": ["src/main/resources/META-INF/plugin.xml"],
       "gates": [".github/workflows/ci.yml"]
@@ -76,6 +84,7 @@
       "name": "RubyMine",
       "support": "platform",
       "since": "2025.3",
+      "homeAdapters": ["RUBY"],
       "verifier": {"type": "RubyMine", "endpoints": [{"id": "minimum", "version": "2025.3.6.1", "build": "253.33813.45", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.2.1", "build": "262.9437.192", "gradle": "present", "maven": "unavailable"}]},
       "fixtures": ["src/main/resources/META-INF/plugin.xml"],
       "gates": [".github/workflows/ci.yml"]
@@ -85,6 +94,7 @@
       "name": "RustRover",
       "support": "platform",
       "since": "2025.3",
+      "homeAdapters": ["CARGO"],
       "verifier": {"type": "RustRover", "endpoints": [{"id": "minimum", "version": "2025.3.7", "build": "253.33813.58", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.2.1", "build": "262.9437.161", "gradle": "present", "maven": "unavailable"}]},
       "fixtures": ["src/main/resources/META-INF/plugin.xml"],
       "gates": [".github/workflows/ci.yml"]
@@ -94,6 +104,7 @@
       "name": "DataSpell",
       "support": "platform",
       "since": "2025.3",
+      "homeAdapters": ["RPROJECT", "PYTHON"],
       "verifier": {"type": "DataSpell", "endpoints": [{"id": "minimum", "version": "2025.3.3", "build": "253.33813.68", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.1.3", "build": "261.26222.84", "gradle": "unavailable", "maven": "unavailable"}]},
       "fixtures": ["src/main/resources/META-INF/plugin.xml"],
       "gates": [".github/workflows/ci.yml"]
@@ -891,6 +902,20 @@
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/atlas"],
       "gates": [".github/workflows/ci.yml"]
+    }
+  ],
+  "mixedProofs": [
+    {
+      "id": "cmake-dotnet",
+      "adapters": ["CMAKE", "DOTNET"],
+      "fixtures": ["conformance/cli-fixtures/mixed-cmake-dotnet"],
+      "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/CliMixedPolyglotConformanceTest.kt"]
+    },
+    {
+      "id": "gradle-xcode",
+      "adapters": ["GRADLE", "XCODE"],
+      "fixtures": ["conformance/cli-fixtures/mixed-gradle-xcode", "conformance/cli-fixtures/xcode"],
+      "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/AffectedMixedRunNativeTest.kt"]
     }
   ]
 }

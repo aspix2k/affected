@@ -398,7 +398,7 @@ def validate_products(root: Path, products: object) -> list[dict[str, Any]]:
                     product.get("issue"), f"{identifier} issue", ISSUE
                 )
         elif support in {"verified", "platform"}:
-            allowed = {"id", "name", "support", "since", "fixtures", "gates"}
+            allowed = {"id", "name", "support", "since", "homeAdapters", "fixtures", "gates"}
             if support == "platform":
                 allowed.add("verifier")
             require_fields(
@@ -474,6 +474,12 @@ def validate_products(root: Path, products: object) -> list[dict[str, Any]]:
                         f"Invalid current verifier version for {identifier}: {endpoints[1]['version']}"
                     )
             product["since"] = since
+            product["homeAdapters"] = [
+                require_string(item, f"{identifier} homeAdapters", ADAPTER_IDENTIFIER)
+                for item in require_strings(
+                    product.get("homeAdapters"), f"{identifier} homeAdapters"
+                )
+            ]
             product["fixtures"] = require_evidence(
                 root, product.get("fixtures"), f"{identifier} fixtures"
             )
@@ -705,20 +711,91 @@ def validate_adapters(root: Path, adapters: object) -> list[dict[str, Any]]:
     return result
 
 
+def bind_home_adapters(
+    products: list[dict[str, Any]], adapters: list[dict[str, Any]]
+) -> None:
+    """Require every claimed product to own at least one proven native adapter."""
+    by_id = {adapter["id"]: adapter for adapter in adapters}
+    for product in products:
+        if product["support"] not in {"verified", "platform"}:
+            continue
+        for adapter_id in product["homeAdapters"]:
+            adapter = by_id.get(adapter_id)
+            if adapter is None:
+                raise SupportMatrixError(
+                    f"{product['id']} home adapter is missing: {adapter_id}"
+                )
+            if adapter["support"] != "supported":
+                raise SupportMatrixError(
+                    f"{product['id']} home adapter is not supported: {adapter_id}"
+                )
+            if not adapter["fixtures"] or not adapter["gates"]:
+                raise SupportMatrixError(
+                    f"{product['id']} home adapter lacks runtime evidence: {adapter_id}"
+                )
+
+
+def validate_mixed_proofs(
+    root: Path, value: object, adapters: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Require mixed-build-system fixtures to name real adapters and tests."""
+    if not isinstance(value, list) or not value or len(value) > 16:
+        raise SupportMatrixError("mixedProofs must be a non-empty bounded list")
+    by_id = {adapter["id"]: adapter for adapter in adapters}
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for raw in value:
+        if not isinstance(raw, dict):
+            raise SupportMatrixError("Every mixed proof must be an object")
+        proof = dict(raw)
+        require_fields(proof, {"id", "adapters", "fixtures", "tests"}, "mixed proof")
+        identifier = require_string(proof.get("id"), "mixed proof id", IDENTIFIER)
+        if identifier in seen:
+            raise SupportMatrixError(f"Duplicate mixed proof: {identifier}")
+        seen.add(identifier)
+        adapter_ids = [
+            require_string(item, f"{identifier} adapters", ADAPTER_IDENTIFIER)
+            for item in require_strings(proof.get("adapters"), f"{identifier} adapters")
+        ]
+        if len(set(adapter_ids)) < 2:
+            raise SupportMatrixError(
+                f"{identifier} mixed proof must name at least two distinct adapters"
+            )
+        for adapter_id in adapter_ids:
+            if adapter_id not in by_id:
+                raise SupportMatrixError(
+                    f"{identifier} mixed adapter is missing: {adapter_id}"
+                )
+        proof["id"] = identifier
+        proof["adapters"] = adapter_ids
+        proof["fixtures"] = require_evidence(
+            root, proof.get("fixtures"), f"{identifier} fixtures"
+        )
+        proof["tests"] = require_evidence(root, proof.get("tests"), f"{identifier} tests")
+        result.append(proof)
+    return result
+
+
 def validated(root: Path, matrix: dict[str, Any]) -> dict[str, Any]:
     """Return a normalized matrix after all fail-closed checks pass."""
-    allowed = {"schema", "products", "operatingSystems", "adapters"}
+    allowed = {"schema", "products", "operatingSystems", "adapters", "mixedProofs"}
     if set(matrix) != allowed:
         raise SupportMatrixError(
             f"Unexpected support matrix fields: {sorted(set(matrix) - allowed)}"
         )
+    products = validate_products(root, matrix.get("products"))
+    operating_systems = validate_operating_systems(
+        root, matrix.get("operatingSystems")
+    )
+    adapters = validate_adapters(root, matrix.get("adapters"))
+    bind_home_adapters(products, adapters)
+    mixed_proofs = validate_mixed_proofs(root, matrix.get("mixedProofs"), adapters)
     return {
         "schema": 1,
-        "products": validate_products(root, matrix.get("products")),
-        "operatingSystems": validate_operating_systems(
-            root, matrix.get("operatingSystems")
-        ),
-        "adapters": validate_adapters(root, matrix.get("adapters")),
+        "products": products,
+        "operatingSystems": operating_systems,
+        "adapters": adapters,
+        "mixedProofs": mixed_proofs,
     }
 
 
@@ -782,23 +859,47 @@ def render(matrix: dict[str, Any], mcp_section: str = "") -> str:
         "",
         "## JetBrains products",
         "",
-        "| Product | Evidence level | Minimum platform | Evidence |",
-        "|---|---|---:|---|",
+        "| Product | Evidence level | Minimum platform | Home ecosystems | Evidence |",
+        "|---|---|---:|---|---|",
     ]
     product_levels = {"verified": "Product-verified", "platform": "Platform-compatible"}
+    adapters_by_id = {adapter["id"]: adapter for adapter in adapters}
     for product in supported_products:
+        homes = ", ".join(
+            adapters_by_id[adapter_id]["ecosystem"]
+            for adapter_id in product["homeAdapters"]
+        )
         evidence = links(product["fixtures"] + product["gates"])
         lines.append(
             f"| {markdown(product['name'])} | {product_levels[product['support']]} | "
-            f"{markdown(product['since'])} | {evidence} |"
+            f"{markdown(product['since'])} | {markdown(homes)} | {evidence} |"
         )
     lines += [
         "",
         "Product-verified entries run a dedicated product gate. Every Platform-compatible",
         "entry runs a static product-specific Plugin Verifier at its exact minimum and",
         "current endpoints, including the declared optional Gradle and Maven descriptors.",
-        "This proves packaged plugin compatibility; it does not claim the installed IDE lifecycle.",
+        "Home ecosystems are the native adapters that the product must keep proven at runtime;",
+        "Plugin Verifier still does not claim the installed IDE lifecycle.",
     ]
+    mixed_proofs = matrix.get("mixedProofs") or []
+    if mixed_proofs:
+        lines += [
+            "",
+            "## Mixed build systems",
+            "",
+            "| Proof | Adapters | Evidence |",
+            "|---|---|---|",
+        ]
+        for proof in mixed_proofs:
+            names = ", ".join(
+                adapters_by_id[adapter_id]["ecosystem"]
+                for adapter_id in proof["adapters"]
+            )
+            evidence = links(proof["fixtures"] + proof["tests"])
+            lines.append(
+                f"| {markdown(proof['id'])} | {markdown(names)} | {evidence} |"
+            )
     if planned_products:
         lines += [
             "",
