@@ -2,9 +2,7 @@ package com.aspix2k.affected.build
 
 import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.ModuleGraph
-import com.aspix2k.affected.Plan
 import com.aspix2k.affected.ProjectChanges
-import com.aspix2k.affected.TaskGroup
 import com.aspix2k.affected.Verification
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.ui.RunContentManager
@@ -52,6 +50,8 @@ class CliMixedGradleNodeConformanceTest : BasePlatformTestCase() {
 
     override fun tearDown() {
         try {
+            unlinkGradleProjects()
+            deleteCopiedRoots()
             AffectedSettings.getInstance().stopAfterFirstFailure = previousStopAfterFirstFailure
             super.tearDown()
         } finally {
@@ -81,19 +81,23 @@ class CliMixedGradleNodeConformanceTest : BasePlatformTestCase() {
         val root = mixedRepo()
         val prepared = prepared(root, NODE_SOURCE)
         assertEquals(listOf("NODE"), prepared.plan.groups.map { it.systemId }.distinct())
-        assertTrue(prepared.plan.groups.single().tasks.any { it.endsWith(":test") })
+        assertEquals(listOf(".:test"), prepared.plan.groups.single().tasks)
     }
 
-    fun testProductionRegistrySeesBothAdapters() = runBlocking {
-        mixedRepo()
+    fun testProductionRegistryPlansBothAdaptersInOneRepository() = runBlocking {
+        val root = mixedRepo()
         val systems = BuildSystems.of(project).map { it.id }.toSet()
+        val prepared = prepared(root, GRADLE_SOURCE, NODE_SOURCE)
+
         assertEquals(setOf(GradleConstants.SYSTEM_ID.id, "NODE"), systems)
+        assertEquals(setOf(GradleConstants.SYSTEM_ID.id, "NODE"), prepared.plan.groups.map { it.systemId }.toSet())
+        assertEquals(2, prepared.plan.groups.size)
     }
 
     fun testSimultaneousChangesRunThroughOnePreparedVerificationSession() {
         if (!nativeEnabled()) return
         val root = mixedRepo()
-        val outcome = runBlocking { runPlan(root, gradleTask = "test") }
+        val outcome = runBlocking { runPrepared(root, GRADLE_SOURCE, NODE_SOURCE) }
         assertTrue(outcome.passed)
         assertEquals(setOf(GradleConstants.SYSTEM_ID.id, "NODE"), outcome.plan.groups.map { it.systemId }.toSet())
         assertTrue(File(root, "backend/affected-gradle-test.marker").isFile)
@@ -104,7 +108,7 @@ class CliMixedGradleNodeConformanceTest : BasePlatformTestCase() {
         if (!nativeEnabled()) return
         val root = mixedRepo()
         File(root, NODE_SOURCE).appendText("\nthrow new Error('requested mixed fixture failure');\n")
-        val outcome = runBlocking { runPlan(root, gradleTask = "test") }
+        val outcome = runBlocking { runPrepared(root, GRADLE_SOURCE, NODE_SOURCE) }
         assertFalse(outcome.passed)
         assertTrue(File(root, "backend/affected-gradle-test.marker").isFile)
     }
@@ -120,21 +124,11 @@ class CliMixedGradleNodeConformanceTest : BasePlatformTestCase() {
         return Verification.prepare(ModuleGraph.create(project), changes).testsOnly
     }
 
-    private suspend fun runPlan(root: File, gradleTask: String): Verification.Outcome {
+    private suspend fun runPrepared(root: File, vararg paths: String): Verification.Outcome {
         val editors = currentEditors()
         return try {
             withTimeout(SESSION_TIMEOUT_MILLIS) {
-                Verification.runAndWait(
-                    project,
-                    Plan(
-                        groups = listOf(
-                            TaskGroup(GradleConstants.SYSTEM_ID.id, File(root, "backend").path, listOf(gradleTask)),
-                            TaskGroup("NODE", File(root, "frontend").path, listOf(".:test")),
-                        ),
-                        tested = 2,
-                        compiled = 0,
-                    ),
-                )
+                Verification.runAndWait(project, prepared(root, *paths))
             }
         } finally {
             disposeRunContents(editors)
@@ -144,7 +138,8 @@ class CliMixedGradleNodeConformanceTest : BasePlatformTestCase() {
     private fun mixedRepo(): File {
         val source = CliConformanceRepository.configured.fixture("mixed-gradle-node")
         val root = File(requireNotNull(project.basePath))
-        GENERATED_PATHS.forEach { path -> check(File(root, path).deleteRecursively()) }
+        unlinkGradleProjects()
+        deleteCopiedRoots()
         source.listFiles().orEmpty().forEach { child ->
             check(child.copyRecursively(File(root, child.name), overwrite = true))
         }
@@ -179,6 +174,23 @@ class CliMixedGradleNodeConformanceTest : BasePlatformTestCase() {
         )
     }
 
+    private fun unlinkGradleProjects() {
+        val settings = GradleSettings.getInstance(project)
+        settings.linkedProjectsSettings.toList().forEach { linked ->
+            settings.unlinkExternalProject(linked.externalProjectPath)
+        }
+    }
+
+    private fun deleteCopiedRoots() {
+        val root = project.basePath?.let(::File) ?: return
+        COPIED_ROOTS.forEach { name ->
+            val copied = File(root, name)
+            if (copied.exists()) {
+                check(copied.deleteRecursively())
+            }
+        }
+    }
+
     private fun nativeEnabled(): Boolean = System.getProperty("affected.cliConformance") == "true"
 
     private fun currentEditors(): Set<Editor> {
@@ -208,6 +220,6 @@ class CliMixedGradleNodeConformanceTest : BasePlatformTestCase() {
         const val GRADLE_SOURCE = "backend/src/main/java/backend/Value.java"
         const val NODE_SOURCE = "frontend/alpha.test.js"
         const val SESSION_TIMEOUT_MILLIS = 300_000L
-        val GENERATED_PATHS = listOf("backend/build", "frontend/node_modules")
+        val COPIED_ROOTS = listOf("backend", "frontend")
     }
 }
