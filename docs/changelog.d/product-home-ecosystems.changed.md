@@ -1,1 +1,1 @@
-- Bind every claimed JetBrains product to its native runtime ecosystems and list mixed-build-system proofs in the support matrix.
+- Bind every claimed JetBrains product to its native runtime ecosystems and list mixed-build-system proofs that name at least two adapters.

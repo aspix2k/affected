@@ -30,8 +30,7 @@ Plugin Verifier still does not claim the installed IDE lifecycle.
 | Proof | Adapters | Evidence |
 |---|---|---|
 | cmake-dotnet | CMake, .NET | [mixed-cmake-dotnet](../conformance/cli-fixtures/mixed-cmake-dotnet) · [CliMixedPolyglotConformanceTest.kt](../core/src/test/kotlin/com/aspix2k/affected/build/CliMixedPolyglotConformanceTest.kt) |
-| gradle-xcode | Gradle JVM and Android, Xcode | [mixed-gradle-xcode](../conformance/cli-fixtures/mixed-gradle-xcode) · [AffectedMixedRunNativeTest.kt](../core/src/test/kotlin/com/aspix2k/affected/build/AffectedMixedRunNativeTest.kt) |
-| gradle-kmp | Gradle JVM and Android | [gradle-kmp-fallback](../conformance/cli-fixtures/gradle-kmp-fallback) · [GradleKmpSourceSetTest.kt](../core/src/test/kotlin/com/aspix2k/affected/build/GradleKmpSourceSetTest.kt) |
+| gradle-xcode | Gradle JVM and Android, Xcode | [mixed-gradle-xcode](../conformance/cli-fixtures/mixed-gradle-xcode) · [xcode](../conformance/cli-fixtures/xcode) · [AffectedMixedRunNativeTest.kt](../core/src/test/kotlin/com/aspix2k/affected/build/AffectedMixedRunNativeTest.kt) |
 
 ## Planned coverage
 

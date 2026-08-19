@@ -339,10 +339,24 @@ class SupportMatrixTest(unittest.TestCase):
             root = Path(directory)
             self.write_repository(root)
             matrix = json.loads((root / "config/support-matrix.json").read_text())
-            matrix["mixedProofs"][0]["adapters"] = ["MISSING"]
+            matrix["mixedProofs"][0]["adapters"] = ["EXAMPLE", "MISSING"]
 
             with self.assertRaisesRegex(
                 support_matrix.SupportMatrixError, "mixed adapter is missing"
+            ):
+                support_matrix.validated(root, matrix)
+
+    def test_mixed_proofs_must_name_two_distinct_adapters(self) -> None:
+        """A single-adapter row is a corner case, not a mixed build system."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            matrix["mixedProofs"][0]["adapters"] = ["EXAMPLE"]
+
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError,
+                "at least two distinct adapters",
             ):
                 support_matrix.validated(root, matrix)
 
@@ -900,6 +914,9 @@ class SupportMatrixTest(unittest.TestCase):
         self.assertIn("Mixed build systems", support)
         self.assertIn("Go modules", support)
         self.assertIn("CliUnittestConformanceTest.kt", support)
+        self.assertIn("| cmake-dotnet |", support)
+        self.assertIn("| gradle-xcode |", support)
+        self.assertNotIn("| gradle-kmp |", support)
 
     def test_product_verifier_uses_matrix_selected_type_archive_and_failure_levels(
         self,
@@ -963,6 +980,12 @@ class SupportMatrixTest(unittest.TestCase):
             "fixtures": ["fixtures/example"],
             "gates": [".github/workflows/conformance.yml"],
         }
+        other = {
+            **adapter,
+            "id": "OTHER",
+            "implementation": "example.OtherBuildSystem",
+            "ecosystem": "Other",
+        }
         matrix = {
             "schema": 1,
             "products": [
@@ -985,11 +1008,11 @@ class SupportMatrixTest(unittest.TestCase):
                     "gates": [".github/workflows/conformance.yml"],
                 }
             ],
-            "adapters": adapters if adapters is not None else [adapter],
+            "adapters": adapters if adapters is not None else [adapter, other],
             "mixedProofs": [
                 {
                     "id": "example-mixed",
-                    "adapters": ["EXAMPLE"],
+                    "adapters": ["EXAMPLE", "OTHER"],
                     "fixtures": ["fixtures/example"],
                     "tests": ["fixtures/selection-test.txt"],
                 }
@@ -1003,6 +1026,7 @@ class SupportMatrixTest(unittest.TestCase):
             f"{support_matrix.SUMMARY_END}\n]]></description>"
             '<extensions defaultExtensionNs="com.aspix2k.affected">'
             '<buildSystem implementation="example.ExampleBuildSystem"/>'
+            '<buildSystem implementation="example.OtherBuildSystem"/>'
             "</extensions></idea-plugin>",
         )
         self.write(root / "fixtures/example", "fixture\n")

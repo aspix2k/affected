@@ -757,6 +757,10 @@ def validate_mixed_proofs(
             require_string(item, f"{identifier} adapters", ADAPTER_IDENTIFIER)
             for item in require_strings(proof.get("adapters"), f"{identifier} adapters")
         ]
+        if len(set(adapter_ids)) < 2:
+            raise SupportMatrixError(
+                f"{identifier} mixed proof must name at least two distinct adapters"
+            )
         for adapter_id in adapter_ids:
             if adapter_id not in by_id:
                 raise SupportMatrixError(

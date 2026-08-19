@@ -914,14 +914,8 @@
     {
       "id": "gradle-xcode",
       "adapters": ["GRADLE", "XCODE"],
-      "fixtures": ["conformance/cli-fixtures/mixed-gradle-xcode"],
+      "fixtures": ["conformance/cli-fixtures/mixed-gradle-xcode", "conformance/cli-fixtures/xcode"],
       "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/AffectedMixedRunNativeTest.kt"]
-    },
-    {
-      "id": "gradle-kmp",
-      "adapters": ["GRADLE"],
-      "fixtures": ["conformance/cli-fixtures/gradle-kmp-fallback"],
-      "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/GradleKmpSourceSetTest.kt"]
     }
   ]
 }
