@@ -181,19 +181,25 @@ jobs:
             current_commit=$(git rev-parse HEAD)
             trusted_main=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
             if [ "$current_commit" != "$trusted_main" ]; then
-              echo "::error::A new release must use the current trusted main commit."
-              exit 1
+              if ! git merge-base --is-ancestor "$current_commit" "$trusted_main"; then
+                echo "::error::A new release must use the current trusted main commit or an ancestor of it."
+                exit 1
+              fi
+              echo "::notice::Publishing unpublished $RELEASE_TAG from ancestor $current_commit of main $trusted_main."
+              echo "historical=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "historical=false" >> "$GITHUB_OUTPUT"
             fi
             echo "currentness=true" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        if: steps.promotion.outputs.currentness == 'true'
+        if: steps.promotion.outputs.currentness == 'true' && steps.promotion.outputs.historical != 'true'
         with:
           python-version: "3.14.7"
 
       - name: Require current release pins
-        if: steps.promotion.outputs.currentness == 'true'
+        if: steps.promotion.outputs.currentness == 'true' && steps.promotion.outputs.historical != 'true'
         run: /usr/bin/time --verbose python3 scripts/release_currentness.py
 
       - name: Prepare the release tag

@@ -264,6 +264,306 @@ class CiContractsTest(unittest.TestCase):
             with self.assertRaisesRegex(ci_contracts.CiContractError, "containment"):
                 ci_contracts.check(root)
 
+    def test_cross_platform_gate_must_prove_windows_unittest_junction_rejection(self) -> None:
+        """The required Windows lane must reject native unittest junctions."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/conformance.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "          --tests com.aspix2k.affected.build."
+                    "CliUnittestWindowsJunctionConformanceTest\n",
+                    "",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "Windows unittest junction proof"):
+                ci_contracts.check(root)
+
+    def test_windows_unittest_junction_proof_keeps_its_runtime_prerequisites(self) -> None:
+        """The native proof must run with conformance enabled and governed Python."""
+        cases = {
+            "conformance": (
+                "          -Paffected.cliConformance=true\n",
+                "",
+            ),
+            "python": (
+                "      - uses: actions/setup-python@"
+                "5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0\n"
+                "        if: runner.os == 'Windows'\n"
+                "        with:\n"
+                '          python-version: "3.14.7"\n',
+                "",
+            ),
+        }
+        for name, (required, weakened) in cases.items():
+            with self.subTest(name=name), TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.copy_workflows(root)
+                path = root / ".github/workflows/conformance.yml"
+                workflow = path.read_text(encoding="utf-8")
+                self.assertIn(required, workflow)
+                path.write_text(workflow.replace(required, weakened, 1), encoding="utf-8")
+
+                with self.assertRaisesRegex(
+                    ci_contracts.CiContractError, "Windows unittest junction proof"
+                ):
+                    ci_contracts.check(root)
+
+    def test_windows_unittest_junction_proof_keeps_the_windows_matrix_leg(self) -> None:
+        """The native proof must keep its Windows matrix leg and runner binding."""
+        mutations = {
+            "matrix": (
+                "        os: [macos-latest, windows-latest]",
+                "        os: [macos-latest]",
+            ),
+            "runner": (
+                "    if: needs.scope.outputs.exact == 'true'\n"
+                "    runs-on: ${{ matrix.os }}\n"
+                "    timeout-minutes: 20",
+                "    if: needs.scope.outputs.exact == 'true'\n"
+                "    runs-on: macos-latest\n"
+                "    timeout-minutes: 20",
+            ),
+        }
+        for name, (required, weakened) in mutations.items():
+            with self.subTest(name=name), TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.copy_workflows(root)
+                path = root / ".github/workflows/conformance.yml"
+                path.write_text(
+                    path.read_text(encoding="utf-8").replace(
+                        required,
+                        weakened,
+                        1,
+                    ),
+                    encoding="utf-8",
+                )
+
+                with self.assertRaisesRegex(
+                    ci_contracts.CiContractError, "Windows unittest junction proof"
+                ):
+                    ci_contracts.check(root)
+
+    def test_windows_unittest_junction_proof_keeps_exact_scope_dataflow(self) -> None:
+        """The required Windows job must depend on and follow the exact classifier."""
+        mutations = {
+            "needs": (
+                "  cross-platform-paths:\n"
+                "    name: Cross-platform paths / ${{ matrix.os }}\n"
+                "    needs: [scope]\n",
+                "  cross-platform-paths:\n"
+                "    name: Cross-platform paths / ${{ matrix.os }}\n"
+                "    env:\n"
+                '      CONTRACT_DECOY: "needs: [scope]"\n',
+            ),
+            "if": (
+                "  cross-platform-paths:\n"
+                "    name: Cross-platform paths / ${{ matrix.os }}\n"
+                "    needs: [scope]\n"
+                "    if: needs.scope.outputs.exact == 'true'\n",
+                "  cross-platform-paths:\n"
+                "    name: Cross-platform paths / ${{ matrix.os }}\n"
+                "    needs: [scope]\n"
+                "    if: false\n"
+                "    env:\n"
+                "      CONTRACT_DECOY: \"needs.scope.outputs.exact == 'true'\"\n",
+            ),
+        }
+        for name, (required, weakened) in mutations.items():
+            with self.subTest(name=name), TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.copy_workflows(root)
+                path = root / ".github/workflows/conformance.yml"
+                workflow = path.read_text(encoding="utf-8")
+                self.assertIn(required, workflow)
+                path.write_text(workflow.replace(required, weakened, 1), encoding="utf-8")
+
+                with self.assertRaisesRegex(
+                    ci_contracts.CiContractError, "Windows unittest junction proof"
+                ):
+                    ci_contracts.check(root)
+
+    def test_windows_unittest_junction_proof_rejects_decoy_runtime_tokens(self) -> None:
+        """Tokens outside their executable steps cannot satisfy the native proof."""
+        mutations = {
+            "conformance": (
+                "          -Paffected.cliConformance=true\n",
+                "",
+                "          name: cross-platform-paths-${{ matrix.os }}\n",
+                "          name: cross-platform-paths-${{ matrix.os }}-Paffected.cliConformance=true\n",
+            ),
+            "python-condition": (
+                "        if: runner.os == 'Windows'\n",
+                "        if: runner.os == 'macOS'\n",
+                "          name: cross-platform-paths-${{ matrix.os }}\n",
+                '          name: "if: runner.os == \'Windows\'"\n',
+            ),
+        }
+        for name, (required, weakened, anchor, decoy) in mutations.items():
+            with self.subTest(name=name), TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.copy_workflows(root)
+                path = root / ".github/workflows/conformance.yml"
+                workflow = path.read_text(encoding="utf-8")
+                self.assertIn(required, workflow)
+                self.assertIn(anchor, workflow)
+                workflow = workflow.replace(required, weakened, 1).replace(anchor, decoy, 1)
+                path.write_text(workflow, encoding="utf-8")
+
+                with self.assertRaisesRegex(
+                    ci_contracts.CiContractError, "Windows unittest junction proof"
+                ):
+                    ci_contracts.check(root)
+
+    def test_windows_unittest_junction_proof_rejects_intra_step_decoys(self) -> None:
+        """Runtime prerequisites must stay in run, top-level if, and with mappings."""
+        mutations = {
+            "run": (
+                "          -Paffected.cliConformance=true\n",
+                "",
+                "      - name: Run platform-specific core tests\n",
+                "      - name: Run platform-specific core tests\n"
+                '        env:\n          CONTRACT_DECOY: "-Paffected.cliConformance=true"\n',
+            ),
+            "run-after": (
+                "          -Paffected.cliConformance=true\n",
+                "",
+                "          --tests com.aspix2k.affected.build.XcodeNativeTest\n"
+                "          --rerun-tasks --no-daemon --no-parallel --max-workers=1\n",
+                "          --tests com.aspix2k.affected.build.XcodeNativeTest\n"
+                "          --rerun-tasks --no-daemon --no-parallel --max-workers=1\n"
+                '        env:\n          CONTRACT_DECOY: "-Paffected.cliConformance=true"\n',
+            ),
+            "disabled-step": (
+                "      - name: Run platform-specific core tests\n"
+                "        shell: bash\n",
+                "      - name: Run platform-specific core tests\n"
+                "        if: false\n"
+                "        shell: bash\n",
+                "",
+                "",
+            ),
+            "action-if": (
+                "        if: runner.os == 'Windows'\n"
+                "        with:\n",
+                "        if: runner.os == 'macOS'\n"
+                "        with:\n"
+                "          if: runner.os == 'Windows'\n",
+                "",
+                "",
+            ),
+            "action-with": (
+                "        with:\n"
+                '          python-version: "3.14.7"\n',
+                "        env:\n"
+                '          python-version: "3.14.7"\n',
+                "",
+                "",
+            ),
+        }
+        for name, (required, weakened, anchor, decoy) in mutations.items():
+            with self.subTest(name=name), TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.copy_workflows(root)
+                path = root / ".github/workflows/conformance.yml"
+                workflow = path.read_text(encoding="utf-8")
+                self.assertIn(required, workflow)
+                workflow = workflow.replace(required, weakened, 1)
+                if anchor:
+                    self.assertIn(anchor, workflow)
+                    workflow = workflow.replace(anchor, decoy, 1)
+                path.write_text(workflow, encoding="utf-8")
+
+                with self.assertRaisesRegex(
+                    ci_contracts.CiContractError, "Windows unittest junction proof"
+                ):
+                    ci_contracts.check(root)
+
+    def test_windows_unittest_junction_proof_rejects_ignored_failures(self) -> None:
+        """Neither the required job nor its executable step may ignore failures."""
+        mutations = {
+            "job": (
+                "    if: needs.scope.outputs.exact == 'true'\n"
+                "    runs-on: ${{ matrix.os }}\n"
+                "    timeout-minutes: 20",
+                "    if: needs.scope.outputs.exact == 'true'\n"
+                "    runs-on: ${{ matrix.os }}\n"
+                "    continue-on-error: true\n"
+                "    timeout-minutes: 20",
+            ),
+            "step": (
+                "      - name: Run platform-specific core tests\n",
+                "      - name: Run platform-specific core tests\n"
+                "        continue-on-error: true\n",
+            ),
+            "python-step": (
+                "      - uses: actions/setup-python@"
+                "5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0\n"
+                "        if: runner.os == 'Windows'\n",
+                "      - uses: actions/setup-python@"
+                "5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0\n"
+                "        continue-on-error: true\n"
+                "        if: runner.os == 'Windows'\n",
+            ),
+        }
+        for name, (required, weakened) in mutations.items():
+            with self.subTest(name=name), TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.copy_workflows(root)
+                path = root / ".github/workflows/conformance.yml"
+                workflow = path.read_text(encoding="utf-8")
+                self.assertIn(required, workflow)
+                path.write_text(workflow.replace(required, weakened, 1), encoding="utf-8")
+
+                with self.assertRaisesRegex(
+                    ci_contracts.CiContractError, "Windows unittest junction proof"
+                ):
+                    ci_contracts.check(root)
+
+    def test_windows_unittest_junction_proof_executes_gradle_fail_closed(self) -> None:
+        """The governed run must invoke Gradle through bash and preserve its exit status."""
+        mutations = {
+            "command": (
+                "          scripts/run_gradle.sh :core:test\n",
+                "          echo scripts/run_gradle.sh :core:test\n",
+            ),
+            "exit": (
+                "          --tests com.aspix2k.affected.build.XcodeNativeTest\n"
+                "          -Paffected.cliConformance=true\n"
+                "          --rerun-tasks --no-daemon --no-parallel --max-workers=1\n",
+                "          --tests com.aspix2k.affected.build.XcodeNativeTest\n"
+                "          -Paffected.cliConformance=true\n"
+                "          --rerun-tasks --no-daemon --no-parallel --max-workers=1 || true\n",
+            ),
+            "intermediate-operator": (
+                "          --tests com.aspix2k.affected.build.CliUnittestWindowsJunctionConformanceTest\n",
+                "          || true\n"
+                "          --tests com.aspix2k.affected.build.CliUnittestWindowsJunctionConformanceTest\n",
+            ),
+            "shell": (
+                "      - name: Run platform-specific core tests\n"
+                "        shell: bash\n",
+                "      - name: Run platform-specific core tests\n"
+                "        shell: bash {0} || true\n",
+            ),
+        }
+        for name, (required, weakened) in mutations.items():
+            with self.subTest(name=name), TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.copy_workflows(root)
+                path = root / ".github/workflows/conformance.yml"
+                workflow = path.read_text(encoding="utf-8")
+                self.assertIn(required, workflow)
+                path.write_text(workflow.replace(required, weakened, 1), encoding="utf-8")
+
+                with self.assertRaisesRegex(
+                    ci_contracts.CiContractError, "Windows unittest junction proof"
+                ):
+                    ci_contracts.check(root)
+
     def test_verify_aggregate_must_check_the_scripts_result(self) -> None:
         """A failed scripts lane must reach the required verify aggregate."""
         with TemporaryDirectory() as directory:
@@ -605,10 +905,8 @@ class CiContractsTest(unittest.TestCase):
             workflow = path.read_text(encoding="utf-8")
             path.write_text(
                 workflow.replace(
-                    'require_when product-verifier "${PLUGIN_REQUIRED:-true}" '
-                    '"$PRODUCT_VERIFIER_RESULT"',
-                    'require_when product-verifier "${PLUGIN_REQUIRED:-true}" '
-                    '"$PLUGIN_RESULT"',
+                    'require_success product-verifier "$PRODUCT_VERIFIER_RESULT"',
+                    'require_success product-verifier "$PLUGIN_RESULT"',
                     1,
                 ),
                 encoding="utf-8",

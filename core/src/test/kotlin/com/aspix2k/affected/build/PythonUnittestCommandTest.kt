@@ -1,11 +1,9 @@
 package com.aspix2k.affected.build
 
-import com.google.gson.JsonParser
 import com.intellij.openapi.progress.ProcessCanceledException
 import kotlinx.coroutines.CancellationException
 import java.io.File
 import java.nio.file.Files
-import java.util.Base64
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,20 +30,12 @@ class PythonUnittestCommandTest {
         val arguments = pythonCommands(
             root.path,
             listOf("pkg-a:test"),
-            modules(root, "pkg-a", "packages/a"),
-            changes(helper),
+            unittestModules(root, "pkg-a", "packages/a"),
+            unittestChanges(helper),
             adapter,
         ).single().arguments
 
-        assertEquals(listOf("python", adapter.toString()), arguments.take(2))
-        assertEquals(3, arguments.size)
-        val padding = "=".repeat((4 - arguments[2].length % 4) % 4)
-        val context = JsonParser.parseString(
-            Base64.getUrlDecoder().decode(arguments[2] + padding).toString(Charsets.UTF_8),
-        ).asJsonObject
-        assertEquals(1, context.get("schema").asInt)
-        assertEquals(listOf("packages/a"), context.getAsJsonArray("packages").map { it.asString })
-        assertEquals(listOf("packages/a/test_helpers.py"), context.getAsJsonArray("selected").map { it.asString })
+        assertExactUnittestSelection(arguments, adapter, "packages/a", "packages/a/test_helpers.py")
     }
 
     @Test
@@ -57,8 +47,8 @@ class PythonUnittestCommandTest {
             writeText("import unittest\nclass AlphaTest(unittest.TestCase):\n    pass\n")
         }
         val adapter = File(root, "affected_unittest.py").apply { writeText("# adapter\n") }.toPath()
-        val planned = changes(selected)
-        val modules = modules(root, "pkg-a", "packages/a")
+        val planned = unittestChanges(selected)
+        val modules = unittestModules(root, "pkg-a", "packages/a")
 
         val command = pythonDeferredCommands(
             root.path,
@@ -76,12 +66,12 @@ class PythonUnittestCommandTest {
 
     @Test
     fun `deferred unittest selection fails visibly when the test runner changes`() {
-        val fixture = deferredFixture("python-unittest-runner-drift")
-        val planned = changes(fixture.selected)
+        val fixture = deferredUnittestFixture("python-unittest-runner-drift")
+        val planned = unittestChanges(fixture.selected)
         val step = pythonDeferredCommands(
             fixture.root.path,
             listOf("pkg-a:test"),
-            modules(fixture.root, "pkg-a", "packages/a"),
+            unittestModules(fixture.root, "pkg-a", "packages/a"),
             planned,
             fixture.adapter,
         ) { planned }.single()
@@ -94,12 +84,12 @@ class PythonUnittestCommandTest {
 
     @Test
     fun `deferred unittest selection fails visibly when its adapter disappears`() {
-        val fixture = deferredFixture("python-unittest-adapter-drift")
-        val planned = changes(fixture.selected)
+        val fixture = deferredUnittestFixture("python-unittest-adapter-drift")
+        val planned = unittestChanges(fixture.selected)
         val step = pythonDeferredCommands(
             fixture.root.path,
             listOf("pkg-a:test"),
-            modules(fixture.root, "pkg-a", "packages/a"),
+            unittestModules(fixture.root, "pkg-a", "packages/a"),
             planned,
             fixture.adapter,
         ) { planned }.single()
@@ -112,12 +102,12 @@ class PythonUnittestCommandTest {
 
     @Test
     fun `deferred unittest selection fails visibly when its adapter content changes`() {
-        val fixture = deferredFixture("python-unittest-adapter-content-drift")
-        val planned = changes(fixture.selected)
+        val fixture = deferredUnittestFixture("python-unittest-adapter-content-drift")
+        val planned = unittestChanges(fixture.selected)
         val step = pythonDeferredCommands(
             fixture.root.path,
             listOf("pkg-a:test"),
-            modules(fixture.root, "pkg-a", "packages/a"),
+            unittestModules(fixture.root, "pkg-a", "packages/a"),
             planned,
             fixture.adapter,
         ) { planned }.single()
@@ -130,13 +120,13 @@ class PythonUnittestCommandTest {
 
     @Test
     fun `deferred unittest selection rechecks adapter drift after refreshing changes`() {
-        val fixture = deferredFixture("python-unittest-adapter-refresh-drift")
-        val planned = changes(fixture.selected)
+        val fixture = deferredUnittestFixture("python-unittest-adapter-refresh-drift")
+        val planned = unittestChanges(fixture.selected)
 
         val command = pythonDeferredCommands(
             fixture.root.path,
             listOf("pkg-a:test"),
-            modules(fixture.root, "pkg-a", "packages/a"),
+            unittestModules(fixture.root, "pkg-a", "packages/a"),
             planned,
             fixture.adapter,
         ) {
@@ -149,13 +139,13 @@ class PythonUnittestCommandTest {
 
     @Test
     fun `deferred unittest selection rechecks runner drift after refreshing changes`() {
-        val fixture = deferredFixture("python-unittest-runner-refresh-drift")
-        val planned = changes(fixture.selected)
+        val fixture = deferredUnittestFixture("python-unittest-runner-refresh-drift")
+        val planned = unittestChanges(fixture.selected)
 
         val command = pythonDeferredCommands(
             fixture.root.path,
             listOf("pkg-a:test"),
-            modules(fixture.root, "pkg-a", "packages/a"),
+            unittestModules(fixture.root, "pkg-a", "packages/a"),
             planned,
             fixture.adapter,
         ) {
@@ -168,12 +158,12 @@ class PythonUnittestCommandTest {
 
     @Test
     fun `deferred unittest selection preserves type checking in the same plan`() {
-        val fixture = deferredFixture("python-unittest-deferred-typecheck")
-        val planned = changes(fixture.selected)
+        val fixture = deferredUnittestFixture("python-unittest-deferred-typecheck")
+        val planned = unittestChanges(fixture.selected)
         val steps = pythonDeferredCommands(
             fixture.root.path,
             listOf("pkg-a:typecheck", "pkg-a:test"),
-            modules(fixture.root, "pkg-a", "packages/a"),
+            unittestModules(fixture.root, "pkg-a", "packages/a"),
             planned,
             fixture.adapter,
         ) { planned }
@@ -198,23 +188,17 @@ class PythonUnittestCommandTest {
         }
         val helper = File(root, "packages/a/helper.py").apply { writeText("VALUE = 1\n") }
         val adapter = File(root, "affected_unittest.py").apply { writeText("# adapter\n") }.toPath()
-        val planned = changes(selected)
+        val planned = unittestChanges(selected)
 
         val arguments = pythonDeferredCommands(
             root.path,
             listOf("pkg-a:test"),
-            modules(root, "pkg-a", "packages/a"),
+            unittestModules(root, "pkg-a", "packages/a"),
             planned,
             adapter,
-        ) { changes(selected, helper) }.single().resolve()!!.arguments
+        ) { unittestChanges(selected, helper) }.single().resolve()!!.arguments
 
-        assertEquals(listOf("python", adapter.toString()), arguments.take(2))
-        assertEquals(3, arguments.size)
-        val padding = "=".repeat((4 - arguments[2].length % 4) % 4)
-        val context = JsonParser.parseString(
-            Base64.getUrlDecoder().decode(arguments[2] + padding).toString(Charsets.UTF_8),
-        ).asJsonObject
-        assertEquals(emptyList(), context.getAsJsonArray("selected").map { it.asString })
+        assertUnittestAdapterFullCommand(arguments, adapter)
     }
 
     @Test
@@ -227,13 +211,13 @@ class PythonUnittestCommandTest {
         }
         val source = File(root, "packages/a/alpha.py").apply { writeText("VALUE = 1\n") }
         val adapter = File(root, "affected_unittest.py").apply { writeText("# adapter\n") }.toPath()
-        val planned = changes(source)
+        val planned = unittestChanges(source)
         var refreshed = false
 
         val command = pythonDeferredCommands(
             root.path,
             listOf("pkg-a:test"),
-            modules(root, "pkg-a", "packages/a"),
+            unittestModules(root, "pkg-a", "packages/a"),
             planned,
             adapter,
         ) {
@@ -242,19 +226,19 @@ class PythonUnittestCommandTest {
         }.single().resolve()
 
         assertFalse(refreshed)
-        assertAdapterFullCommand(requireNotNull(command).arguments, adapter)
+        assertUnittestAdapterFullCommand(requireNotNull(command).arguments, adapter)
     }
 
     @Test
     fun `a full unittest plan fails visibly when the test runner changes without refreshing changes`() {
-        val fixture = deferredFixture("python-unittest-full-runner-drift")
+        val fixture = deferredUnittestFixture("python-unittest-full-runner-drift")
         val source = File(fixture.root, "packages/a/alpha.py").apply { writeText("VALUE = 1\n") }
-        val planned = changes(source)
+        val planned = unittestChanges(source)
         var refreshed = false
         val step = pythonDeferredCommands(
             fixture.root.path,
             listOf("pkg-a:test"),
-            modules(fixture.root, "pkg-a", "packages/a"),
+            unittestModules(fixture.root, "pkg-a", "packages/a"),
             planned,
             fixture.adapter,
         ) {
@@ -271,22 +255,22 @@ class PythonUnittestCommandTest {
 
     @Test
     fun `an ordinary unittest revalidation failure widens in the adapter process`() {
-        val fixture = deferredFixture("python-unittest-deferred-error")
+        val fixture = deferredUnittestFixture("python-unittest-deferred-error")
 
         val command = pythonDeferredCommands(
             fixture.root.path,
             listOf("pkg-a:test"),
-            modules(fixture.root, "pkg-a", "packages/a"),
-            changes(fixture.selected),
+            unittestModules(fixture.root, "pkg-a", "packages/a"),
+            unittestChanges(fixture.selected),
             fixture.adapter,
         ) { error("inspection failed") }.single().resolve()!!
 
-        assertAdapterFullCommand(command.arguments, fixture.adapter)
+        assertUnittestAdapterFullCommand(command.arguments, fixture.adapter)
     }
 
     @Test
     fun `deferred unittest selection propagates coroutine cancellation`() {
-        val fixture = deferredFixture("python-unittest-deferred-cancel")
+        val fixture = deferredUnittestFixture("python-unittest-deferred-cancel")
         val cancellation = CancellationException("cancelled")
 
         assertSame(
@@ -295,8 +279,8 @@ class PythonUnittestCommandTest {
                 pythonDeferredCommands(
                     fixture.root.path,
                     listOf("pkg-a:test"),
-                    modules(fixture.root, "pkg-a", "packages/a"),
-                    changes(fixture.selected),
+                    unittestModules(fixture.root, "pkg-a", "packages/a"),
+                    unittestChanges(fixture.selected),
                     fixture.adapter,
                 ) { throw cancellation }.single().resolve()
             },
@@ -305,7 +289,7 @@ class PythonUnittestCommandTest {
 
     @Test
     fun `deferred unittest selection propagates IDE process cancellation`() {
-        val fixture = deferredFixture("python-unittest-deferred-ide-cancel")
+        val fixture = deferredUnittestFixture("python-unittest-deferred-ide-cancel")
         val cancellation = ProcessCanceledException()
 
         assertSame(
@@ -314,8 +298,8 @@ class PythonUnittestCommandTest {
                 pythonDeferredCommands(
                     fixture.root.path,
                     listOf("pkg-a:test"),
-                    modules(fixture.root, "pkg-a", "packages/a"),
-                    changes(fixture.selected),
+                    unittestModules(fixture.root, "pkg-a", "packages/a"),
+                    unittestChanges(fixture.selected),
                     fixture.adapter,
                 ) { throw cancellation }.single().resolve()
             },
@@ -324,7 +308,7 @@ class PythonUnittestCommandTest {
 
     @Test
     fun `deferred unittest selection propagates interruption and restores its flag`() {
-        val fixture = deferredFixture("python-unittest-deferred-interrupt")
+        val fixture = deferredUnittestFixture("python-unittest-deferred-interrupt")
         val interruption = InterruptedException("interrupted")
 
         try {
@@ -334,8 +318,8 @@ class PythonUnittestCommandTest {
                     pythonDeferredCommands(
                         fixture.root.path,
                         listOf("pkg-a:test"),
-                        modules(fixture.root, "pkg-a", "packages/a"),
-                        changes(fixture.selected),
+                        unittestModules(fixture.root, "pkg-a", "packages/a"),
+                        unittestChanges(fixture.selected),
                         fixture.adapter,
                     ) { throw interruption }.single().resolve()
                 },
@@ -357,13 +341,13 @@ class PythonUnittestCommandTest {
         File(root, "packages/a/test_other.py").writeText(
             "import unittest\nclass OtherTest(unittest.TestCase):\n    pass\n",
         )
-        val modules = modules(root, "pkg-a", "packages/a")
+        val modules = unittestModules(root, "pkg-a", "packages/a")
 
         val arguments = pythonCommands(
             root.path,
             listOf("pkg-a:test"),
             modules,
-            changes(changed),
+            unittestChanges(changed),
         ).single().arguments
 
         assertEquals(
@@ -409,12 +393,12 @@ class PythonUnittestCommandTest {
         val command = pythonDeferredCommands(
             root.path,
             listOf("pkg-a:test"),
-            modules(root, "pkg-a", "packages/a"),
-            changes(generated),
+            unittestModules(root, "pkg-a", "packages/a"),
+            unittestChanges(generated),
             adapter,
-        ) { changes(generated) }.single().resolve()!!
+        ) { unittestChanges(generated) }.single().resolve()!!
 
-        assertAdapterFullCommand(command.arguments, adapter)
+        assertUnittestAdapterFullCommand(command.arguments, adapter)
     }
 
     @Test
@@ -436,10 +420,10 @@ class PythonUnittestCommandTest {
         val command = pythonDeferredCommands(
             root.path,
             listOf("pkg-a:test"),
-            modules(root, "pkg-a", "packages/a"),
-            changes(changed),
+            unittestModules(root, "pkg-a", "packages/a"),
+            unittestChanges(changed),
             adapter,
-        ) { changes(changed) }.single().resolve()!!
+        ) { unittestChanges(changed) }.single().resolve()!!
 
         assertEquals(listOf("python", "-c", PYTHON_RUNNER_DISCOVERY_FAILURE), command.arguments)
     }
@@ -457,13 +441,13 @@ class PythonUnittestCommandTest {
         val commands = pythonDeferredCommands(
             root.path,
             listOf("root:test", "pkg-a:test"),
-            modules(root, "root", ".", "pkg-a", "packages/a"),
-            changes(changed),
+            unittestModules(root, "root", ".", "pkg-a", "packages/a"),
+            unittestChanges(changed),
             adapter,
-        ) { changes(changed) }
+        ) { unittestChanges(changed) }
 
         assertEquals(1, commands.size)
-        assertAdapterFullCommand(commands.single().resolve()!!.arguments, adapter)
+        assertUnittestAdapterFullCommand(commands.single().resolve()!!.arguments, adapter)
     }
 
     @Test
@@ -481,8 +465,8 @@ class PythonUnittestCommandTest {
         val arguments = pythonCommands(
             root.path,
             listOf("pkg-a:test"),
-            modules(root, "pkg-a", "packages/a"),
-            changes(*changed.toTypedArray()),
+            unittestModules(root, "pkg-a", "packages/a"),
+            unittestChanges(*changed.toTypedArray()),
             adapter,
         ).single().arguments
 
@@ -501,17 +485,17 @@ class PythonUnittestCommandTest {
         val entries = (0 until 256).flatMap { index ->
             listOf("pkg-$index", "packages/${index}_${"x".repeat(80)}")
         }.toTypedArray()
-        val modules = modules(root, *entries)
+        val modules = unittestModules(root, *entries)
         val tasks = modules.map { "${it.executionId}:test" }
 
         val commands = pythonDeferredCommands(
             root.path,
             tasks,
             modules,
-            changes(source),
+            unittestChanges(source),
             adapter,
             PythonTestRunner.UNITTEST,
-        ) { changes(source) }
+        ) { unittestChanges(source) }
 
         assertEquals(1, commands.size)
         assertEquals(
@@ -531,13 +515,13 @@ class PythonUnittestCommandTest {
         val source = File(root, "packages/a/alpha.py").apply {
             writeText("value = 1\n")
         }
-        val modules = modules(root, "pkg-a", "packages/a")
+        val modules = unittestModules(root, "pkg-a", "packages/a")
 
         val arguments = pythonCommands(
             root.path,
             listOf("pkg-a:test"),
             modules,
-            changes(source),
+            unittestChanges(source),
         ).single().arguments
 
         assertEquals(
@@ -558,13 +542,13 @@ class PythonUnittestCommandTest {
             parentFile.mkdirs()
             writeText("import unittest\nclass BetaTest(unittest.TestCase):\n    pass\n")
         }
-        val modules = modules(root, "pkg-a", "packages/a", "pkg-b", "packages/b")
+        val modules = unittestModules(root, "pkg-a", "packages/a", "pkg-b", "packages/b")
 
         val commands = pythonCommands(
             root.path,
             listOf("pkg-a:test", "pkg-b:test"),
             modules,
-            changes(changed),
+            unittestChanges(changed),
         )
 
         assertEquals(2, commands.size)
@@ -583,7 +567,7 @@ class PythonUnittestCommandTest {
             parentFile.mkdirs()
             writeText("import unittest\nclass AlphaTest(unittest.TestCase):\n    pass\n")
         }
-        val modules = modules(root, "pkg-a", "packages/a")
+        val modules = unittestModules(root, "pkg-a", "packages/a")
 
         val arguments = pythonCommands(
             root.path,
@@ -596,68 +580,5 @@ class PythonUnittestCommandTest {
             listOf("python", "-m", "unittest", "discover", "-s", "packages/a", "-t", "."),
             arguments,
         )
-    }
-
-    private fun changes(vararg files: File) = BuildChanges(
-        files = files.map(File::getPath),
-        exactSelectionEligible = files.mapTo(LinkedHashSet(), File::getPath),
-        comparedToBase = true,
-    )
-
-    private fun deferredFixture(prefix: String): DeferredFixture {
-        val root = createTempDirectory(prefix).toFile()
-        File(root, "pyproject.toml").writeText("[project]\nname = \"app\"\n")
-        val selected = File(root, "packages/a/test_alpha.py").apply {
-            parentFile.mkdirs()
-            writeText("import unittest\nclass AlphaTest(unittest.TestCase):\n    pass\n")
-        }
-        val adapter = File(root, "affected_unittest.py").apply { writeText("# adapter\n") }.toPath()
-        return DeferredFixture(root, selected, adapter)
-    }
-
-    private fun assertAdapterFullCommand(arguments: List<String>, adapter: java.nio.file.Path) {
-        assertEquals(listOf("python", adapter.toString()), arguments.take(2))
-        assertEquals(3, arguments.size)
-        val padding = "=".repeat((4 - arguments[2].length % 4) % 4)
-        val context = JsonParser.parseString(
-            Base64.getUrlDecoder().decode(arguments[2] + padding).toString(Charsets.UTF_8),
-        ).asJsonObject
-        assertEquals(emptyList(), context.getAsJsonArray("selected").map { it.asString })
-    }
-
-    private fun modules(root: File, vararg entries: String): List<BuildModule> {
-        require(entries.size % 2 == 0)
-        return entries.toList().chunked(2).map { (name, path) ->
-            BuildModule(
-                name,
-                root.path,
-                listOf(File(root, path).path),
-                PythonProjects.TEST,
-                PythonProjects.TYPECHECK,
-                true,
-                executionId = name,
-            )
-        }
-    }
-
-    private data class DeferredFixture(
-        val root: File,
-        val selected: File,
-        val adapter: java.nio.file.Path,
-    )
-
-    private companion object {
-        const val PYTHON_RUNNER_DISCOVERY_FAILURE =
-            "import sys; sys.stderr.write(\"Affected could not safely determine whether this project uses " +
-                "pytest or unittest; remove test-tree symlinks or declare pytest.\\n\"); raise SystemExit(2)"
-        const val UNITTEST_CONTEXT_FAILURE =
-            "import sys; sys.stderr.write(\"Affected could not safely encode the unittest package set; " +
-                "reduce the number or depth of Python package roots.\\n\"); raise SystemExit(2)"
-        const val PYTHON_RUNNER_DRIFT_FAILURE =
-            "import sys; sys.stderr.write(\"Affected detected a Python test-runner change after planning; " +
-                "refresh the project model and run again.\\n\"); raise SystemExit(2)"
-        const val UNITTEST_ADAPTER_DRIFT_FAILURE =
-            "import sys; sys.stderr.write(\"Affected could not revalidate the packaged unittest adapter; " +
-                "reinstall or rebuild the plugin and run again.\\n\"); raise SystemExit(2)"
     }
 }

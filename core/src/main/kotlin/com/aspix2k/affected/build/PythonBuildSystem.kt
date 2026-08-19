@@ -236,23 +236,17 @@ private fun selectUnittestFiles(
     require(changes.files.toSet() == changes.exactSelectionEligible)
     val rootPath = Path.of(root).toAbsolutePath().normalize()
     require(Files.isDirectory(rootPath, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(rootPath))
+    val realRoot = rootPath.toRealPath()
     val roots = packages.map { packageName ->
         val directory = rootPath.resolve(packageName).normalize()
-        require(directory.startsWith(rootPath))
-        require(Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(directory))
-        require(symlinkFreePythonPath(rootPath, directory))
-        directory
+        containedRealDirectory(rootPath, realRoot, directory)
     }
     val selected = changes.files.map { raw ->
-        val requested = Path.of(raw).toAbsolutePath().normalize()
-        require(requested.startsWith(rootPath) && symlinkFreePythonPath(rootPath, requested))
-        require(Files.isRegularFile(requested, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(requested))
-        val real = requested.toRealPath(LinkOption.NOFOLLOW_LINKS)
-        require(real.startsWith(rootPath))
+        val real = containedRealFile(rootPath, realRoot, Path.of(raw).toAbsolutePath().normalize())
         require(isPythonTestModule(real.toFile()))
-        require(rootPath.relativize(real).none { it.toString().lowercase() in PYTHON_GENERATED_DIRECTORIES })
+        require(realRoot.relativize(real).none { it.toString().lowercase() in PYTHON_GENERATED_DIRECTORIES })
         require(roots.count { real.startsWith(it) } == 1)
-        val relative = rootPath.relativize(real).toString().replace('\\', '/')
+        val relative = realRoot.relativize(real).toString().replace('\\', '/')
         require(relative.isNotEmpty() && !relative.startsWith("../"))
         relative
     }.distinct().sorted()
@@ -276,6 +270,25 @@ private fun unittestContext(packages: List<String>, selected: List<String>): Str
     require(json.size <= MAX_UNITTEST_CONTEXT_BYTES)
     Base64.getUrlEncoder().withoutPadding().encodeToString(json)
 }.getOrNull()
+
+private fun containedRealDirectory(rootPath: Path, realRoot: Path, directory: Path): Path {
+    require(directory.startsWith(rootPath))
+    require(Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(directory))
+    require(symlinkFreePythonPath(rootPath, directory))
+    val real = directory.toRealPath()
+    require(real.startsWith(realRoot))
+    return real
+}
+
+private fun containedRealFile(rootPath: Path, realRoot: Path, requested: Path): Path {
+    require(Files.isRegularFile(requested, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(requested))
+    if (requested.startsWith(rootPath)) {
+        require(symlinkFreePythonPath(rootPath, requested))
+    }
+    val real = requested.toRealPath()
+    require(real.startsWith(realRoot) && symlinkFreePythonPath(realRoot, real))
+    return real
+}
 
 private fun symlinkFreePythonPath(root: Path, target: Path): Boolean {
     if (!target.startsWith(root)) return false

@@ -480,6 +480,7 @@ public class MavenInjectionTest {
             executable.toString(),
             "-B",
             "-ntp",
+            "-Dmaven.repo.local=" + required("affected.test.mavenLocalRepo"),
             "-Dmaven.ext.class.path=" + required("affected.test.mavenExtension"),
             "-Daffected.collector.mavenAgent=" + required("affected.test.mavenAgent"),
             "-Daffected.collector.output=" + output,

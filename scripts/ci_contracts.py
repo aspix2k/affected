@@ -141,6 +141,46 @@ def check(root: Path = ROOT) -> None:
     for containment_test in ("ContainedProcessTest", "SequentialProcessCancellationTest"):
         if cross_platform.count(f"--tests com.aspix2k.affected.build.{containment_test}") != 1:
             raise CiContractError("macOS and Windows must keep the process containment proof")
+    platform_step = named_step(cross_platform, "Run platform-specific core tests")
+    platform_run = step_run(platform_step) if platform_step is not None else None
+    platform_lines = platform_run.splitlines() if platform_run is not None else []
+    expected_platform_run = (
+        "scripts/run_gradle.sh :core:test",
+        "--tests com.aspix2k.affected.CrossPlatformPathTest",
+        "--tests com.aspix2k.affected.build.AffectedMixedRunNativeTest",
+        "--tests com.aspix2k.affected.build.CliUnittestWindowsJunctionConformanceTest",
+        "--tests com.aspix2k.affected.build.ContainedProcessTest",
+        "--tests com.aspix2k.affected.build.SequentialProcessCancellationTest",
+        "--tests com.aspix2k.affected.build.XcodeNativeTest",
+        "-Paffected.cliConformance=true",
+        "--rerun-tasks --no-daemon --no-parallel --max-workers=1",
+    )
+    python_steps = action_steps(cross_platform, "actions/setup-python")
+    if (
+        re.search(r"(?m)^    needs: \[scope\]$", cross_platform) is None
+        or re.search(r"(?m)^    if: needs\.scope\.outputs\.exact == 'true'$", cross_platform) is None
+        or re.search(r"(?m)^    runs-on: \$\{\{ matrix\.os \}\}$", cross_platform) is None
+        or re.search(r"(?m)^        os: \[macos-latest, windows-latest\]$", cross_platform) is None
+        or re.search(r"(?m)^    continue-on-error:", cross_platform) is not None
+        or platform_step is None
+        or re.search(r"(?m)^        if:", platform_step) is not None
+        or re.search(r"(?m)^        continue-on-error:", platform_step) is not None
+        or len(re.findall(r"(?m)^        shell: bash$", platform_step)) != 1
+        or platform_run is None
+        or tuple(platform_lines) != expected_platform_run
+    ):
+        raise CiContractError("The Windows unittest junction proof must remain mandatory")
+    if (
+        len(python_steps) != 1
+        or re.search(r"(?m)^        if: runner\.os == 'Windows'$", python_steps[0]) is None
+        or re.search(r"(?m)^        continue-on-error:", python_steps[0]) is not None
+        or re.search(
+            r'(?m)^        with:\n          python-version: "\d+\.\d+\.\d+"$',
+            python_steps[0],
+        )
+        is None
+    ):
+        raise CiContractError("The Windows unittest junction proof must keep its runtime prerequisites")
     check_conformance(conformance)
 
     pins = GRADLE_ACTION.findall(ci + conformance + codeql + mutation)
@@ -363,7 +403,7 @@ def check_scope(root: Path, ci: str, codeql: str) -> None:
             "product-verifier",
             "PRODUCT_VERIFIER_RESULT",
             "needs.product-verifier.result",
-            'require_when product-verifier "${PLUGIN_REQUIRED:-true}" "$PRODUCT_VERIFIER_RESULT"',
+            'require_success product-verifier "$PRODUCT_VERIFIER_RESULT"',
         ),
         (
             "health",
@@ -378,6 +418,10 @@ def check_scope(root: Path, ci: str, codeql: str) -> None:
             invocation,
         ):
             raise CiContractError(f"verify must bind and check the {name} result")
+    if 'if [ "$PLUGIN_RESULT" = success ]; then' not in verify:
+        raise CiContractError(
+            "verify must require product-verifier only after plugin success"
+        )
     for variable, source in (
         ("PLUGIN_REQUIRED", "needs.scope.outputs.plugin"),
         ("HEALTH_REQUIRED", "needs.scope.outputs.health"),
@@ -543,6 +587,35 @@ def slice_job(workflow: str, name: str) -> str:
     if match is None:
         raise CiContractError(f"Missing job: {name}")
     return match.group(0)
+
+
+def named_step(job: str, name: str) -> str | None:
+    """Return one named GitHub Actions step from a sliced job."""
+    match = re.search(rf"(?ms)^      - name: {re.escape(name)}\n.*?(?=^      - |\Z)", job)
+    return match.group(0) if match else None
+
+
+def action_steps(job: str, action: str) -> list[str]:
+    """Return every use of one action from a sliced job."""
+    return re.findall(rf"(?ms)^      - uses: {re.escape(action)}@[^\n]+\n.*?(?=^      - |\Z)", job)
+
+
+def step_run(step: str) -> str | None:
+    """Return one folded or literal run value from a sliced step."""
+    lines = step.splitlines()
+    for index, line in enumerate(lines):
+        if re.fullmatch(r"        run: [>|][+-]?", line) is None:
+            continue
+        body = []
+        for child in lines[index + 1 :]:
+            if not child:
+                body.append("")
+            elif child.startswith("          "):
+                body.append(child[10:])
+            else:
+                break
+        return "\n".join(body) if body else None
+    return None
 
 
 def main(arguments: list[str] | None = None) -> int:

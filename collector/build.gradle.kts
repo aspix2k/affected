@@ -203,6 +203,10 @@ tasks.test {
     systemProperty("affected.test.listener", listenerArchive.get().asFile.absolutePath)
     systemProperty("affected.test.mavenExtension", mavenExtensionArchive.get().asFile.absolutePath)
     systemProperty("affected.test.mavenAgent", mavenAgentArchive.get().asFile.absolutePath)
+    systemProperty(
+        "affected.test.mavenLocalRepo",
+        layout.buildDirectory.dir("maven-local-repo").get().asFile.absolutePath,
+    )
     systemProperty("affected.test.gradle8", runGradleEightTests.get())
     systemProperty("affected.test.symlinkMode", symlinkMode.get())
     if (conformance.get()) {
