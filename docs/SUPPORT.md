@@ -22,7 +22,7 @@ is tied to public repository evidence and an executable CI gate.
 Product-verified entries run a dedicated product gate. Every Platform-compatible
 entry runs a static product-specific Plugin Verifier at its exact minimum and
 current endpoints, including the declared optional Gradle and Maven descriptors.
-Home ecosystems are the native adapters that product must keep proven at runtime;
+Home ecosystems are the native adapters that the product must keep proven at runtime;
 Plugin Verifier still does not claim the installed IDE lifecycle.
 
 ## Mixed build systems
