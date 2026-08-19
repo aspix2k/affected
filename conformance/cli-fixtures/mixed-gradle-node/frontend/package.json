@@ -1,0 +1,7 @@
+{
+  "name": "affected-mixed-frontend",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  }
+}

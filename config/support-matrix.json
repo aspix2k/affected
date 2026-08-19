@@ -200,7 +200,7 @@
       ],
       "versions": "Gradle 8–9; JDK 17, 21 and 26; in change-aware Affected test runs, exact KMP target narrowing is retained for proven platform source sets; common sources keep every target, Kotlin/Native stays task-level, and missing/stale JVM baselines or class-set drift keep the whole task; fallbacks report fixed reason codes without paths",
       "support": "supported",
-      "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java", "conformance/cli-fixtures/gradle-cancellation", "conformance/cli-fixtures/gradle-kmp-fallback", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleCancellationConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleSelectionDiagnosticsConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/GradleKmpSourceSetTest.kt"],
+      "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java", "conformance/cli-fixtures/gradle-cancellation", "conformance/cli-fixtures/gradle-kmp-fallback", "conformance/cli-fixtures/mixed-gradle-node", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleCancellationConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleSelectionDiagnosticsConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleNodeConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/GradleKmpSourceSetTest.kt"],
       "gates": [".github/workflows/conformance.yml", ".github/workflows/ci.yml"]
     },
     {
@@ -301,7 +301,7 @@
       ],
       "versions": "Current stable Node.js; Jest 29–30; Vitest 2–4",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/node"],
+      "fixtures": ["conformance/cli-fixtures/node", "conformance/cli-fixtures/mixed-gradle-node", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleNodeConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
@@ -916,6 +916,12 @@
       "adapters": ["GRADLE", "XCODE"],
       "fixtures": ["conformance/cli-fixtures/mixed-gradle-xcode", "conformance/cli-fixtures/xcode"],
       "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/AffectedMixedRunNativeTest.kt"]
+    },
+    {
+      "id": "gradle-node",
+      "adapters": ["GRADLE", "NODE"],
+      "fixtures": ["conformance/cli-fixtures/mixed-gradle-node"],
+      "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleNodeConformanceTest.kt"]
     }
   ]
 }
