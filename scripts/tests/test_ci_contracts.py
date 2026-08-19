@@ -247,6 +247,25 @@ class CiContractsTest(unittest.TestCase):
             with self.assertRaisesRegex(ci_contracts.CiContractError, "recommended packages"):
                 ci_contracts.check(root)
 
+    def test_cli_native_must_keep_a_forty_five_minute_lane(self) -> None:
+        """Slow apt mirrors exhaust a 30-minute lane before native fixtures run."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/conformance.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "    runs-on: ubuntu-latest\n    timeout-minutes: 45\n    env:\n"
+                    "      CARGO_NEXTEST_VERSION:",
+                    "    runs-on: ubuntu-latest\n    timeout-minutes: 30\n    env:\n"
+                    "      CARGO_NEXTEST_VERSION:",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "45-minute lane"):
+                ci_contracts.check(root)
+
     def test_cross_platform_gate_must_prove_process_containment(self) -> None:
         """Windows Job and POSIX session cleanup must remain in the OS matrix."""
         with TemporaryDirectory() as directory:

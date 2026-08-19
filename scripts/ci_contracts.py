@@ -490,6 +490,8 @@ def check_conformance(conformance: str) -> None:
     )
     if cli_native.count(native_packages) != 1 or not has_line(cli_native, native_packages):
         raise CiContractError("Native CLI fixture tools must skip recommended packages")
+    if not has_line(cli_native, "timeout-minutes: 45"):
+        raise CiContractError("CLI native must keep a 45-minute lane when apt is slow")
     adapter_directory = "core/src/main/python"
     for command in (
         f"python -m ruff check {adapter_directory}",
