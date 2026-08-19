@@ -170,7 +170,7 @@ jobs:
           dotnet-version: "10.0.400"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26.7"
+          go-version: "1.27.0"
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
         with:
           toolchain: "1.97.1"
@@ -261,8 +261,8 @@ jobs:
       - name: Install native fixture tools
         run: |
           python -m pip install cmake==4.4.2 pytest==9.1.1 ruff==0.16.3
-          sudo timeout --kill-after=30s 10m apt-get update
-          sudo timeout --kill-after=30s 10m apt-get install -y --no-install-recommends ant ant-optional meson ninja-build gcc make r-base r-cran-testthat
+          sudo timeout --kill-after=30s 10m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo timeout --kill-after=30s 10m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends ant ant-optional meson ninja-build gcc make r-base r-cran-testthat
 
       - name: Check Python adapters
         run: |
