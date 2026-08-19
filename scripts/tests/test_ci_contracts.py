@@ -40,7 +40,7 @@ class CiContractsTest(unittest.TestCase):
             self.copy_workflows(root)
             wrapper = root / "gradle/wrapper/gradle-wrapper.properties"
             wrapper.write_text(
-                "distributionUrl=https\\://services.gradle.org/distributions/gradle-9.7.0-bin.zip\n"
+                "distributionUrl=https\\://services.gradle.org/distributions/gradle-9.7.1-bin.zip\n"
                 "distributionSha256Sum=abc\n"
                 "networkTimeout=10000\n"
                 "retries=0\n",

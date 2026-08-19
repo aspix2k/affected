@@ -20,6 +20,7 @@ import org.gradle.api.tasks.testing.TestListener
 import org.gradle.api.tasks.testing.TestResult
 import org.gradle.api.tasks.testing.junit.JUnitOptions
 import org.gradle.api.tasks.testing.junitplatform.JUnitPlatformOptions
+import org.gradle.api.tasks.testing.testng.TestNGOptions
 import org.gradle.util.GradleVersion
 
 class AffectedCollectorSelectionSpec implements Spec<Task>, Serializable {
@@ -97,6 +98,13 @@ class AffectedCollectorSelectionSpec implements Spec<Task>, Serializable {
             task.systemProperty(OUTPUT, taskOutput.toString())
             if (task.options instanceof JUnitOptions) {
                 task.systemProperty("affected.collector.junit4", "true")
+            }
+            if (task.options instanceof TestNGOptions) {
+                task.systemProperty("affected.collector.testng", "true")
+                Set<String> listeners = ((TestNGOptions) task.options).listeners
+                if (!listeners.contains("com.aspix2k.affected.collector.AffectedTestNgListener")) {
+                    listeners.add("com.aspix2k.affected.collector.AffectedTestNgListener")
+                }
             }
             if (decision.kind == AffectedDependencySelector.Kind.CLASSES) {
                 task.filter.setIncludePatterns(decision.testClasses as String[])
@@ -199,7 +207,9 @@ class AffectedCollectorSelectionSpec implements Spec<Task>, Serializable {
     }
 
     private static boolean supportedJvmTestOptions(Object options) {
-        return options instanceof JUnitPlatformOptions || options instanceof JUnitOptions
+        return options instanceof JUnitPlatformOptions
+            || options instanceof JUnitOptions
+            || options instanceof TestNGOptions
     }
 
     private static void fingerprintJvmTestOptions(MessageDigest digest, Test task) {
@@ -215,6 +225,22 @@ class AffectedCollectorSelectionSpec implements Spec<Task>, Serializable {
             JUnitOptions options = (JUnitOptions) task.options
             updateValues(digest, "junit.includeCategories", options.includeCategories)
             updateValues(digest, "junit.excludeCategories", options.excludeCategories)
+            return
+        }
+        if (task.options instanceof TestNGOptions) {
+            TestNGOptions options = (TestNGOptions) task.options
+            updateValues(digest, "testng.includeGroups", options.includeGroups)
+            updateValues(digest, "testng.excludeGroups", options.excludeGroups)
+            updateValues(digest, "testng.listeners", options.listeners)
+            update(digest, String.valueOf(options.configFailurePolicy))
+            update(digest, String.valueOf(options.parallel))
+            update(digest, String.valueOf(options.threadCount))
+            update(digest, String.valueOf(options.suiteName))
+            update(digest, String.valueOf(options.testName))
+            update(digest, String.valueOf(options.useDefaultListeners))
+            update(digest, String.valueOf(options.preserveOrder))
+            update(digest, String.valueOf(options.groupByInstances))
+            updateValues(digest, "testng.suiteXmlFiles", options.suiteXmlFiles.collect { it.absolutePath })
             return
         }
         throw new IllegalStateException(task.options.class.name)

@@ -152,6 +152,20 @@ public class CollectorContractTest {
     }
 
     @Test
+    public void testNgListenerIsPackagedOnTheHostClasspath() throws Exception {
+        Path listener = Paths.get(requiredProperty("affected.test.listener"));
+        try (java.nio.file.FileSystem zip = java.nio.file.FileSystems.newFileSystem(listener, (ClassLoader) null)) {
+            assertTrue(Files.isRegularFile(zip.getPath(
+                "/com/aspix2k/affected/collector/AffectedTestNgListener.class")));
+        }
+        Set<String> interfaces = new HashSet<String>();
+        for (Class<?> type : AffectedTestNgListener.class.getInterfaces()) interfaces.add(type.getName());
+        assertTrue(interfaces.contains("org.testng.IInvokedMethodListener"));
+        assertTrue(interfaces.contains("org.testng.IClassListener"));
+        assertTrue(interfaces.contains("org.testng.IExecutionListener"));
+    }
+
+    @Test
     public void transformerIgnoresCodeSourcesOutsideTheAllowList() throws Exception {
         AffectedCollectorAgent.CollectorState state = new AffectedCollectorAgent.CollectorState();
         state.configure(Collections.singleton(temporary.newFolder("disallowed").toPath()));

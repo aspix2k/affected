@@ -22,7 +22,7 @@
       "name": "Rider",
       "support": "platform",
       "since": "2025.3",
-      "verifier": {"type": "Rider", "endpoints": [{"id": "minimum", "version": "2025.3.5", "build": "253.33813.59", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.2.0.2", "build": "262.8665.400", "gradle": "present", "maven": "unavailable"}]},
+      "verifier": {"type": "Rider", "endpoints": [{"id": "minimum", "version": "2025.3.5", "build": "253.33813.59", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.2.1", "build": "262.9437.287", "gradle": "present", "maven": "unavailable"}]},
       "fixtures": ["build.gradle.kts"],
       "gates": [".github/workflows/ci.yml"]
     },
@@ -31,7 +31,7 @@
       "name": "GoLand",
       "support": "platform",
       "since": "2025.3",
-      "verifier": {"type": "GoLand", "endpoints": [{"id": "minimum", "version": "2025.3.5.1", "build": "253.33813.70", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.2.1", "build": "262.9437.195", "gradle": "present", "maven": "unavailable"}]},
+      "verifier": {"type": "GoLand", "endpoints": [{"id": "minimum", "version": "2025.3.5.1", "build": "253.33813.70", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.2.1.1", "build": "262.9437.286", "gradle": "present", "maven": "unavailable"}]},
       "fixtures": ["build.gradle.kts"],
       "gates": [".github/workflows/ci.yml"]
     },
