@@ -332,10 +332,12 @@ public class GradleInjectionTest {
         assertEquals(setOf("first", "second"), executedTests(project));
     }
 
-    @Test(timeout = 120_000L)
-    public void testNgHostTasksStayOnTheUnsupportedFrameworkFallback() throws Exception {
+    @Test(timeout = COMPLETE_MAP_SCENARIO_TIMEOUT_MILLIS)
+    public void testNgHostTestsSelectExactDependentClasses() throws Exception {
         Path project = temporary.newFolder("testng-host-project").toPath();
-        Path output = temporary.newFolder("testng-host-output").toPath();
+        Path baselineOutput = temporary.newFolder("testng-host-baseline-output").toPath();
+        Path unchangedOutput = temporary.newFolder("testng-host-unchanged-output").toPath();
+        Path exactOutput = temporary.newFolder("testng-host-exact-output").toPath();
         write(project.resolve("settings.gradle"), "rootProject.name = 'testng-host'\n");
         write(
             project.resolve("build.gradle"),
@@ -346,6 +348,7 @@ public class GradleInjectionTest {
                 "    testClassesDirs = sourceSets.test.output.classesDirs\n" +
                 "    classpath = sourceSets.test.runtimeClasspath\n" +
                 "    useTestNG()\n" +
+                "    systemProperty 'fixture.executed', file('executed').absolutePath\n" +
                 "}\n"
         );
         write(
@@ -353,15 +356,117 @@ public class GradleInjectionTest {
             "package fixture; public final class Host { public static int value() { return 1; } }\n"
         );
         write(
+            project.resolve("src/main/java/fixture/Other.java"),
+            "package fixture; public final class Other { public static int value() { return 2; } }\n"
+        );
+        write(
+            project.resolve("src/test/java/fixture/Executions.java"),
+            "package fixture; import java.nio.charset.StandardCharsets; import java.nio.file.*; " +
+                "public final class Executions { public static void mark(String name) throws Exception { " +
+                "Path root = Paths.get(System.getProperty(\"fixture.executed\")); Files.createDirectories(root); " +
+                "Files.write(root.resolve(name), name.getBytes(StandardCharsets.UTF_8)); } }\n"
+        );
+        write(
             project.resolve("src/test/java/fixture/NgHostTest.java"),
-            "package fixture; import org.testng.annotations.Test; " +
-                "public final class NgHostTest { @Test public void ng() {} }\n"
+            "package fixture; import org.testng.annotations.Test; import static org.testng.Assert.*; " +
+                "public final class NgHostTest { @Test public void ng() throws Exception { " +
+                "assertEquals(Host.value(), 1); Executions.mark(\"NgHostTest\"); } }\n"
+        );
+        write(
+            project.resolve("src/test/java/fixture/NgOtherTest.java"),
+            "package fixture; import org.testng.annotations.Test; import static org.testng.Assert.*; " +
+                "public final class NgOtherTest { @Test public void other() throws Exception { " +
+                "assertEquals(Other.value(), 2); Executions.mark(\"NgOtherTest\"); } }\n"
         );
 
-        BuildResult result = run(project, output, "testNgHost", false);
+        BuildResult baseline = run(project, baselineOutput, "testNgHost", false);
+        assertDecision(baseline, ":testNgHost", "full fallback (baseline not collected yet)");
+        assertComplete(baselineOutput, 2, baseline.getOutput());
+        promote(baselineOutput, project.resolve(".affected/maps"));
 
-        assertDecision(result, ":testNgHost", "full fallback (unsupported framework)");
-        assertFallback(output);
+        clearExecuted(project);
+        BuildResult unchanged = run(project, unchangedOutput, "testNgHost", false);
+        assertDecision(unchanged, ":testNgHost", "proven-empty");
+        assertEquals(TaskOutcome.SKIPPED, unchanged.task(":testNgHost").getOutcome());
+        assertEquals(Collections.emptySet(), executedTests(project));
+
+        write(
+            project.resolve("src/main/java/fixture/Host.java"),
+            "package fixture; public final class Host { public static int value() { int result = 1; return result; } }\n"
+        );
+        clearExecuted(project);
+        BuildResult exact = run(project, exactOutput, "testNgHost", false);
+        assertDecision(exact, ":testNgHost", "exact (1 test class)");
+        assertComplete(exactOutput, 1, false, exact.getOutput());
+        assertEquals(setOf("NgHostTest"), executedTests(project));
+    }
+
+    @Test(timeout = COMPLETE_MAP_SCENARIO_TIMEOUT_MILLIS)
+    public void testNgTwoMethodClassKeepsLaterMethodDependencies() throws Exception {
+        Path project = temporary.newFolder("testng-two-method-project").toPath();
+        Path baselineOutput = temporary.newFolder("testng-two-method-baseline-output").toPath();
+        Path exactOutput = temporary.newFolder("testng-two-method-exact-output").toPath();
+        write(project.resolve("settings.gradle"), "rootProject.name = 'testng-two-method'\n");
+        write(
+            project.resolve("build.gradle"),
+            "plugins { id 'java' }\n" +
+                "repositories { mavenCentral() }\n" +
+                "dependencies { testImplementation 'org.testng:testng:7.11.0' }\n" +
+                "tasks.register('testNgHost', Test) {\n" +
+                "    testClassesDirs = sourceSets.test.output.classesDirs\n" +
+                "    classpath = sourceSets.test.runtimeClasspath\n" +
+                "    useTestNG()\n" +
+                "    include '**/TwoMethodNgTest.class'\n" +
+                "    systemProperty 'fixture.executed', file('executed').absolutePath\n" +
+                "}\n"
+        );
+        write(
+            project.resolve("src/main/java/fixture/FirstDep.java"),
+            "package fixture; public final class FirstDep { public static int value() { return 1; } }\n"
+        );
+        write(
+            project.resolve("src/main/java/fixture/SecondDep.java"),
+            "package fixture; public final class SecondDep { public static int value() { return 2; } }\n"
+        );
+        write(
+            project.resolve("src/test/java/fixture/Executions.java"),
+            "package fixture; import java.nio.charset.StandardCharsets; import java.nio.file.*; " +
+                "public final class Executions { public static void mark(String name) throws Exception { " +
+                "Path root = Paths.get(System.getProperty(\"fixture.executed\")); Files.createDirectories(root); " +
+                "Files.write(root.resolve(name), name.getBytes(StandardCharsets.UTF_8)); } }\n"
+        );
+        write(
+            project.resolve("src/test/java/fixture/TwoMethodNgTest.java"),
+            "package fixture; import org.testng.annotations.Test; import static org.testng.Assert.*; " +
+                "public final class TwoMethodNgTest { " +
+                "@Test(priority = 1) public void first() throws Exception { " +
+                "assertEquals(FirstDep.value(), 1); Executions.mark(\"first\"); } " +
+                "@Test(priority = 2) public void second() throws Exception { " +
+                "Object value = Class.forName(\"fixture.SecondDep\").getMethod(\"value\").invoke(null); " +
+                "assertEquals(((Integer) value).intValue(), 2); Executions.mark(\"second\"); } }\n"
+        );
+
+        BuildResult baseline = run(project, baselineOutput, "testNgHost", false);
+        assertDecision(baseline, ":testNgHost", "full fallback (baseline not collected yet)");
+        assertComplete(baselineOutput, 1, baseline.getOutput());
+        assertEquals(
+            baseline.getOutput() + "\n" + readWorkerMaps(baselineOutput),
+            1,
+            dependencyHashes(baselineOutput, "fixture.SecondDep").size()
+        );
+        promote(baselineOutput, project.resolve(".affected/maps"));
+
+        write(
+            project.resolve("src/main/java/fixture/SecondDep.java"),
+            "package fixture; public final class SecondDep { public static int value() { int result = 2; return result; } }\n"
+        );
+        clearExecuted(project);
+        BuildResult exact = run(project, exactOutput, "testNgHost", false);
+        assertTrue(
+            readWorkerMaps(baselineOutput) + "\n" + exact.getOutput(),
+            exact.getOutput().contains("[Affected] :testNgHost - exact (1 test class)")
+        );
+        assertEquals(setOf("first", "second"), executedTests(project));
     }
 
     @Test(timeout = 120_000L)

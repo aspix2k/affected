@@ -45,12 +45,14 @@ repositories {
 dependencies {
     implementation("org.jetbrains.intellij.deps:asm-all:9.10.1")
     compileOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
+    compileOnly("org.testng:testng:7.5.1")
 
     add(maven.compileOnlyConfigurationName, "org.apache.maven:maven-core:$mavenLatestVersion")
     add(maven.compileOnlyConfigurationName, "org.apache.maven:maven-model:$mavenLatestVersion")
     add(maven.compileOnlyConfigurationName, "org.codehaus.plexus:plexus-utils:3.6.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.testng:testng:7.5.1")
     testImplementation(gradleTestKit())
     testImplementation("org.apache.maven:maven-core:$mavenLatestVersion")
     testImplementation("org.apache.maven:maven-model:$mavenLatestVersion")
@@ -122,6 +124,7 @@ val listenerJar = tasks.register<Jar>("listenerJar") {
     archiveFileName.set("affected-collector-listener.jar")
     from(sourceSets.main.get().output)
     include("com/aspix2k/affected/collector/AffectedTestExecutionListener*.class")
+    include("com/aspix2k/affected/collector/AffectedTestNgListener*.class")
     include("META-INF/services/org.junit.platform.launcher.TestExecutionListener")
 }
 
