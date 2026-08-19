@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.15.6] - 2026-08-19
+
+### Added
+
+- Select exact test classes on Gradle JUnit 4 and Android host `Test` tasks.
+
 ## [3.15.5] - 2026-08-19
 
 ### Fixed
@@ -609,7 +615,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.5...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.6...HEAD
+[3.15.6]: https://github.com/aspix2k/affected/compare/v3.15.5...v3.15.6
 [3.15.5]: https://github.com/aspix2k/affected/compare/v3.15.4...v3.15.5
 [3.15.4]: https://github.com/aspix2k/affected/compare/v3.15.3...v3.15.4
 [3.15.3]: https://github.com/aspix2k/affected/compare/v3.15.2...v3.15.3
