@@ -69,7 +69,7 @@ object Verification {
 
     suspend fun runAndWait(project: Project, prepared: Prepared): Outcome {
         val plan = prepared.plan
-        if (plan.isEmpty) return Outcome(plan, passed = true)
+        if (plan.isEmpty) return Outcome(plan, passed = verificationPassesWithoutWork(prepared))
         val claim = project.service<AffectedState>().tryClaimVerification()
             ?: return Outcome(plan, passed = false)
         return runClaimedAndWait(project, prepared, claim)
@@ -83,7 +83,7 @@ object Verification {
         val plan = prepared.plan
         var passed = false
         try {
-            if (plan.isEmpty) return Outcome(plan, passed = true)
+            if (plan.isEmpty) return Outcome(plan, passed = verificationPassesWithoutWork(prepared))
             if (!claim.markRunning()) return Outcome(plan, passed = false)
             val stopAfterFirstFailure = AffectedSettings.getInstance().stopAfterFirstFailure
             passed = runClaimedGroups(
@@ -114,6 +114,9 @@ object Verification {
 }
 
 internal fun preparedGroupPasses(adapterFound: Boolean): Boolean = adapterFound
+
+internal fun verificationPassesWithoutWork(prepared: Verification.Prepared): Boolean =
+    prepared.plan.isEmpty && prepared.changes.files.isEmpty()
 
 fun <T> runWithRequiredAdapter(
     adapter: T?,
