@@ -238,8 +238,8 @@ class CiContractsTest(unittest.TestCase):
             path = root / ".github/workflows/conformance.yml"
             path.write_text(
                 path.read_text(encoding="utf-8").replace(
-                    "sudo timeout --kill-after=30s 10m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends",
-                    "sudo timeout --kill-after=30s 10m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y",
+                    "sudo timeout --kill-after=30s 15m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends",
+                    "sudo timeout --kill-after=30s 15m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y",
                     1,
                 ),
                 encoding="utf-8",
@@ -255,7 +255,7 @@ class CiContractsTest(unittest.TestCase):
             path = root / ".github/workflows/conformance.yml"
             path.write_text(
                 path.read_text(encoding="utf-8").replace(
-                    "sudo timeout --kill-after=30s 10m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update",
+                    "sudo timeout --kill-after=30s 15m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update",
                     "sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update",
                     1,
                 ),
@@ -265,7 +265,7 @@ class CiContractsTest(unittest.TestCase):
                 ci_contracts.check(root)
 
     def test_native_fixture_tools_must_retry_stalled_apt_fetches(self) -> None:
-        """A stuck apt index fetch must fail closed and retry inside the 10-minute bound."""
+        """A stuck apt index fetch must fail closed and retry inside the 15-minute bound."""
         with TemporaryDirectory() as directory:
             root = Path(directory)
             self.copy_workflows(root)

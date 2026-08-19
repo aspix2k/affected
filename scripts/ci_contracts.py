@@ -485,11 +485,11 @@ def check_conformance(conformance: str) -> None:
         raise CiContractError("conformance scope must publish the classifier exact-impact decision")
     cli_native = slice_job(conformance, "cli-native")
     native_update = (
-        "sudo timeout --kill-after=30s 10m apt-get -o Acquire::Retries=3 "
+        "sudo timeout --kill-after=30s 15m apt-get -o Acquire::Retries=3 "
         "-o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update"
     )
     native_packages = (
-        "sudo timeout --kill-after=30s 10m apt-get -o Acquire::Retries=3 "
+        "sudo timeout --kill-after=30s 15m apt-get -o Acquire::Retries=3 "
         "-o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y "
         "--no-install-recommends ant ant-optional meson ninja-build gcc make "
         "r-base r-cran-testthat"
