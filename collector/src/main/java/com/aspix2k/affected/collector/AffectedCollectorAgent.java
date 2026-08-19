@@ -85,6 +85,10 @@ public final class AffectedCollectorAgent {
         AffectedJUnit4Bridge.finished(description);
     }
 
+    public static void junit4SuiteFinished(Object description) {
+        AffectedJUnit4Bridge.suiteFinished(description);
+    }
+
     public static void junit4RunFinished() {
         AffectedJUnit4Bridge.runFinished();
     }

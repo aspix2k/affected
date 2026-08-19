@@ -9,7 +9,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class AffectedJUnit4Bridge {
     static final String ENABLED_PROPERTY = "affected.collector.junit4";
 
-    private static final Set<String> COMPLETED = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+    private static final Set<String> SEEN = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+    private static final Set<String> WRITTEN = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private static final AtomicBoolean UNSUPPORTED = new AtomicBoolean();
     private static final AtomicBoolean ENABLED = new AtomicBoolean();
     private static volatile CollectorOutput output;
@@ -44,6 +45,7 @@ final class AffectedJUnit4Bridge {
         if (!enabled()) return;
         String testClass = className(description);
         if (testClass != null) {
+            SEEN.add(testClass);
             try {
                 AffectedCollectorAgent.endExecution(token(description, testClass));
             } catch (Throwable failure) {
@@ -51,7 +53,30 @@ final class AffectedJUnit4Bridge {
                 UNSUPPORTED.set(true);
             }
         }
-        if (testClass == null || output == null || !COMPLETED.add(testClass)) return;
+    }
+
+    static void suiteFinished(Object description) {
+        if (!enabled() || !isSuite(description)) return;
+        writeClassMap(className(description));
+    }
+
+    static void runFinished() {
+        if (!enabled()) return;
+        for (String testClass : SEEN) writeClassMap(testClass);
+        CollectorOutput current = output;
+        if (current == null) return;
+        boolean supported = !UNSUPPORTED.get()
+            && AffectedCollectorAgent.isSupported()
+            && !SEEN.isEmpty();
+        try {
+            current.writeCompletion(supported, SEEN);
+        } catch (Throwable failure) {
+            AffectedCollectorAgent.markUnsupported();
+        }
+    }
+
+    private static void writeClassMap(String testClass) {
+        if (testClass == null || output == null || !WRITTEN.add(testClass)) return;
         try {
             output.writeMap(testClass, AffectedCollectorAgent.dependencies(testClass));
         } catch (Throwable failure) {
@@ -60,18 +85,8 @@ final class AffectedJUnit4Bridge {
         }
     }
 
-    static void runFinished() {
-        if (!enabled()) return;
-        CollectorOutput current = output;
-        if (current == null) return;
-        boolean supported = !UNSUPPORTED.get()
-            && AffectedCollectorAgent.isSupported()
-            && !COMPLETED.isEmpty();
-        try {
-            current.writeCompletion(supported, COMPLETED);
-        } catch (Throwable failure) {
-            AffectedCollectorAgent.markUnsupported();
-        }
+    private static boolean isSuite(Object description) {
+        return "true".equals(invoke(description, "isSuite"));
     }
 
     private static void prepareOutput(String testClass) throws Exception {

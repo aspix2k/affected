@@ -141,7 +141,7 @@ jobs:
     needs: [scope]
     if: needs.scope.outputs.exact == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       CARGO_NEXTEST_VERSION: "0.9.143"
       CARGO_NEXTEST_SHA256: "66786b9abe23920d022a182d1416b1bbc8130dd4872a9553d76985a1708dcd1e"
@@ -261,8 +261,8 @@ jobs:
       - name: Install native fixture tools
         run: |
           python -m pip install cmake==4.4.2 pytest==9.1.1 ruff==0.16.3
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ant ant-optional meson ninja-build gcc make r-base r-cran-testthat
+          sudo timeout --kill-after=30s 10m apt-get update
+          sudo timeout --kill-after=30s 10m apt-get install -y --no-install-recommends ant ant-optional meson ninja-build gcc make r-base r-cran-testthat
 
       - name: Check Python adapters
         run: |
