@@ -1,1 +1,0 @@
-- Keep JUnit 4 exact-selection maps until every method in the class has finished.
