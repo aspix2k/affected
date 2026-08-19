@@ -1066,6 +1066,22 @@ class CiContractsTest(unittest.TestCase):
             with self.assertRaisesRegex(ci_contracts.CiContractError, "Jackson BOM"):
                 ci_contracts.check(root)
 
+    def test_every_platform_test_runtime_must_enforce_the_patched_jackson_bom(self) -> None:
+        """The root IntelliJ test-framework runtime still leaked Jackson 2.19.0."""
+        marker = (
+            'add("intellijPlatformTestDependencies", '
+            'enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.2"))\n'
+        )
+        for relative in ("build.gradle.kts", "core/build.gradle.kts", "mcp/build.gradle.kts"):
+            with self.subTest(relative):
+                with TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    self.copy_workflows(root)
+                    path = root / relative
+                    path.write_text(path.read_text(encoding="utf-8").replace(marker, "", 1), encoding="utf-8")
+                    with self.assertRaisesRegex(ci_contracts.CiContractError, "IntelliJ test runtime"):
+                        ci_contracts.check(root)
+
     def copy_workflows(self, root: Path) -> None:
         """Copy the production workflow set into a temporary repository."""
         production = Path(__file__).resolve().parents[2]

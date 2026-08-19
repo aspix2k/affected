@@ -221,6 +221,7 @@ def check(root: Path = ROOT) -> None:
         root / "mcp/build.gradle.kts"
     ):
         raise CiContractError("The MCP module must enforce the patched Jackson BOM")
+    check_intellij_test_jackson_bom(root)
     root_build = read(root / "build.gradle.kts")
     if 'kover(project(":core"))' not in root_build or 'kover(project(":mcp"))' not in root_build:
         raise CiContractError("Kover must verify :core and :mcp, not only the root plugin sources")
@@ -230,6 +231,31 @@ def check(root: Path = ROOT) -> None:
 
     check_merge_queue(root, ci, codeql, conformance)
     check_wrapper(root)
+
+
+def check_intellij_test_jackson_bom(root: Path) -> None:
+    """Every IntelliJ Platform test runtime must pin the patched Jackson BOM."""
+    marker = 'add("intellijPlatformTestDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:'
+    for path in intellij_gradle_scripts(root):
+        text = path.read_text(encoding="utf-8")
+        if "testFramework(TestFrameworkType.Platform)" not in text:
+            continue
+        if marker not in text:
+            raise CiContractError(
+                f"{path.relative_to(root)} must enforce the patched Jackson BOM "
+                "on the IntelliJ test runtime"
+            )
+
+
+def intellij_gradle_scripts(root: Path) -> list[Path]:
+    """Return plugin Gradle scripts, excluding fixtures and build output."""
+    scripts: list[Path] = []
+    for path in root.rglob("*.gradle.kts"):
+        relative = path.relative_to(root)
+        if any(part in {"fixtures", "build", ".gradle"} for part in relative.parts):
+            continue
+        scripts.append(path)
+    return scripts
 
 
 def check_codeql_compatibility(
