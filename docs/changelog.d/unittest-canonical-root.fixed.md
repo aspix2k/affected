@@ -1,1 +1,0 @@
-- Kept exact Python unittest selection active when the filesystem canonicalizes the project-root spelling.
