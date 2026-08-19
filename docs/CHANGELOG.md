@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.15.9] - 2026-08-19
+
+### Changed
+
+- Bind every claimed JetBrains product to its native runtime ecosystems and list mixed-build-system proofs that name at least two adapters.
+
 ## [3.15.8] - 2026-08-19
 
 ### Added
@@ -627,7 +633,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.8...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.9...HEAD
+[3.15.9]: https://github.com/aspix2k/affected/compare/v3.15.8...v3.15.9
 [3.15.8]: https://github.com/aspix2k/affected/compare/v3.15.7...v3.15.8
 [3.15.7]: https://github.com/aspix2k/affected/compare/v3.15.6...v3.15.7
 [3.15.6]: https://github.com/aspix2k/affected/compare/v3.15.5...v3.15.6
