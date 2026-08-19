@@ -1,1 +1,0 @@
-- Prove the IntelliJ install-plan-Run-Stop path: a published snapshot drives the toolbar, the Run action claims one session, and Stop cancels it before the next claim.

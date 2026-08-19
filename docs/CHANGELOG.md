@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.15.11] - 2026-08-20
+
+### Added
+
+- Prove the IntelliJ install-plan-Run-Stop path: a published snapshot drives the toolbar, the Run action claims one session, and Stop cancels it before the next claim.
+
 ## [3.15.10] - 2026-08-20
 
 ### Added
@@ -639,7 +645,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.10...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.11...HEAD
+[3.15.11]: https://github.com/aspix2k/affected/compare/v3.15.10...v3.15.11
 [3.15.10]: https://github.com/aspix2k/affected/compare/v3.15.9...v3.15.10
 [3.15.9]: https://github.com/aspix2k/affected/compare/v3.15.8...v3.15.9
 [3.15.8]: https://github.com/aspix2k/affected/compare/v3.15.7...v3.15.8
