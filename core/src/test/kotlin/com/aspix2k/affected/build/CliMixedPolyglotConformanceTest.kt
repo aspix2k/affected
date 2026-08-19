@@ -124,7 +124,9 @@ class CliMixedPolyglotConformanceTest : BasePlatformTestCase() {
         assertFalse(outcome.passed)
         assertTrue(".NET sibling did not start", File(root, DOTNET_STARTED_MARKER).isFile)
         assertFalse(".NET sibling was not cancelled", markerExists(root, DOTNET_MARKER))
-        val siblingPid = File(root, DOTNET_PID_MARKER).readText().trim().toLong()
+        val pidFile = File(root, DOTNET_PID_MARKER)
+        assertTrue(".NET sibling pid was not recorded before start", pidFile.isFile)
+        val siblingPid = pidFile.readText().trim().toLong()
         val siblingAlive = ProcessHandle.of(siblingPid).map { it.isAlive }.orElse(false)
         assertFalse(".NET sibling was still alive after the outcome", siblingAlive)
     }
