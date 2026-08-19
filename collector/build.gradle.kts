@@ -12,6 +12,7 @@ val symlinkMode = providers.gradleProperty("affected.test.symlinkMode").orElse("
 val conformance = providers.gradleProperty("affected.conformance").map(String::toBoolean).orElse(false)
 val junitVersion = "5.14.4"
 val junitPlatformVersion = "1.14.4"
+val testngVersion = "7.5.1"
 val mavenLatestVersion = "3.9.16"
 val maven4Version = "4.0.0-rc-6"
 val smoke = sourceSets.create("smoke")
@@ -45,14 +46,14 @@ repositories {
 dependencies {
     implementation("org.jetbrains.intellij.deps:asm-all:9.10.1")
     compileOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
-    compileOnly("org.testng:testng:7.5.1")
+    compileOnly("org.testng:testng:$testngVersion")
 
     add(maven.compileOnlyConfigurationName, "org.apache.maven:maven-core:$mavenLatestVersion")
     add(maven.compileOnlyConfigurationName, "org.apache.maven:maven-model:$mavenLatestVersion")
     add(maven.compileOnlyConfigurationName, "org.codehaus.plexus:plexus-utils:3.6.1")
 
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.testng:testng:7.5.1")
+    testImplementation("org.testng:testng:$testngVersion")
     testImplementation(gradleTestKit())
     testImplementation("org.apache.maven:maven-core:$mavenLatestVersion")
     testImplementation("org.apache.maven:maven-model:$mavenLatestVersion")
