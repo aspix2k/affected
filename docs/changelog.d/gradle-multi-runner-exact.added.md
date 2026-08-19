@@ -1,1 +1,0 @@
-- Isolate exact Gradle selection when JUnit Platform, JUnit 4 and TestNG share one project root.
