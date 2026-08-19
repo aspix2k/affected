@@ -144,6 +144,7 @@ public class CollectorContractTest {
             String constants = new String(transformed, StandardCharsets.ISO_8859_1);
             assertTrue(constants.contains("junit4Started"));
             assertTrue(constants.contains("junit4Finished"));
+            assertTrue(constants.contains("junit4SuiteFinished"));
             assertTrue(constants.contains("junit4RunFinished"));
         } finally {
             System.clearProperty(AffectedJUnit4Bridge.ENABLED_PROPERTY);

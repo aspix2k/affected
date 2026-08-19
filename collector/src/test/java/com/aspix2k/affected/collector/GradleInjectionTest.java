@@ -262,6 +262,76 @@ public class GradleInjectionTest {
         assertEquals(setOf("LegacyTest"), executedTests(project));
     }
 
+    @Test(timeout = COMPLETE_MAP_SCENARIO_TIMEOUT_MILLIS)
+    public void junit4TwoMethodClassKeepsLaterMethodDependencies() throws Exception {
+        Path project = temporary.newFolder("junit4-two-method-project").toPath();
+        Path baselineOutput = temporary.newFolder("junit4-two-method-baseline-output").toPath();
+        Path exactOutput = temporary.newFolder("junit4-two-method-exact-output").toPath();
+        write(project.resolve("settings.gradle"), "rootProject.name = 'junit4-two-method'\n");
+        write(
+            project.resolve("build.gradle"),
+            "plugins { id 'java' }\n" +
+                "repositories { mavenCentral() }\n" +
+                "dependencies { testImplementation 'junit:junit:4.13.2' }\n" +
+                "tasks.register('testAndroidHostTest', Test) {\n" +
+                "    testClassesDirs = sourceSets.test.output.classesDirs\n" +
+                "    classpath = sourceSets.test.runtimeClasspath\n" +
+                "    useJUnit()\n" +
+                "    include '**/TwoMethodHostTest.class'\n" +
+                "    systemProperty 'fixture.executed', file('executed').absolutePath\n" +
+                "}\n"
+        );
+        write(
+            project.resolve("src/main/java/fixture/FirstDep.java"),
+            "package fixture; public final class FirstDep { public static int value() { return 1; } }\n"
+        );
+        write(
+            project.resolve("src/main/java/fixture/SecondDep.java"),
+            "package fixture; public final class SecondDep { public static int value() { return 2; } }\n"
+        );
+        write(
+            project.resolve("src/test/java/fixture/Executions.java"),
+            "package fixture; import java.nio.charset.StandardCharsets; import java.nio.file.*; " +
+                "public final class Executions { public static void mark(String name) throws Exception { " +
+                "Path root = Paths.get(System.getProperty(\"fixture.executed\")); Files.createDirectories(root); " +
+                "Files.write(root.resolve(name), name.getBytes(StandardCharsets.UTF_8)); } }\n"
+        );
+        write(
+            project.resolve("src/test/java/fixture/TwoMethodHostTest.java"),
+            "package fixture; import org.junit.FixMethodOrder; import org.junit.Test; " +
+                "import org.junit.runners.MethodSorters; import static org.junit.Assert.*; " +
+                "@FixMethodOrder(MethodSorters.NAME_ASCENDING) " +
+                "public final class TwoMethodHostTest { " +
+                "@Test public void first() throws Exception { " +
+                "assertEquals(1, FirstDep.value()); Executions.mark(\"first\"); } " +
+                "@Test public void second() throws Exception { " +
+                "Object value = Class.forName(\"fixture.SecondDep\").getMethod(\"value\").invoke(null); " +
+                "assertEquals(2, ((Integer) value).intValue()); Executions.mark(\"second\"); } }\n"
+        );
+
+        BuildResult baseline = run(project, baselineOutput, "testAndroidHostTest", false);
+        assertDecision(baseline, ":testAndroidHostTest", "full fallback (baseline not collected yet)");
+        assertComplete(baselineOutput, 1, baseline.getOutput());
+        assertEquals(
+            baseline.getOutput() + "\n" + readWorkerMaps(baselineOutput),
+            1,
+            dependencyHashes(baselineOutput, "fixture.SecondDep").size()
+        );
+        promote(baselineOutput, project.resolve(".affected/maps"));
+
+        write(
+            project.resolve("src/main/java/fixture/SecondDep.java"),
+            "package fixture; public final class SecondDep { public static int value() { int result = 2; return result; } }\n"
+        );
+        clearExecuted(project);
+        BuildResult exact = run(project, exactOutput, "testAndroidHostTest", false);
+        assertTrue(
+            readWorkerMaps(baselineOutput) + "\n" + exact.getOutput(),
+            exact.getOutput().contains("[Affected] :testAndroidHostTest - exact (1 test class)")
+        );
+        assertEquals(setOf("first", "second"), executedTests(project));
+    }
+
     @Test(timeout = 120_000L)
     public void testNgHostTasksStayOnTheUnsupportedFrameworkFallback() throws Exception {
         Path project = temporary.newFolder("testng-host-project").toPath();
@@ -509,6 +579,21 @@ public class GradleInjectionTest {
             Path task = files.findFirst().orElseThrow(AssertionError::new);
             return read(task.resolve("task.manifest"));
         }
+    }
+
+    private static String readWorkerMaps(Path output) throws Exception {
+        StringBuilder text = new StringBuilder();
+        try (Stream<Path> tasks = Files.list(output)) {
+            for (Path task : tasks.collect(Collectors.toList())) {
+                try (Stream<Path> children = Files.walk(task)) {
+                    for (Path file : children.filter(path -> path.getFileName().toString().endsWith(".map"))
+                        .collect(Collectors.toList())) {
+                        text.append(file).append('\n').append(read(file)).append('\n');
+                    }
+                }
+            }
+        }
+        return text.toString();
     }
 
     private static void assertFallback(Path output) throws Exception {
