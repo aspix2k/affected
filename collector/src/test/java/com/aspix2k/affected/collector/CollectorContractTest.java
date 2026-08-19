@@ -127,6 +127,30 @@ public class CollectorContractTest {
     }
 
     @Test
+    public void junit4RunNotifierIsInstrumentedWhenHostCollectionIsEnabled() throws Exception {
+        System.setProperty(AffectedJUnit4Bridge.ENABLED_PROPERTY, "true");
+        try {
+            AffectedCollectorAgent.CollectorState state = new AffectedCollectorAgent.CollectorState();
+            state.configure(Collections.singleton(codeSource(ObservedFixture.class)));
+            byte[] original = classBytes(org.junit.runner.notification.RunNotifier.class);
+            byte[] transformed = new AffectedCollectorAgent.CollectorTransformer(state).transform(
+                org.junit.runner.notification.RunNotifier.class.getClassLoader(),
+                "org/junit/runner/notification/RunNotifier",
+                null,
+                org.junit.runner.notification.RunNotifier.class.getProtectionDomain(),
+                original
+            );
+            assertNotNull(transformed);
+            String constants = new String(transformed, StandardCharsets.ISO_8859_1);
+            assertTrue(constants.contains("junit4Started"));
+            assertTrue(constants.contains("junit4Finished"));
+            assertTrue(constants.contains("junit4RunFinished"));
+        } finally {
+            System.clearProperty(AffectedJUnit4Bridge.ENABLED_PROPERTY);
+        }
+    }
+
+    @Test
     public void transformerIgnoresCodeSourcesOutsideTheAllowList() throws Exception {
         AffectedCollectorAgent.CollectorState state = new AffectedCollectorAgent.CollectorState();
         state.configure(Collections.singleton(temporary.newFolder("disallowed").toPath()));

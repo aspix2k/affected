@@ -77,6 +77,18 @@ public final class AffectedCollectorAgent {
         }
     }
 
+    public static void junit4Started(Object description) {
+        AffectedJUnit4Bridge.started(description);
+    }
+
+    public static void junit4Finished(Object description) {
+        AffectedJUnit4Bridge.finished(description);
+    }
+
+    public static void junit4RunFinished() {
+        AffectedJUnit4Bridge.runFinished();
+    }
+
     public static void hit(Class<?> type) {
         try {
             STATE.hit(type);
@@ -206,6 +218,10 @@ public final class AffectedCollectorAgent {
         ) throws IllegalClassFormatException {
             try {
                 if (!state.isSupported()) return null;
+                if ("org/junit/runner/notification/RunNotifier".equals(className)
+                    && AffectedJUnit4Bridge.enabled()) {
+                    return AffectedClassInstrumenter.instrumentRunNotifier(classfileBuffer);
+                }
                 boolean productionClass = state.observe(className, protectionDomain);
                 if (!productionClass && !state.shouldInstrument(protectionDomain)) return null;
                 if (loader != null && !bridgeVisible(loader)) {

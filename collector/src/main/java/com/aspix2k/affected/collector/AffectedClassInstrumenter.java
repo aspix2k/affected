@@ -51,6 +51,66 @@ final class AffectedClassInstrumenter {
         return visitor.changed ? writer.toByteArray() : null;
     }
 
+    static byte[] instrumentRunNotifier(byte[] bytes) {
+        if (bytes == null) return null;
+        ClassReader reader = new ClassReader(bytes);
+        ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+        reader.accept(new RunNotifierVisitor(writer), ClassReader.EXPAND_FRAMES);
+        return writer.toByteArray();
+    }
+
+    private static final class RunNotifierVisitor extends ClassVisitor {
+        private static final String DESCRIPTION = "Lorg/junit/runner/Description;";
+
+        private RunNotifierVisitor(ClassVisitor delegate) {
+            super(Opcodes.ASM9, delegate);
+        }
+
+        @Override
+        public MethodVisitor visitMethod(
+            int access,
+            String name,
+            String descriptor,
+            String signature,
+            String[] exceptions
+        ) {
+            MethodVisitor visitor = super.visitMethod(access, name, descriptor, signature, exceptions);
+            if ("fireTestStarted".equals(name) && ("(" + DESCRIPTION + ")V").equals(descriptor)) {
+                return new AdviceAdapter(Opcodes.ASM9, visitor, access, name, descriptor) {
+                    @Override
+                    protected void onMethodEnter() {
+                        loadArg(0);
+                        invokeStatic(Type.getType(AffectedCollectorAgent.class),
+                            org.jetbrains.org.objectweb.asm.commons.Method.getMethod(
+                                "void junit4Started(java.lang.Object)"));
+                    }
+                };
+            }
+            if ("fireTestFinished".equals(name) && ("(" + DESCRIPTION + ")V").equals(descriptor)) {
+                return new AdviceAdapter(Opcodes.ASM9, visitor, access, name, descriptor) {
+                    @Override
+                    protected void onMethodEnter() {
+                        loadArg(0);
+                        invokeStatic(Type.getType(AffectedCollectorAgent.class),
+                            org.jetbrains.org.objectweb.asm.commons.Method.getMethod(
+                                "void junit4Finished(java.lang.Object)"));
+                    }
+                };
+            }
+            if ("fireTestRunFinished".equals(name) && "(Lorg/junit/runner/Result;)V".equals(descriptor)) {
+                return new AdviceAdapter(Opcodes.ASM9, visitor, access, name, descriptor) {
+                    @Override
+                    protected void onMethodEnter() {
+                        invokeStatic(Type.getType(AffectedCollectorAgent.class),
+                            org.jetbrains.org.objectweb.asm.commons.Method.getMethod(
+                                "void junit4RunFinished()"));
+                    }
+                };
+            }
+            return visitor;
+        }
+    }
+
     private static final class SafeClassWriter extends ClassWriter {
         private static final String OBJECT = "java/lang/Object";
         private final ClassLoader loader;

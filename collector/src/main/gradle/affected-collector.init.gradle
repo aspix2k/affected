@@ -18,6 +18,7 @@ import org.gradle.api.tasks.testing.Test
 import org.gradle.api.tasks.testing.TestDescriptor
 import org.gradle.api.tasks.testing.TestListener
 import org.gradle.api.tasks.testing.TestResult
+import org.gradle.api.tasks.testing.junit.JUnitOptions
 import org.gradle.api.tasks.testing.junitplatform.JUnitPlatformOptions
 import org.gradle.util.GradleVersion
 
@@ -59,7 +60,7 @@ class AffectedCollectorSelectionSpec implements Spec<Task>, Serializable {
                 ))
                 return true
             }
-            if (!(task.options instanceof JUnitPlatformOptions)) {
+            if (!supportedJvmTestOptions(task.options)) {
                 report(task, AffectedDependencySelector.Decision.full(
                     AffectedDependencySelector.Reason.UNSUPPORTED_FRAMEWORK
                 ))
@@ -94,6 +95,9 @@ class AffectedCollectorSelectionSpec implements Spec<Task>, Serializable {
             task.systemProperty(CODE_SOURCES, codeSources.join(File.pathSeparator))
             task.systemProperty(TEST_CODE_SOURCES, testClasses.join(File.pathSeparator))
             task.systemProperty(OUTPUT, taskOutput.toString())
+            if (task.options instanceof JUnitOptions) {
+                task.systemProperty("affected.collector.junit4", "true")
+            }
             if (decision.kind == AffectedDependencySelector.Kind.CLASSES) {
                 task.filter.setIncludePatterns(decision.testClasses as String[])
             }
@@ -190,13 +194,30 @@ class AffectedCollectorSelectionSpec implements Spec<Task>, Serializable {
         updateValues(digest, "filter.commandLineInclude", commandLine)
         updateValues(digest, "files.include", task.includes)
         updateValues(digest, "files.exclude", task.excludes)
-        if (!(task.options instanceof JUnitPlatformOptions)) throw new IllegalStateException(task.options.class.name)
-        JUnitPlatformOptions options = (JUnitPlatformOptions) task.options
-        updateValues(digest, "junitPlatform.includeEngines", options.includeEngines)
-        updateValues(digest, "junitPlatform.excludeEngines", options.excludeEngines)
-        updateValues(digest, "junitPlatform.includeTags", options.includeTags)
-        updateValues(digest, "junitPlatform.excludeTags", options.excludeTags)
+        fingerprintJvmTestOptions(digest, task)
         return [fingerprint: hex(digest.digest()), allTests: commandLine.isEmpty()]
+    }
+
+    private static boolean supportedJvmTestOptions(Object options) {
+        return options instanceof JUnitPlatformOptions || options instanceof JUnitOptions
+    }
+
+    private static void fingerprintJvmTestOptions(MessageDigest digest, Test task) {
+        if (task.options instanceof JUnitPlatformOptions) {
+            JUnitPlatformOptions options = (JUnitPlatformOptions) task.options
+            updateValues(digest, "junitPlatform.includeEngines", options.includeEngines)
+            updateValues(digest, "junitPlatform.excludeEngines", options.excludeEngines)
+            updateValues(digest, "junitPlatform.includeTags", options.includeTags)
+            updateValues(digest, "junitPlatform.excludeTags", options.excludeTags)
+            return
+        }
+        if (task.options instanceof JUnitOptions) {
+            JUnitOptions options = (JUnitOptions) task.options
+            updateValues(digest, "junit.includeCategories", options.includeCategories)
+            updateValues(digest, "junit.excludeCategories", options.excludeCategories)
+            return
+        }
+        throw new IllegalStateException(task.options.class.name)
     }
 
     private static Set<String> commandLineIncludePatterns(Test task) {
