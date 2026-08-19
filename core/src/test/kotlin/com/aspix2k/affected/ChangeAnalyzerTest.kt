@@ -237,6 +237,10 @@ class ChangeAnalyzerTest {
 
         val changes = analyze(dir)
         assertTrue(changes.files.isNotEmpty(), "committed branch work still requires tests")
+        assertTrue(
+            ChangeAnalyzer(dir, "main").hasComparisonBase(),
+            "a configured base keeps committed branch work affected",
+        )
         assertEquals(1, changes.apiTouched.size, "its API change remains visible too")
     }
 

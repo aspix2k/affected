@@ -1,6 +1,8 @@
 package com.aspix2k.affected
 
 import com.aspix2k.affected.build.BuildChanges
+import com.intellij.ide.ActivityTracker
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.progress.ProcessCanceledException
@@ -56,7 +58,13 @@ internal data class AffectedAnalysis(
 
 internal const val MAX_PUBLISHED_MODULES = 4096
 
-internal class AffectedStateStore {
+internal fun interface AffectedPresentationRefresh {
+    fun request()
+}
+
+internal class AffectedStateStore(
+    @Volatile private var presentationRefresh: AffectedPresentationRefresh = AffectedPresentationRefresh {},
+) {
     private data class StoredState(
         val revision: Long,
         val analysisStatus: AnalysisStatus,
@@ -71,6 +79,14 @@ internal class AffectedStateStore {
     private val nextRunToken = AtomicLong()
 
     val currentRevision: Long get() = state.get().revision
+
+    fun setPresentationRefresh(refresh: AffectedPresentationRefresh) {
+        presentationRefresh = refresh
+    }
+
+    private fun published() {
+        presentationRefresh.request()
+    }
 
     fun snapshot(): AffectedStateSnapshot {
         val current = state.get()
@@ -91,7 +107,10 @@ internal class AffectedStateStore {
                 revision = current.revision + 1,
                 analysisStatus = AnalysisStatus.ANALYZING,
             )
-            if (state.compareAndSet(current, invalidated)) return invalidated.revision
+            if (state.compareAndSet(current, invalidated)) {
+                published()
+                return invalidated.revision
+            }
         }
     }
 
@@ -109,6 +128,7 @@ internal class AffectedStateStore {
                     current.copy(analysisStatus = AnalysisStatus.READY, analysis = completed),
                 )
             ) {
+                published()
                 return true
             }
         }
@@ -128,6 +148,7 @@ internal class AffectedStateStore {
                     current.copy(analysisStatus = AnalysisStatus.UNAVAILABLE, analysis = null),
                 )
             ) {
+                published()
                 return true
             }
         }
@@ -151,6 +172,7 @@ internal class AffectedStateStore {
                 runToken = token,
             )
             if (state.compareAndSet(current, claimed)) {
+                published()
                 return AffectedRunClaim(
                     snapshot = current.toSnapshot(VerificationStatus.PREPARING),
                     changes = current.analysis?.changes,
@@ -168,7 +190,10 @@ internal class AffectedStateStore {
             if (current.runToken != token || current.revision != revision) return false
             if (current.verificationStatus == VerificationStatus.RUNNING) return true
             if (current.verificationStatus != VerificationStatus.PREPARING) return false
-            if (state.compareAndSet(current, current.copy(verificationStatus = VerificationStatus.RUNNING))) return true
+            if (state.compareAndSet(current, current.copy(verificationStatus = VerificationStatus.RUNNING))) {
+                published()
+                return true
+            }
         }
     }
 
@@ -177,7 +202,10 @@ internal class AffectedStateStore {
             val current = state.get()
             if (current.runToken != token) return
             val finished = current.copy(verificationStatus = VerificationStatus.IDLE, runToken = null)
-            if (state.compareAndSet(current, finished)) return
+            if (state.compareAndSet(current, finished)) {
+                published()
+                return
+            }
         }
     }
 
@@ -443,13 +471,16 @@ class AffectedState(
         debounceMs: Long,
         awaitSmart: suspend () -> Unit,
         analyzeProject: suspend () -> AffectedAnalysis,
+        presentationRefresh: AffectedPresentationRefresh = AffectedPresentationRefresh {},
     ) : this(project, scope) {
         this.debounceMs = debounceMs
         this.awaitSmart = awaitSmart
         this.analyzeProject = analyzeProject
+        state.setPresentationRefresh(presentationRefresh)
     }
 
     init {
+        state.setPresentationRefresh(::requestActionRefresh)
         scope.launch {
             while (true) {
                 invalidations.receive()
@@ -478,6 +509,12 @@ class AffectedState(
     fun invalidate() {
         state.invalidate()
         invalidations.trySend(Unit)
+    }
+
+    private fun requestActionRefresh() {
+        val application = ApplicationManager.getApplication() ?: return
+        if (application.isDisposed) return
+        ActivityTracker.getInstance().inc()
     }
 
     fun watchDumbMode() {

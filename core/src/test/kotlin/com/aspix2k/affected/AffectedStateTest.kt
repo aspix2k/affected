@@ -14,6 +14,7 @@ import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class AffectedStateTest {
 
@@ -148,6 +149,7 @@ class AffectedStateTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         var nextModule = module(":before")
         var analyses = 0
+        val refreshes = java.util.concurrent.atomic.AtomicInteger()
         val state = AffectedState(
             project = project(),
             scope = scope,
@@ -161,12 +163,14 @@ class AffectedStateTest {
                     plans = emptyPlans(),
                 )
             },
+            presentationRefresh = { refreshes.incrementAndGet() },
         )
         try {
             state.invalidate()
             withTimeout(1_000) {
                 while (!state.ready) yield()
             }
+            val afterFirstReady = refreshes.get()
 
             nextModule = module(":after")
             val listener = AffectedVcsChangeListener(state::invalidate)
@@ -178,6 +182,7 @@ class AffectedStateTest {
 
             assertEquals(2, analyses)
             assertEquals(":after", state.modules.single().id)
+            assertTrue(refreshes.get() > afterFirstReady)
         } finally {
             scope.cancel()
         }
