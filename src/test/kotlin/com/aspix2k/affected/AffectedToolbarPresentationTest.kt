@@ -34,6 +34,30 @@ class AffectedToolbarPresentationTest {
     }
 
     @Test
+    fun `a running verification disables run and marks the group as running`() {
+        val snapshot = snapshot(
+            AnalysisStatus.READY,
+            modules = listOf(module(), module(":two")),
+            verificationStatus = VerificationStatus.RUNNING,
+        )
+        val group = Presentation()
+        presentAffectedGroup(
+            presentation = group,
+            snapshot = snapshot,
+            ideBusy = false,
+            animateWhileRunning = true,
+            projectAvailable = true,
+        )
+        val run = Presentation()
+        presentRunAffectedAction(run, snapshot, ideBusy = false)
+
+        assertEquals(AffectedIcons.Running, group.icon)
+        assertEquals(AffectedBundle.message("group.title.running"), group.text)
+        assertFalse(run.isEnabled)
+        assertEquals(AffectedBundle.message("action.run.description.running"), run.description)
+    }
+
+    @Test
     fun `a completed analysis shows the current toolbar count`() {
         val presentation = Presentation()
         presentAffectedGroup(
