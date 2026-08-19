@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.15.10] - 2026-08-20
+
+### Added
+
+- Prove mixed Gradle and Node roots in one Linux verification session, with sibling ownership isolation.
+
 ## [3.15.9] - 2026-08-19
 
 ### Changed
@@ -633,7 +639,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.9...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.10...HEAD
+[3.15.10]: https://github.com/aspix2k/affected/compare/v3.15.9...v3.15.10
 [3.15.9]: https://github.com/aspix2k/affected/compare/v3.15.8...v3.15.9
 [3.15.8]: https://github.com/aspix2k/affected/compare/v3.15.7...v3.15.8
 [3.15.7]: https://github.com/aspix2k/affected/compare/v3.15.6...v3.15.7
