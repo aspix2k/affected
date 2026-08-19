@@ -97,7 +97,7 @@ final class AffectedJUnit4Bridge {
             Method method = description.getClass().getMethod(methodName);
             Object value = method.invoke(description);
             return value == null ? null : String.valueOf(value);
-        } catch (Exception ignored) {
+        } catch (ReflectiveOperationException ignored) {
             return null;
         }
     }
