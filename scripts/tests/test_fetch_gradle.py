@@ -13,7 +13,7 @@ from urllib.request import OpenerDirector
 from scripts import fetch_gradle
 
 
-OFFICIAL = "https://services.gradle.org/distributions/gradle-9.7.0-bin.zip"
+OFFICIAL = "https://services.gradle.org/distributions/gradle-9.7.1-bin.zip"
 PAYLOAD = b"gradle-distribution"
 DIGEST = hashlib.sha256(PAYLOAD).hexdigest()
 
@@ -61,7 +61,7 @@ class FetchGradleTest(unittest.TestCase):
         """CI should hit GitHub release assets, not services.gradle.org first."""
         self.assertEqual(
             fetch_gradle.github_mirror(OFFICIAL),
-            "https://github.com/gradle/gradle-distributions/releases/download/v9.7.0/gradle-9.7.0-bin.zip",
+            "https://github.com/gradle/gradle-distributions/releases/download/v9.7.1/gradle-9.7.1-bin.zip",
         )
         self.assertEqual(
             fetch_gradle.candidate_urls(OFFICIAL)[0],
@@ -72,7 +72,7 @@ class FetchGradleTest(unittest.TestCase):
         """The seeded path must be the directory Gradle already uses."""
         self.assertEqual(
             fetch_gradle.distribution_hash(OFFICIAL),
-            "d4tj7w02tcgubx9zk9hbippn6",
+            "1w1c7tv4s851m17nbqdsro2tv",
         )
 
     def test_existing_verified_zip_is_not_downloaded(self) -> None:
@@ -138,14 +138,14 @@ class FetchGradleTest(unittest.TestCase):
         path = root / "gradle/wrapper/gradle-wrapper.properties"
         path.parent.mkdir(parents=True)
         path.write_text(
-            "distributionUrl=https\\://services.gradle.org/distributions/gradle-9.7.0-bin.zip\n"
+            "distributionUrl=https\\://services.gradle.org/distributions/gradle-9.7.1-bin.zip\n"
             f"distributionSha256Sum={DIGEST}\n",
             encoding="utf-8",
         )
 
     def cache_archive(self, home: Path) -> Path:
-        """Return the wrapper cache path for the official 9.7.0 URL."""
-        return fetch_gradle.cache_dir(home, OFFICIAL) / "gradle-9.7.0-bin.zip"
+        """Return the wrapper cache path for the official distribution URL."""
+        return fetch_gradle.cache_dir(home, OFFICIAL) / "gradle-9.7.1-bin.zip"
 
 
 if __name__ == "__main__":
