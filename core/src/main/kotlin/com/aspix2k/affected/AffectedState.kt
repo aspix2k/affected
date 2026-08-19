@@ -437,6 +437,27 @@ fun launchClaimed(
     return job
 }
 
+fun startClaimedAffectedRun(
+    project: Project,
+    state: AffectedState,
+    scope: () -> CoroutineScope,
+    onEmptyChanges: () -> Unit = {},
+    onEmptyPlan: () -> Unit = {},
+): Job? {
+    if (projectBusy(project)) return null
+    val claim = state.tryClaimReadyRun() ?: return null
+    return launchClaimed(claim, scope) {
+        val changes = claim.changes ?: return@launchClaimed
+        val prepared = claim.prepared ?: return@launchClaimed
+        when {
+            changes.files.isEmpty() -> onEmptyChanges()
+            prepared.plan.isEmpty -> onEmptyPlan()
+            projectBusy(project) -> Unit
+            else -> Verification.runClaimedAndWait(project, prepared, claim)
+        }
+    }
+}
+
 @Service(Service.Level.PROJECT)
 class AffectedState(
     private val project: Project,

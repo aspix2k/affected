@@ -33,36 +33,30 @@ class RunAffectedTestsAction : AnAction() {
         val project = e.project ?: return
         val state = project.service<AffectedState>()
         FileDocumentManager.getInstance().saveAllDocuments()
-        if (projectBusy(project)) return
-        val claim = state.tryClaimReadyRun() ?: return
-
-        launchClaimed(claim, ::currentThreadCoroutineScope) {
-            val changes = requireNotNull(claim.changes)
-            val prepared = requireNotNull(claim.prepared)
-            if (changes.files.isEmpty()) {
+        startClaimedAffectedRun(
+            project,
+            state,
+            ::currentThreadCoroutineScope,
+            onEmptyChanges = {
                 notify(
                     project,
                     AffectedBundle.message("notification.nothing.title"),
                     AffectedBundle.message("notification.nothing.text"),
                     NotificationType.INFORMATION,
                 )
-                return@launchClaimed
-            }
-
-            val plan = prepared.plan
-            if (plan.isEmpty) {
+            },
+            onEmptyPlan = {
                 notify(
                     project,
                     AffectedBundle.message("notification.unresolved.title"),
-                    AffectedBundle.message("notification.unresolved.text", changes.files.size),
+                    AffectedBundle.message(
+                        "notification.unresolved.text",
+                        state.snapshot().changes?.files?.size ?: 0,
+                    ),
                     NotificationType.WARNING,
                 )
-                return@launchClaimed
-            }
-            if (projectBusy(project)) return@launchClaimed
-
-            Verification.runClaimedAndWait(project, prepared, claim)
-        }
+            },
+        )
     }
 
     private fun notify(project: Project, title: String, content: String, type: NotificationType) {
