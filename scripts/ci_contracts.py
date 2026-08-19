@@ -484,10 +484,13 @@ def check_conformance(conformance: str) -> None:
     if not has_line(scope, "exact: ${{ steps.classify.outputs.exact }}") or classifier is None:
         raise CiContractError("conformance scope must publish the classifier exact-impact decision")
     cli_native = slice_job(conformance, "cli-native")
+    native_update = "sudo timeout --kill-after=30s 10m apt-get update"
     native_packages = (
-        "sudo apt-get install -y --no-install-recommends "
+        "sudo timeout --kill-after=30s 10m apt-get install -y --no-install-recommends "
         "ant ant-optional meson ninja-build gcc make r-base r-cran-testthat"
     )
+    if cli_native.count(native_update) != 1 or not has_line(cli_native, native_update):
+        raise CiContractError("Native CLI fixture tools must bound apt-get update")
     if cli_native.count(native_packages) != 1 or not has_line(cli_native, native_packages):
         raise CiContractError("Native CLI fixture tools must skip recommended packages")
     if not has_line(cli_native, "timeout-minutes: 45"):

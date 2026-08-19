@@ -238,13 +238,30 @@ class CiContractsTest(unittest.TestCase):
             path = root / ".github/workflows/conformance.yml"
             path.write_text(
                 path.read_text(encoding="utf-8").replace(
-                    "sudo apt-get install -y --no-install-recommends",
-                    "sudo apt-get install -y",
+                    "sudo timeout --kill-after=30s 10m apt-get install -y --no-install-recommends",
+                    "sudo timeout --kill-after=30s 10m apt-get install -y",
                     1,
                 ),
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(ci_contracts.CiContractError, "recommended packages"):
+                ci_contracts.check(root)
+
+    def test_native_fixture_tools_must_bound_apt_update(self) -> None:
+        """A hung apt-get update must not consume the native-fixture lane."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.copy_workflows(root)
+            path = root / ".github/workflows/conformance.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "sudo timeout --kill-after=30s 10m apt-get update",
+                    "sudo apt-get update",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "bound apt-get update"):
                 ci_contracts.check(root)
 
     def test_cli_native_must_keep_a_forty_five_minute_lane(self) -> None:
