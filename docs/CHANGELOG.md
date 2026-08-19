@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.15.5] - 2026-08-19
+
+### Fixed
+
+- Refresh the toolbar after background analysis so the icon, badge and enabled state match the current snapshot.
+
 ## [3.15.4] - 2026-08-19
 
 ### Fixed
@@ -603,7 +609,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.4...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.5...HEAD
+[3.15.5]: https://github.com/aspix2k/affected/compare/v3.15.4...v3.15.5
 [3.15.4]: https://github.com/aspix2k/affected/compare/v3.15.3...v3.15.4
 [3.15.3]: https://github.com/aspix2k/affected/compare/v3.15.2...v3.15.3
 [3.15.2]: https://github.com/aspix2k/affected/compare/v3.15.1...v3.15.2

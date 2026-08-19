@@ -1,1 +1,0 @@
-- Refresh the toolbar after background analysis so the icon, badge and enabled state match the current snapshot.
