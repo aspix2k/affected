@@ -5,6 +5,7 @@ import com.intellij.notification.NotificationType
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.Presentation
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.currentThreadCoroutineScope
@@ -17,40 +18,15 @@ class RunAffectedTestsAction : AnAction() {
     override fun update(e: AnActionEvent) {
         val project = e.project
         val state = project?.service<AffectedState>()
-
         if (project == null || state == null) {
-            e.presentation.isEnabled = false
+            presentRunAffectedAction(e.presentation, snapshot = null, ideBusy = false)
             return
         }
-
-        val snapshot = state.snapshot()
-        val uiState = affectedUiState(snapshot, ideBusy = projectBusy(project))
-        e.presentation.text = AffectedBundle.message(uiState.runActionTextKey)
-        e.presentation.isEnabled = uiState.canRun
-
-        when (uiState) {
-            AffectedUiState.RUNNING -> {
-                e.presentation.description = AffectedBundle.message("action.run.description.running")
-            }
-            AffectedUiState.PREPARING -> {
-                e.presentation.description = AffectedBundle.message("action.run.description.preparing")
-            }
-            AffectedUiState.BUSY -> {
-                e.presentation.description = AffectedBundle.message("action.run.description.busy")
-            }
-            AffectedUiState.ANALYZING -> {
-                e.presentation.description = AffectedBundle.message("action.run.description.counting")
-            }
-            AffectedUiState.UNAVAILABLE -> {
-                e.presentation.description = AffectedBundle.message("notification.unresolved.title")
-            }
-            AffectedUiState.EMPTY -> {
-                e.presentation.description = AffectedBundle.message("action.run.description.nothing")
-            }
-            AffectedUiState.READY -> {
-                e.presentation.description = AffectedBundle.message("action.run.description")
-            }
-        }
+        presentRunAffectedAction(
+            e.presentation,
+            snapshot = state.snapshot(),
+            ideBusy = projectBusy(project),
+        )
     }
 
     override fun actionPerformed(e: AnActionEvent) {
@@ -94,5 +70,28 @@ class RunAffectedTestsAction : AnAction() {
             .getNotificationGroup("AffectedTests")
             .createNotification(title, content, type)
             .notify(project)
+    }
+}
+
+internal fun presentRunAffectedAction(
+    presentation: Presentation,
+    snapshot: AffectedStateSnapshot?,
+    ideBusy: Boolean,
+) {
+    if (snapshot == null) {
+        presentation.isEnabled = false
+        return
+    }
+    val uiState = affectedUiState(snapshot, ideBusy)
+    presentation.text = AffectedBundle.message(uiState.runActionTextKey)
+    presentation.isEnabled = uiState.canRun
+    presentation.description = when (uiState) {
+        AffectedUiState.RUNNING -> AffectedBundle.message("action.run.description.running")
+        AffectedUiState.PREPARING -> AffectedBundle.message("action.run.description.preparing")
+        AffectedUiState.BUSY -> AffectedBundle.message("action.run.description.busy")
+        AffectedUiState.ANALYZING -> AffectedBundle.message("action.run.description.counting")
+        AffectedUiState.UNAVAILABLE -> AffectedBundle.message("notification.unresolved.title")
+        AffectedUiState.EMPTY -> AffectedBundle.message("action.run.description.nothing")
+        AffectedUiState.READY -> AffectedBundle.message("action.run.description")
     }
 }
