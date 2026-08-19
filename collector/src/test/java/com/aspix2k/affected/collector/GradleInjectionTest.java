@@ -149,7 +149,7 @@ public class GradleInjectionTest {
             "--tests",
             "fixture.AlphaTest"
         );
-        BuildResult legacy = run(project, legacyOutput, "legacyTest", false);
+        BuildResult host = run(project, legacyOutput, "testAndroidHostTest", false);
         Files.write(
             baselineMap,
             baseline.replace("schema=4", "schema=3").getBytes(StandardCharsets.UTF_8)
@@ -161,17 +161,17 @@ public class GradleInjectionTest {
 
         assertDecision(tagged, ":testDebugUnitTest", "full fallback (runtime changed)");
         assertDecision(selected, ":testDebugUnitTest", "full fallback (existing test filter)");
-        assertDecision(legacy, ":legacyTest", "full fallback (unsupported framework)");
+        assertDecision(host, ":testAndroidHostTest", "full fallback (baseline not collected yet)");
         assertDecision(stale, ":testDebugUnitTest", "full fallback (baseline stale)");
         assertDecision(corrupt, ":testDebugUnitTest", "full fallback (baseline corrupt)");
         assertComplete(taggedOutput, 6, tagged.getOutput());
         assertComplete(selectedOutput, 1, false, selected.getOutput());
+        assertComplete(legacyOutput, 1, host.getOutput());
         assertEquals(manifestValue(firstOutput, "input="), manifestValue(exactOutput, "input="));
         assertEquals(manifestValue(firstOutput, "runtime="), manifestValue(exactOutput, "runtime="));
         assertNotEquals(manifestValue(firstOutput, "runtime="), manifestValue(taggedOutput, "runtime="));
         assertNotEquals(dependencyHashes(firstOutput, "fixture.Alpha"), dependencyHashes(exactOutput, "fixture.Alpha"));
         assertTrue(selected.getOutput(), readTaskManifest(selectedOutput).endsWith("all=false\n"));
-        assertFallback(legacyOutput);
         assertTrue(unchanged.getOutput(), unchanged.getOutput().contains("Reusing configuration cache"));
     }
 
@@ -233,6 +233,65 @@ public class GradleInjectionTest {
         }
         long elapsed = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
         assertTrue("elapsed=" + elapsed, elapsed < 2_000L);
+    }
+
+    @Test(timeout = COMPLETE_MAP_SCENARIO_TIMEOUT_MILLIS)
+    public void junit4AndroidHostTestsSelectExactDependentClasses() throws Exception {
+        Path project = temporary.newFolder("junit4-host-project").toPath();
+        Path baselineOutput = temporary.newFolder("junit4-host-baseline-output").toPath();
+        Path unchangedOutput = temporary.newFolder("junit4-host-unchanged-output").toPath();
+        Path exactOutput = temporary.newFolder("junit4-host-exact-output").toPath();
+        writeFixture(project);
+
+        BuildResult baseline = run(project, baselineOutput, "testAndroidHostTest", true);
+        assertDecision(baseline, ":testAndroidHostTest", "full fallback (baseline not collected yet)");
+        assertComplete(baselineOutput, 1, baseline.getOutput());
+        promote(baselineOutput, project.resolve(".affected/maps"));
+
+        clearExecuted(project);
+        BuildResult unchanged = run(project, unchangedOutput, "testAndroidHostTest", true);
+        assertDecision(unchanged, ":testAndroidHostTest", "proven-empty");
+        assertEquals(TaskOutcome.SKIPPED, unchanged.task(":testAndroidHostTest").getOutcome());
+        assertEquals(Collections.emptySet(), executedTests(project));
+
+        writeAlpha(project, "int result = 1; return result;");
+        clearExecuted(project);
+        BuildResult exact = run(project, exactOutput, "testAndroidHostTest", true);
+        assertDecision(exact, ":testAndroidHostTest", "exact (1 test class)");
+        assertComplete(exactOutput, 1, false, exact.getOutput());
+        assertEquals(setOf("LegacyTest"), executedTests(project));
+    }
+
+    @Test(timeout = 120_000L)
+    public void testNgHostTasksStayOnTheUnsupportedFrameworkFallback() throws Exception {
+        Path project = temporary.newFolder("testng-host-project").toPath();
+        Path output = temporary.newFolder("testng-host-output").toPath();
+        write(project.resolve("settings.gradle"), "rootProject.name = 'testng-host'\n");
+        write(
+            project.resolve("build.gradle"),
+            "plugins { id 'java' }\n" +
+                "repositories { mavenCentral() }\n" +
+                "dependencies { testImplementation 'org.testng:testng:7.11.0' }\n" +
+                "tasks.register('testNgHost', Test) {\n" +
+                "    testClassesDirs = sourceSets.test.output.classesDirs\n" +
+                "    classpath = sourceSets.test.runtimeClasspath\n" +
+                "    useTestNG()\n" +
+                "}\n"
+        );
+        write(
+            project.resolve("src/main/java/fixture/Host.java"),
+            "package fixture; public final class Host { public static int value() { return 1; } }\n"
+        );
+        write(
+            project.resolve("src/test/java/fixture/NgHostTest.java"),
+            "package fixture; import org.testng.annotations.Test; " +
+                "public final class NgHostTest { @Test public void ng() {} }\n"
+        );
+
+        BuildResult result = run(project, output, "testNgHost", false);
+
+        assertDecision(result, ":testNgHost", "full fallback (unsupported framework)");
+        assertFallback(output);
     }
 
     @Test(timeout = 120_000L)
@@ -637,9 +696,10 @@ public class GradleInjectionTest {
                 "        systemProperty 'junit.jupiter.execution.parallel.config.fixed.parallelism', '4'\n" +
                 "    }\n" +
                 "}\n" +
-                "tasks.register('legacyTest', Test) {\n" +
+                "tasks.register('testAndroidHostTest', Test) {\n" +
                 "    testClassesDirs = sourceSets.test.output.classesDirs\n" +
                 "    classpath = sourceSets.test.runtimeClasspath\n" +
+                "    useJUnit()\n" +
                 "    include '**/LegacyTest.class'\n" +
                 "    systemProperty 'fixture.executed', file('executed').absolutePath\n" +
                 "}\n"

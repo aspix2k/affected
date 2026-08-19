@@ -1,0 +1,1 @@
+- Select exact test classes on Gradle JUnit 4 and Android host `Test` tasks.
