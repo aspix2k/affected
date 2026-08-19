@@ -44,7 +44,9 @@ them. The required checks `verify` and `exact-impact` always report. CodeQL
 `pull-request` and dependency `review` keep their names. Unknown paths fail
 closed. Weekly `pitest` fails on meaningful survivors.
 
-Enqueue ready PRs with `gh pr merge --auto --squash`. Do not merge by hand.
+Enqueue ready PRs with `gh pr merge --auto --squash` using a user token.
+Do not merge by hand and do not enable auto-merge from Actions
+`GITHUB_TOKEN`: those merges suppress push workflows, including Release.
 Keep GitHub "Automatically delete head branches" on. After a squash lands,
 delete leftover heads and worktrees.
 

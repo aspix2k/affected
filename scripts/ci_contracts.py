@@ -555,7 +555,6 @@ def has_line(block: str, line: str) -> bool:
 def check_merge_queue(root: Path, ci: str, codeql: str, conformance: str) -> None:
     """Required checks must report on merge_group or the merge queue hangs."""
     review = read(root / ".github/workflows/dependency-review.yml")
-    queue = read(root / ".github/workflows/queue.yml")
     for name, text in (
         ("ci.yml", ci),
         ("codeql.yml", codeql),
@@ -569,10 +568,20 @@ def check_merge_queue(root: Path, ci: str, codeql: str, conformance: str) -> Non
         raise CiContractError("CodeQL pull-request must analyze merge_group")
     if "github.event_name != 'pull_request'" in codeql:
         raise CiContractError("CodeQL main must not run on merge_group")
-    if "gh pr merge" not in queue or "--squash" not in queue:
-        raise CiContractError("queue.yml must enable squash auto-merge")
-    if "--auto" not in queue or re.search(r"gh pr merge(?![^\n]*--auto)", queue):
-        raise CiContractError("queue.yml must never merge without --auto")
+    check_actions_must_not_merge_with_github_token(root)
+
+
+def check_actions_must_not_merge_with_github_token(root: Path) -> None:
+    """GITHUB_TOKEN merges do not start push workflows, including Release."""
+    workflows = root / ".github/workflows"
+    if not workflows.is_dir():
+        raise CiContractError("Missing workflows directory")
+    for path in sorted(workflows.glob("*.yml")):
+        text = read(path)
+        if "gh pr merge" not in text:
+            continue
+        if "secrets.GITHUB_TOKEN" in text or "github.token" in text:
+            raise CiContractError(f"{path.name} must not merge pull requests with GITHUB_TOKEN")
 
 
 def has_on_trigger(workflow: str, name: str) -> bool:

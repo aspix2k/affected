@@ -917,17 +917,25 @@ class CiContractsTest(unittest.TestCase):
             ):
                 ci_contracts.check(root)
 
-    def test_queue_must_not_merge_immediately(self) -> None:
-        """Agents enqueue. GitHub merges after required checks."""
+    def test_actions_must_not_merge_with_github_token(self) -> None:
+        """GITHUB_TOKEN squash merges suppress Release, CodeQL and the dependency graph."""
         with TemporaryDirectory() as directory:
             root = Path(directory)
             self.copy_workflows(root)
             path = root / ".github/workflows/queue.yml"
             path.write_text(
-                path.read_text(encoding="utf-8").replace(" --auto", "", 1),
+                "name: Queue\n"
+                "on: pull_request\n"
+                "jobs:\n"
+                "  enqueue:\n"
+                "    runs-on: ubuntu-latest\n"
+                "    steps:\n"
+                "      - env:\n"
+                "          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}\n"
+                "        run: gh pr merge 1 --auto --squash\n",
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(ci_contracts.CiContractError, "--auto"):
+            with self.assertRaisesRegex(ci_contracts.CiContractError, "GITHUB_TOKEN"):
                 ci_contracts.check(root)
 
     def test_dependabot_version_update_prs_are_rejected(self) -> None:
@@ -1093,7 +1101,6 @@ class CiContractsTest(unittest.TestCase):
             ".github/workflows/dependency-review.yml",
             ".github/workflows/dependency-graph.yml",
             ".github/workflows/dependency-graph-submit.yml",
-            ".github/workflows/queue.yml",
             "scripts/ci_scope.py",
             "scripts/codeql-kotlin-compat.init.gradle",
             "scripts/codeql_kotlin_compat_probe.py",
