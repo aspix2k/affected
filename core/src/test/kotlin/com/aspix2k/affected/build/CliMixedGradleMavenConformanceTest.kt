@@ -109,10 +109,7 @@ class CliMixedGradleMavenConformanceTest : HeavyPlatformTestCase() {
         val outcome = runBlocking { runBothGroups(root) }
         val gradleMarker = File(root, "gradle/mixed-gradle.marker")
         val mavenMarker = File(root, "maven/mixed-maven.marker")
-        assertTrue(
-            "mixed Gradle+Maven verification failed; gradleMarker=${gradleMarker.isFile} mavenMarker=${mavenMarker.isFile} gradle=${File(root, "gradle").list()?.toList()} maven=${File(root, "maven").list()?.toList()}",
-            outcome.passed,
-        )
+        assertTrue("mixed Gradle+Maven verification failed", outcome.passed)
         assertEquals(
             setOf(GradleConstants.SYSTEM_ID.id, "MAVEN"),
             outcome.plan.groups.map { it.systemId }.toSet(),
@@ -130,7 +127,7 @@ class CliMixedGradleMavenConformanceTest : HeavyPlatformTestCase() {
         val outcome = runBlocking { runBothGroups(root) }
         assertFalse(outcome.passed)
         assertTrue(
-            "Maven group did not finish after the Gradle failure; gradleMarker=${File(root, "gradle/mixed-gradle.marker").isFile} maven=${File(root, "maven").list()?.toList()}",
+            "Maven group did not finish after the Gradle failure",
             File(root, "maven/mixed-maven.marker").isFile,
         )
     }
