@@ -301,7 +301,7 @@
       ],
       "versions": "Current stable Node.js; Jest 29–30; Vitest 2–4",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/node", "conformance/cli-fixtures/mixed-gradle-node", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleNodeConformanceTest.kt"],
+      "fixtures": ["conformance/cli-fixtures/node", "conformance/cli-fixtures/mixed-gradle-node", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleNodeConformanceTest.kt", "conformance/cli-fixtures/mixed-node-dart", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedNodeDartConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
@@ -617,7 +617,7 @@
       ],
       "versions": "Dart 3.13.x; proven workspace packages use dart test <pkg>/test; pubspec, .dart_tool and generated files outside a member keep the workspace command; build.yaml or build_runner prepends dart run build_runner build",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/dart", "conformance/cli-fixtures/dart-workspace", "conformance/cli-fixtures/mixed-dart-flutter", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedDartFlutterConformanceTest.kt"],
+      "fixtures": ["conformance/cli-fixtures/dart", "conformance/cli-fixtures/dart-workspace", "conformance/cli-fixtures/mixed-dart-flutter", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedDartFlutterConformanceTest.kt", "conformance/cli-fixtures/mixed-node-dart", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedNodeDartConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
@@ -942,6 +942,12 @@
       "adapters": ["CMAKE", "MESON"],
       "fixtures": ["conformance/cli-fixtures/mixed-cmake-meson"],
       "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/CliMixedCmakeMesonConformanceTest.kt"]
+    },
+    {
+      "id": "node-dart",
+      "adapters": ["NODE", "DART"],
+      "fixtures": ["conformance/cli-fixtures/mixed-node-dart"],
+      "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/CliMixedNodeDartConformanceTest.kt"]
     }
   ]
 }
