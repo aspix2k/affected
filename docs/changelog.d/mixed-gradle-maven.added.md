@@ -1,0 +1,1 @@
+- Prove mixed Gradle and Maven roots in one Linux verification session, with sibling ownership isolation.

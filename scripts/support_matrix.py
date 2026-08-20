@@ -735,6 +735,25 @@ def bind_home_adapters(
                 )
 
 
+def bind_home_mixed_proofs(
+    products: list[dict[str, Any]], mixed_proofs: list[dict[str, Any]]
+) -> None:
+    """Require a mixed proof among the home adapters of every multi-home product."""
+    for product in products:
+        if product["support"] not in {"verified", "platform"}:
+            continue
+        homes = set(product["homeAdapters"])
+        if len(homes) < 2:
+            continue
+        if not any(
+            len(set(proof["adapters"])) >= 2 and set(proof["adapters"]) <= homes
+            for proof in mixed_proofs
+        ):
+            raise SupportMatrixError(
+                f"{product['id']} has multiple home adapters but no mixed proof among them"
+            )
+
+
 def validate_mixed_proofs(
     root: Path, value: object, adapters: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -790,6 +809,7 @@ def validated(root: Path, matrix: dict[str, Any]) -> dict[str, Any]:
     adapters = validate_adapters(root, matrix.get("adapters"))
     bind_home_adapters(products, adapters)
     mixed_proofs = validate_mixed_proofs(root, matrix.get("mixedProofs"), adapters)
+    bind_home_mixed_proofs(products, mixed_proofs)
     return {
         "schema": 1,
         "products": products,

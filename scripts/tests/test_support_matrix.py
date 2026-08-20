@@ -360,6 +360,39 @@ class SupportMatrixTest(unittest.TestCase):
             ):
                 support_matrix.validated(root, matrix)
 
+    def test_multi_home_product_requires_a_mixed_proof_among_homes(self) -> None:
+        """A claimed product with two homes cannot hide behind a mixed proof of foreign adapters."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository(root)
+            matrix = json.loads((root / "config/support-matrix.json").read_text())
+            matrix["products"][0]["homeAdapters"] = ["EXAMPLE", "OTHER"]
+            matrix["mixedProofs"][0]["adapters"] = ["EXAMPLE", "OTHER"]
+            support_matrix.validated(root, matrix)
+
+            third = {
+                **matrix["adapters"][1],
+                "id": "THIRD",
+                "implementation": "example.ThirdBuildSystem",
+                "ecosystem": "Third",
+            }
+            matrix["adapters"].append(third)
+            plugin = (root / "src/main/resources/META-INF/plugin.xml").read_text()
+            (root / "src/main/resources/META-INF/plugin.xml").write_text(
+                plugin.replace(
+                    '<buildSystem implementation="example.OtherBuildSystem"/>',
+                    '<buildSystem implementation="example.OtherBuildSystem"/>'
+                    '<buildSystem implementation="example.ThirdBuildSystem"/>',
+                ),
+                encoding="utf-8",
+            )
+            matrix["mixedProofs"][0]["adapters"] = ["EXAMPLE", "THIRD"]
+            with self.assertRaisesRegex(
+                support_matrix.SupportMatrixError,
+                "no mixed proof among them",
+            ):
+                support_matrix.validated(root, matrix)
+
     def test_platform_product_requires_product_specific_verifier_endpoints(self) -> None:
         """Reject a platform claim without its own minimum and current IDE cells."""
         with TemporaryDirectory() as directory:
@@ -917,6 +950,7 @@ class SupportMatrixTest(unittest.TestCase):
         self.assertIn("| cmake-dotnet |", support)
         self.assertIn("| gradle-xcode |", support)
         self.assertIn("| gradle-node |", support)
+        self.assertIn("| gradle-maven |", support)
         self.assertNotIn("| gradle-kmp |", support)
 
     def test_product_verifier_uses_matrix_selected_type_archive_and_failure_levels(

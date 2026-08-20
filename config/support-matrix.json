@@ -200,7 +200,7 @@
       ],
       "versions": "Gradle 8–9; JDK 17, 21 and 26; in change-aware Affected test runs, exact KMP target narrowing is retained for proven platform source sets; common sources keep every target, Kotlin/Native stays task-level, and missing/stale JVM baselines or class-set drift keep the whole task; fallbacks report fixed reason codes without paths",
       "support": "supported",
-      "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java", "conformance/cli-fixtures/gradle-cancellation", "conformance/cli-fixtures/gradle-kmp-fallback", "conformance/cli-fixtures/mixed-gradle-node", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleCancellationConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleSelectionDiagnosticsConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleNodeConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/GradleKmpSourceSetTest.kt"],
+      "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java", "conformance/cli-fixtures/gradle-cancellation", "conformance/cli-fixtures/gradle-kmp-fallback", "conformance/cli-fixtures/mixed-gradle-node", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleCancellationConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleSelectionDiagnosticsConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleNodeConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/GradleKmpSourceSetTest.kt", "conformance/cli-fixtures/mixed-gradle-maven", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleMavenConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml", ".github/workflows/ci.yml"]
     },
     {
@@ -232,7 +232,7 @@
       ],
       "versions": "Maven 3.9.x; Maven 4 RC keeps the full goal",
       "support": "supported",
-      "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/MavenInjectionTest.java", "conformance/cli-fixtures/maven-cancellation", "core/src/test/kotlin/com/aspix2k/affected/build/CliMavenCancellationConformanceTest.kt"],
+      "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/MavenInjectionTest.java", "conformance/cli-fixtures/maven-cancellation", "core/src/test/kotlin/com/aspix2k/affected/build/CliMavenCancellationConformanceTest.kt", "conformance/cli-fixtures/mixed-gradle-maven", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleMavenConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
@@ -948,6 +948,12 @@
       "adapters": ["NODE", "DART"],
       "fixtures": ["conformance/cli-fixtures/mixed-node-dart"],
       "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/CliMixedNodeDartConformanceTest.kt"]
+    },
+    {
+      "id": "gradle-maven",
+      "adapters": ["GRADLE", "MAVEN"],
+      "fixtures": ["conformance/cli-fixtures/mixed-gradle-maven"],
+      "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleMavenConformanceTest.kt"]
     }
   ]
 }
