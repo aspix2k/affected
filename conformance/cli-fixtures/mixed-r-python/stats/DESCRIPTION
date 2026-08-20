@@ -1,0 +1,7 @@
+Package: mixedstats
+Title: Mixed Stats
+Version: 0.0.1
+License: MIT
+Suggests: testthat
+Config/testthat/edition: 3
+Config/testthat/parallel: false
