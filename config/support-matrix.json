@@ -615,7 +615,7 @@
       ],
       "versions": "Dart 3.13.x; proven workspace packages use dart test <pkg>/test; pubspec, .dart_tool and generated files outside a member keep the workspace command; build.yaml or build_runner prepends dart run build_runner build",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/dart", "conformance/cli-fixtures/dart-workspace"],
+      "fixtures": ["conformance/cli-fixtures/dart", "conformance/cli-fixtures/dart-workspace", "conformance/cli-fixtures/mixed-dart-flutter", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedDartFlutterConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
@@ -638,7 +638,7 @@
       ],
       "versions": "Flutter 3.47.x; build.yaml or build_runner prepends dart run build_runner build; generated-file ownership stays unclaimed",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/flutter"],
+      "fixtures": ["conformance/cli-fixtures/flutter", "conformance/cli-fixtures/mixed-dart-flutter", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedDartFlutterConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
@@ -928,6 +928,12 @@
       "adapters": ["RPROJECT", "PYTHON"],
       "fixtures": ["conformance/cli-fixtures/mixed-r-python"],
       "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/CliMixedRPythonConformanceTest.kt"]
+    },
+    {
+      "id": "dart-flutter",
+      "adapters": ["DART", "FLUTTER"],
+      "fixtures": ["conformance/cli-fixtures/mixed-dart-flutter"],
+      "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/CliMixedDartFlutterConformanceTest.kt"]
     }
   ]
 }
