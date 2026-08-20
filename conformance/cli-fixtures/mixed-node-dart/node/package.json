@@ -1,0 +1,7 @@
+{
+  "name": "affected-mixed-node",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  }
+}
