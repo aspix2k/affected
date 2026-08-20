@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.15.14] - 2026-08-20
+
+### Added
+
+- Prove mixed Dart and Flutter roots in one Linux verification session, with sibling ownership isolation.
+
 ## [3.15.13] - 2026-08-20
 
 ### Added
@@ -657,7 +663,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.13...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.14...HEAD
+[3.15.14]: https://github.com/aspix2k/affected/compare/v3.15.13...v3.15.14
 [3.15.13]: https://github.com/aspix2k/affected/compare/v3.15.12...v3.15.13
 [3.15.12]: https://github.com/aspix2k/affected/compare/v3.15.11...v3.15.12
 [3.15.11]: https://github.com/aspix2k/affected/compare/v3.15.10...v3.15.11
