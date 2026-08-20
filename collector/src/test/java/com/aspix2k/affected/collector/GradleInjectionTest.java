@@ -469,6 +469,163 @@ public class GradleInjectionTest {
         assertEquals(setOf("first", "second"), executedTests(project));
     }
 
+    @Test(timeout = 360_000L)
+    public void oneRootPlatformJunit4AndTestNgIsolateExactSelection() throws Exception {
+        Path project = temporary.newFolder("multi-runner-project").toPath();
+        Path platformBaseline = temporary.newFolder("multi-runner-platform-baseline").toPath();
+        Path junit4Baseline = temporary.newFolder("multi-runner-junit4-baseline").toPath();
+        Path testngBaseline = temporary.newFolder("multi-runner-testng-baseline").toPath();
+        Path platformExact = temporary.newFolder("multi-runner-platform-exact").toPath();
+        Path junit4Exact = temporary.newFolder("multi-runner-junit4-exact").toPath();
+        Path testngExact = temporary.newFolder("multi-runner-testng-exact").toPath();
+        write(
+            project.resolve("settings.gradle"),
+            "rootProject.name = 'multi-runner'\n"
+        );
+        write(
+            project.resolve("build.gradle"),
+            "plugins { id 'java' }\n" +
+                "repositories { mavenCentral() }\n" +
+                "dependencies {\n" +
+                "    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.14.4'\n" +
+                "    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.14.4'\n" +
+                "    testRuntimeOnly 'org.junit.vintage:junit-vintage-engine:5.14.4'\n" +
+                "    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.14.4'\n" +
+                "    testImplementation 'junit:junit:4.13.2'\n" +
+                "    testImplementation 'org.testng:testng:7.11.0'\n" +
+                "}\n" +
+                "tasks.register('testPlatform', Test) {\n" +
+                "    testClassesDirs = sourceSets.test.output.classesDirs\n" +
+                "    classpath = sourceSets.test.runtimeClasspath\n" +
+                "    useJUnitPlatform()\n" +
+                "    include '**/PlatformHostTest.class'\n" +
+                "    include '**/VintagePlatformTest.class'\n" +
+                "    systemProperty 'fixture.executed', file('executed').absolutePath\n" +
+                "}\n" +
+                "tasks.register('testJunit4Host', Test) {\n" +
+                "    testClassesDirs = sourceSets.test.output.classesDirs\n" +
+                "    classpath = sourceSets.test.runtimeClasspath\n" +
+                "    useJUnit()\n" +
+                "    include '**/Junit4HostTest.class'\n" +
+                "    systemProperty 'fixture.executed', file('executed').absolutePath\n" +
+                "}\n" +
+                "tasks.register('testNgHost', Test) {\n" +
+                "    testClassesDirs = sourceSets.test.output.classesDirs\n" +
+                "    classpath = sourceSets.test.runtimeClasspath\n" +
+                "    useTestNG()\n" +
+                "    include '**/NgHostTest.class'\n" +
+                "    systemProperty 'fixture.executed', file('executed').absolutePath\n" +
+                "}\n"
+        );
+        write(
+            project.resolve("src/main/java/fixture/PlatformDep.java"),
+            "package fixture; public final class PlatformDep { public static int value() { return 1; } }\n"
+        );
+        write(
+            project.resolve("src/main/java/fixture/VintageDep.java"),
+            "package fixture; public final class VintageDep { public static int value() { return 2; } }\n"
+        );
+        write(
+            project.resolve("src/main/java/fixture/Junit4Dep.java"),
+            "package fixture; public final class Junit4Dep { public static int value() { return 3; } }\n"
+        );
+        write(
+            project.resolve("src/main/java/fixture/NgDep.java"),
+            "package fixture; public final class NgDep { public static int value() { return 4; } }\n"
+        );
+        write(
+            project.resolve("src/test/java/fixture/Executions.java"),
+            "package fixture; import java.nio.charset.StandardCharsets; import java.nio.file.*; " +
+                "public final class Executions { public static void mark(String name) throws Exception { " +
+                "Path root = Paths.get(System.getProperty(\"fixture.executed\")); Files.createDirectories(root); " +
+                "Files.write(root.resolve(name), name.getBytes(StandardCharsets.UTF_8)); } }\n"
+        );
+        write(
+            project.resolve("src/test/java/fixture/PlatformHostTest.java"),
+            "package fixture; import org.junit.jupiter.api.Test; import static org.junit.jupiter.api.Assertions.*; " +
+                "public final class PlatformHostTest { @Test void platform() throws Exception { " +
+                "assertEquals(1, PlatformDep.value()); Executions.mark(\"PlatformHostTest\"); } }\n"
+        );
+        write(
+            project.resolve("src/test/java/fixture/VintagePlatformTest.java"),
+            "package fixture; import org.junit.Test; import static org.junit.Assert.*; " +
+                "public final class VintagePlatformTest { @Test public void vintage() throws Exception { " +
+                "assertEquals(2, VintageDep.value()); Executions.mark(\"VintagePlatformTest\"); } }\n"
+        );
+        write(
+            project.resolve("src/test/java/fixture/Junit4HostTest.java"),
+            "package fixture; import org.junit.Test; import static org.junit.Assert.*; " +
+                "public final class Junit4HostTest { @Test public void junit4() throws Exception { " +
+                "assertEquals(3, Junit4Dep.value()); Executions.mark(\"Junit4HostTest\"); } }\n"
+        );
+        write(
+            project.resolve("src/test/java/fixture/NgHostTest.java"),
+            "package fixture; import org.testng.annotations.Test; import static org.testng.Assert.*; " +
+                "public final class NgHostTest { @Test public void ng() throws Exception { " +
+                "assertEquals(NgDep.value(), 4); Executions.mark(\"NgHostTest\"); } }\n"
+        );
+
+        BuildResult platformBaselineResult = run(project, platformBaseline, "testPlatform", false);
+        assertDecision(platformBaselineResult, ":testPlatform", "full fallback (baseline not collected yet)");
+        assertComplete(platformBaseline, 2, platformBaselineResult.getOutput());
+        promote(platformBaseline, project.resolve(".affected/maps"));
+
+        BuildResult junit4BaselineResult = run(project, junit4Baseline, "testJunit4Host", false);
+        assertDecision(junit4BaselineResult, ":testJunit4Host", "full fallback (baseline not collected yet)");
+        assertComplete(junit4Baseline, 1, junit4BaselineResult.getOutput());
+        promote(junit4Baseline, project.resolve(".affected/maps"));
+
+        BuildResult testngBaselineResult = run(project, testngBaseline, "testNgHost", false);
+        assertDecision(testngBaselineResult, ":testNgHost", "full fallback (baseline not collected yet)");
+        assertComplete(testngBaseline, 1, testngBaselineResult.getOutput());
+        promote(testngBaseline, project.resolve(".affected/maps"));
+
+        write(
+            project.resolve("src/main/java/fixture/NgDep.java"),
+            "package fixture; public final class NgDep { public static int value() { int result = 4; return result; } }\n"
+        );
+        clearExecuted(project);
+        BuildResult platformAfterNg = run(project, platformExact, "testPlatform", false);
+        assertDecision(platformAfterNg, ":testPlatform", "proven-empty");
+        assertEquals(TaskOutcome.SKIPPED, platformAfterNg.task(":testPlatform").getOutcome());
+        BuildResult junit4AfterNg = run(project, junit4Exact, "testJunit4Host", false);
+        assertDecision(junit4AfterNg, ":testJunit4Host", "proven-empty");
+        assertEquals(TaskOutcome.SKIPPED, junit4AfterNg.task(":testJunit4Host").getOutcome());
+        BuildResult testngAfterNg = run(project, testngExact, "testNgHost", false);
+        assertDecision(testngAfterNg, ":testNgHost", "exact (1 test class)");
+        assertEquals(setOf("NgHostTest"), executedTests(project));
+        promote(testngExact, project.resolve(".affected/maps"));
+
+        Path platformAfterJunit4Out = temporary.newFolder("multi-runner-platform-junit4").toPath();
+        Path junit4AfterJunit4Out = temporary.newFolder("multi-runner-junit4-junit4").toPath();
+        Path testngAfterJunit4Out = temporary.newFolder("multi-runner-testng-junit4").toPath();
+        write(
+            project.resolve("src/main/java/fixture/Junit4Dep.java"),
+            "package fixture; public final class Junit4Dep { public static int value() { int result = 3; return result; } }\n"
+        );
+        clearExecuted(project);
+        assertDecision(run(project, platformAfterJunit4Out, "testPlatform", false), ":testPlatform", "proven-empty");
+        BuildResult junit4AfterJunit4 = run(project, junit4AfterJunit4Out, "testJunit4Host", false);
+        assertDecision(junit4AfterJunit4, ":testJunit4Host", "exact (1 test class)");
+        assertDecision(run(project, testngAfterJunit4Out, "testNgHost", false), ":testNgHost", "proven-empty");
+        assertEquals(setOf("Junit4HostTest"), executedTests(project));
+        promote(junit4AfterJunit4Out, project.resolve(".affected/maps"));
+
+        Path platformAfterPlatformOut = temporary.newFolder("multi-runner-platform-platform").toPath();
+        Path junit4AfterPlatformOut = temporary.newFolder("multi-runner-junit4-platform").toPath();
+        Path testngAfterPlatformOut = temporary.newFolder("multi-runner-testng-platform").toPath();
+        write(
+            project.resolve("src/main/java/fixture/PlatformDep.java"),
+            "package fixture; public final class PlatformDep { public static int value() { int result = 1; return result; } }\n"
+        );
+        clearExecuted(project);
+        BuildResult platformAfterPlatform = run(project, platformAfterPlatformOut, "testPlatform", false);
+        assertDecision(platformAfterPlatform, ":testPlatform", "exact (1 test class)");
+        assertDecision(run(project, junit4AfterPlatformOut, "testJunit4Host", false), ":testJunit4Host", "proven-empty");
+        assertDecision(run(project, testngAfterPlatformOut, "testNgHost", false), ":testNgHost", "proven-empty");
+        assertEquals(setOf("PlatformHostTest"), executedTests(project));
+    }
+
     @Test(timeout = 120_000L)
     public void gradleEightSelectsExactTestClasses() throws Exception {
         Assume.assumeTrue(
