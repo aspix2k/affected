@@ -3,7 +3,7 @@ import com.github.spotbugs.snom.Effort
 
 plugins {
     `java-library`
-    id("com.github.spotbugs") version "6.5.10"
+    id("com.github.spotbugs") version "6.5.11"
 }
 
 val testJavaVersion = providers.gradleProperty("affected.test.javaVersion").orElse("21")
