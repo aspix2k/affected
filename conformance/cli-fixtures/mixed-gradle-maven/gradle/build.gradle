@@ -1,0 +1,12 @@
+tasks.register("test") {
+    doLast {
+        file("mixed-gradle.marker").setText("executed\n", "UTF-8")
+    }
+}
+
+tasks.register("failingTest") {
+    doLast {
+        file("mixed-gradle.marker").setText("executed\n", "UTF-8")
+        throw new GradleException("requested mixed-run failure")
+    }
+}
