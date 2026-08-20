@@ -1,1 +1,0 @@
-- Treat an empty verification plan as failure when source changes exist, including commit and push guards.
