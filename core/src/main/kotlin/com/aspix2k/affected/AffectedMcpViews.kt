@@ -36,6 +36,20 @@ object AffectedMcpViews {
         val prepared = snapshot.plans?.select(checkConsumers)
             ?: return unavailable("Prepared verification data is not available.")
         val tasks = prepared.plan.groups.flatMap(TaskGroup::tasks)
+        if (prepared.plan.isEmpty && !snapshot.changes?.files.isNullOrEmpty()) {
+            return AffectedMcpView(
+                text = "Changes exist but no verification could be planned.",
+                data = mapOf(
+                    "analysisStatus" to "ready",
+                    "revision" to snapshot.revision,
+                    "reason" to "empty-plan",
+                    "tested" to 0,
+                    "compiled" to 0,
+                    "tasks" to emptyList<String>(),
+                ),
+                error = true,
+            )
+        }
         return AffectedMcpView(
             text = when {
                 prepared.plan.isEmpty -> "Nothing to verify."

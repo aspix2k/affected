@@ -165,6 +165,26 @@ class AffectedMcpViewsTest {
     }
 
     @Test
+    fun `a ready empty plan with changed files is unresolved`() {
+        val snapshot = snapshot(
+            analysisStatus = AnalysisStatus.READY,
+            modules = listOf(module(":alpha")),
+            changes = changes("/repo/alpha/src/Main.kt"),
+            plans = Verification.PreparedPlans(
+                testsOnly = prepared(0, 0, emptyList()),
+                withConsumers = prepared(0, 0, emptyList()),
+            ),
+        )
+
+        val plan = AffectedMcpViews.plan(snapshot, checkConsumers = false)
+
+        assertTrue(plan.error)
+        assertEquals("empty-plan", plan.data["reason"])
+        assertEquals("ready", plan.data["analysisStatus"])
+        assertEquals("Changes exist but no verification could be planned.", plan.text)
+    }
+
+    @Test
     fun `status reports owned sessions instead of every IDE run`() {
         val snapshot = snapshot(
             analysisStatus = AnalysisStatus.READY,
