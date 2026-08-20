@@ -472,7 +472,9 @@
       "fixtures": [
         "conformance/cli-fixtures/cmake",
         "conformance/cli-fixtures/mixed-cmake-dotnet",
-        "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedPolyglotConformanceTest.kt"
+        "conformance/cli-fixtures/mixed-cmake-meson",
+        "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedPolyglotConformanceTest.kt",
+        "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedCmakeMesonConformanceTest.kt"
       ],
       "gates": [".github/workflows/conformance.yml"]
     },
@@ -661,7 +663,7 @@
       ],
       "versions": "Meson 1.x with Ninja; in-tree subprojects and meson-info tests merge, unreadable introspection keeps meson test",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/meson", "conformance/cli-fixtures/meson-subprojects"],
+      "fixtures": ["conformance/cli-fixtures/meson", "conformance/cli-fixtures/meson-subprojects", "conformance/cli-fixtures/mixed-cmake-meson", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedCmakeMesonConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
@@ -934,6 +936,12 @@
       "adapters": ["DART", "FLUTTER"],
       "fixtures": ["conformance/cli-fixtures/mixed-dart-flutter"],
       "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/CliMixedDartFlutterConformanceTest.kt"]
+    },
+    {
+      "id": "cmake-meson",
+      "adapters": ["CMAKE", "MESON"],
+      "fixtures": ["conformance/cli-fixtures/mixed-cmake-meson"],
+      "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/CliMixedCmakeMesonConformanceTest.kt"]
     }
   ]
 }
