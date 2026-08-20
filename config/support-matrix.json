@@ -382,7 +382,7 @@
       ],
       "versions": "Current stable Python; pytest 8–9; standard-library unittest exact files only when every selected module contributes owned tests; zero-test, import, load_tests, or content drift widens to bounded package discovery in the same process, while unsafe layouts or incomplete runner discovery fail visibly",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/python", "conformance/cli-fixtures/unittest"],
+      "fixtures": ["conformance/cli-fixtures/python", "conformance/cli-fixtures/unittest", "conformance/cli-fixtures/mixed-r-python", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedRPythonConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
@@ -739,7 +739,7 @@
       ],
       "versions": "R 4.x with testthat 3.x; source packages use exact or full test_local when testthat is present and an isolated R CMD check without manuals or built vignettes otherwise; renv and R Markdown execution stay unproven",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/r", "conformance/cli-fixtures/r-check"],
+      "fixtures": ["conformance/cli-fixtures/r", "conformance/cli-fixtures/r-check", "conformance/cli-fixtures/mixed-r-python", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedRPythonConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
@@ -922,6 +922,12 @@
       "adapters": ["GRADLE", "NODE"],
       "fixtures": ["conformance/cli-fixtures/mixed-gradle-node"],
       "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleNodeConformanceTest.kt"]
+    },
+    {
+      "id": "r-python",
+      "adapters": ["RPROJECT", "PYTHON"],
+      "fixtures": ["conformance/cli-fixtures/mixed-r-python"],
+      "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/CliMixedRPythonConformanceTest.kt"]
     }
   ]
 }
