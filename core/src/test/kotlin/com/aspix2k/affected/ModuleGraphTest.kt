@@ -51,6 +51,71 @@ class ModuleGraphTest {
     }
 
     @Test
+    fun `a Gradle settings file belongs to the root project not every subproject`() {
+        val root = createTempDirectory("module-graph-gradle-settings").toFile()
+        val graph = ModuleGraph(
+            listOf(
+                ModuleGraph.Node(module(root, ":", "app"), system("GRADLE")),
+                ModuleGraph.Node(module(root, ":analytics", "analytics"), system("GRADLE")),
+                ModuleGraph.Node(module(root, ":ui", "ui"), system("GRADLE")),
+            ),
+        )
+
+        assertEquals(listOf(":"), graph.nodesFor(File(root, "settings.gradle.kts")).map { it.id })
+        assertEquals(
+            listOf(":"),
+            affectedModules(graph, listOf(File(root, "settings.gradle.kts"))).map(AffectedModule::id),
+        )
+    }
+
+    @Test
+    fun `a Gradle catalog outside content roots stays on the root project`() {
+        val root = createTempDirectory("module-graph-gradle-catalog").toFile()
+        val catalog = File(root, "gradle/libs.versions.toml").apply {
+            parentFile.mkdirs()
+            writeText("[versions]")
+        }
+        val graph = ModuleGraph(
+            listOf(
+                ModuleGraph.Node(module(root, ":", "app"), system("GRADLE")),
+                ModuleGraph.Node(module(root, ":analytics", "analytics"), system("GRADLE")),
+            ),
+        )
+
+        assertEquals(listOf(":"), graph.nodesFor(catalog).map { it.id })
+    }
+
+    @Test
+    fun `a Gradle subproject source file stays on that subproject`() {
+        val root = createTempDirectory("module-graph-gradle-source").toFile()
+        val graph = ModuleGraph(
+            listOf(
+                ModuleGraph.Node(module(root, ":", "app"), system("GRADLE")),
+                ModuleGraph.Node(module(root, ":analytics", "analytics"), system("GRADLE")),
+            ),
+        )
+        val source = File(root, "analytics/Foo.kt").apply { writeText("class Foo") }
+
+        assertEquals(listOf(":analytics"), graph.nodesFor(source).map { it.id })
+    }
+
+    @Test
+    fun `a Maven parent POM belongs to the root project not every module`() {
+        val root = createTempDirectory("module-graph-maven-parent").toFile()
+        val parent = module(root, "very-long-parent-name", "app").copy(
+            contentRoots = listOf(root.invariantSeparatorsPath),
+        )
+        val graph = ModuleGraph(
+            listOf(
+                ModuleGraph.Node(parent, system("MAVEN")),
+                ModuleGraph.Node(module(root, "app", "app"), system("MAVEN")),
+            ),
+        )
+
+        assertEquals(listOf("very-long-parent-name"), graph.nodesFor(File(root, "pom.xml")).map { it.id })
+    }
+
+    @Test
     fun `shared Gradle content keeps one source-set owner`() {
         val root = createTempDirectory("module-graph-gradle").toFile()
         val content = File(root, "shared").apply { mkdirs() }

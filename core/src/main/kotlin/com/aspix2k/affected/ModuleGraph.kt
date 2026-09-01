@@ -9,6 +9,7 @@ import com.aspix2k.affected.build.TransitiveTestConsumersBuildSystem
 import com.aspix2k.affected.build.WorkspaceChangesBuildSystem
 import com.intellij.openapi.project.Project
 import java.io.File
+import java.nio.file.Path
 
 class ModuleGraph internal constructor(private val nodes: List<Node>) {
 
@@ -65,7 +66,10 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
                     .getOrDefault(false)
             }
         }
-        val owners = scoped.ifEmpty { rooted }
+        val parent = file.parentFile?.toPath()?.toAbsolutePath()?.normalize()
+        val owners = scoped.ifEmpty {
+            if (parent == null) rooted else collapseSingleOwnerBuildRoots(rooted, parent)
+        }
         val deepest = owners.maxOfOrNull { File(it.module.root).toPath().nameCount } ?: return emptyList()
         return owners.filter { File(it.module.root).toPath().nameCount == deepest }.distinct()
     }
@@ -138,8 +142,9 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
         val owners = nodes.filter { node ->
             runCatching { File(node.module.root).toPath().toAbsolutePath().normalize() == parent }
                 .getOrDefault(false)
-        }
-        return owners.distinct().takeIf { it.isNotEmpty() }
+        }.distinct()
+        if (owners.isEmpty()) return null
+        return collapseSingleOwnerBuildRoots(owners, parent)
     }
 
     private fun contentOwners(candidates: List<Node>): List<Node> {
@@ -148,6 +153,29 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
             .groupBy { it.system.id to it.module.root }
             .values
             .map { owners -> owners.maxBy { it.module.id.length } }
+    }
+
+    private fun collapseSingleOwnerBuildRoots(owners: List<Node>, directory: Path): List<Node> {
+        val (singleOwner, multiOwner) = owners.partition { it.system.id in SINGLE_OWNER_SYSTEMS }
+        val collapsed = singleOwner.groupBy { it.system.id to it.buildRoot }.values.map { group ->
+            rootProject(group, directory)
+        }
+        return (multiOwner + collapsed).distinct()
+    }
+
+    private fun rootProject(group: List<Node>, directory: Path): Node {
+        val here = group.filter { node ->
+            node.module.contentRoots.any { root ->
+                runCatching { File(root).toPath().toAbsolutePath().normalize() == directory }
+                    .getOrDefault(false)
+            }
+        }
+        return (here.ifEmpty { group }).minBy(::rootProjectRank)
+    }
+
+    private fun rootProjectRank(node: Node): Int {
+        val normalized = node.module.id.trim().trim(':', '.')
+        return if (normalized.isEmpty()) 0 else 1 + node.module.id.length
     }
 
     companion object {

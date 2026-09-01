@@ -1,0 +1,1 @@
+- Keep a Gradle or Maven settings file at the build root on the root project, not every subproject.
