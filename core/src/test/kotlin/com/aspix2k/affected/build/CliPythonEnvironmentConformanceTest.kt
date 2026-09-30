@@ -47,6 +47,22 @@ class CliPythonEnvironmentConformanceTest {
         assertFalse(stale.output.contains("passed"))
     }
 
+    @Test
+    fun `a uv workspace member runs inside the workspace environment`() = fixture("uv-workspace") { workspace ->
+        File(workspace, ".git").mkdirs()
+        val member = File(workspace, "packages/app")
+        val modules = PythonProjects.parse(member).filter(BuildModule::hasTests)
+        val task = listOf("${modules.single().executionId}:test")
+
+        val command = pythonCommands(member.path, task, modules).single().arguments
+        assertEquals(listOf("uv", "run", "--locked", "python", "-m", "unittest"), command.take(6))
+        val result = execute(member, command)
+        assertTrue(result.passed, result.output)
+        assertContains(result.output, "Ran 1 test")
+        assertTrue(File(workspace, ".venv").isDirectory)
+        assertFalse(File(member, ".venv").exists())
+    }
+
     private fun fixture(name: String, block: (File) -> Unit) {
         assumeTrue(System.getProperty("affected.cliConformance") == "true")
         val source = CliConformanceRepository.configured.fixturesRoot().resolve(name)

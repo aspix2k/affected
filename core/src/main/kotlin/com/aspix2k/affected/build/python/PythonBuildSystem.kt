@@ -162,6 +162,7 @@ internal fun resolvedPythonCommands(
     unittestAdapterFallback: Boolean = false,
     toolchain: PythonToolchain = pythonToolchain(File(root)),
 ): List<CliCommand> {
+    toolchain.launcher.failureCommand()?.let { return listOf(it) }
     val byName = modules.associateBy { it.executionId }
     val rootPath = Path.of(root).toAbsolutePath().normalize()
     val resolved = tasks.map { task ->

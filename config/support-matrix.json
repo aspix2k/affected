@@ -380,9 +380,9 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "Current stable Python; pytest 8–9; standard-library unittest exact files only when every selected module contributes owned tests; zero-test, import, load_tests, or content drift widens to bounded package discovery in the same process, while unsafe layouts or incomplete runner discovery fail visibly; managed environments: uv.lock runs `uv run --locked`, poetry.lock `poetry run`; ambiguous markers, a missing tool, tox, and nox keep the plain interpreter",
+      "versions": "Current stable Python; pytest 8–9; standard-library unittest exact files only when every selected module contributes owned tests; zero-test, import, load_tests, or content drift widens to bounded package discovery, while unsafe layouts or incomplete runner discovery fail visibly; environments only from uv.lock (`uv run --locked`, syncs `.venv`, also from a workspace root) or poetry.lock (`poetry run`, pre-installed); a missing tool or ambiguous markers fail visibly; tox and nox are not inspected",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/python", "conformance/cli-fixtures/uv-pytest", "core/src/test/kotlin/com/aspix2k/affected/build/CliPythonEnvironmentConformanceTest.kt", "conformance/cli-fixtures/unittest", "conformance/cli-fixtures/mixed-r-python", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedRPythonConformanceTest.kt"],
+      "fixtures": ["conformance/cli-fixtures/python", "conformance/cli-fixtures/uv-pytest", "conformance/cli-fixtures/uv-workspace", "core/src/test/kotlin/com/aspix2k/affected/build/CliPythonEnvironmentConformanceTest.kt", "conformance/cli-fixtures/unittest", "conformance/cli-fixtures/mixed-r-python", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedRPythonConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {

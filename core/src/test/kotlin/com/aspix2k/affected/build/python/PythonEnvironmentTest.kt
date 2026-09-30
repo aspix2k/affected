@@ -8,6 +8,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 
 class PythonEnvironmentTest {
@@ -16,7 +17,7 @@ class PythonEnvironmentTest {
     fun `uv lock runs pytest selection through a locked uv environment`() {
         val fixture = environmentFixture("uv.lock", pyproject = PYTEST_PROJECT)
 
-        assertEquals(UV_LAUNCHER, fixture.launcher())
+        assertEquals(UV_LAUNCHER, fixture.launcher().arguments)
         val command = fixture.pytestCommand()
         assertEquals(UV_LAUNCHER + listOf("python", fixture.adapter.toString()), command.take(UV_LAUNCHER.size + 2))
         assertEquals(plainPytestCommand(fixture), command.drop(UV_LAUNCHER.size))
@@ -26,7 +27,7 @@ class PythonEnvironmentTest {
     fun `poetry lock runs pytest selection through poetry run`() {
         val fixture = environmentFixture("poetry.lock", pyproject = PYTEST_PROJECT + POETRY_TABLE)
 
-        assertEquals(POETRY_LAUNCHER, fixture.launcher())
+        assertEquals(POETRY_LAUNCHER, fixture.launcher().arguments)
         assertEquals(POETRY_LAUNCHER + plainPytestCommand(fixture), fixture.pytestCommand())
     }
 
@@ -63,7 +64,7 @@ class PythonEnvironmentTest {
             modules,
             null,
             null,
-            toolchain = PythonToolchain(PythonTestRunner.UNITTEST, emptyList()),
+            toolchain = PythonToolchain(PythonTestRunner.UNITTEST),
         ).single()
 
         assertEquals(UV_LAUNCHER + listOf("python", adapter.toString()), exact.arguments.take(UV_LAUNCHER.size + 2))
@@ -91,34 +92,77 @@ class PythonEnvironmentTest {
     }
 
     @Test
-    fun `missing tool binary keeps the plain interpreter`() {
-        assertEquals(emptyList(), environmentFixture("uv.lock", binaries = emptyList()).launcher())
-        assertEquals(emptyList(), environmentFixture("poetry.lock", binaries = listOf("uv")).launcher())
-        assertEquals(emptyList(), environmentFixture("uv.lock", binaries = listOf("poetry")).launcher())
+    fun `a lock without its tool fails visibly instead of using the plain interpreter`() {
+        val missing = environmentFixture("uv.lock", binaries = emptyList())
+        assertEquals(emptyList(), missing.launcher().arguments)
+        assertContains(checkNotNull(missing.launcher().failure), "uv is not on PATH")
+        assertEquals(failureArguments(missing.launcher()), missing.pytestCommand())
+        val poetryOnly = environmentFixture("poetry.lock", binaries = listOf("uv"))
+        assertContains(checkNotNull(poetryOnly.launcher().failure), "poetry")
+        val uvOnly = environmentFixture("uv.lock", binaries = listOf("poetry"))
+        assertContains(checkNotNull(uvOnly.launcher().failure), "uv")
     }
 
     @Test
-    fun `ambiguous uv and poetry markers keep the plain interpreter`() {
+    fun `a tool in a common install directory is used by its absolute path`() {
+        val fixture = environmentFixture("uv.lock", binaries = emptyList())
+        val directory = createTempDirectory("python-environment-tools").toFile()
+        val uv = File(directory, "uv").apply { writeText("#!/bin/sh\n") }.also { it.setExecutable(true) }
+
+        val launcher = fixture.launcher(listOf(directory.path))
+
+        assertEquals(null, launcher.failure)
+        assertEquals(listOf(uv.absoluteFile.normalize().invariantSeparatorsPath, "run", "--locked"), launcher.arguments)
+    }
+
+    @Test
+    fun `ambiguous uv and poetry markers fail visibly`() {
         val both = environmentFixture("uv.lock", binaries = listOf("uv", "poetry"))
         File(both.root, "poetry.lock").writeText("")
-        assertEquals(emptyList(), both.launcher())
+        assertContains(checkNotNull(both.launcher().failure), "both uv.lock and poetry.lock")
+        assertEquals(failureArguments(both.launcher()), both.pytestCommand())
 
         val uvWithPoetryTable = environmentFixture("uv.lock", pyproject = PYTEST_PROJECT + POETRY_TABLE)
-        assertEquals(emptyList(), uvWithPoetryTable.launcher())
+        assertContains(checkNotNull(uvWithPoetryTable.launcher().failure), "conflicts")
 
         val poetryWithUvTable = environmentFixture("poetry.lock", pyproject = PYTEST_PROJECT + UV_TABLE)
-        assertEquals(emptyList(), poetryWithUvTable.launcher())
+        assertContains(checkNotNull(poetryWithUvTable.launcher().failure), "conflicts")
+    }
+
+    @Test
+    fun `a uv workspace member uses the workspace lock found above it`() {
+        val workspace = workspaceFixture(members = "\"packages/*\"")
+
+        assertEquals(UV_LAUNCHER, workspace.launcher().arguments)
+        assertEquals(null, workspace.launcher().failure)
+    }
+
+    @Test
+    fun `a uv workspace lock does not apply to excluded or unlisted directories`() {
+        val excluded = workspaceFixture(members = "\"packages/*\"", exclude = "\"packages/a\"")
+        assertEquals(PythonLauncher(), excluded.launcher())
+        assertEquals(PythonLauncher(), workspaceFixture(members = "\"libs/*\"").launcher())
+        assertEquals(PythonLauncher(), workspaceFixture(members = null).launcher())
+    }
+
+    @Test
+    fun `ancestor locks stop at the repository boundary and never apply to poetry`() {
+        val outside = workspaceFixture(members = "\"packages/*\"", repositoryAtMember = true)
+        assertEquals(PythonLauncher(), outside.launcher())
+
+        val poetry = workspaceFixture(members = "\"packages/*\"", lock = "poetry.lock")
+        assertEquals(PythonLauncher(), poetry.launcher())
     }
 
     @Test
     fun `tool tables without a lock and tox or nox projects keep the plain interpreter`() {
-        assertEquals(emptyList(), environmentFixture(null, pyproject = PYTEST_PROJECT + UV_TABLE).launcher())
-        assertEquals(emptyList(), environmentFixture(null, pyproject = PYTEST_PROJECT + POETRY_TABLE).launcher())
+        assertEquals(PythonLauncher(), environmentFixture(null, pyproject = PYTEST_PROJECT + UV_TABLE).launcher())
+        assertEquals(PythonLauncher(), environmentFixture(null, pyproject = PYTEST_PROJECT + POETRY_TABLE).launcher())
 
         val toxNox = environmentFixture(null, pyproject = PYTEST_PROJECT)
         File(toxNox.root, "tox.ini").writeText("[tox]\nenvlist = py\n")
         File(toxNox.root, "noxfile.py").writeText("import nox\n")
-        assertEquals(emptyList(), toxNox.launcher())
+        assertEquals(PythonLauncher(), toxNox.launcher())
         assertEquals(plainPytestCommand(toxNox), toxNox.pytestCommand())
     }
 
@@ -127,18 +171,45 @@ class PythonEnvironmentTest {
         val linked = environmentFixture(null)
         val target = File(linked.root, "elsewhere.lock").apply { writeText("") }
         Files.createSymbolicLink(File(linked.root, "uv.lock").toPath(), target.toPath())
-        assertEquals(emptyList(), linked.launcher())
+        assertEquals(PythonLauncher(), linked.launcher())
 
         val directory = environmentFixture(null)
         File(directory.root, "poetry.lock").mkdirs()
-        assertEquals(emptyList(), directory.launcher())
+        assertEquals(PythonLauncher(), directory.launcher())
     }
 
     private inner class Fixture(val root: File, val bin: File, val adapter: Path) {
-        fun launcher(): List<String> = pythonLauncher(root, bin.path, null)
+        fun launcher(toolDirectories: List<String> = emptyList()): PythonLauncher =
+            pythonLauncher(root, bin.path, null, toolDirectories)
 
         fun pytestCommand(): List<String> = pytestArguments(this, launcher())
     }
+
+    private fun workspaceFixture(
+        members: String?,
+        exclude: String? = null,
+        lock: String = "uv.lock",
+        repositoryAtMember: Boolean = false,
+    ): Fixture {
+        val workspace = createTempDirectory("python-workspace").toFile()
+        val table = members?.let {
+            "\n[tool.uv.workspace]\nmembers = [$it]\n" + exclude?.let { value -> "exclude = [$value]\n" }.orEmpty()
+        }.orEmpty()
+        File(workspace, "pyproject.toml").writeText("[project]\nname = \"root\"\n$table")
+        File(workspace, lock).writeText("")
+        val member = File(workspace, "packages/a").apply { mkdirs() }
+        File(member, "pyproject.toml").writeText(PYTEST_PROJECT)
+        File(if (repositoryAtMember) member else workspace, ".git").mkdirs()
+        val bin = createTempDirectory("python-environment-bin").toFile()
+        listOf("uv", "poetry").forEach { name ->
+            File(bin, name).apply { writeText("#!/bin/sh\n") }.setExecutable(true)
+        }
+        val adapter = File(member, "affected_pytest.py").apply { writeText("# adapter\n") }.toPath()
+        return Fixture(member, bin, adapter)
+    }
+
+    private fun failureArguments(launcher: PythonLauncher): List<String> =
+        checkNotNull(launcher.failureCommand()).arguments
 
     private fun environmentFixture(
         lock: String?,
@@ -154,7 +225,7 @@ class PythonEnvironmentTest {
         return Fixture(root, bin, adapter)
     }
 
-    private fun pytestArguments(fixture: Fixture, launcher: List<String>): List<String> {
+    private fun pytestArguments(fixture: Fixture, launcher: PythonLauncher): List<String> {
         val test = File(fixture.root, "packages/a/test_alpha.py").apply {
             parentFile.mkdirs()
             writeText("def test_alpha():\n    pass\n")
@@ -171,7 +242,7 @@ class PythonEnvironmentTest {
 
     private fun toolchain(fixture: Fixture, runner: PythonTestRunner) = PythonToolchain(runner, fixture.launcher())
 
-    private fun plainPytestCommand(fixture: Fixture): List<String> = pytestArguments(fixture, emptyList())
+    private fun plainPytestCommand(fixture: Fixture): List<String> = pytestArguments(fixture, PythonLauncher())
 
     private fun unresolvedRunnerArguments(fixture: Fixture): List<String> {
         val outside = createTempDirectory("python-environment-outside").toFile()

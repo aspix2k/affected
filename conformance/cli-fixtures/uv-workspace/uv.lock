@@ -1,0 +1,19 @@
+version = 1
+revision = 3
+requires-python = ">=3.10"
+
+[manifest]
+members = [
+    "affected-uv-workspace",
+    "affected-uv-workspace-app",
+]
+
+[[package]]
+name = "affected-uv-workspace"
+version = "0.1.0"
+source = { virtual = "." }
+
+[[package]]
+name = "affected-uv-workspace-app"
+version = "0.1.0"
+source = { virtual = "packages/app" }
