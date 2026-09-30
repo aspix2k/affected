@@ -7,6 +7,7 @@ import com.aspix2k.affected.ProjectChanges
 import com.aspix2k.affected.TaskGroup
 import com.aspix2k.affected.Verification
 import com.aspix2k.affected.build.gradle.GradleBuildSystem
+import com.aspix2k.affected.runAndWait
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.ui.RunContentManager
 import com.intellij.openapi.application.ApplicationManager

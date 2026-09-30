@@ -32,6 +32,23 @@ class KotlinToolchainNativeEnvironmentTest {
     }
 
     @Test
+    fun `a verified KOTLIN_CLI_JAVA_HOME is kept next to JAVA_HOME`() {
+        val javaHome = fakeJdk("env-home")
+        val cliHome = fakeJdk("cli-home")
+        val env = kotlinToolchainNativeEnvironment(
+            mutableMapOf(
+                "JAVA_HOME" to javaHome.path,
+                "KOTLIN_CLI_JAVA_HOME" to cliHome.path,
+                "PATH" to "/usr/bin",
+            ),
+            runtimeJavaHome = null,
+        )
+
+        assertEquals(javaHome.canonicalPath, env["JAVA_HOME"])
+        assertEquals(cliHome.canonicalPath, env["KOTLIN_CLI_JAVA_HOME"])
+    }
+
+    @Test
     fun `a stale JAVA_HOME falls back to the runtime home`() {
         val stale = createTempDirectory("stale-jdk").toFile()
         val runtime = fakeJdk("runtime-home")
