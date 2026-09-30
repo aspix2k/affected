@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build.gradle
 
+import com.aspix2k.affected.build.PerformanceBudgets
 import java.io.File
 import java.nio.file.Path
 
@@ -33,17 +34,18 @@ private fun gradleSettingsMayInclude(consumer: Path, included: Path): Boolean =
     }
 
 private fun gradleMayProducePlugins(included: Path): Boolean = runCatching {
-    included.toFile().walkTopDown()
+    val entries = included.toFile().walkTopDown()
         .onEnter { it.name !in GRADLE_SKIPPED_DIRECTORIES }
-        .filter(File::isFile)
-        .any { file ->
-            when {
-                file.name in GRADLE_BUILD_SCRIPT_NAMES -> GRADLE_PLUGIN_MARKER.containsMatchIn(file.readText())
-                file.name.endsWith(".gradle.kts") || file.name.endsWith(".gradle") ->
-                    GRADLE_PRECOMPILED_SCRIPT_DIRECTORY.containsMatchIn(file.invariantSeparatorsPath)
-                else -> false
-            }
+        .take(PerformanceBudgets.MAX_DIRECTORIES + 1)
+        .toList()
+    entries.size > PerformanceBudgets.MAX_DIRECTORIES || entries.filter(File::isFile).any { file ->
+        when {
+            file.name in GRADLE_BUILD_SCRIPT_NAMES -> GRADLE_PLUGIN_MARKER.containsMatchIn(file.readText())
+            file.name.endsWith(".gradle.kts") || file.name.endsWith(".gradle") ->
+                GRADLE_PRECOMPILED_SCRIPT_DIRECTORY.containsMatchIn(file.invariantSeparatorsPath)
+            else -> false
         }
+    }
 }.getOrDefault(true)
 
 private val GRADLE_SKIPPED_DIRECTORIES = setOf("build", ".gradle", ".git", ".idea", "node_modules")
