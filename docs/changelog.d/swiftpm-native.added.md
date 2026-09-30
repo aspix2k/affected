@@ -1,0 +1,1 @@
+- Swift: discover SwiftPM targets with `swift package describe --type json` and run only the affected test targets, including tests of dependent targets, with `swift test --filter` for XCTest and Swift Testing; a failed discovery is cached until the manifests change, and unresolved targets or unknown tasks keep the whole-package `swift test`.

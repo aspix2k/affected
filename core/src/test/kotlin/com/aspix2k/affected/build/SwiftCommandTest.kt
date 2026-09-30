@@ -35,6 +35,106 @@ class SwiftCommandTest {
     }
 
     @Test
+    fun `a named target with an unknown task keeps the project test command`() {
+        assertEquals(
+            listOf(listOf("swift", "test")),
+            swiftCommands(listOf("Alpha:mystery")).map { it.arguments },
+        )
+        assertEquals(
+            listOf(listOf("swift", "build", "--target", "Alpha"), listOf("swift", "test")),
+            swiftCommands(listOf("Alpha:build", "AlphaTests:test", "Beta:mystery")).map { it.arguments },
+        )
+    }
+
+    @Test
+    fun `a failed describe is cached for the same manifests`() {
+        val root = swiftRoot()
+        var calls = 0
+        val system = SwiftBuildSystem { calls++; null }
+
+        assertEquals(".", system.modules(root).single().executionId)
+        assertEquals(".", system.modules(root).single().executionId)
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun `a manifest written by describe does not invalidate the cached targets`() {
+        val root = swiftRoot()
+        var calls = 0
+        val system = SwiftBuildSystem {
+            calls++
+            File(root, "Package.resolved").writeText("{}")
+            DESCRIBE
+        }
+
+        assertEquals(listOf("Alpha", "AlphaTests"), system.modules(root).map { it.id })
+        assertEquals(listOf("Alpha", "AlphaTests"), system.modules(root).map { it.id })
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun `a versioned manifest change refreshes the cached targets`() {
+        val root = swiftRoot()
+        val versioned = File(root, "Package@swift-5.9.swift").apply { writeText("// one") }
+        var calls = 0
+        val system = SwiftBuildSystem { calls++; DESCRIBE }
+
+        system.modules(root)
+        system.modules(root)
+        versioned.writeText("// two")
+        system.modules(root)
+
+        assertEquals(2, calls)
+    }
+
+    @Test
+    fun `Swift test targets run by anchored target filters after the built targets`() {
+        val commands = swiftCommands(listOf("Alpha:build", "AlphaTests:test", "BetaTests:test", "AlphaTests:test"))
+
+        assertEquals(
+            listOf(
+                listOf("swift", "build", "--target", "Alpha"),
+                listOf("swift", "test", "--filter", "^AlphaTests\\.", "--filter", "^BetaTests\\."),
+            ),
+            commands.map { it.arguments },
+        )
+    }
+
+    @Test
+    fun `a whole package or unsafe target name keeps the project command`() {
+        assertEquals(
+            listOf(listOf("swift", "test")),
+            swiftCommands(listOf("AlphaTests:test", ".:test")).map { it.arguments },
+        )
+        assertEquals(
+            listOf(listOf("swift", "test")),
+            swiftCommands(listOf("Alpha.*:test")).map { it.arguments },
+        )
+    }
+
+    @Test
+    fun `swift package describe output becomes target modules`() {
+        val modules = checkNotNull(SwiftTargets.parse(DESCRIBE, File("/work/pkg")))
+
+        assertEquals(listOf("Alpha", "AlphaTests"), modules.map { it.id })
+        assertEquals(listOf(false, true), modules.map { it.hasTests })
+        assertEquals(listOf("/work/pkg/Sources/Alpha"), modules.first().contentRoots)
+        assertEquals(setOf("/work/pkg|Alpha"), modules.last().dependencies)
+        assertEquals("/work/pkg", modules.first().root)
+    }
+
+    @Test
+    fun `undescribed Swift targets keep the project command`() {
+        val root = File("/work/pkg")
+
+        assertNull(SwiftTargets.parse("not json", root))
+        assertNull(SwiftTargets.parse("""{"targets": []}""", root))
+        assertNull(SwiftTargets.parse(DESCRIBE.replace("library", "plugin"), root))
+        assertNull(SwiftTargets.parse(DESCRIBE.replace("\"c99name\":\"Alpha\"", "\"c99name\":\"_Alpha\""), root))
+        assertNull(SwiftTargets.parse(DESCRIBE.replace("\"name\":\"AlphaTests\"", "\"name\":\"Alpha\""), root))
+    }
+
+    @Test
     fun `a Swift package with tests is runnable`() {
         val root = swiftRoot()
         File(root, "Tests/ProbeTests/ProbeTests.swift").apply {
@@ -84,5 +184,15 @@ class SwiftCommandTest {
         val root = createTempDirectory("swift-root").toFile()
         File(root, "Package.swift").writeText("let package = Package(name: \"probe\")\n")
         return root
+    }
+
+    private companion object {
+        val DESCRIBE = """
+            {"targets":[
+              {"c99name":"Alpha","name":"Alpha","path":"Sources/Alpha","type":"library"},
+              {"c99name":"AlphaTests","name":"AlphaTests","path":"Tests/AlphaTests","type":"test",
+               "target_dependencies":["Alpha"]}
+            ]}
+        """.trimIndent()
     }
 }

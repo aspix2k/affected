@@ -796,8 +796,17 @@
       "ecosystem": "Swift",
       "languages": ["Swift", "Objective-C"],
       "runners": ["swift test", "swift build"],
-      "selection": ["project"],
+      "selection": ["target", "project"],
       "selectionProofs": [
+        {
+          "units": ["target"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/SwiftPmNativeTest.kt",
+          "marker": "SwiftPM discovers targets and runs only affected test targets",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "SwiftPmNativeTest",
+          "gateJob": "cross-platform-paths",
+          "gateStep": "Run platform-specific core tests"
+        },
         {
           "units": ["project"],
           "path": "core/src/test/kotlin/com/aspix2k/affected/build/SwiftCommandTest.kt",
@@ -808,10 +817,10 @@
           "gateStep": "Analyze and test"
         }
       ],
-      "versions": "SwiftPM; project-level until Xcode schemes, target selection and native Swift execution are proven",
+      "versions": "SwiftPM, proven on a tools-version 6.0 package with XCTest and Swift Testing targets on the Swift toolchain of macos-latest; targets come from swift package describe --type json and test targets run by anchored swift test --filter, while unresolved or unsupported target layouts and unknown tasks keep the project-level swift test",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/swift"],
-      "gates": [".github/workflows/ci.yml"]
+      "fixtures": ["conformance/cli-fixtures/swiftpm"],
+      "gates": [".github/workflows/ci.yml", ".github/workflows/conformance.yml"]
     },
     {
       "id": "XCODE",
