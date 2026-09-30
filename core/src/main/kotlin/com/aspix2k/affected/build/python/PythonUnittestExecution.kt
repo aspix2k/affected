@@ -23,9 +23,11 @@ internal fun pythonDeferredCommands(
     runner: PythonTestRunner = pythonTestRunner(File(root)),
     currentChanges: () -> BuildChanges,
 ): List<CliStep> {
+    val toolchain = PythonToolchain(runner, pythonLauncher(File(root)))
     val adapterStamp = adapterFingerprint(adapter)
-    val plannedCommands = resolvedPythonCommands(root, tasks, modules, planned, adapter, runner = runner)
-    val fullCommands = resolvedPythonCommands(root, tasks, modules, null, null, runner = runner)
+    val plannedCommands =
+        resolvedPythonCommands(root, tasks, modules, planned, adapter, toolchain = toolchain)
+    val fullCommands = resolvedPythonCommands(root, tasks, modules, null, null, toolchain = toolchain)
     val fullAdapterCommands = resolvedPythonCommands(
         root,
         tasks,
@@ -33,7 +35,7 @@ internal fun pythonDeferredCommands(
         changes = null,
         adapter = adapter,
         unittestAdapterFallback = true,
-        runner = runner,
+        toolchain = toolchain,
     )
     if (plannedCommands == fullCommands) {
         return fullAdapterCommands.map { command ->
@@ -51,7 +53,7 @@ internal fun pythonDeferredCommands(
                 effective,
                 adapter,
                 unittestAdapterFallback = true,
-                runner = runner,
+                toolchain = toolchain,
             ).filterNot { it.title == "mypy" }
                 .singleOrNull()
                 ?.takeIf { it.title == "unittest" || it.title == "unittest package set unresolved" }

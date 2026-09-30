@@ -94,6 +94,7 @@
     {"id":"cmake","local":{"type":"pip-command","name":"cmake","occurrences":{".github/workflows/conformance.yml":1}},"source":{"type":"pypi","name":"cmake"},"policy":"latest"},
     {"id":"pytest","local":{"type":"pip-command","name":"pytest","occurrences":{".github/workflows/conformance.yml":1}},"source":{"type":"pypi","name":"pytest"},"policy":"latest"},
     {"id":"ruff","local":{"type":"pip-command","name":"ruff","occurrences":{".github/workflows/conformance.yml":1}},"source":{"type":"pypi","name":"ruff"},"policy":"latest"},
+    {"id":"uv","local":{"type":"pip-command","name":"uv","occurrences":{".github/workflows/conformance.yml":1}},"source":{"type":"pypi","name":"uv"},"policy":"latest"},
     {"id":"shellcheck","local":{"type":"workflow-env","name":"SHELLCHECK_VERSION","occurrences":{".github/workflows/ci.yml":1}},"source":{"type":"github-release","name":"koalaman/shellcheck"},"policy":"latest"},
     {"id":"actionlint","local":{"type":"workflow-env","name":"ACTIONLINT_VERSION","occurrences":{".github/workflows/ci.yml":1}},"source":{"type":"github-release","name":"rhysd/actionlint"},"policy":"latest"},
 

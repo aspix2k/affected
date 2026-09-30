@@ -1,0 +1,1 @@
+- Run exact Python pytest and unittest selection, and mypy, inside the project's managed environment: `uv run --locked` when a root uv.lock exists and `poetry run` when a root poetry.lock exists and the tool is on PATH; ambiguous uv and Poetry markers, a missing tool, tox, and nox keep the plain interpreter.

@@ -94,7 +94,8 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
     ): List<CliStep> {
         val directory = File(root)
         val discovered = modules(project)
-        val runner = pythonTestRunner(directory)
+        val toolchain = pythonToolchain(directory)
+        val runner = toolchain.runner
         val adapter = configuredPythonAdapter(runner)
             ?: findPythonAdapter(runner, Path.of(PathManager.getJarPathForClass(PythonBuildSystem::class.java)))
         return when {
@@ -159,7 +160,7 @@ internal fun resolvedPythonCommands(
     changes: BuildChanges?,
     adapter: Path?,
     unittestAdapterFallback: Boolean = false,
-    runner: PythonTestRunner = pythonTestRunner(File(root)),
+    toolchain: PythonToolchain = pythonToolchain(File(root)),
 ): List<CliCommand> {
     val byName = modules.associateBy { it.executionId }
     val rootPath = Path.of(root).toAbsolutePath().normalize()
@@ -175,9 +176,17 @@ internal fun resolvedPythonCommands(
         if (task == PythonProjects.TYPECHECK) {
             listOf(CliCommand("mypy", listOf("python", "-m", "mypy") + paths.distinct()))
         } else {
-            pythonTestCommands(root, paths.distinct(), modules, changes, adapter, unittestAdapterFallback, runner)
+            pythonTestCommands(
+                root,
+                paths.distinct(),
+                modules,
+                changes,
+                adapter,
+                unittestAdapterFallback,
+                toolchain.runner,
+            )
         }
-    }
+    }.map { it.inPythonLauncher(toolchain.launcher) }
 }
 
 private fun pythonTestCommands(
