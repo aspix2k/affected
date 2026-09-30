@@ -92,7 +92,9 @@ jobs:
         run: scripts/quality.sh analyzers
 
       - name: Test the release currentness gate
-        run: python3 -m unittest scripts.tests.test_release_currentness
+        run: |
+          python3 -m unittest scripts.tests.test_release_currentness
+          python3 scripts/release_currentness.py --offline
 
       - name: Test the executable support matrix
         run: |
