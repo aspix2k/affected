@@ -21,9 +21,7 @@ import java.io.File
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 import java.nio.file.Files
-import java.util.concurrent.TimeUnit
 import javax.xml.parsers.DocumentBuilderFactory
-import kotlin.io.path.createTempDirectory
 
 class CliMixedPolyglotConformanceTest : BasePlatformTestCase() {
 
@@ -133,9 +131,8 @@ class CliMixedPolyglotConformanceTest : BasePlatformTestCase() {
 
     fun testSpaceUnicodeAndLeadingDashRootRunsBothGroups() {
         if (!nativeEnabled()) return
-        val parent = createTempDirectory("affected mixed ü ").toFile()
-        val root = File(parent, "-repo данные")
-        try {
+        OwnedSandbox.use("affected mixed ü ") { sandbox ->
+            val root = File(sandbox.root, "-repo данные")
             check(root.mkdirs())
             copyFixtureTo(root)
             configureCmake(root)
@@ -148,8 +145,6 @@ class CliMixedPolyglotConformanceTest : BasePlatformTestCase() {
             assertTrue(outcome.passed)
             assertTrue("CMake marker was not written", markerExists(root, CMAKE_MARKER))
             assertTrue(".NET marker was not written", markerExists(root, DOTNET_MARKER))
-        } finally {
-            check(parent.deleteRecursively())
         }
     }
 
@@ -209,21 +204,13 @@ class CliMixedPolyglotConformanceTest : BasePlatformTestCase() {
     private fun nativeEnabled(): Boolean = System.getProperty("affected.cliConformance") == "true"
 
     private fun configureCmake(root: File) {
-        val output = File.createTempFile("affected-mixed-cmake", ".log")
-        try {
-            val process = ProcessBuilder("cmake", "-S", ".", "-B", "build")
-                .directory(root)
-                .redirectErrorStream(true)
-                .redirectOutput(output)
-                .start()
-            val completed = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            if (!completed) process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)
-            val text = output.readText()
-            assertTrue("CMake configuration timed out\n$text", completed)
-            assertEquals(text, 0, process.exitValue())
-        } finally {
-            output.delete()
-        }
+        val result = NativeProcessRunner.run(
+            listOf("cmake", "-S", ".", "-B", "build"),
+            root,
+            COMMAND_TIMEOUT_SECONDS,
+        )
+        assertTrue("CMake configuration timed out\n${result.output}", result.completed)
+        assertEquals(result.output, 0, result.exitCode)
     }
 
     private fun markerExists(root: File, name: String): Boolean =

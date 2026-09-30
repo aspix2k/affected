@@ -38,7 +38,7 @@ class CliGradleSelectionDiagnosticsConformanceTest : BasePlatformTestCase() {
         val root = File(checkNotNull(project.basePath), "gradle-selection-diagnostics")
         val markers = File(root, "markers")
         try {
-            root.deleteRecursively()
+            OwnedSandbox.remove(root)
             assertTrue(repository.fixture("gradle-kmp-fallback").copyRecursively(root, overwrite = true))
             installWrapper(repository, root)
             File(root, "gradle.properties").writeText(
@@ -61,7 +61,7 @@ class CliGradleSelectionDiagnosticsConformanceTest : BasePlatformTestCase() {
             assertEquals("included\n", File(markers, "included.marker").readText())
         } finally {
             AffectedRunSessions.getInstance(project).stopOwned()
-            assertTrue(!root.exists() || root.deleteRecursively())
+            OwnedSandbox.remove(root)
         }
     }
 

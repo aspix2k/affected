@@ -22,13 +22,12 @@ import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 import java.nio.file.Files
 import javax.xml.parsers.DocumentBuilderFactory
-import kotlin.io.path.createTempDirectory
 
 class CliMixedRPythonConformanceTest : BasePlatformTestCase() {
 
     private var registeredPoint = false
     private var previousStopAfterFirstFailure = false
-    private val temporaryRoots = mutableListOf<File>()
+    private val sandboxes = mutableListOf<OwnedSandbox>()
 
     override fun setUp() {
         super.setUp()
@@ -50,12 +49,9 @@ class CliMixedRPythonConformanceTest : BasePlatformTestCase() {
 
     override fun tearDown() {
         try {
-            temporaryRoots.toList().forEach { root ->
-                if (root.exists()) {
-                    check(root.deleteRecursively())
-                }
-            }
-            temporaryRoots.clear()
+            val owned = sandboxes.toList()
+            sandboxes.clear()
+            OwnedSandbox.closeAll(owned)
             deleteCopiedRoots()
             AffectedSettings.getInstance().stopAfterFirstFailure = previousStopAfterFirstFailure
             super.tearDown()
@@ -164,8 +160,9 @@ class CliMixedRPythonConformanceTest : BasePlatformTestCase() {
 
     private fun mixedRepo(): File {
         val source = CliConformanceRepository.configured.fixture("mixed-r-python")
-        val root = createTempDirectory("affected-mixed-r-python").toFile()
-        temporaryRoots += root
+        val sandbox = OwnedSandbox.open("affected-mixed-r-python")
+        sandboxes += sandbox
+        val root = sandbox.root
         source.listFiles().orEmpty().forEach { child ->
             check(child.copyRecursively(File(root, child.name), overwrite = true))
         }

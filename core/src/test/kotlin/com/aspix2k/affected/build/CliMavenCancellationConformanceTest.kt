@@ -262,7 +262,7 @@ class CliMavenCancellationConformanceTest : BasePlatformTestCase() {
     }
 
     private fun assertDeleted(file: File) {
-        assertTrue(!file.exists() || file.deleteRecursively(), "Failed to delete $file")
+        OwnedSandbox.remove(file)
         assertFalse(file.exists(), "Cleanup left $file")
     }
 

@@ -2,11 +2,10 @@ package com.aspix2k.affected.build.dotnet
 
 import com.aspix2k.affected.build.BuildChanges
 import com.aspix2k.affected.build.CliConformanceRepository
+import com.aspix2k.affected.build.NativeProcessRunner
+import com.aspix2k.affected.build.OwnedSandbox
 import org.junit.Assume.assumeTrue
 import java.io.File
-import java.nio.file.Files
-import java.util.concurrent.TimeUnit
-import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -91,12 +90,9 @@ class DotnetMtpCliConformanceTest {
 
     private fun fixture(block: (File) -> Unit) {
         val source = fixtureRoot().resolve("dotnet-mtp-xunit4")
-        val root = createTempDirectory("dotnet-mtp-xunit4").toFile()
-        try {
-            assertTrue(source.copyRecursively(root, overwrite = true), "Could not copy $source")
-            block(root)
-        } finally {
-            root.deleteRecursively()
+        OwnedSandbox.use("dotnet-mtp-xunit4") { sandbox ->
+            assertTrue(source.copyRecursively(sandbox.root, overwrite = true), "Could not copy $source")
+            block(sandbox.root)
         }
     }
 
@@ -108,23 +104,10 @@ class DotnetMtpCliConformanceTest {
     )
 
     private fun execute(directory: File, arguments: List<String>, environment: Map<String, String>): Result {
-        val log = Files.createTempFile("dotnet-mtp-cli", ".log")
-        return try {
-            val process = ProcessBuilder(arguments)
-                .directory(directory)
-                .redirectErrorStream(true)
-                .redirectOutput(log.toFile())
-                .apply { environment().putAll(environment) }
-                .start()
-            if (!process.waitFor(PROCESS_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                process.destroyForcibly()
-                error("Timed out: ${arguments.joinToString(" ")}")
-            }
-            require(Files.size(log) <= MAX_OUTPUT_BYTES)
-            Result(process.exitValue() == 0, Files.readString(log))
-        } finally {
-            Files.deleteIfExists(log)
-        }
+        val result = NativeProcessRunner.run(arguments, directory, PROCESS_TIMEOUT_SECONDS, environment)
+        check(result.completed) { "Timed out: ${arguments.joinToString(" ")}" }
+        require(result.output.length <= MAX_OUTPUT_BYTES)
+        return Result(result.passed, result.output)
     }
 
     private fun assertMarkers(directory: File, expected: Set<String>) {
@@ -155,7 +138,7 @@ class DotnetMtpCliConformanceTest {
 
     private companion object {
         const val PROCESS_TIMEOUT_SECONDS = 300L
-        const val MAX_OUTPUT_BYTES = 16L * 1024 * 1024
+        const val MAX_OUTPUT_BYTES = 16 * 1024 * 1024
         const val CONFORMANCE_PROPERTY = "affected.cliConformance"
     }
 }

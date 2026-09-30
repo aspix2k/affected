@@ -5,12 +5,9 @@ import com.aspix2k.affected.build.python.PythonProjects
 import com.aspix2k.affected.build.python.pythonCommands
 import org.junit.Assume.assumeTrue
 import java.io.File
-import java.nio.charset.Charset
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
-import java.util.concurrent.TimeUnit
-import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -78,14 +75,11 @@ class CliUnittestWindowsJunctionConformanceTest {
         assumeTrue(System.getProperty("os.name").startsWith("Windows"))
         assumeTrue(System.getProperty("affected.cliConformance") == "true")
         val source = CliConformanceRepository.configured.fixture("unittest")
-        val root = createTempDirectory("affected-unittest-junction").toFile()
-        val outside = createTempDirectory("affected-unittest-outside").toFile()
-        try {
+        OwnedSandbox.use("affected-unittest-junction") { sandbox ->
+            val root = sandbox.directory("root")
+            val outside = sandbox.directory("outside")
             assertTrue(source.copyRecursively(root, overwrite = true), "Could not copy $source")
             block(root, outside)
-        } finally {
-            assertTrue(root.deleteRecursively(), "Could not delete $root")
-            assertTrue(outside.deleteRecursively(), "Could not delete $outside")
         }
     }
 
@@ -136,58 +130,10 @@ class CliUnittestWindowsJunctionConformanceTest {
 
     private fun runProcess(directory: File, arguments: List<String>, timeoutSeconds: Long): Execution {
         check(directory.isDirectory && directory.canRead()) { "Process directory is not readable: $directory" }
-        val output = Files.createTempFile("affected-unittest-process", ".log").toFile()
-        try {
-            val process = ProcessBuilder(arguments)
-                .directory(directory)
-                .redirectErrorStream(true)
-                .redirectOutput(output)
-                .start()
-            val completed = try {
-                process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
-            } catch (failure: InterruptedException) {
-                val terminated = terminate(process)
-                Thread.currentThread().interrupt()
-                if (!terminated) {
-                    throw IllegalStateException(
-                        "Could not terminate after interruption: ${arguments.joinToString(" ")}",
-                        failure,
-                    )
-                }
-                throw failure
-            }
-            if (!completed) {
-                assertTrue(terminate(process), "Could not terminate: ${arguments.joinToString(" ")}")
-            }
-            val text = readBounded(output)
-            assertTrue(completed, "Timed out: ${arguments.joinToString(" ")}\n$text")
-            return Execution(process.exitValue(), text)
-        } finally {
-            assertTrue(output.delete(), "Could not delete $output")
-        }
-    }
-
-    private fun terminate(process: Process): Boolean {
-        process.destroyForcibly()
-        var interrupted = false
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TERMINATION_TIMEOUT_SECONDS)
-        while (process.isAlive && System.nanoTime() < deadline) {
-            val remaining = deadline - System.nanoTime()
-            if (remaining <= 0) break
-            try {
-                process.waitFor(remaining, TimeUnit.NANOSECONDS)
-            } catch (_: InterruptedException) {
-                interrupted = true
-            }
-        }
-        if (interrupted) Thread.currentThread().interrupt()
-        return !process.isAlive
-    }
-
-    private fun readBounded(output: File): String {
-        val bytes = output.inputStream().use { stream -> stream.readNBytes(MAX_OUTPUT_BYTES + 1) }
-        assertTrue(bytes.size <= MAX_OUTPUT_BYTES, "Process output exceeded $MAX_OUTPUT_BYTES bytes")
-        return String(bytes, Charset.defaultCharset())
+        val result = NativeProcessRunner.run(arguments, directory, timeoutSeconds)
+        assertTrue(result.completed, "Timed out: ${arguments.joinToString(" ")}\n${result.output}")
+        assertTrue(result.output.length <= MAX_OUTPUT_BYTES, "Process output exceeded $MAX_OUTPUT_BYTES bytes")
+        return Execution(checkNotNull(result.exitCode), result.output)
     }
 
     private fun outsideTest(sentinel: File): String =
@@ -207,7 +153,6 @@ class CliUnittestWindowsJunctionConformanceTest {
     private companion object {
         const val COMMAND_TIMEOUT_SECONDS = 180L
         const val JUNCTION_TIMEOUT_SECONDS = 10L
-        const val TERMINATION_TIMEOUT_SECONDS = 10L
         const val MAX_OUTPUT_BYTES = 64 * 1024
     }
 }

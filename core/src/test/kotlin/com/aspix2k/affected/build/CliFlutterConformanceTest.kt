@@ -5,8 +5,6 @@ import com.aspix2k.affected.build.dart.flutterProjectRoot
 import com.aspix2k.affected.build.dart.flutterRootModule
 import org.junit.Assume.assumeTrue
 import java.io.File
-import java.util.concurrent.TimeUnit
-import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -42,13 +40,10 @@ class CliFlutterConformanceTest {
         assumeTrue(System.getProperty("affected.cliConformance") == "true")
         val source = File(fixtureRoot(), name)
         assertTrue(source.isDirectory, "Missing CLI conformance fixture: $source")
-        val target = createTempDirectory("affected-cli-$name").toFile()
-        try {
-            val destination = if (nested) File(target, "app") else target
+        OwnedSandbox.use("affected-cli-$name") { sandbox ->
+            val destination = if (nested) File(sandbox.root, "app") else sandbox.root
             assertTrue(source.copyRecursively(destination, overwrite = true), "Could not copy $source")
-            block(target)
-        } finally {
-            target.deleteRecursively()
+            block(sandbox.root)
         }
     }
 
@@ -58,24 +53,8 @@ class CliFlutterConformanceTest {
         execute(directory, listOf("flutter", "pub", "get"))
     }
 
-    private fun execute(directory: File, arguments: List<String>): String {
-        val output = File.createTempFile("affected-cli-output", ".log")
-        try {
-            val process = ProcessBuilder(arguments)
-                .directory(directory)
-                .redirectErrorStream(true)
-                .redirectOutput(output)
-                .start()
-            val completed = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            if (!completed) process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)
-            val text = output.readText()
-            assertTrue(completed, "Timed out: ${arguments.joinToString(" ")}\n$text")
-            assertTrue(completed && process.exitValue() == 0, "Failed: ${arguments.joinToString(" ")}\n$text")
-            return text
-        } finally {
-            output.delete()
-        }
-    }
+    private fun execute(directory: File, arguments: List<String>): String =
+        NativeProcessRunner.execute(arguments, directory, COMMAND_TIMEOUT_SECONDS)
 
     private companion object {
         const val COMMAND_TIMEOUT_SECONDS = 180L

@@ -82,7 +82,7 @@ class AffectedMixedRunNativeTest : BasePlatformTestCase() {
         val repository = CliConformanceRepository.configured
         val root = File(checkNotNull(project.basePath), name)
         val iosRoot = File(root, "iosApp")
-        root.deleteRecursively()
+        OwnedSandbox.remove(root)
         assertTrue(repository.fixture("mixed-gradle-xcode").copyRecursively(root, overwrite = true))
         assertTrue(repository.fixture("xcode").copyRecursively(iosRoot, overwrite = true))
         if (slowXcode) installSlowXcodeTest(iosRoot)
@@ -153,7 +153,7 @@ class AffectedMixedRunNativeTest : BasePlatformTestCase() {
         File(fixture.iosRoot, "release-xcode.marker").writeText("release\n")
         AffectedRunSessions.getInstance(project).stopOwned()
         fixture.presentation.dispose()
-        assertTrue(!fixture.root.exists() || fixture.root.deleteRecursively())
+        OwnedSandbox.remove(fixture.root)
         assertFalse(fixture.root.exists())
     }
 

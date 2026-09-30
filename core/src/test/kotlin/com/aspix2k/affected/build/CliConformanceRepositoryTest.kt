@@ -3,11 +3,9 @@ package com.aspix2k.affected.build
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.nio.file.Files
-import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertTrue
 
 class CliConformanceRepositoryTest {
 
@@ -20,29 +18,30 @@ class CliConformanceRepositoryTest {
 
     @Test
     fun `configured repository ignores mutable user directory for fixtures and adapters`() {
-        val unrelated = createTempDirectory("affected-cli-unrelated").toFile()
-        val original = System.getProperty("user.dir")
-        try {
-            System.setProperty("user.dir", unrelated.resolve("missing").path)
-            val repository = CliConformanceRepository.configured
-            val root = configuredRoot()
+        OwnedSandbox.use("affected-cli-unrelated") { sandbox ->
+            val unrelated = sandbox.root
+            val original = System.getProperty("user.dir")
+            try {
+                System.setProperty("user.dir", unrelated.resolve("missing").path)
+                val repository = CliConformanceRepository.configured
+                val root = configuredRoot()
 
-            assertEquals(root.resolve("conformance/cli-fixtures/go").canonicalFile, repository.fixture("go"))
-            assertEquals(root.resolve("conformance/cli-fixtures/r").canonicalFile, repository.fixture("r"))
-            assertEquals(
-                root.resolve("core/src/main/python/affected_unittest.py").canonicalFile,
-                repository.repositoryFile("core/src/main/python/affected_unittest.py"),
-            )
-            assertFailsWith<IllegalStateException> { error("injected setup failure") }
-            assertEquals(
-                root.resolve("core/src/main/python/affected_unittest.py").canonicalFile,
-                repository.repositoryFile("core/src/main/python/affected_unittest.py"),
-            )
-            assertEquals(root.resolve("conformance/cli-fixtures/r").canonicalFile, repository.fixture("r"))
-            assertEquals(root.resolve("conformance/cli-fixtures/go").canonicalFile, repository.fixture("go"))
-        } finally {
-            System.setProperty("user.dir", original)
-            assertTrue(unrelated.deleteRecursively(), "Could not delete $unrelated")
+                assertEquals(root.resolve("conformance/cli-fixtures/go").canonicalFile, repository.fixture("go"))
+                assertEquals(root.resolve("conformance/cli-fixtures/r").canonicalFile, repository.fixture("r"))
+                assertEquals(
+                    root.resolve("core/src/main/python/affected_unittest.py").canonicalFile,
+                    repository.repositoryFile("core/src/main/python/affected_unittest.py"),
+                )
+                assertFailsWith<IllegalStateException> { error("injected setup failure") }
+                assertEquals(
+                    root.resolve("core/src/main/python/affected_unittest.py").canonicalFile,
+                    repository.repositoryFile("core/src/main/python/affected_unittest.py"),
+                )
+                assertEquals(root.resolve("conformance/cli-fixtures/r").canonicalFile, repository.fixture("r"))
+                assertEquals(root.resolve("conformance/cli-fixtures/go").canonicalFile, repository.fixture("go"))
+            } finally {
+                System.setProperty("user.dir", original)
+            }
         }
     }
 
@@ -68,65 +67,53 @@ class CliConformanceRepositoryTest {
 
     @Test
     fun `fixture resolution rejects a missing directory`() {
-        val root = createTempDirectory("affected-cli-repository").toFile()
-        try {
+        OwnedSandbox.use("affected-cli-repository") { sandbox ->
             assertFailsWith<IllegalStateException> {
-                CliConformanceRepository(root).fixture("missing")
+                CliConformanceRepository(sandbox.root).fixture("missing")
             }
-        } finally {
-            assertTrue(root.deleteRecursively(), "Could not delete $root")
         }
     }
 
     @Test
     fun `fixture resolution rejects a directory symlink`() {
-        val root = createTempDirectory("affected-cli-repository").toFile()
-        val outside = createTempDirectory("affected-cli-outside").toFile()
-        try {
-            val fixtures = root.resolve("conformance/cli-fixtures").apply { mkdirs() }
-            val link = fixtures.resolve("linked").toPath()
-            assumeTrue(runCatching { Files.createSymbolicLink(link, outside.toPath()) }.isSuccess)
+        OwnedSandbox.use("affected-cli-repository") { sandbox ->
+            OwnedSandbox.use("affected-cli-outside") { outside ->
+                val fixtures = sandbox.root.resolve("conformance/cli-fixtures").apply { mkdirs() }
+                val link = fixtures.resolve("linked").toPath()
+                assumeTrue(runCatching { Files.createSymbolicLink(link, outside.root.toPath()) }.isSuccess)
 
-            assertFailsWith<IllegalArgumentException> {
-                CliConformanceRepository(root).fixture("linked")
+                assertFailsWith<IllegalArgumentException> {
+                    CliConformanceRepository(sandbox.root).fixture("linked")
+                }
             }
-        } finally {
-            assertTrue(root.deleteRecursively(), "Could not delete $root")
-            assertTrue(outside.deleteRecursively(), "Could not delete $outside")
         }
     }
 
     @Test
     fun `repository resolution rejects a symlinked root`() {
-        val parent = createTempDirectory("affected-cli-root-parent").toFile()
-        val outside = createTempDirectory("affected-cli-root-outside").toFile()
-        try {
-            val linkedRoot = parent.resolve("repository").toPath()
-            assumeTrue(runCatching { Files.createSymbolicLink(linkedRoot, outside.toPath()) }.isSuccess)
+        OwnedSandbox.use("affected-cli-root-parent") { parent ->
+            OwnedSandbox.use("affected-cli-root-outside") { outside ->
+                val linkedRoot = parent.root.resolve("repository").toPath()
+                assumeTrue(runCatching { Files.createSymbolicLink(linkedRoot, outside.root.toPath()) }.isSuccess)
 
-            assertFailsWith<IllegalArgumentException> {
-                CliConformanceRepository(linkedRoot.toFile())
+                assertFailsWith<IllegalArgumentException> {
+                    CliConformanceRepository(linkedRoot.toFile())
+                }
             }
-        } finally {
-            assertTrue(parent.deleteRecursively(), "Could not delete $parent")
-            assertTrue(outside.deleteRecursively(), "Could not delete $outside")
         }
     }
 
     @Test
     fun `repository file resolution rejects an intermediate symlink`() {
-        val root = createTempDirectory("affected-cli-repository").toFile()
-        try {
-            val real = root.resolve("real").apply { mkdirs() }
+        OwnedSandbox.use("affected-cli-repository") { sandbox ->
+            val real = sandbox.root.resolve("real").apply { mkdirs() }
             real.resolve("adapter.py").writeText("pass\n")
-            val linked = root.resolve("linked").toPath()
+            val linked = sandbox.root.resolve("linked").toPath()
             assumeTrue(runCatching { Files.createSymbolicLink(linked, real.toPath()) }.isSuccess)
 
             assertFailsWith<IllegalArgumentException> {
-                CliConformanceRepository(root).repositoryFile("linked/adapter.py")
+                CliConformanceRepository(sandbox.root).repositoryFile("linked/adapter.py")
             }
-        } finally {
-            assertTrue(root.deleteRecursively(), "Could not delete $root")
         }
     }
 

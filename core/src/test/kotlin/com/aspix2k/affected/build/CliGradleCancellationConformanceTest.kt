@@ -71,7 +71,7 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
         var owned: Deferred<Boolean>? = null
         var unrelated: Deferred<Boolean>? = null
         try {
-            target.deleteRecursively()
+            OwnedSandbox.remove(target)
             assertTrue(source.copyRecursively(ownedRoot, overwrite = true))
             assertTrue(source.copyRecursively(unrelatedRoot, overwrite = true))
             installWrapper(ownedRoot)
@@ -101,7 +101,7 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
             withTimeoutOrNull(PROCESS_TIMEOUT_MILLIS) { owned?.await() }
             withTimeoutOrNull(PROCESS_TIMEOUT_MILLIS) { unrelated?.await() }
             disposeRunContents(existingEditors)
-            target.deleteRecursively()
+            OwnedSandbox.remove(target)
         }
     }
 
@@ -117,7 +117,7 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
         val stopped = AtomicBoolean()
         val ownedTask = AtomicReference<ExternalSystemTaskId?>()
         try {
-            target.deleteRecursively()
+            OwnedSandbox.remove(target)
             assertTrue(source.copyRecursively(root, overwrite = true))
             installWrapper(root)
             linkGradleProject(root)
@@ -155,7 +155,7 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
             File(root, "markers/release.marker").runCatching { parentFile.mkdirs(); writeText("release") }
             sessions.stopOwned()
             disposeRunContents(existingEditors)
-            target.deleteRecursively()
+            OwnedSandbox.remove(target)
         }
     }
 

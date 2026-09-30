@@ -21,15 +21,13 @@ import java.io.File
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 import java.nio.file.Files
-import java.util.concurrent.TimeUnit
 import javax.xml.parsers.DocumentBuilderFactory
-import kotlin.io.path.createTempDirectory
 
 class CliMixedNodeDartConformanceTest : BasePlatformTestCase() {
 
     private var registeredPoint = false
     private var previousStopAfterFirstFailure = false
-    private val temporaryRoots = mutableListOf<File>()
+    private val sandboxes = mutableListOf<OwnedSandbox>()
 
     override fun setUp() {
         super.setUp()
@@ -51,12 +49,9 @@ class CliMixedNodeDartConformanceTest : BasePlatformTestCase() {
 
     override fun tearDown() {
         try {
-            temporaryRoots.toList().forEach { root ->
-                if (root.exists()) {
-                    check(root.deleteRecursively())
-                }
-            }
-            temporaryRoots.clear()
+            val owned = sandboxes.toList()
+            sandboxes.clear()
+            OwnedSandbox.closeAll(owned)
             deleteCopiedRoots()
             AffectedSettings.getInstance().stopAfterFirstFailure = previousStopAfterFirstFailure
             super.tearDown()
@@ -162,8 +157,9 @@ class CliMixedNodeDartConformanceTest : BasePlatformTestCase() {
 
     private fun mixedRepo(): File {
         val source = CliConformanceRepository.configured.fixture("mixed-node-dart")
-        val root = createTempDirectory("affected-mixed-node-dart").toFile()
-        temporaryRoots += root
+        val sandbox = OwnedSandbox.open("affected-mixed-node-dart")
+        sandboxes += sandbox
+        val root = sandbox.root
         source.listFiles().orEmpty().forEach { child ->
             check(child.copyRecursively(File(root, child.name), overwrite = true))
         }
@@ -175,21 +171,7 @@ class CliMixedNodeDartConformanceTest : BasePlatformTestCase() {
     }
 
     private fun execute(directory: File, arguments: List<String>) {
-        val output = File.createTempFile("affected-mixed-node-dart", ".log")
-        try {
-            val process = ProcessBuilder(arguments)
-                .directory(directory)
-                .redirectErrorStream(true)
-                .redirectOutput(output)
-                .start()
-            val completed = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            if (!completed) process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)
-            val text = output.readText()
-            assertTrue("Timed out: ${arguments.joinToString(" ")}\n$text", completed)
-            assertEquals("Failed: ${arguments.joinToString(" ")}\n$text", 0, process.exitValue())
-        } finally {
-            output.delete()
-        }
+        NativeProcessRunner.execute(arguments, directory, COMMAND_TIMEOUT_SECONDS)
     }
 
     private fun deleteCopiedRoots() {
