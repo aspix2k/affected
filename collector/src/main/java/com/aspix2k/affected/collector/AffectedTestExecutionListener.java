@@ -1,5 +1,6 @@
 package com.aspix2k.affected.collector;
 
+import org.junit.platform.engine.TestExecutionResult;
 import org.junit.platform.engine.TestSource;
 import org.junit.platform.engine.support.descriptor.ClassSource;
 import org.junit.platform.engine.support.descriptor.MethodSource;
@@ -7,7 +8,10 @@ import org.junit.platform.launcher.TestExecutionListener;
 import org.junit.platform.launcher.TestIdentifier;
 import org.junit.platform.launcher.TestPlan;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -18,6 +22,7 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
     private final Set<String> completedClasses = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private final Set<String> expectedClasses = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private final Map<String, String> classesByIdentifier = new ConcurrentHashMap<String, String>();
+    private final Map<String, Set<String>> enclosingClasses = new ConcurrentHashMap<String, Set<String>>();
     private final AtomicBoolean unsupported = new AtomicBoolean();
     private volatile CollectorOutput output;
 
@@ -65,8 +70,12 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
     @Override
     public void executionFinished(
         TestIdentifier testIdentifier,
-        org.junit.platform.engine.TestExecutionResult testExecutionResult
+        TestExecutionResult testExecutionResult
     ) {
+        if (testExecutionResult != null
+            && testExecutionResult.getStatus() == TestExecutionResult.Status.ABORTED) {
+            unsupported.set(true);
+        }
         String stableClass = classesByIdentifier.get(testIdentifier.getUniqueId());
         if (stableClass == null) stableClass = directClass(testIdentifier);
         if (stableClass != null) AffectedCollectorAgent.endExecution(testIdentifier.getUniqueId());
@@ -74,21 +83,15 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
         if (!source.isPresent() || !(source.get() instanceof ClassSource)) return;
         String testClass = ((ClassSource) source.get()).getClassName();
         if (output == null) return;
-        if (!completedClasses.add(testClass)) return;
-        try {
-            java.util.List<AffectedCollectorAgent.Dependency> dependencies =
-                AffectedCollectorAgent.dependencies(testClass);
-            output.writeMap(testClass, dependencies);
-        } catch (Exception failure) {
-            AffectedCollectorAgent.markUnsupported();
-            unsupported.set(true);
-        }
+        completedClasses.add(testClass);
+        writeClassMap(testClass);
     }
 
     @Override
     public void testPlanExecutionFinished(TestPlan testPlan) {
         CollectorOutput current = output;
         if (current == null) return;
+        for (String testClass : completedClasses) writeClassMap(testClass);
         boolean supported = !unsupported.get()
             && AffectedCollectorAgent.isSupported()
             && !completedClasses.isEmpty();
@@ -99,6 +102,42 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
             current.writeCompletion(supported, completedClasses);
         } catch (Exception failure) {
             AffectedCollectorAgent.markUnsupported();
+        }
+    }
+
+    private static Set<String> enclosingClasses(TestPlan testPlan, TestIdentifier identifier, String testClass) {
+        Set<String> enclosing = new LinkedHashSet<String>();
+        if (testPlan == null) return enclosing;
+        Optional<TestIdentifier> parent = testPlan.getParent(identifier);
+        while (parent.isPresent()) {
+            String parentClass = directClass(parent.get());
+            if (parentClass != null && !parentClass.equals(testClass)) enclosing.add(parentClass);
+            parent = testPlan.getParent(parent.get());
+        }
+        return enclosing;
+    }
+
+    private void writeClassMap(String testClass) {
+        CollectorOutput current = output;
+        if (current == null) return;
+        try {
+            Map<String, AffectedCollectorAgent.Dependency> merged =
+                new LinkedHashMap<String, AffectedCollectorAgent.Dependency>();
+            addDependencies(merged, testClass);
+            Set<String> enclosing = enclosingClasses.get(testClass);
+            if (enclosing != null) {
+                for (String enclosingClass : enclosing) addDependencies(merged, enclosingClass);
+            }
+            current.writeMap(testClass, new ArrayList<AffectedCollectorAgent.Dependency>(merged.values()));
+        } catch (Exception failure) {
+            AffectedCollectorAgent.markUnsupported();
+            unsupported.set(true);
+        }
+    }
+
+    private static void addDependencies(Map<String, AffectedCollectorAgent.Dependency> merged, String testClass) {
+        for (AffectedCollectorAgent.Dependency dependency : AffectedCollectorAgent.dependencies(testClass)) {
+            merged.put(dependency.getClassName() + "\n" + dependency.getCodeSource(), dependency);
         }
     }
 
@@ -114,6 +153,11 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
     }
 
     private void rememberClass(TestPlan testPlan, TestIdentifier identifier) {
+        Optional<TestSource> source = identifier.getSource();
+        if (source.isPresent() && source.get() instanceof ClassSource) {
+            String ownClass = ((ClassSource) source.get()).getClassName();
+            enclosingClasses.put(ownClass, enclosingClasses(testPlan, identifier, ownClass));
+        }
         String testClass = stableClass(testPlan, identifier);
         if (testClass != null) classesByIdentifier.put(identifier.getUniqueId(), testClass);
     }

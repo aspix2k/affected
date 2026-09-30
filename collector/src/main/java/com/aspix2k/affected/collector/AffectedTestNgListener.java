@@ -18,7 +18,6 @@ public final class AffectedTestNgListener implements IInvokedMethodListener, ICl
     static final String ENABLED_PROPERTY = "affected.collector.testng";
 
     private final Set<String> seen = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
-    private final Set<String> written = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private final AtomicBoolean unsupported = new AtomicBoolean();
     private final AtomicBoolean enabled = new AtomicBoolean();
     private volatile CollectorOutput output;
@@ -94,7 +93,7 @@ public final class AffectedTestNgListener implements IInvokedMethodListener, ICl
     }
 
     private void writeClassMap(String testClass) {
-        if (testClass == null || output == null || !written.add(testClass)) return;
+        if (testClass == null || output == null) return;
         try {
             output.writeMap(testClass, AffectedCollectorAgent.dependencies(testClass));
         } catch (Throwable failure) {

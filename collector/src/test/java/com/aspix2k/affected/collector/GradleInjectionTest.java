@@ -333,6 +333,43 @@ public class GradleInjectionTest {
     }
 
     @Test(timeout = COMPLETE_MAP_SCENARIO_TIMEOUT_MILLIS)
+    public void junit4IgnoredMethodKeepsTheExpectedManifestSupported() throws Exception {
+        Path project = temporary.newFolder("junit4-skipped-project").toPath();
+        Path output = temporary.newFolder("junit4-skipped-output").toPath();
+        write(project.resolve("settings.gradle"), "rootProject.name = 'junit4-skipped'\n");
+        write(
+            project.resolve("build.gradle"),
+            "plugins { id 'java' }\n" +
+                "repositories { mavenCentral() }\n" +
+                "dependencies { testImplementation 'junit:junit:4.13.2' }\n" +
+                "tasks.register('testAndroidHostTest', Test) {\n" +
+                "    testClassesDirs = sourceSets.test.output.classesDirs\n" +
+                "    classpath = sourceSets.test.runtimeClasspath\n" +
+                "    useJUnit()\n" +
+                "}\n"
+        );
+        write(
+            project.resolve("src/main/java/fixture/Dep.java"),
+            "package fixture; public final class Dep { public static int value() { return 1; } }\n"
+        );
+        write(
+            project.resolve("src/test/java/fixture/SkippedHostTest.java"),
+            "package fixture; import org.junit.Ignore; import org.junit.Test; import static org.junit.Assert.*; " +
+                "public final class SkippedHostTest { " +
+                "@Test public void runs() { assertEquals(1, Dep.value()); } " +
+                "@Ignore @Test public void skipped() { fail(); } }\n"
+        );
+
+        BuildResult result = run(project, output, "testAndroidHostTest", false);
+
+        Path task;
+        try (Stream<Path> files = Files.list(output)) {
+            task = files.findFirst().orElseThrow(AssertionError::new);
+        }
+        assertTrue(result.getOutput(), read(task.resolve("expected.manifest")).contains("supported=true"));
+    }
+
+    @Test(timeout = COMPLETE_MAP_SCENARIO_TIMEOUT_MILLIS)
     public void testNgHostTestsSelectExactDependentClasses() throws Exception {
         Path project = temporary.newFolder("testng-host-project").toPath();
         Path baselineOutput = temporary.newFolder("testng-host-baseline-output").toPath();

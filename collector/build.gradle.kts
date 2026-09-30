@@ -53,7 +53,7 @@ dependencies {
     add(maven.compileOnlyConfigurationName, "org.codehaus.plexus:plexus-utils:3.6.1")
 
     testImplementation("junit:junit:4.13.2")
-    testRuntimeOnly("org.testng:testng:$testngVersion")
+    testImplementation("org.testng:testng:$testngVersion")
     testImplementation(gradleTestKit())
     testImplementation("org.apache.maven:maven-core:$mavenLatestVersion")
     testImplementation("org.apache.maven:maven-model:$mavenLatestVersion")
