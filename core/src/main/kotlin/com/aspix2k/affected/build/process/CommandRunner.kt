@@ -17,6 +17,7 @@ import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.CancellationException
@@ -35,6 +36,8 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.resume
 
 object CommandRunner {
+
+    private val LOG = logger<CommandRunner>()
 
     internal fun refuseInvalidExecutionRoot(project: Project, workingDirectory: String, title: String) {
         runBatch(project, workingDirectory, emptyList(), title)
@@ -95,6 +98,7 @@ object CommandRunner {
         title: String,
         unresolvedMessage: String? = null,
         continueAfterFailure: Boolean = planContinuesAfterFailure(),
+        show: (Project, ProcessHandler, String, String, AffectedRunPresentation?) -> Unit = ::showHandler,
     ): Boolean {
         if (project.isDisposed) return false
 
@@ -146,7 +150,7 @@ object CommandRunner {
                         complete(false)
                         return@invokeLater
                     }
-                    showHandler(project, handler, title, workingDirectory, presentation)
+                    showOrFail(show, project, handler, title, workingDirectory, presentation) { complete(false) }
                 }
             }
         } catch (cancelled: CancellationException) {
@@ -160,6 +164,25 @@ object CommandRunner {
             throw cancelled
         } finally {
             if (registered) sessions.unregister(handler as AffectedOwnedSession)
+        }
+    }
+
+    private fun showOrFail(
+        show: (Project, ProcessHandler, String, String, AffectedRunPresentation?) -> Unit,
+        project: Project,
+        handler: ProcessHandler,
+        title: String,
+        workingDirectory: String,
+        presentation: AffectedRunPresentation?,
+        onFailure: () -> Unit,
+    ) {
+        try {
+            show(project, handler, title, workingDirectory, presentation)
+        } catch (error: Exception) {
+            LOG.warn("Affected could not show the run for $title", error)
+            if (!handler.isProcessTerminated) handler.destroyProcess()
+            handler.startNotify()
+            onFailure()
         }
     }
 

@@ -14,6 +14,7 @@ import com.intellij.execution.process.ProcessHandler
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -52,6 +53,30 @@ class CommandRunnerPresentationTest : BasePlatformTestCase() {
         assertTrue(failure, passed)
         assertEquals(listOf("Xcode · ${java.io.File(root).name}"), view.labels)
         assertEquals(1, view.publications)
+    }
+
+    fun testFailureWhileShowingTheRunCompletesAsFailedAndReleasesTheSession() = runBlocking {
+        val sessions = AffectedRunSessions.getInstance(project)
+        val root = checkNotNull(project.basePath)
+        Files.createDirectories(Path.of(root))
+        var shown: ProcessHandler? = null
+
+        val passed = withTimeout(10_000) {
+            CommandRunner.runBatchAndWait(
+                project,
+                root,
+                listOf(CliCommand("xcodebuild build", listOf(java(), "-version"))),
+                "Affected Xcode",
+                show = { _, handler, _, _, _ ->
+                    shown = handler
+                    error("console failed")
+                },
+            )
+        }
+
+        assertFalse(passed)
+        assertTrue(checkNotNull(shown).isProcessTerminated)
+        assertEquals(0, sessions.activeCount())
     }
 
     private fun claim() = AffectedRunClaim(

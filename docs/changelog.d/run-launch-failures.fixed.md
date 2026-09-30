@@ -1,0 +1,1 @@
+- A run that fails while opening its console or starting its build task now ends as failed instead of staying in the running state, and cancelling a Gradle run that never reports its end no longer blocks the next run.

@@ -60,6 +60,56 @@ class SequentialProcessCancellationTest : BasePlatformTestCase() {
         }
     }
 
+    fun testStopDuringCleanupBetweenStepsPreventsTheNextStepAndFinishesStopped() {
+        val directory = createTempDirectory("sequential-stop-between-steps")
+        val later = directory.resolve("later")
+        val firstTemporary = Files.createTempDirectory("affected-handler-between-first-")
+        val laterTemporary = Files.createTempDirectory("affected-handler-between-later-")
+        val cleanupStarted = CountDownLatch(1)
+        val releaseCleanup = CountDownLatch(1)
+        val handler = SequentialProcessHandler(
+            directory.toFile(),
+            listOf(
+                CliCommand(
+                    "first",
+                    listOf(java(), "-version"),
+                    ownedTemporaryDirectories = listOf(firstTemporary),
+                ),
+                CliCommand(
+                    "later",
+                    markerCommand(later),
+                    ownedTemporaryDirectories = listOf(laterTemporary),
+                ),
+            ),
+            ownedTemporaryDirectoryCleanup = {
+                if (it == firstTemporary) {
+                    cleanupStarted.countDown()
+                    releaseCleanup.await()
+                }
+                it.toFile().deleteRecursively()
+            },
+        )
+
+        try {
+            handler.startNotify()
+            assertTrue(cleanupStarted.await(5, TimeUnit.SECONDS))
+            assertTrue(handler.stopIfActive())
+
+            releaseCleanup.countDown()
+            assertTrue(handler.waitFor(5_000))
+            assertEquals(1, handler.exitCode)
+            assertFalse(Files.exists(later), "The step after Stop was started")
+            assertFalse(Files.exists(firstTemporary))
+            assertFalse(Files.exists(laterTemporary))
+        } finally {
+            releaseCleanup.countDown()
+            if (!handler.isProcessTerminated) handler.destroyProcess()
+            firstTemporary.toFile().deleteRecursively()
+            laterTemporary.toFile().deleteRecursively()
+            directory.toFile().deleteRecursively()
+        }
+    }
+
     fun testStopIsRejectedAfterProcessTerminalDecisionWhileCleanupRemainsOwned() {
         val directory = createTempDirectory("sequential-terminal-decision")
         val marker = directory.resolve("started")

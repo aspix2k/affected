@@ -3,9 +3,11 @@ package com.aspix2k.affected
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskId
 import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskNotificationListener
 import com.intellij.openapi.externalSystem.task.TaskCallback
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import com.intellij.util.concurrency.AppExecutorUtil
 import kotlinx.coroutines.CancellationException
@@ -17,12 +19,14 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 interface AffectedOwnedSession {
     fun isActive(): Boolean
@@ -347,6 +351,14 @@ internal class OwnedExternalTaskExecution(
         if (complete) result.complete(false)
     }
 
+    fun abandon() {
+        synchronized(lock) {
+            cancelRequested = true
+            phase = Phase.TERMINATED
+        }
+        result.complete(false)
+    }
+
     suspend fun awaitResult(): Boolean = result.await()
 
     override fun isActive(): Boolean = synchronized(lock) {
@@ -493,13 +505,15 @@ internal class OwnedExternalTaskExecution(
 internal suspend fun runOwnedExternalTask(
     sessions: AffectedRunSessions,
     execution: OwnedExternalTaskExecution,
+    cancellationTimeoutMillis: Long = OWNED_EXTERNAL_TASK_CANCELLATION_TIMEOUT_MILLIS,
     launch: (ExternalSystemTaskNotificationListener) -> Unit,
-): Boolean = runPreparedOwnedExternalTask(sessions, execution, prepare = {}, launch)
+): Boolean = runPreparedOwnedExternalTask(sessions, execution, prepare = {}, cancellationTimeoutMillis, launch)
 
 internal suspend fun runPreparedOwnedExternalTask(
     sessions: AffectedRunSessions,
     execution: OwnedExternalTaskExecution,
     prepare: suspend () -> Unit,
+    cancellationTimeoutMillis: Long = OWNED_EXTERNAL_TASK_CANCELLATION_TIMEOUT_MILLIS,
     launch: (ExternalSystemTaskNotificationListener) -> Unit,
 ): Boolean {
     if (!sessions.register(execution)) return false
@@ -510,7 +524,12 @@ internal suspend fun runPreparedOwnedExternalTask(
         return awaitOwnedExternalTask(execution, launch)
     } catch (cancelled: CancellationException) {
         execution.stopIfActive()
-        withContext(NonCancellable) { execution.awaitResult() }
+        withContext(NonCancellable) {
+            if (withTimeoutOrNull(cancellationTimeoutMillis) { execution.awaitResult() } == null) {
+                LOG.warn("Owned external task did not terminate after cancellation; releasing its run")
+                execution.abandon()
+            }
+        }
         throw cancelled
     } finally {
         sessions.unregister(execution)
@@ -524,9 +543,25 @@ private suspend fun awaitOwnedExternalTask(
     continuation.invokeOnCancellation { execution.stopIfActive() }
     try {
         AppExecutorUtil.getAppExecutorService().execute {
-            runCatching { execution.launch(launch) }
-            val passed = runBlocking { execution.awaitResult() }
-            if (continuation.isActive) continuation.resume(passed)
+            try {
+                try {
+                    execution.launch(launch)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (cancelled: ProcessCanceledException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    LOG.warn("Owned external task launch failed", error)
+                }
+                val passed = runBlocking { execution.awaitResult() }
+                if (continuation.isActive) continuation.resume(passed)
+            } catch (cancelled: CancellationException) {
+                if (continuation.isActive) continuation.resumeWithException(cancelled)
+            } catch (cancelled: ProcessCanceledException) {
+                if (continuation.isActive) continuation.resumeWithException(cancelled)
+            } finally {
+                if (continuation.isActive) continuation.resume(false)
+            }
         }
     } catch (_: RuntimeException) {
         execution.launchFailed()
@@ -593,6 +628,9 @@ private fun scheduleGradleCancellation(delayMillis: Long, action: () -> Unit): B
     AppExecutorUtil.getAppScheduledExecutorService().schedule(action, delayMillis, TimeUnit.MILLISECONDS)
 }.isSuccess
 
+private val LOG = logger<AffectedRunSessions>()
+
+private const val OWNED_EXTERNAL_TASK_CANCELLATION_TIMEOUT_MILLIS = 120_000L
 private const val GRADLE_CANCEL_MAX_ATTEMPTS = 64
 private const val GRADLE_CANCEL_INITIAL_DELAY_MILLIS = 10L
 private const val GRADLE_CANCEL_MAX_DELAY_MILLIS = 1_000L
