@@ -23,11 +23,14 @@ object BuildSystems {
     fun sourceFileNames(project: Project): Set<String> =
         of(project).filterIsInstance<NamedSourceBuildSystem>().flatMapTo(HashSet()) { it.sourceFileNames }
 
-    fun includesAllFileChanges(project: Project): Boolean =
-        of(project).any { it is AllFileChangesBuildSystem }
+    fun includesAllFileChanges(project: Project, systems: List<BuildSystem> = point.extensionList): Boolean =
+        presentAllFileSystems(project, systems).isNotEmpty()
 
-    fun generatedFileChangeRoots(project: Project): List<String> =
-        point.extensionList
-            .filter { it is AllFileChangesBuildSystem && it.includeGeneratedFiles }
+    fun generatedFileChangeRoots(project: Project, systems: List<BuildSystem> = point.extensionList): List<String> =
+        presentAllFileSystems(project, systems)
+            .filter { (it as AllFileChangesBuildSystem).includeGeneratedFiles }
             .flatMap { system -> system.modules(project).map(BuildModule::root) }
+
+    private fun presentAllFileSystems(project: Project, systems: List<BuildSystem>): List<BuildSystem> =
+        systems.filter { it is AllFileChangesBuildSystem && it.isPresent(project) }
 }
