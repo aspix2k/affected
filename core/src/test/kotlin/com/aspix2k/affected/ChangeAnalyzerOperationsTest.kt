@@ -4,6 +4,7 @@ import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -90,6 +91,61 @@ class ChangeAnalyzerOperationsTest {
             analyzer.againstBase(),
             "without a configured or fallback branch there is no comparison",
         )
+    }
+
+    @Test
+    fun `committed files with non-ASCII names are found`() {
+        val directory = repository()
+        run(directory, "git", "checkout", "-q", "-b", "feature")
+        File(directory, "Тест.kt").writeText("fun test() {}\n")
+        File(directory, "日本 語.kt").writeText("fun spaced() {}\n")
+        run(directory, "git", "add", "-A")
+        run(directory, "git", "commit", "-qm", "unicode")
+
+        val names = analyzer(directory).againstBase().map { it.name }.toSet()
+
+        assertEquals(setOf("Тест.kt", "日本 語.kt"), names)
+    }
+
+    @Test
+    fun `non-ASCII modifications are eligible for exact selection`() {
+        val directory = repository()
+        val unicode = File(directory, "Тест.kt").apply { writeText("fun test() {}\n") }
+        run(directory, "git", "add", "-A")
+        run(directory, "git", "commit", "-qm", "unicode")
+        run(directory, "git", "checkout", "-q", "-b", "feature")
+        unicode.appendText("fun more() {}\n")
+
+        assertEquals(setOf(unicode), analyzer(directory).modifiedAgainstBase())
+        assertEquals(setOf(unicode), analyzer(directory).apiTouchedAmong(listOf(unicode)))
+    }
+
+    @Test
+    fun `a failing Git is reported instead of an empty change list`() {
+        val directory = repository()
+        run(directory, "git", "checkout", "-q", "-b", "feature")
+        File(directory, "Committed.kt").writeText("fun committed() {}\n")
+        File(directory, ".git/index").writeText("not an index")
+
+        assertFailsWith<ChangeAnalyzer.GitFailure> { analyzer(directory).againstBase() }
+        assertFailsWith<ChangeAnalyzer.GitFailure> { analyzer(directory).modifiedAgainstBase() }
+        val files = listOf(File(directory, "A.kt"))
+        assertFailsWith<ChangeAnalyzer.GitFailure> { analyzer(directory).apiTouchedAmong(files) }
+    }
+
+    @Test
+    fun `an API change is detected from one diff for many files`() {
+        val directory = repository()
+        val spaced = File(directory, "With Space.kt").apply { writeText("fun old(): Int = 1\n") }
+        run(directory, "git", "add", "-A")
+        run(directory, "git", "commit", "-qm", "spaced")
+        run(directory, "git", "checkout", "-q", "-b", "feature")
+        spaced.writeText("fun old(): Int = 2\n")
+        val renamed = File(directory, "Base.kt").apply { writeText("fun renamed() {}\n") }
+
+        val touched = analyzer(directory).apiTouchedAmong(listOf(spaced, renamed))
+
+        assertEquals(setOf(renamed), touched)
     }
 
     private fun run(directory: File, vararg args: String) {

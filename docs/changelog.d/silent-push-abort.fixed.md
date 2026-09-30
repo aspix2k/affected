@@ -1,0 +1,1 @@
+- Show a notification instead of silently cancelling a push or commit when changes map to no module or the check cannot start.

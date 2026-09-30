@@ -221,12 +221,7 @@ object CommandRunner {
         null
     }
 
-    internal fun capture(process: Process, timeoutSeconds: Long, maxBytes: Int): String? {
-        val termination = ProcessTreeTermination(process.toHandle())
-        return capture(process, termination, timeoutSeconds, maxBytes)
-    }
-
-    private fun capture(
+    internal fun capture(
         process: Process,
         termination: ProcessTermination,
         timeoutSeconds: Long,

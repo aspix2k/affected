@@ -40,18 +40,13 @@ private class AffectedCheckinHandler(private val panel: CheckinProjectPanel) : C
         if (!AffectedSettings.getInstance().runBeforeCommit) return ReturnResult.COMMIT
 
         val project = panel.project
-        val outcome = ProgressManager.getInstance().runProcessWithProgressSynchronously<Verification.Outcome, Nothing>(
-            {
-                runBlockingCancellable {
-                    val prepared = Verification.prepare(project)
-                    Verification.runAndWait(project, prepared)
-                }
-            },
+        val passed = ProgressManager.getInstance().runProcessWithProgressSynchronously<Boolean, Nothing>(
+            { runBlockingCancellable { verifyAndReport(project) } },
             AffectedBundle.message("progress.title"),
             true,
             project,
         )
 
-        return if (outcome.passed) ReturnResult.COMMIT else ReturnResult.CANCEL
+        return if (passed) ReturnResult.COMMIT else ReturnResult.CANCEL
     }
 }

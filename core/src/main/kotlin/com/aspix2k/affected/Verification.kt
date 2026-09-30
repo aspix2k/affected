@@ -14,12 +14,16 @@ import java.io.File
 
 object Verification {
 
-    data class Outcome(val plan: Plan, val passed: Boolean)
+    enum class Blocker { UNRESOLVED_CHANGES, NOT_STARTED }
+
+    data class Outcome(val plan: Plan, val passed: Boolean, val blocker: Blocker? = null)
 
     class Prepared internal constructor(
         val plan: Plan,
         internal val changes: BuildChanges,
-    )
+    ) {
+        val changedFiles: Int get() = changes.files.size
+    }
 
     data class PreparedPlans(
         val testsOnly: Prepared,
@@ -39,15 +43,6 @@ object Verification {
                 .select(AffectedSettings.getInstance().checkConsumers)
         }
 
-    suspend fun plan(project: Project): Plan {
-        return prepare(project).plan
-    }
-
-    suspend fun plan(project: Project, changes: ProjectChanges.Result): Plan = withContext(Dispatchers.Default) {
-        val graph = ModuleGraph.create(project)
-        verificationPlan(graph, changes, AffectedSettings.getInstance().checkConsumers)
-    }
-
     internal fun prepare(
         graph: ModuleGraph,
         changes: ProjectChanges.Result,
@@ -61,18 +56,11 @@ object Verification {
         )
     }
 
-    suspend fun runAndWait(project: Project, plan: Plan): Outcome {
-        return runAndWait(
-            project,
-            Prepared(plan, BuildChanges(emptyList(), emptySet(), comparedToBase = false)),
-        )
-    }
-
     suspend fun runAndWait(project: Project, prepared: Prepared): Outcome {
         val plan = prepared.plan
-        if (plan.isEmpty) return Outcome(plan, passed = verificationPassesWithoutWork(prepared))
+        if (plan.isEmpty) return withoutWork(prepared)
         val claim = project.service<AffectedState>().tryClaimVerification()
-            ?: return Outcome(plan, passed = false)
+            ?: return Outcome(plan, passed = false, Blocker.NOT_STARTED)
         return runClaimedAndWait(project, prepared, claim)
     }
 
@@ -84,8 +72,8 @@ object Verification {
         val plan = prepared.plan
         var passed = false
         try {
-            if (plan.isEmpty) return Outcome(plan, passed = verificationPassesWithoutWork(prepared))
-            if (!claim.markRunning()) return Outcome(plan, passed = false)
+            if (plan.isEmpty) return withoutWork(prepared)
+            if (!claim.markRunning()) return Outcome(plan, passed = false, Blocker.NOT_STARTED)
             val stopAfterFirstFailure = AffectedSettings.getInstance().stopAfterFirstFailure
             passed = runClaimedGroups(
                 project,
@@ -96,7 +84,7 @@ object Verification {
             ) { group ->
                 group.runInPlannedExecutionRoot(project) {
                     when (val system = BuildSystems.byId(group.systemId)) {
-                        null -> preparedGroupPasses(adapterFound = false)
+                        null -> false
                         is ChangeAwareSuspendingBuildSystem ->
                             system.runAndWaitSuspending(project, group.root, group.tasks, prepared.changes)
                         is SuspendingBuildSystem ->
@@ -112,9 +100,12 @@ object Verification {
             claim.close()
         }
     }
-}
 
-internal fun preparedGroupPasses(adapterFound: Boolean): Boolean = adapterFound
+    private fun withoutWork(prepared: Prepared): Outcome {
+        val passed = verificationPassesWithoutWork(prepared)
+        return Outcome(prepared.plan, passed, Blocker.UNRESOLVED_CHANGES.takeUnless { passed })
+    }
+}
 
 internal fun verificationPassesWithoutWork(prepared: Verification.Prepared): Boolean =
     prepared.plan.isEmpty && prepared.changes.files.isEmpty()
@@ -123,22 +114,13 @@ fun <T> runWithRequiredAdapter(
     adapter: T?,
     run: (T) -> Boolean,
 ): Boolean {
-    if (adapter == null) return preparedGroupPasses(adapterFound = false)
-    return run(adapter)
+    return adapter != null && run(adapter)
 }
-
-internal fun verificationPlan(
-    graph: ModuleGraph,
-    changes: ProjectChanges.Result,
-    checkConsumers: Boolean,
-): Plan = verificationPlans(graph, changes).select(checkConsumers)
 
 private data class VerificationPlans(
     val testsOnly: Plan,
     val withConsumers: Plan,
-) {
-    fun select(checkConsumers: Boolean): Plan = if (checkConsumers) withConsumers else testsOnly
-}
+)
 
 private fun verificationPlans(
     graph: ModuleGraph,
