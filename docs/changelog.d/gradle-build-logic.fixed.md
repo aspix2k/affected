@@ -1,0 +1,1 @@
+- Run every project in a Gradle build when its version catalog, wrapper, `buildSrc` or root build configuration changes.
