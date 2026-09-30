@@ -8,6 +8,7 @@ import com.aspix2k.affected.build.CargoNextestMode
 import com.aspix2k.affected.build.CargoNextestPlan
 import com.aspix2k.affected.build.ComposerBuildSystem
 import com.aspix2k.affected.build.ComposerPackages
+import com.aspix2k.affected.build.GradleBuildSystem
 import com.aspix2k.affected.build.TransitiveTestConsumersBuildSystem
 import com.aspix2k.affected.build.WorkspaceChangesBuildSystem
 import com.aspix2k.affected.build.cargoCommands
@@ -95,6 +96,39 @@ class ModuleGraphTest {
         val modules = affectedModules(graph, listOf(File(content, "shared.h")))
 
         assertEquals(setOf("library", "application"), modules.mapTo(HashSet(), AffectedModule::id))
+    }
+
+    @Test
+    fun `Gradle build logic changes widen to every project in that build`() {
+        val root = createTempDirectory("module-graph-gradle-build-logic").toFile()
+        val system = GradleBuildSystem()
+        val graph = ModuleGraph(
+            listOf(
+                ModuleGraph.Node(module(root, ":", ""), system),
+                ModuleGraph.Node(module(root, ":app", "app"), system),
+                ModuleGraph.Node(module(root, ":lib", "lib"), system),
+            ),
+        )
+        val buildLogic = listOf(
+            "gradle/libs.versions.toml",
+            "gradle/wrapper/gradle-wrapper.properties",
+            "buildSrc/src/main/kotlin/Conventions.kt",
+        ).map { root.createFile(it) }
+        val source = root.createFile("lib/src/main/kotlin/Lib.kt")
+
+        buildLogic.forEach { file ->
+            val changes = ProjectChanges.Result(listOf(file), emptySet(), setOf(file), comparedToBase = true)
+            assertEquals(
+                setOf(":", ":app", ":lib"),
+                graph.ownersForChanges(changes.toBuildChanges()).getValue(file).mapTo(HashSet()) { it.id },
+                file.path,
+            )
+        }
+        val sourceChanges = ProjectChanges.Result(listOf(source), emptySet(), setOf(source), comparedToBase = true)
+        assertEquals(
+            listOf(":lib"),
+            graph.ownersForChanges(sourceChanges.toBuildChanges()).getValue(source).map { it.id },
+        )
     }
 
     @Test
@@ -260,6 +294,12 @@ class ModuleGraphTest {
         assertEquals(listOf("app"), graph.directDependents(setOf(cmakeNode)).map(ModuleGraph.Node::id))
         assertTrue(graph.directDependents(setOf(dotnetNode)).isEmpty())
     }
+
+    private fun File.createFile(relative: String): File =
+        File(this, relative).apply {
+            parentFile.mkdirs()
+            writeText("")
+        }
 
     private fun graph(vararg modules: BuildModule): ModuleGraph =
         ModuleGraph(modules.map { ModuleGraph.Node(it, system("NODE")) })

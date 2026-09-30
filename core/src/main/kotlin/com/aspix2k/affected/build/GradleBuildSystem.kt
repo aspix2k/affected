@@ -45,7 +45,7 @@ import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicReference
 
-class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
+class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuildSystem {
 
     override val id: String = GradleConstants.SYSTEM_ID.id
 
@@ -54,6 +54,9 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem {
 
     override fun isPresent(project: Project): Boolean =
         GradleSettings.getInstance(project).linkedProjectsSettings.isNotEmpty()
+
+    override fun requiresWorkspace(module: BuildModule, changes: BuildChanges): Boolean =
+        gradleRequiresWorkspace(module.root, changes)
 
     override fun modules(project: Project): List<BuildModule> =
         runBlockingCancellable { modulesSuspending(project) }
@@ -435,6 +438,26 @@ private val GRADLE_TEST_SOURCE_SET_MARKERS = listOf(
     "unitTest",
     "androidTest",
 )
+
+internal fun gradleRequiresWorkspace(root: String, changes: BuildChanges): Boolean {
+    val rootPath = File(root).toPath().toAbsolutePath().normalize()
+    return changes.files.any { raw ->
+        val file = File(raw).toPath().toAbsolutePath().normalize()
+        file.startsWith(rootPath) && gradleBuildWideChange(rootPath.relativize(file).toString().replace('\\', '/'))
+    }
+}
+
+internal fun gradleBuildWideChange(relative: String): Boolean =
+    relative in GRADLE_BUILD_WIDE_FILES || GRADLE_BUILD_WIDE_DIRECTORIES.any { relative.startsWith("$it/") }
+
+private val GRADLE_BUILD_WIDE_FILES = setOf(
+    "settings.gradle",
+    "settings.gradle.kts",
+    "build.gradle",
+    "build.gradle.kts",
+    "gradle.properties",
+)
+private val GRADLE_BUILD_WIDE_DIRECTORIES = listOf("gradle", "buildSrc")
 
 internal fun gradleIsSourceFile(file: File): Boolean =
     file.isFile && file.extension in JVM_SOURCE_EXTENSIONS

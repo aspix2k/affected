@@ -124,8 +124,9 @@ internal class SequentialProcessHandler(
             }
         }
         if (!initiate) return false
+        val activeTermination = termination
         when {
-            handler != null -> termination!!.request()
+            activeTermination != null -> activeTermination.request()
             !hasActiveLifecycle -> {
                 pending.forEach(::cleanup)
                 endLifecycle()
