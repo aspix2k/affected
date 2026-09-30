@@ -6,6 +6,7 @@ import com.aspix2k.affected.build.PerformanceBudgets
 import com.aspix2k.affected.build.RubyGems
 import org.junit.Assume.assumeTrue
 import java.io.File
+import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -54,18 +55,12 @@ class RealMonorepoTest {
     }
 
     @Test
-    fun `Rails is parsed as a gem monorepo`() {
+    fun `Rails fails closed because a test suite contains a symlink`() {
         val root = fixture("ruby-rails")
         assumeTrue(root != null)
+        assumeTrue(File(root, "activerecord/test").walk().any { Files.isSymbolicLink(it.toPath()) })
 
-        val modules = RubyGems.parse(root!!)
-
-        assertGraphIsSound(modules, minimum = 8)
-        assertTrue(
-            modules.any { it.dependencies.isNotEmpty() },
-            "actionpack depends on activesupport and related gems",
-        )
-        assertTrue(modules.all { it.compileTask == null }, "Ruby consumers are not checked")
+        assertTrue(RubyGems.parse(root!!).isEmpty(), "an untrusted suite must fall back to the whole repository")
     }
 
     @Test

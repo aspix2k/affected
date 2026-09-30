@@ -61,16 +61,6 @@ UNSTABLE = re.compile(
 VERSION = re.compile(r"^[vV]?(\d+(?:\.\d+)+(?:[-+][0-9A-Za-z.-]+)?)$")
 SHA = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
-SECURITY_PREVIEW = re.compile(r"^(\d+)\.(\d+)\.(\d+)-(Alpha|Beta|RC)([1-9]\d*)?$")
-STABLE_RELEASE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
-KOTLIN_SECURITY = {
-    "advisory": "GHSA-r937-wjx7-w2jp",
-    "cve": "CVE-2026-53914",
-    "repository": "JetBrains/kotlin",
-    "package": "org.jetbrains.kotlin:kotlin-gradle-plugin",
-    "fixCommit": "bf51df665b458fda7c3eaf436c4d88dc119d7ec6",
-}
-KOTLIN_PLUGIN_ID = "org.jetbrains.kotlin.jvm"
 JETBRAINS_UPDATES_URL = "https://www.jetbrains.com/updates/updates.xml"
 
 
@@ -226,25 +216,6 @@ def newest(values: list[str], series: str | None = None) -> str:
     if not stable:
         raise CurrentnessError(f"Official source returned no stable releases for series {series or 'latest'}")
     return max(stable, key=version_key)
-
-
-def security_preview_key(value: str) -> tuple[int, int, int, int, int]:
-    """Order one strict Alpha, Beta, or RC release without treating it as stable."""
-    match = SECURITY_PREVIEW.fullmatch(value)
-    if match is None or (match.group(4) != "RC" and match.group(5) is None):
-        raise CurrentnessError(f"Expected an ordered security preview version, found {value!r}")
-    major, minor, patch = (int(match.group(index)) for index in range(1, 4))
-    stage = {"Alpha": 0, "Beta": 1, "RC": 2}[match.group(4)]
-    sequence = int(match.group(5) or "1")
-    return major, minor, patch, stage, sequence
-
-
-def stable_release_key(value: str) -> tuple[int, int, int]:
-    """Parse one strict major.minor.patch stable replacement."""
-    match = STABLE_RELEASE.fullmatch(value)
-    if match is None:
-        raise CurrentnessError(f"Expected a stable replacement version, found {value!r}")
-    return tuple(int(match.group(index)) for index in range(1, 4))
 
 
 def support_matrix_verifier_slot(local: dict[str, Any]) -> tuple[str, str, str]:
@@ -479,12 +450,8 @@ def local_version(local: dict[str, Any]) -> tuple[str, str | None]:
     raise CurrentnessError(f"Unknown local extractor: {kind}")
 
 
-def metadata_version_state(
-    transport: Transport,
-    base: str,
-    name: str,
-) -> tuple[list[str], tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]]:
-    """Read bounded Maven versions plus the declared current-version headers."""
+def metadata_versions(transport: Transport, base: str, name: str) -> list[str]:
+    """Read bounded version candidates from Maven-compatible metadata."""
     group, artifact = name.split(":", 1)
     path = f"{group.replace('.', '/')}/{artifact}"
     url = f"{base}/{path}/maven-metadata.xml"
@@ -492,218 +459,7 @@ def metadata_version_state(
         root = ET.fromstring(transport.read(url))
     except ET.ParseError as error:
         raise CurrentnessError(f"Invalid Maven metadata for {name}: {error}") from error
-    versions = [node.text or "" for node in root.findall("./versioning/versions/version")]
-    header_groups = (
-        tuple(node.text or "" for node in root.findall("./version")),
-        tuple(node.text or "" for node in root.findall("./versioning/latest")),
-        tuple(node.text or "" for node in root.findall("./versioning/release")),
-    )
-    return versions, header_groups
-
-
-def metadata_versions(transport: Transport, base: str, name: str) -> list[str]:
-    """Read bounded version candidates from Maven-compatible metadata."""
-    return metadata_version_state(transport, base, name)[0]
-
-
-def github_tag_commit(transport: Transport, repository: str, version: str) -> str:
-    """Resolve one exact GitHub tag ref to its bounded, peeled commit SHA."""
-    expected_ref = f"refs/tags/v{version}"
-    data = transport.json(f"https://api.github.com/repos/{repository}/git/ref/tags/v{version}")
-    if not isinstance(data, dict) or data.get("ref") != expected_ref:
-        raise CurrentnessError(f"Invalid exact GitHub tag ref {expected_ref}")
-    obj = data.get("object")
-    seen: set[str] = set()
-    for _ in range(4):
-        if not isinstance(obj, dict):
-            raise CurrentnessError(f"Invalid GitHub tag object for {expected_ref}")
-        kind = obj.get("type")
-        sha = obj.get("sha")
-        if type(sha) is not str or not SHA.fullmatch(sha) or sha in seen:
-            raise CurrentnessError(f"Invalid GitHub tag identity for {expected_ref}")
-        if kind == "commit":
-            return sha
-        if kind != "tag":
-            raise CurrentnessError(f"Invalid GitHub tag object type for {expected_ref}")
-        seen.add(sha)
-        tag = transport.json(f"https://api.github.com/repos/{repository}/git/tags/{sha}")
-        if not isinstance(tag, dict) or tag.get("sha") != sha:
-            raise CurrentnessError(f"Invalid annotated GitHub tag for {expected_ref}")
-        obj = tag.get("object")
-    raise CurrentnessError(f"Annotated GitHub tag chain is too deep for {expected_ref}")
-
-
-def validate_fix_ancestry(
-    transport: Transport,
-    repository: str,
-    fix_commit: str,
-    tag_commit: str,
-) -> None:
-    """Require GitHub to prove that an official release tag contains the exact fix."""
-    data = transport.json(
-        f"https://api.github.com/repos/{repository}/compare/"
-        f"{fix_commit}...{tag_commit}?per_page=1"
-    )
-    if not isinstance(data, dict):
-        raise CurrentnessError(f"Invalid GitHub ancestry response for {tag_commit}")
-    status = data.get("status")
-    ahead = data.get("ahead_by")
-    behind = data.get("behind_by")
-    base = data.get("base_commit")
-    merge_base = data.get("merge_base_commit")
-    valid_distance = (
-        status == "ahead"
-        and type(ahead) is int
-        and ahead > 0
-        and type(behind) is int
-        and behind == 0
-    ) or (
-        status == "identical"
-        and tag_commit == fix_commit
-        and type(ahead) is int
-        and ahead == 0
-        and type(behind) is int
-        and behind == 0
-    )
-    if (
-        not valid_distance
-        or not isinstance(base, dict)
-        or base.get("sha") != fix_commit
-        or not isinstance(merge_base, dict)
-        or merge_base.get("sha") != fix_commit
-    ):
-        raise CurrentnessError(f"GitHub does not prove fix {fix_commit} is an ancestor of {tag_commit}")
-
-
-def validate_kotlin_security_proof(
-    entry: dict[str, Any],
-    minimum: str,
-    expected: str,
-    transport: Transport,
-) -> None:
-    """Bind the reviewed Kotlin advisory to the exact fix and official release tags."""
-    security = entry.get("security")
-    if security != KOTLIN_SECURITY:
-        raise CurrentnessError("Kotlin security preview lacks the exact reviewed proof metadata")
-    advisory = transport.json(f"https://api.github.com/advisories/{KOTLIN_SECURITY['advisory']}")
-    if not isinstance(advisory, dict):
-        raise CurrentnessError("Invalid reviewed Kotlin advisory response")
-    vulnerabilities = advisory.get("vulnerabilities")
-    references = advisory.get("references")
-    expected_vulnerability = {
-        "package": {"ecosystem": "maven", "name": KOTLIN_SECURITY["package"]},
-        "vulnerable_version_range": f"< {minimum}",
-        "first_patched_version": minimum,
-    }
-    if (
-        advisory.get("ghsa_id") != KOTLIN_SECURITY["advisory"]
-        or advisory.get("cve_id") != KOTLIN_SECURITY["cve"]
-        or advisory.get("type") != "reviewed"
-        or "withdrawn_at" not in advisory
-        or advisory.get("withdrawn_at") is not None
-        or not isinstance(vulnerabilities, list)
-        or len(vulnerabilities) != 1
-        or not isinstance(vulnerabilities[0], dict)
-        or any(vulnerabilities[0].get(key) != value for key, value in expected_vulnerability.items())
-        or not isinstance(references, list)
-        or any(type(reference) is not str for reference in references)
-    ):
-        raise CurrentnessError("Reviewed Kotlin advisory no longer establishes the declared patched floor")
-    repository = KOTLIN_SECURITY["repository"]
-    fix_commit = KOTLIN_SECURITY["fixCommit"]
-    required_references = {
-        f"https://github.com/{repository}/commit/{fix_commit}",
-        f"https://github.com/{repository}/releases/tag/v{minimum}",
-    }
-    if not required_references.issubset(set(references)):
-        raise CurrentnessError("Reviewed Kotlin advisory lacks the exact fix and patched release references")
-    for version in (minimum, expected):
-        tag_commit = github_tag_commit(transport, repository, version)
-        validate_fix_ancestry(transport, repository, fix_commit, tag_commit)
-
-
-def validate_security_preview(
-    entry: dict[str, Any],
-    local: str,
-    source: dict[str, Any],
-    transport: Transport,
-) -> str:
-    """Validate a temporary patched preview and expire it at a stable replacement."""
-    expected = entry.get("expected")
-    minimum = entry.get("minimumPatched")
-    replacement = entry.get("stableReplacement")
-    local_config = entry.get("local")
-    if (
-        type(expected) is not str
-        or type(minimum) is not str
-        or type(replacement) is not str
-        or not isinstance(local_config, dict)
-        or source.get("type") != "gradle-plugin"
-        or source.get("name") != local_config.get("name")
-        or source.get("name") != KOTLIN_PLUGIN_ID
-    ):
-        raise CurrentnessError("Security preview policy has invalid version or source metadata")
-    expected_key = security_preview_key(expected)
-    minimum_key = security_preview_key(minimum)
-    replacement_line = stable_release_key(replacement)
-    replacement_order = version_key(replacement)
-    if expected_key[:3] != replacement_line or minimum_key[:3] != replacement_line:
-        raise CurrentnessError("Security preview policy versions must share one stable release line")
-    if expected_key < minimum_key:
-        raise CurrentnessError(f"Security preview {expected} is below patched minimum {minimum}")
-    if local != expected:
-        raise CurrentnessError(f"Security preview pin drifted: local {local}, approved {expected}")
-
-    validate_kotlin_security_proof(entry, minimum, expected, transport)
-
-    name = str(source.get("name"))
-    versions, header_groups = metadata_version_state(
-        transport,
-        "https://plugins.gradle.org/m2",
-        f"{name}:{name}.gradle.plugin",
-    )
-    if any(len(group) != 1 for group in header_groups):
-        raise CurrentnessError("Official security preview metadata has missing or duplicate headers")
-    headers = tuple(group[0] for group in header_groups)
-    if (
-        not versions
-        or len(versions) > 10_000
-        or len(versions) != len(set(versions))
-        or any(not version or version.strip() != version for version in versions)
-    ):
-        raise CurrentnessError("Official security preview metadata is empty, too large, or ambiguous")
-    if versions.count(expected) != 1 or versions.count(minimum) != 1:
-        raise CurrentnessError("Expected and minimum security previews must be officially published once")
-
-    stable = []
-    for version in (*versions, *headers):
-        try:
-            stable.append(normalize_version(version))
-        except CurrentnessError:
-            pass
-    if any(version_key(version) >= replacement_order for version in stable):
-        raise CurrentnessError(f"Security preview expired because stable {replacement} or newer is published")
-    if (
-        any(not header or header.strip() != header for header in headers)
-        or len(set(headers)) != 1
-        or headers[0] != expected
-        or headers[0] not in versions
-    ):
-        raise CurrentnessError("Official security preview headers contradict the published version list")
-
-    prefix = f"{replacement}-"
-    previews: list[tuple[tuple[int, int, int, int, int], str]] = []
-    for version in versions:
-        if not version.startswith(prefix):
-            continue
-        key = security_preview_key(version)
-        previews.append((key, version))
-    if not previews or len({key for key, _ in previews}) != len(previews):
-        raise CurrentnessError("Official security previews have ambiguous ordering")
-    newest_patched = max((item for item in previews if item[0] >= minimum_key), default=None)
-    if newest_patched is None or newest_patched[1] != expected:
-        raise CurrentnessError(f"Security preview {expected} is not the newest patched preview")
-    return f"{entry['id']}: {local} (security preview until stable {replacement})"
+    return [node.text or "" for node in root.findall("./versioning/versions/version")]
 
 
 def is_transient_metadata_error(error: CurrentnessError) -> bool:
@@ -984,7 +740,7 @@ def remote_version(source: dict[str, Any], policy: str, series: str | None, tran
         rows = [
             row
             for row in data.get("releases-index", [])
-            if isinstance(row, dict) and row.get("support-phase") != "preview"
+            if isinstance(row, dict) and row.get("support-phase") in {"active", "maintenance"}
         ] if isinstance(data, dict) else []
         if not rows:
             raise CurrentnessError("Invalid .NET release response")
@@ -1037,7 +793,7 @@ def validate_entry(entry: dict[str, Any], transport: Transport) -> str:
     else:
         local, local_sha = local_version(local_config)
     policy = entry.get("policy")
-    if policy not in {"latest", "series", "compatibility", "branch", "security-preview"}:
+    if policy not in {"latest", "series", "compatibility", "branch"}:
         raise CurrentnessError(f"Currentness entry {identifier} has an invalid policy: {policy!r}")
     if local_config.get("type") == "support-matrix-verifier":
         endpoint_policies = {"minimum": "series", "current": "latest"}
@@ -1056,7 +812,7 @@ def validate_entry(entry: dict[str, Any], transport: Transport) -> str:
         raise CurrentnessError(
             f"Currentness entry {identifier} cannot narrow {policy} with a series"
         )
-    if policy in {"compatibility", "series", "security-preview"}:
+    if policy in {"compatibility", "series"}:
         reason = entry.get("reason")
         evidence = entry.get("evidence")
         if not isinstance(reason, str) or len(reason.strip()) < 20 or not isinstance(evidence, list) or not evidence:
@@ -1080,8 +836,6 @@ def validate_entry(entry: dict[str, Any], transport: Transport) -> str:
         raise CurrentnessError(
             f"Product verifier {identifier} is not bound to its official product"
         )
-    if policy == "security-preview":
-        return validate_security_preview(entry, local, source, transport)
     series = entry.get("series") if policy == "series" else None
     expected, expected_shas = remote_version(source, str(policy), series, transport)
     if policy == "branch":

@@ -23,21 +23,21 @@ buildscript {
         gradlePluginPortal()
     }
     dependencies {
-        classpath(enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.2"))
+        classpath(enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.3"))
         constraints {
-            classpath("org.jsoup:jsoup:1.23.1")
+            classpath("org.jsoup:jsoup:1.23.2")
         }
     }
 }
 
 plugins {
-    kotlin("jvm") version "2.4.20-RC"
-    id("org.jetbrains.intellij.platform") version "2.18.1"
-    id("org.jetbrains.kotlinx.kover") version "0.9.9"
+    kotlin("jvm") version "2.4.20"
+    id("org.jetbrains.intellij.platform") version "2.19.0"
+    id("org.jetbrains.kotlinx.kover") version "0.9.11"
     id("info.solidsoft.pitest") version "1.19.0"
     id("org.jetbrains.changelog") version "2.5.0"
     id("io.gitlab.arturbosch.detekt") version "1.23.8"
-    id("com.autonomousapps.dependency-analysis") version "3.18.0"
+    id("com.autonomousapps.dependency-analysis") version "3.19.2"
 }
 
 group = "com.aspix2k"
@@ -81,10 +81,10 @@ dependencies {
         bundledModule("intellij.platform.vcs.dvcs.impl")
         bundledPlugin("Git4Idea")
         testFramework(TestFrameworkType.Platform)
-        pluginComposedModule(api(project(":core")))
+        pluginComposedModule(implementation(project(":core")))
         pluginModule(runtimeOnly(project(":mcp")))
     }
-    add("intellijPlatformTestDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.2"))
+    add("intellijPlatformTestDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.3"))
 
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
@@ -481,6 +481,7 @@ pitest {
             "com.aspix2k.affected.AffectedSettings*",
         )
     )
+    excludedTestClasses.set(listOf("com.aspix2k.affected.*IntegrationTest"))
     mutators.set(listOf("STRONGER"))
     outputFormats.set(listOf("XML", "HTML"))
     threads.set(4)

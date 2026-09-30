@@ -12,12 +12,13 @@ object AffectedIcons {
 
     val Check: Icon = load("check")
 
-    private val counts: List<Pair<IntRange, Icon>> = listOf(
-        1..2 to load("affected_few"),
-        3..6 to load("affected_some"),
-        7..15 to load("affected_many"),
-        16..Int.MAX_VALUE to load("affected_all"),
-    )
+    private val Few: Icon = load("affected_few")
+
+    private val Some: Icon = load("affected_some")
+
+    private val Many: Icon = load("affected_many")
+
+    private val All: Icon = load("affected_all")
 
     private val runningFrames: Array<Icon> by lazy {
         Array(FRAMES) { load("affected_run${it + 1}") }
@@ -28,18 +29,12 @@ object AffectedIcons {
         AnimatedIcon(FRAME_DELAY_MS, *runningFrames)
     }
 
-    @Suppress("SpreadOperator")
-    val DisabledRunning: Icon by lazy {
-        AnimatedIcon(FRAME_DELAY_MS, *runningFrames.map(IconLoader::getDisabledIcon).toTypedArray())
-    }
-
-    fun withCount(count: Int): Icon =
-        counts.firstOrNull { count in it.first }?.second ?: Action
-
-    fun forState(status: VerificationStatus, count: Int, animate: Boolean): Icon = when (status) {
-        VerificationStatus.PREPARING,
-        VerificationStatus.RUNNING -> if (animate) Running else withCount(count)
-        VerificationStatus.IDLE -> withCount(count)
+    fun withCount(count: Int): Icon = when {
+        count <= 0 -> Action
+        count <= 2 -> Few
+        count <= 6 -> Some
+        count <= 15 -> Many
+        else -> All
     }
 
     private fun load(name: String): Icon =

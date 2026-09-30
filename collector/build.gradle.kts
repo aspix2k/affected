@@ -3,7 +3,7 @@ import com.github.spotbugs.snom.Effort
 
 plugins {
     `java-library`
-    id("com.github.spotbugs") version "6.5.11"
+    id("com.github.spotbugs") version "6.5.12"
 }
 
 val testJavaVersion = providers.gradleProperty("affected.test.javaVersion").orElse("21")
@@ -59,7 +59,6 @@ dependencies {
     testImplementation("org.apache.maven:maven-model:$mavenLatestVersion")
     testImplementation("org.codehaus.plexus:plexus-utils:3.6.1")
     testCompileOnly("org.junit.jupiter:junit-jupiter-api:$junitVersion")
-    testImplementation("org.junit.platform:junit-platform-engine:$junitPlatformVersion")
     testImplementation("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitVersion")
     testRuntimeOnly("org.junit.vintage:junit-vintage-engine:$junitVersion")
@@ -90,7 +89,7 @@ java {
 }
 
 spotbugs {
-    toolVersion = "4.10.3"
+    toolVersion = "4.10.4"
     ignoreFailures = false
     effort = Effort.MAX
     reportLevel = Confidence.DEFAULT

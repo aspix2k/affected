@@ -17,11 +17,13 @@ import com.intellij.openapi.externalSystem.service.execution.ExternalSystemJdkUt
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.testFramework.ExtensionTestUtil
 import com.intellij.testFramework.HeavyPlatformTestCase
+import com.intellij.testFramework.common.ThreadLeakTracker
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.jetbrains.idea.maven.execution.MavenRunner
 import org.jetbrains.idea.maven.execution.MavenRunnerSettings
 import org.jetbrains.idea.maven.project.MavenProjectsManager
+import org.jetbrains.idea.maven.server.MavenServerManager
 import org.jetbrains.plugins.gradle.settings.DistributionType
 import org.jetbrains.plugins.gradle.settings.GradleProjectSettings
 import org.jetbrains.plugins.gradle.settings.GradleSettings
@@ -37,6 +39,7 @@ class CliMixedGradleMavenConformanceTest : HeavyPlatformTestCase() {
 
     override fun setUp() {
         super.setUp()
+        ThreadLeakTracker.longRunningThreadCreated(ApplicationManager.getApplication(), *IDE_IMPORT_THREADS)
         val area = ApplicationManager.getApplication().extensionArea
         if (!area.hasExtensionPoint(BUILD_SYSTEM_POINT)) {
             area.registerExtensionPoint(
@@ -64,6 +67,7 @@ class CliMixedGradleMavenConformanceTest : HeavyPlatformTestCase() {
         try {
             unlinkGradleProjects()
             unlinkMavenProjects()
+            MavenServerManager.getInstance().closeAllConnectorsAndWait()
             deleteCopiedRoots()
             AffectedSettings.getInstance().stopAfterFirstFailure = previousStopAfterFirstFailure
             previousMavenJre?.let { MavenRunner.getInstance(project).settings.setJreName(it) }
@@ -283,6 +287,7 @@ class CliMixedGradleMavenConformanceTest : HeavyPlatformTestCase() {
         const val MAVEN_SOURCE = "maven/src/main/java/lib/Value.java"
         const val SESSION_TIMEOUT_MILLIS = 300_000L
         const val IMPORT_TIMEOUT_SECONDS = 60L
+        val IDE_IMPORT_THREADS = arrayOf("RemoteMavenServer", "BuildOutputInstantReaderImpl")
         val COPIED_ROOTS = listOf("gradle", "maven")
     }
 }

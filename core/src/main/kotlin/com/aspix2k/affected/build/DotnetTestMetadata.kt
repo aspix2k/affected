@@ -648,7 +648,7 @@ private val SUPPORTED_ADAPTERS = mapOf(
 )
 private val SUPPORTED_FRAMEWORKS = mapOf(
     "xunit" to 2..2,
-    "nunit" to 4..4,
+    "nunit" to 4..5,
     "mstest.testframework" to 4..4,
 )
 private val DOTNET_EXTENSION_SUFFIXES = setOf(

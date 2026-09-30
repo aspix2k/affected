@@ -46,7 +46,7 @@ internal fun presentAffectedGroup(
         else -> AffectedIcons.Action
     }
     presentation.disabledIcon = null
-    presentation.text = AffectedBundle.message(uiState?.groupTitleKey ?: "group.title")
+    presentation.text = AffectedBundle.message(if (uiState == null) "group.title" else uiState.groupTitleKey)
     presentation.description = when (uiState) {
         AffectedUiState.ANALYZING -> AffectedBundle.message("action.run.description.counting")
         AffectedUiState.BUSY -> AffectedBundle.message("action.run.description.busy")

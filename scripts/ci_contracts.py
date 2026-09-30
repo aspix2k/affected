@@ -33,8 +33,8 @@ EXACT_IMPACT_JOBS = (
     "dotnet-sdks",
     "phpunit-versions",
 )
-CODEQL_KOTLIN_COMPAT_SHA256 = "d934807f5c469f8f1d494a53ea54de114b4c8f95e7bd370868065eefc035fa73"
-CODEQL_KOTLIN_PROBE_SHA256 = "c2466a058bb8191dce7c14619d13ba6c2e6341ef4a01417fc746bac5a73458ab"
+CODEQL_KOTLIN_COMPAT_SHA256 = "73a5dd964566b450af31e4d870dd45e795d6f1fce27ba04443b7cfa138df6ddd"
+CODEQL_KOTLIN_PROBE_SHA256 = "1120008c8354f7a580198bd3becfe9b185c407e78f18fabdcadd9e4621a1cefe"
 
 
 class CiContractError(RuntimeError):
@@ -88,8 +88,6 @@ def check(root: Path = ROOT) -> None:
         "scripts/quality.sh workflows",
         "scripts/quality.sh analyzers",
         "scripts.tests.test_release_currentness",
-        "scripts/release_currentness.py",
-        "GH_TOKEN",
         "scripts.tests.test_support_matrix",
         "scripts/support_matrix.py --check",
         "scripts.tests.test_mcp_capabilities",

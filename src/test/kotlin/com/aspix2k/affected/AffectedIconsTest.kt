@@ -31,16 +31,4 @@ class AffectedIconsTest {
         assertSame(AffectedIcons.withCount(7), AffectedIcons.withCount(15))
         assertSame(AffectedIcons.withCount(16), AffectedIcons.withCount(Int.MAX_VALUE))
     }
-
-    @Test
-    fun `animation respects its setting`() {
-        assertSame(AffectedIcons.Running, AffectedIcons.forState(VerificationStatus.PREPARING, 4, true))
-        assertSame(AffectedIcons.Running, AffectedIcons.forState(VerificationStatus.RUNNING, 4, true))
-        assertSame(AffectedIcons.withCount(4), AffectedIcons.forState(VerificationStatus.RUNNING, 4, false))
-    }
-
-    @Test
-    fun `idle state shows the current module count`() {
-        assertSame(AffectedIcons.withCount(4), AffectedIcons.forState(VerificationStatus.IDLE, 4, true))
-    }
 }
