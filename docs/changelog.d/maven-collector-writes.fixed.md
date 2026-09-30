@@ -1,0 +1,1 @@
+- Stop Maven test runs from rewriting the collector's expected-tests file for every test, which slowed large and parallel suites.

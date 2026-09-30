@@ -58,7 +58,8 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
         if (testClass == null) testClass = directClass(testIdentifier);
         if (testClass != null) {
             AffectedCollectorAgent.beginExecution(testIdentifier.getUniqueId(), testClass);
-            if ("maven".equals(System.getProperty("affected.collector.runner")) || output == null) {
+            boolean maven = "maven".equals(System.getProperty("affected.collector.runner"));
+            if (output == null || (maven && !expectedClasses.contains(testClass))) {
                 prepareOutput(Collections.singleton(testClass));
             }
         } else if (testIdentifier.isTest()) {
