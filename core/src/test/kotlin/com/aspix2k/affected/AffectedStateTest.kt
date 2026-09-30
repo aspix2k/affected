@@ -7,7 +7,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import java.lang.reflect.Proxy
@@ -114,7 +113,7 @@ class AffectedStateTest {
     }
 
     @Test
-    fun `a canceled analysis retries instead of stopping refreshes`() = runBlocking {
+    fun `a canceled analysis retries instead of stopping refreshes`() = runBoundedBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         var attempts = 0
         val state = AffectedState(
@@ -146,7 +145,7 @@ class AffectedStateTest {
     }
 
     @Test
-    fun `a completed VCS refresh recomputes a ready snapshot without a VFS event`() = runBlocking {
+    fun `a completed VCS refresh recomputes a ready snapshot without a VFS event`() = runBoundedBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         var nextModule = module(":before")
         var analyses = 0

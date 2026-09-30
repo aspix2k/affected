@@ -81,6 +81,65 @@ exit 0
         self.assertEqual([":test prefer=1", ":test prefer=0"], calls)
         self.assertIn("cache-redirector first", completed.stderr)
 
+    def test_a_silent_build_is_dumped_and_terminated(self) -> None:
+        """A hung Gradle run leaves thread dumps and exits with 124."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            dumps = root / "dumps"
+            tools = root / "tools"
+            tools.mkdir()
+            jcmd = tools / "jcmd"
+            jcmd.write_text(
+                """#!/usr/bin/env bash
+if [[ "$1" == "-l" ]]; then
+  echo "4242 org.gradle.Fake"
+else
+  echo "thread dump of $1"
+fi
+""",
+                encoding="utf-8",
+            )
+            jcmd.chmod(jcmd.stat().st_mode | stat.S_IEXEC)
+            calls, completed = self.run_wrapper(
+                """#!/usr/bin/env bash
+echo "$*" >> "$CALLS"
+echo started
+sleep 300
+""",
+                env_updates={
+                    "AFFECTED_GRADLE_HANG_DIR": str(dumps),
+                    "AFFECTED_GRADLE_IDLE_SECONDS": "1",
+                    "AFFECTED_GRADLE_IDLE_POLL": "1",
+                    "PATH": f"{tools}{os.pathsep}{os.environ['PATH']}",
+                },
+                cwd=root,
+            )
+            self.assertEqual(124, completed.returncode, completed.stderr)
+            self.assertEqual([":test"], calls)
+            self.assertIn("thread dump of 4242", (dumps / "threads-4242.txt").read_text(encoding="utf-8"))
+            self.assertTrue((dumps / "processes.txt").exists())
+
+    def test_a_chatty_build_is_not_terminated(self) -> None:
+        """Output keeps the watchdog quiet."""
+        with TemporaryDirectory() as directory:
+            dumps = Path(directory) / "dumps"
+            calls, completed = self.run_wrapper(
+                """#!/usr/bin/env bash
+for _ in 1 2 3 4; do
+  echo tick
+  sleep 1
+done
+""",
+                env_updates={
+                    "AFFECTED_GRADLE_HANG_DIR": str(dumps),
+                    "AFFECTED_GRADLE_IDLE_SECONDS": "3",
+                    "AFFECTED_GRADLE_IDLE_POLL": "1",
+                },
+            )
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            self.assertEqual([], calls)
+            self.assertFalse(dumps.exists())
+
     def test_missing_wrapper_fails_before_gradle(self) -> None:
         """Refuse to exec a missing wrapper."""
         with TemporaryDirectory() as directory:
@@ -99,10 +158,11 @@ exit 0
         self,
         script: str,
         env_updates: dict[str, str] | None = None,
+        cwd: Path | None = None,
     ) -> tuple[list[str], subprocess.CompletedProcess[str]]:
         """Run run_gradle.sh against a fake wrapper and return its call log."""
         with TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = cwd or Path(directory)
             calls = root / "calls.log"
             wrapper = root / "gradlew"
             wrapper.write_text(script.replace("$CALLS", str(calls)), encoding="utf-8")

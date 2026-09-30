@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build.process
 
+import com.aspix2k.affected.awaitBounded
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.openapi.util.SystemInfoRt
 import com.sun.jna.Library
@@ -433,7 +434,7 @@ private class TestSupervisorProcess : Process() {
     override fun getErrorStream(): InputStream = ByteArrayInputStream(ByteArray(0))
 
     override fun waitFor(): Int {
-        terminated.await()
+        terminated.awaitBounded()
         return 1
     }
 
@@ -460,7 +461,7 @@ private class EmptyInheritedPipeProcess : Process() {
 
         override fun read(): Int {
             readStarted.countDown()
-            releaseRead.await()
+            releaseRead.awaitBounded()
             return -1
         }
 
@@ -525,7 +526,7 @@ private class ForcedClosePipeProcess : Process() {
 
         override fun read(): Int {
             readStarted.countDown()
-            closed.await()
+            closed.awaitBounded()
             return -1
         }
 

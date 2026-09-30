@@ -9,6 +9,7 @@ import com.aspix2k.affected.TaskGroup
 import com.aspix2k.affected.VerificationStatus
 import com.aspix2k.affected.build.gradle.GradleBuildSystem
 import com.aspix2k.affected.build.xcode.XcodeBuildSystem
+import com.aspix2k.affected.runBoundedBlocking
 import com.aspix2k.affected.runClaimedGroupsWithPresentation
 import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.openapi.externalSystem.service.execution.ExternalSystemJdkUtil
@@ -17,7 +18,6 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.jetbrains.plugins.gradle.settings.DistributionType
 import org.jetbrains.plugins.gradle.settings.GradleProjectSettings
@@ -29,9 +29,9 @@ class AffectedMixedRunNativeTest : BasePlatformTestCase() {
 
     override fun runInDispatchThread(): Boolean = false
 
-    fun testGradleAndXcodeShareOneAffectedRunSession() = runBlocking {
-        if (!nativeEnabled()) return@runBlocking
-        if (!xcodeAvailable()) return@runBlocking
+    fun testGradleAndXcodeShareOneAffectedRunSession() = runBoundedBlocking {
+        if (!nativeEnabled()) return@runBoundedBlocking
+        if (!xcodeAvailable()) return@runBoundedBlocking
         val fixture = prepare("mixed-gradle-xcode-success", "test")
         var failure: Throwable? = null
         try {
@@ -47,9 +47,9 @@ class AffectedMixedRunNativeTest : BasePlatformTestCase() {
         }
     }
 
-    fun testChildFailureFailsTheSharedAffectedRunAfterTheOtherChildFinishes() = runBlocking {
-        if (!nativeEnabled()) return@runBlocking
-        if (!xcodeAvailable()) return@runBlocking
+    fun testChildFailureFailsTheSharedAffectedRunAfterTheOtherChildFinishes() = runBoundedBlocking {
+        if (!nativeEnabled()) return@runBoundedBlocking
+        if (!xcodeAvailable()) return@runBoundedBlocking
         val fixture = prepare("mixed-gradle-xcode-failure", "failingTest")
         var failure: Throwable? = null
         try {
@@ -65,9 +65,9 @@ class AffectedMixedRunNativeTest : BasePlatformTestCase() {
         }
     }
 
-    fun testStoppingTheSharedAffectedRunCancelsItsRunningChildAndWaitsForCleanup() = runBlocking {
-        if (!nativeEnabled()) return@runBlocking
-        if (!xcodeAvailable()) return@runBlocking
+    fun testStoppingTheSharedAffectedRunCancelsItsRunningChildAndWaitsForCleanup() = runBoundedBlocking {
+        if (!nativeEnabled()) return@runBoundedBlocking
+        if (!xcodeAvailable()) return@runBoundedBlocking
         val fixture = prepare("mixed-gradle-xcode-cancellation", "slowTest", slowXcode = true)
         var failure: Throwable? = null
         try {

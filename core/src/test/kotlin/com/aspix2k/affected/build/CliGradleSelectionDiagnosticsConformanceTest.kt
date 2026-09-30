@@ -8,6 +8,7 @@ import com.aspix2k.affected.AnalysisStatus
 import com.aspix2k.affected.TaskGroup
 import com.aspix2k.affected.VerificationStatus
 import com.aspix2k.affected.build.gradle.GradleBuildSystem
+import com.aspix2k.affected.runBoundedBlocking
 import com.aspix2k.affected.runClaimedGroupsWithPresentation
 import com.intellij.execution.ExecutionListener
 import com.intellij.execution.ExecutionManager
@@ -20,7 +21,6 @@ import com.intellij.openapi.externalSystem.service.execution.ExternalSystemJdkUt
 import com.intellij.openapi.util.Key
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.jetbrains.plugins.gradle.settings.DistributionType
 import org.jetbrains.plugins.gradle.settings.GradleProjectSettings
@@ -32,8 +32,8 @@ class CliGradleSelectionDiagnosticsConformanceTest : BasePlatformTestCase() {
 
     override fun runInDispatchThread(): Boolean = false
 
-    fun testStaticFallbackReasonsPrecedeCompositeTasksWithTheConfigurationCache() = runBlocking {
-        if (!nativeEnabled()) return@runBlocking
+    fun testStaticFallbackReasonsPrecedeCompositeTasksWithTheConfigurationCache() = runBoundedBlocking {
+        if (!nativeEnabled()) return@runBoundedBlocking
         val repository = CliConformanceRepository.configured
         val root = File(checkNotNull(project.basePath), "gradle-selection-diagnostics")
         val markers = File(root, "markers")

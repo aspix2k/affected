@@ -17,7 +17,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
@@ -52,7 +51,7 @@ class AffectedLifecycleTest : BasePlatformTestCase() {
 
     override fun runInDispatchThread(): Boolean = false
 
-    fun testPublishedPlanRunsThroughTheActionPathAndStopCancelsBeforeTheNextClaim() = runBlocking {
+    fun testPublishedPlanRunsThroughTheActionPathAndStopCancelsBeforeTheNextClaim() = runBoundedBlocking {
         val root = File(requireNotNull(project.basePath))
         val source = File(root, "src/Main.kt").apply {
             parentFile.mkdirs()

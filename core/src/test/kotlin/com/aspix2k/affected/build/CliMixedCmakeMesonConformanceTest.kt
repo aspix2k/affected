@@ -4,6 +4,7 @@ import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.ProjectChanges
 import com.aspix2k.affected.Verification
+import com.aspix2k.affected.runBoundedBlocking
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.ui.RunContentManager
 import com.intellij.openapi.application.ApplicationManager
@@ -14,7 +15,6 @@ import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.project.Project
 import com.intellij.testFramework.ExtensionTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.w3c.dom.Element
 import java.io.File
@@ -64,21 +64,21 @@ class CliMixedCmakeMesonConformanceTest : BasePlatformTestCase() {
 
     override fun runInDispatchThread(): Boolean = false
 
-    fun testCmakeChangeDoesNotOwnTheSiblingMesonProject() = runBlocking {
+    fun testCmakeChangeDoesNotOwnTheSiblingMesonProject() = runBoundedBlocking {
         val root = mixedRepo()
         val owners = ModuleGraph.create(projectAt(root)).nodesFor(File(root, CMAKE_SOURCE))
         assertEquals(listOf("CMAKE"), owners.map { it.system.id }.distinct())
         assertTrue(owners.none { it.system.id == "MESON" })
     }
 
-    fun testMesonChangeDoesNotOwnTheSiblingCmakeProject() = runBlocking {
+    fun testMesonChangeDoesNotOwnTheSiblingCmakeProject() = runBoundedBlocking {
         val root = mixedRepo()
         val owners = ModuleGraph.create(projectAt(root)).nodesFor(File(root, MESON_SOURCE))
         assertEquals(listOf("MESON"), owners.map { it.system.id }.distinct())
         assertTrue(owners.none { it.system.id == "CMAKE" })
     }
 
-    fun testCmakeChangePlansOnlyTheCmakeGroup() = runBlocking {
+    fun testCmakeChangePlansOnlyTheCmakeGroup() = runBoundedBlocking {
         val root = mixedRepo()
         val prepared = prepared(root, CMAKE_SOURCE)
         assertEquals(listOf("CMAKE"), prepared.plan.groups.map { it.systemId }.distinct())
@@ -86,7 +86,7 @@ class CliMixedCmakeMesonConformanceTest : BasePlatformTestCase() {
         assertEquals(File(root, "cmake").canonicalPath, File(prepared.plan.groups.single().root).canonicalPath)
     }
 
-    fun testMesonChangePlansOnlyTheMesonGroup() = runBlocking {
+    fun testMesonChangePlansOnlyTheMesonGroup() = runBoundedBlocking {
         val root = mixedRepo()
         val prepared = prepared(root, MESON_SOURCE)
         assertEquals(listOf("MESON"), prepared.plan.groups.map { it.systemId }.distinct())
@@ -94,7 +94,7 @@ class CliMixedCmakeMesonConformanceTest : BasePlatformTestCase() {
         assertEquals(File(root, "meson").canonicalPath, File(prepared.plan.groups.single().root).canonicalPath)
     }
 
-    fun testProductionRegistrySeesBothAdaptersAndPlansBothSides() = runBlocking {
+    fun testProductionRegistrySeesBothAdaptersAndPlansBothSides() = runBoundedBlocking {
         val root = mixedRepo()
         val target = projectAt(root)
         val prepared = prepared(target, root, CMAKE_SOURCE, MESON_SOURCE)
@@ -109,7 +109,7 @@ class CliMixedCmakeMesonConformanceTest : BasePlatformTestCase() {
         if (!nativeEnabled()) return
         val root = mixedRepo()
         configureCmake(root)
-        val outcome = runBlocking { runPrepared(root, CMAKE_SOURCE, MESON_SOURCE) }
+        val outcome = runBoundedBlocking { runPrepared(root, CMAKE_SOURCE, MESON_SOURCE) }
         assertTrue(outcome.passed)
         assertEquals(setOf("CMAKE", "MESON"), outcome.plan.groups.map { it.systemId }.toSet())
         assertTrue("CMake marker was not written", markerExists(root, CMAKE_MARKER))
@@ -126,7 +126,7 @@ class CliMixedCmakeMesonConformanceTest : BasePlatformTestCase() {
             ),
         )
         configureCmake(root)
-        val outcome = runBlocking { runPrepared(root, CMAKE_SOURCE, MESON_SOURCE) }
+        val outcome = runBoundedBlocking { runPrepared(root, CMAKE_SOURCE, MESON_SOURCE) }
         assertFalse(outcome.passed)
         assertTrue("CMake group did not finish after the Meson failure", markerExists(root, CMAKE_MARKER))
     }

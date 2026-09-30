@@ -4,6 +4,7 @@ import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.OwnedExternalTaskExecution
 import com.aspix2k.affected.build.gradle.GradleBuildSystem
 import com.aspix2k.affected.build.gradle.cancelExternalTask
+import com.aspix2k.affected.runBoundedBlocking
 import com.aspix2k.affected.runOwnedExternalTask
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.ui.RunContentManager
@@ -24,7 +25,6 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -60,8 +60,8 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
 
     override fun runInDispatchThread(): Boolean = false
 
-    fun testOwnedGradleCancellationLeavesAnUnrelatedIdeTaskRunning() = runBlocking {
-        if (!nativeEnabled()) return@runBlocking
+    fun testOwnedGradleCancellationLeavesAnUnrelatedIdeTaskRunning() = runBoundedBlocking {
+        if (!nativeEnabled()) return@runBoundedBlocking
         val source = fixtureRoot()
         assertTrue(source.isDirectory, "Missing CLI conformance fixture: $source")
         val target = File(checkNotNull(project.basePath), "gradle-cancellation")
@@ -109,8 +109,8 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
         }
     }
 
-    fun testOwnedGradleCancellationRetriesAfterTheEnvironmentIsPrepared() = runBlocking {
-        if (!nativeEnabled()) return@runBlocking
+    fun testOwnedGradleCancellationRetriesAfterTheEnvironmentIsPrepared() = runBoundedBlocking {
+        if (!nativeEnabled()) return@runBoundedBlocking
         val source = fixtureRoot()
         assertTrue(source.isDirectory, "Missing CLI conformance fixture: $source")
         val target = File(checkNotNull(project.basePath), "gradle-cancellation-startup")

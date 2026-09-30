@@ -4,6 +4,7 @@ import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.ProjectChanges
 import com.aspix2k.affected.Verification
+import com.aspix2k.affected.runBoundedBlocking
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.ui.RunContentManager
 import com.intellij.openapi.application.ApplicationManager
@@ -14,7 +15,6 @@ import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.project.Project
 import com.intellij.testFramework.ExtensionTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.w3c.dom.Element
 import java.io.File
@@ -64,21 +64,21 @@ class CliMixedNodeDartConformanceTest : BasePlatformTestCase() {
 
     override fun runInDispatchThread(): Boolean = false
 
-    fun testNodeChangeDoesNotOwnTheSiblingDartProject() = runBlocking {
+    fun testNodeChangeDoesNotOwnTheSiblingDartProject() = runBoundedBlocking {
         val root = mixedRepo()
         val owners = ModuleGraph.create(projectAt(root)).nodesFor(File(root, NODE_SOURCE))
         assertEquals(listOf("NODE"), owners.map { it.system.id }.distinct())
         assertTrue(owners.none { it.system.id == "DART" })
     }
 
-    fun testDartChangeDoesNotOwnTheSiblingNodeProject() = runBlocking {
+    fun testDartChangeDoesNotOwnTheSiblingNodeProject() = runBoundedBlocking {
         val root = mixedRepo()
         val owners = ModuleGraph.create(projectAt(root)).nodesFor(File(root, DART_SOURCE))
         assertEquals(listOf("DART"), owners.map { it.system.id }.distinct())
         assertTrue(owners.none { it.system.id == "NODE" })
     }
 
-    fun testNodeChangePlansOnlyTheNodeGroup() = runBlocking {
+    fun testNodeChangePlansOnlyTheNodeGroup() = runBoundedBlocking {
         val root = mixedRepo()
         val prepared = prepared(root, NODE_SOURCE)
         assertEquals(listOf("NODE"), prepared.plan.groups.map { it.systemId }.distinct())
@@ -86,7 +86,7 @@ class CliMixedNodeDartConformanceTest : BasePlatformTestCase() {
         assertEquals(File(root, "node").canonicalPath, File(prepared.plan.groups.single().root).canonicalPath)
     }
 
-    fun testDartChangePlansOnlyTheDartGroup() = runBlocking {
+    fun testDartChangePlansOnlyTheDartGroup() = runBoundedBlocking {
         val root = mixedRepo()
         val prepared = prepared(root, DART_SOURCE)
         assertEquals(listOf("DART"), prepared.plan.groups.map { it.systemId }.distinct())
@@ -94,7 +94,7 @@ class CliMixedNodeDartConformanceTest : BasePlatformTestCase() {
         assertEquals(File(root, "dart").canonicalPath, File(prepared.plan.groups.single().root).canonicalPath)
     }
 
-    fun testProductionRegistrySeesBothAdaptersAndPlansBothSides() = runBlocking {
+    fun testProductionRegistrySeesBothAdaptersAndPlansBothSides() = runBoundedBlocking {
         val root = mixedRepo()
         val target = projectAt(root)
         val prepared = prepared(target, root, NODE_SOURCE, DART_SOURCE)
@@ -108,7 +108,7 @@ class CliMixedNodeDartConformanceTest : BasePlatformTestCase() {
         if (!nativeEnabled()) return
         val root = mixedRepo()
         resolve(root)
-        val outcome = runBlocking { runPrepared(root, NODE_SOURCE, DART_SOURCE) }
+        val outcome = runBoundedBlocking { runPrepared(root, NODE_SOURCE, DART_SOURCE) }
         assertTrue(outcome.passed)
         assertEquals(setOf("NODE", "DART"), outcome.plan.groups.map { it.systemId }.toSet())
         assertTrue("Node marker was not written", markerExists(root, NODE_MARKER))
@@ -120,7 +120,7 @@ class CliMixedNodeDartConformanceTest : BasePlatformTestCase() {
         val root = mixedRepo()
         File(root, NODE_SOURCE).appendText("\nthrow new Error('requested mixed fixture failure');\n")
         resolve(root)
-        val outcome = runBlocking { runPrepared(root, NODE_SOURCE, DART_SOURCE) }
+        val outcome = runBoundedBlocking { runPrepared(root, NODE_SOURCE, DART_SOURCE) }
         assertFalse(outcome.passed)
         assertTrue("Dart group did not finish after the Node failure", markerExists(root, DART_MARKER))
     }

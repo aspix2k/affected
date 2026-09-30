@@ -10,7 +10,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -44,7 +43,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `cancellation before external launch prevents the task from starting`() = runBlocking {
+    fun `cancellation before external launch prevents the task from starting`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val events = mutableListOf<String>()
         val execution = OwnedExternalTaskExecution(
@@ -63,7 +62,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `cancellation while launch is binding stops the future exact task`() = runBlocking {
+    fun `cancellation while launch is binding stops the future exact task`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val cancelled = mutableListOf<ExternalSystemTaskId>()
         val cancellation = RecordingCancellation {
@@ -91,7 +90,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `cancellation retries scheduling when the bound Gradle task environment becomes ready`() = runBlocking {
+    fun `cancellation retries scheduling when the bound Gradle task environment becomes ready`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val attempts = mutableListOf<ExternalSystemTaskId>()
         val cancellation = RecordingCancellation { id ->
@@ -118,7 +117,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `environment readiness starts a fresh Gradle cancel cycle after attempts are exhausted`() = runBlocking {
+    fun `environment readiness starts a fresh Gradle cancel cycle after attempts are exhausted`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val scheduled = ArrayDeque<() -> Unit>()
         var attempts = 0
@@ -159,7 +158,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `cancellation after binding stops only the exact owned task`() = runBlocking {
+    fun `cancellation after binding stops only the exact owned task`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val cancelled = mutableListOf<ExternalSystemTaskId>()
         val cancellation = RecordingCancellation {
@@ -185,7 +184,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `successful callback waits for owned task termination`() = runBlocking {
+    fun `successful callback waits for owned task termination`() = runBoundedBlocking {
         val execution = OwnedExternalTaskExecution(cancelTask = { true })
         val owned = taskId()
 
@@ -200,7 +199,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `owned execution converts launcher failure to a completed false result`() = runBlocking {
+    fun `owned execution converts launcher failure to a completed false result`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val execution = OwnedExternalTaskExecution(cancelTask = { true })
 
@@ -209,7 +208,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `owned preparation can be stopped before the external launcher is reached`() = runBlocking {
+    fun `owned preparation can be stopped before the external launcher is reached`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val preparing = CompletableDeferred<Unit>()
         val prepared = CompletableDeferred<Unit>()
@@ -238,7 +237,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `launcher failure after binding cancels and waits for the exact task end`() = runBlocking {
+    fun `launcher failure after binding cancels and waits for the exact task end`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val owned = taskId()
         val cancelled = CompletableDeferred<ExternalSystemTaskId>()
@@ -266,7 +265,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `synchronous launcher return without lifecycle callbacks fails visibly`() = runBlocking {
+    fun `synchronous launcher return without lifecycle callbacks fails visibly`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
 
         assertFalse(runOwnedExternalTask(sessions, OwnedExternalTaskExecution(cancelTask = { true })) {})
@@ -274,7 +273,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `terminal callback completes a launch without listener lifecycle events`() = runBlocking {
+    fun `terminal callback completes a launch without listener lifecycle events`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val execution = OwnedExternalTaskExecution(cancelTask = { true })
 
@@ -283,7 +282,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `terminal callback does not finish a bound task before listener end`() = runBlocking {
+    fun `terminal callback does not finish a bound task before listener end`() = runBoundedBlocking {
         val execution = OwnedExternalTaskExecution(cancelTask = { true })
         val owned = taskId()
 
@@ -299,7 +298,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `cancelled bound task waits for exact end after the synchronous launcher returns`() = runBlocking {
+    fun `cancelled bound task waits for exact end after the synchronous launcher returns`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val owned = taskId()
         val cancellation = RecordingCancellation { true }
@@ -325,7 +324,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `late exact end restarts terminal monitoring after its scheduler stops`() = runBlocking {
+    fun `late exact end restarts terminal monitoring after its scheduler stops`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val owned = taskId()
         var requests = 0
@@ -357,7 +356,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `cancellation before registered launch never calls the launcher`() = runBlocking {
+    fun `cancellation before registered launch never calls the launcher`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         var launched = false
 
@@ -386,7 +385,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `coroutine cancellation waits for the bound task to terminate`() = runBlocking {
+    fun `coroutine cancellation waits for the bound task to terminate`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val owned = taskId()
         val cancelled = CompletableDeferred<ExternalSystemTaskId>()
@@ -402,7 +401,7 @@ class AffectedRunSessionsTest {
                 listener.onStart("", owned)
                 listener.onEnvironmentPrepared(owned)
                 launched.complete(Unit)
-                finishLauncher.await()
+                finishLauncher.awaitBounded()
                 listener.onCancel("", owned)
                 listener.onEnd("", owned)
                 cancellation.terminate()
@@ -421,7 +420,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `cancellation that never reaches task end is abandoned after the bound`() = runBlocking {
+    fun `cancellation that never reaches task end is abandoned after the bound`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val owned = taskId()
         val execution = OwnedExternalTaskExecution(cancelTask = { true })
@@ -431,7 +430,7 @@ class AffectedRunSessionsTest {
             runOwnedExternalTask(sessions, execution, cancellationTimeoutMillis = 200) { listener ->
                 listener.onStart("", owned)
                 launched.complete(Unit)
-                release.await()
+                release.awaitBounded()
             }
         }
         launched.await()
@@ -449,7 +448,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `launcher cancellation is propagated instead of being swallowed`() = runBlocking {
+    fun `launcher cancellation is propagated instead of being swallowed`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
 
         withTimeout(5_000) {
@@ -463,7 +462,7 @@ class AffectedRunSessionsTest {
     }
 
     @Test
-    fun `coroutine cancellation before binding stops the late exact task`() = runBlocking {
+    fun `coroutine cancellation before binding stops the late exact task`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val owned = taskId()
         val requested = CompletableDeferred<ExternalSystemTaskNotificationListener>()
@@ -478,10 +477,10 @@ class AffectedRunSessionsTest {
         val task = async(Dispatchers.Default) {
             runOwnedExternalTask(sessions, execution) { listener ->
                 requested.complete(listener)
-                allowBinding.await()
+                allowBinding.awaitBounded()
                 listener.onStart("", owned)
                 listener.onEnvironmentPrepared(owned)
-                allowTermination.await()
+                allowTermination.awaitBounded()
                 listener.onCancel("", owned)
                 listener.onEnd("", owned)
                 cancellation.terminate()

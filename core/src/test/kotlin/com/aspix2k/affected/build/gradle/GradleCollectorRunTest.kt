@@ -3,10 +3,10 @@ package com.aspix2k.affected.build.gradle
 import com.aspix2k.affected.build.cmake.sha256
 import com.aspix2k.affected.build.findGradleFailureStrategyScript
 import com.aspix2k.affected.impact.DependencyMapStore
+import com.aspix2k.affected.runBoundedBlocking
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
-import kotlinx.coroutines.runBlocking
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -79,7 +79,7 @@ class GradleCollectorRunTest {
     }
 
     @Test
-    fun `collector remains published when cancellation wins the dispatcher return`() = runBlocking {
+    fun `collector remains published when cancellation wins the dispatcher return`() = runBoundedBlocking {
         val root = createTempDirectory("affected-gradle-run-publish-test-")
         val published = AtomicReference<GradleCollectorRun?>()
         val created = CompletableDeferred<GradleCollectorRun>()
@@ -89,7 +89,7 @@ class GradleCollectorRunTest {
                 publishGradleCollector(published) {
                     assertNotNull(GradleCollectorRun.create(root.resolve("cache"), artifacts(root))).also {
                         created.complete(it)
-                        runBlocking { release.await() }
+                        runBoundedBlocking { release.await() }
                     }
                 }
             }

@@ -8,6 +8,7 @@ import com.aspix2k.affected.TaskGroup
 import com.aspix2k.affected.Verification
 import com.aspix2k.affected.build.gradle.GradleBuildSystem
 import com.aspix2k.affected.runAndWait
+import com.aspix2k.affected.runBoundedBlocking
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.ui.RunContentManager
 import com.intellij.openapi.application.ApplicationManager
@@ -18,7 +19,6 @@ import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.externalSystem.service.execution.ExternalSystemJdkUtil
 import com.intellij.testFramework.ExtensionTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.jetbrains.plugins.gradle.settings.DistributionType
 import org.jetbrains.plugins.gradle.settings.GradleProjectSettings
@@ -68,21 +68,21 @@ class CliMixedGradleKotlinToolchainConformanceTest : BasePlatformTestCase() {
 
     override fun runInDispatchThread(): Boolean = false
 
-    fun testGradleChangeDoesNotOwnTheSiblingToolchainProject() = runBlocking {
+    fun testGradleChangeDoesNotOwnTheSiblingToolchainProject() = runBoundedBlocking {
         val root = mixedRepo()
         val owners = ModuleGraph.create(project).nodesFor(File(root, GRADLE_SOURCE))
         assertEquals(listOf(GradleConstants.SYSTEM_ID.id), owners.map { it.system.id }.distinct())
         assertTrue(owners.none { it.system.id == "KOTLIN_TOOLCHAIN" })
     }
 
-    fun testToolchainChangeDoesNotOwnTheSiblingGradleProject() = runBlocking {
+    fun testToolchainChangeDoesNotOwnTheSiblingGradleProject() = runBoundedBlocking {
         val root = mixedRepo()
         val owners = ModuleGraph.create(project).nodesFor(File(root, TOOLCHAIN_SOURCE))
         assertEquals(listOf("KOTLIN_TOOLCHAIN"), owners.map { it.system.id }.distinct())
         assertTrue(owners.none { it.system.id == GradleConstants.SYSTEM_ID.id })
     }
 
-    fun testImportedAdaptersArePresentAndToolchainChangePlansTheToolchainGroup() = runBlocking {
+    fun testImportedAdaptersArePresentAndToolchainChangePlansTheToolchainGroup() = runBoundedBlocking {
         val root = mixedRepo()
         val prepared = prepared(root, TOOLCHAIN_SOURCE)
         assertEquals(
@@ -97,7 +97,7 @@ class CliMixedGradleKotlinToolchainConformanceTest : BasePlatformTestCase() {
     fun testSimultaneousChangesRunBothGroupsInOneVerificationSession() {
         if (!nativeEnabled()) return
         val root = mixedRepo()
-        val outcome = runBlocking { runBothGroups(root) }
+        val outcome = runBoundedBlocking { runBothGroups(root) }
         assertTrue("mixed Gradle+Kotlin verification failed${diagnostics()}", outcome.passed)
         assertEquals(
             setOf(GradleConstants.SYSTEM_ID.id, "KOTLIN_TOOLCHAIN"),
@@ -113,7 +113,7 @@ class CliMixedGradleKotlinToolchainConformanceTest : BasePlatformTestCase() {
         File(root, "gradle/build.gradle").appendText(
             "\ntasks.named(\"test\") { doLast { throw new GradleException('requested mixed fixture failure') } }\n",
         )
-        val outcome = runBlocking { runBothGroups(root) }
+        val outcome = runBoundedBlocking { runBothGroups(root) }
         assertFalse(outcome.passed)
         assertTrue(
             "Kotlin group did not finish after the Gradle failure${diagnostics()}",

@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build.process
 
+import com.aspix2k.affected.awaitBounded
 import com.aspix2k.affected.build.PlannedExecutionRoot
 import com.aspix2k.affected.build.executionRootGuard
 import com.intellij.execution.process.OSProcessHandler
@@ -185,7 +186,7 @@ class SequentialProcessHandlerTest {
             executionRootGuard = guard,
             ownedTemporaryDirectoryCleanup = { directory ->
                 cleanupStarted.countDown()
-                releaseCleanup.await()
+                releaseCleanup.awaitBounded()
                 Files.delete(directory)
                 true
             },
@@ -439,7 +440,7 @@ class SequentialProcessHandlerTest {
                     )
                     entered.countDown()
                     try {
-                        release.await()
+                        release.awaitBounded()
                     } catch (_: InterruptedException) {
                         while (release.count > 0) Thread.onSpinWait()
                         Thread.currentThread().interrupt()
@@ -479,7 +480,7 @@ class SequentialProcessHandlerTest {
             ),
             processFactory = { commandLine, afterInitialPass ->
                 starting.countDown()
-                release.await()
+                release.awaitBounded()
                 val processHandler = OSProcessHandler(commandLine)
                 RunningCommand(
                     processHandler,

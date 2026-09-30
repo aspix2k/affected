@@ -9,13 +9,13 @@ import com.aspix2k.affected.AffectedStateSnapshot
 import com.aspix2k.affected.AnalysisStatus
 import com.aspix2k.affected.TaskGroup
 import com.aspix2k.affected.VerificationStatus
+import com.aspix2k.affected.runBoundedBlocking
 import com.aspix2k.affected.runClaimedGroupsWithPresentation
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.process.ProcessListener
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.nio.file.Files
@@ -26,7 +26,7 @@ class CommandRunnerPresentationTest : BasePlatformTestCase() {
 
     override fun runInDispatchThread(): Boolean = false
 
-    fun testClaimedCliBatchAttachesToTheAggregateWithoutPublishingAChildSession() = runBlocking {
+    fun testClaimedCliBatchAttachesToTheAggregateWithoutPublishingAChildSession() = runBoundedBlocking {
         val sessions = AffectedRunSessions.getInstance(project)
         val claim = checkNotNull(sessions.claim(::claim))
         val view = RecordingView()
@@ -58,7 +58,7 @@ class CommandRunnerPresentationTest : BasePlatformTestCase() {
         assertEquals(1, view.publications)
     }
 
-    fun testFailureWhileShowingTheRunCompletesAsFailedAndReleasesTheSession() = runBlocking {
+    fun testFailureWhileShowingTheRunCompletesAsFailedAndReleasesTheSession() = runBoundedBlocking {
         val sessions = AffectedRunSessions.getInstance(project)
         val root = checkNotNull(project.basePath)
         Files.createDirectories(Path.of(root))
@@ -82,7 +82,7 @@ class CommandRunnerPresentationTest : BasePlatformTestCase() {
         assertEquals(0, sessions.activeCount())
     }
 
-    fun testFailureWhileShowingARunningCommandCompletesOnlyAfterTerminationAndOnce() = runBlocking {
+    fun testFailureWhileShowingARunningCommandCompletesOnlyAfterTerminationAndOnce() = runBoundedBlocking {
         val sessions = AffectedRunSessions.getInstance(project)
         val root = checkNotNull(project.basePath)
         Files.createDirectories(Path.of(root))
