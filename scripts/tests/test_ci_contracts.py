@@ -175,7 +175,7 @@ class CiContractsTest(unittest.TestCase):
             path = root / ".github/workflows/conformance.yml"
             path.write_text(
                 path.read_text(encoding="utf-8").replace(
-                    '          require_when cli-native "${EXACT_REQUIRED:-true}" "$CLI_RESULT"\n',
+                    '          require_when cli-native "${NATIVE_REQUIRED:-true}" "$CLI_RESULT"\n',
                     "",
                     1,
                 ),
@@ -192,7 +192,7 @@ class CiContractsTest(unittest.TestCase):
             path = root / ".github/workflows/conformance.yml"
             path.write_text(
                 path.read_text(encoding="utf-8").replace(
-                    'require_when cli-native "${EXACT_REQUIRED:-true}" "$CLI_RESULT"',
+                    'require_when cli-native "${NATIVE_REQUIRED:-true}" "$CLI_RESULT"',
                     'require_when cli-native "${EXACT_REQUIRED:-true}" "$PATHS_RESULT"',
                     1,
                 ),
@@ -373,10 +373,10 @@ class CiContractsTest(unittest.TestCase):
                 "        os: [macos-latest]",
             ),
             "runner": (
-                "    if: needs.scope.outputs.exact == 'true'\n"
+                "    if: needs.scope.outputs.native == 'true'\n"
                 "    runs-on: ${{ matrix.os }}\n"
                 "    timeout-minutes: 20",
-                "    if: needs.scope.outputs.exact == 'true'\n"
+                "    if: needs.scope.outputs.native == 'true'\n"
                 "    runs-on: macos-latest\n"
                 "    timeout-minutes: 20",
             ),
@@ -416,13 +416,13 @@ class CiContractsTest(unittest.TestCase):
                 "  cross-platform-paths:\n"
                 "    name: Cross-platform paths / ${{ matrix.os }}\n"
                 "    needs: [scope]\n"
-                "    if: needs.scope.outputs.exact == 'true'\n",
+                "    if: needs.scope.outputs.native == 'true'\n",
                 "  cross-platform-paths:\n"
                 "    name: Cross-platform paths / ${{ matrix.os }}\n"
                 "    needs: [scope]\n"
                 "    if: false\n"
                 "    env:\n"
-                "      CONTRACT_DECOY: \"needs.scope.outputs.exact == 'true'\"\n",
+                "      CONTRACT_DECOY: \"needs.scope.outputs.native == 'true'\"\n",
             ),
         }
         for name, (required, weakened) in mutations.items():
@@ -539,10 +539,10 @@ class CiContractsTest(unittest.TestCase):
         """Neither the required job nor its executable step may ignore failures."""
         mutations = {
             "job": (
-                "    if: needs.scope.outputs.exact == 'true'\n"
+                "    if: needs.scope.outputs.native == 'true'\n"
                 "    runs-on: ${{ matrix.os }}\n"
                 "    timeout-minutes: 20",
-                "    if: needs.scope.outputs.exact == 'true'\n"
+                "    if: needs.scope.outputs.native == 'true'\n"
                 "    runs-on: ${{ matrix.os }}\n"
                 "    continue-on-error: true\n"
                 "    timeout-minutes: 20",

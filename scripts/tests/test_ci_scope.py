@@ -45,21 +45,21 @@ class CiScopeTest(unittest.TestCase):
         self.assertEqual(ci_scope.scope_for([".gitignore"]), ci_scope.empty_scope())
         self.assertEqual(
             ci_scope.scope_for([".gitignore", "core/src/main/kotlin/Foo.kt"]),
-            {"plugin": True, "health": False, "codeql": True, "dependencies": False, "exact": True},
+            {"plugin": True, "health": False, "codeql": True, "dependencies": False, "exact": True, "native": True},
         )
 
     def test_kotlin_source_runs_plugin_and_codeql(self) -> None:
         """Product JVM source still pays for verification and CodeQL."""
         self.assertEqual(
             ci_scope.scope_for(["core/src/main/kotlin/Foo.kt"]),
-            {"plugin": True, "health": False, "codeql": True, "dependencies": False, "exact": True},
+            {"plugin": True, "health": False, "codeql": True, "dependencies": False, "exact": True, "native": True},
         )
 
     def test_root_ui_source_does_not_start_native_adapter_fixtures(self) -> None:
         """Keep the exact matrix at its previous product boundary."""
         self.assertEqual(
             ci_scope.scope_for(["src/main/kotlin/Action.kt"]),
-            {"plugin": True, "health": False, "codeql": True, "dependencies": False, "exact": False},
+            {"plugin": True, "health": False, "codeql": True, "dependencies": False, "exact": False, "native": False},
         )
 
     def test_gradle_lock_runs_every_expensive_gate(self) -> None:
@@ -70,14 +70,14 @@ class CiScopeTest(unittest.TestCase):
         """Editing the aggregator must still run plugin and health."""
         self.assertEqual(
             ci_scope.scope_for([".github/workflows/ci.yml"]),
-            {"plugin": True, "health": True, "codeql": False, "dependencies": False, "exact": False},
+            {"plugin": True, "health": True, "codeql": False, "dependencies": False, "exact": False, "native": False},
         )
 
     def test_conformance_workflow_runs_its_required_gate(self) -> None:
         """Changing the gate itself must execute every exact-impact lane."""
         self.assertEqual(
             ci_scope.scope_for([".github/workflows/conformance.yml"]),
-            {"plugin": False, "health": False, "codeql": False, "dependencies": False, "exact": True},
+            {"plugin": False, "health": False, "codeql": False, "dependencies": False, "exact": True, "native": True},
         )
 
     def test_codeql_kotlin_compatibility_runs_only_codeql(self) -> None:
@@ -94,7 +94,7 @@ class CiScopeTest(unittest.TestCase):
                 "health": False,
                 "codeql": True,
                 "dependencies": False,
-                "exact": False,
+                "exact": False, "native": False,
             },
         )
 
@@ -102,7 +102,7 @@ class CiScopeTest(unittest.TestCase):
         """Adding native evidence must not erase the existing plugin gate."""
         self.assertEqual(
             ci_scope.scope_for(["src/main/resources/META-INF/plugin.xml"]),
-            {"plugin": True, "health": False, "codeql": False, "dependencies": False, "exact": True},
+            {"plugin": True, "health": False, "codeql": False, "dependencies": False, "exact": True, "native": True},
         )
 
     def test_product_verifier_matrix_sources_run_the_plugin_gate(self) -> None:
@@ -120,7 +120,7 @@ class CiScopeTest(unittest.TestCase):
                         "health": False,
                         "codeql": False,
                         "dependencies": False,
-                        "exact": True,
+                        "exact": True, "native": True,
                     },
                 )
 
@@ -136,7 +136,7 @@ class CiScopeTest(unittest.TestCase):
         """A docs file cannot turn off a product change in the same diff."""
         self.assertEqual(
             ci_scope.scope_for(["README.md", "core/src/main/kotlin/Bar.kt"]),
-            {"plugin": True, "health": False, "codeql": True, "dependencies": False, "exact": True},
+            {"plugin": True, "health": False, "codeql": True, "dependencies": False, "exact": True, "native": True},
         )
 
     def test_merge_group_uses_group_shas(self) -> None:
@@ -157,6 +157,15 @@ class CiScopeTest(unittest.TestCase):
             ci_scope.event_range("push", {"before": "0" * 40, "after": "c" * 40})
         )
 
+    def test_collector_source_skips_native_adapter_lanes(self) -> None:
+        """A JVM collector change keeps the collector proofs but not the CLI toolchains."""
+        self.assertEqual(
+            ci_scope.scope_for(["collector/src/main/java/com/aspix2k/affected/collector/AffectedTestNgListener.java"]),
+            {"plugin": True, "health": False, "codeql": True, "dependencies": False, "exact": True, "native": False},
+        )
+        self.assertTrue(ci_scope.scope_for(["core/src/test/kotlin/com/aspix2k/affected/build/CliCommandTest.kt"])["native"])
+        self.assertTrue(ci_scope.scope_for([".github/workflows/conformance.yml"])["native"])
+
     def test_github_output_writes_lowercase_booleans(self) -> None:
         """Actions conditions compare against the string true."""
         with TemporaryDirectory() as directory:
@@ -164,7 +173,7 @@ class CiScopeTest(unittest.TestCase):
             ci_scope.write_github_output(path, ci_scope.empty_scope())
             self.assertEqual(
                 path.read_text(encoding="utf-8"),
-                "plugin=false\nhealth=false\ncodeql=false\ndependencies=false\nexact=false\n",
+                "plugin=false\nhealth=false\ncodeql=false\ndependencies=false\nexact=false\nnative=false\n",
             )
 
     def test_git_diff_classifies_a_readme_commit(self) -> None:
@@ -212,7 +221,7 @@ class CiScopeTest(unittest.TestCase):
                     "health": False,
                     "codeql": True,
                     "dependencies": False,
-                    "exact": True,
+                    "exact": True, "native": True,
                 },
             )
 

@@ -9,7 +9,7 @@ import re
 import subprocess
 from pathlib import Path
 
-GATES = ("plugin", "health", "codeql", "dependencies", "exact")
+GATES = ("plugin", "health", "codeql", "dependencies", "exact", "native")
 SHA = re.compile(r"^[0-9a-f]{40}$")
 ZERO_SHA = "0" * 40
 PRODUCT_PREFIXES = ("src/", "core/", "mcp/", "collector/")
@@ -135,9 +135,9 @@ def flags_for(path: str) -> dict[str, bool] | None:
     name = path.rsplit("/", 1)[-1]
     if path in EXACT_EVIDENCE_FILES:
         return (
-            selected_scope("plugin", "exact")
+            selected_scope("plugin", "exact", "native")
             if path.startswith("src/") or path in PRODUCT_VERIFIER_MATRIX_FILES
-            else selected_scope("exact")
+            else selected_scope("exact", "native")
         )
     if path in DOC_FILES or path.startswith("docs/") or is_github_doc(path):
         return empty_scope()
@@ -153,7 +153,7 @@ def flags_for(path: str) -> dict[str, bool] | None:
     if path in SAFE_WORKFLOWS:
         return empty_scope()
     if path == ".github/workflows/conformance.yml":
-        return selected_scope("exact")
+        return selected_scope("exact", "native")
     if path == ".github/workflows/ci.yml":
         return selected_scope("plugin", "health")
     if path == ".github/workflows/codeql.yml":
@@ -165,7 +165,7 @@ def flags_for(path: str) -> dict[str, bool] | None:
         "scripts/fetch_gradle.py",
         ".github/changelog-section.sh",
     }:
-        return selected_scope("plugin", "health", "codeql", "exact")
+        return selected_scope("plugin", "health", "codeql", "exact", "native")
     if path == "config/detekt.yml":
         return selected_scope("plugin")
     if is_dependency_path(path, name):
@@ -176,9 +176,11 @@ def flags_for(path: str) -> dict[str, bool] | None:
             enabled.append("codeql")
         if path.startswith(("core/", "collector/")):
             enabled.append("exact")
+        if path.startswith("core/"):
+            enabled.append("native")
         return selected_scope(*enabled)
     if path.startswith(("conformance/", "fixtures/")):
-        return selected_scope("plugin", "exact")
+        return selected_scope("plugin", "exact", "native")
     return None
 
 

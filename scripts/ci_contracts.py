@@ -32,6 +32,7 @@ EXACT_IMPACT_JOBS = (
     "dotnet-sdks",
     "phpunit-versions",
 )
+NATIVE_IMPACT_JOBS = frozenset({"cross-platform-paths", "cli-native", "dotnet-sdks", "phpunit-versions"})
 CODEQL_KOTLIN_COMPAT_SHA256 = "73a5dd964566b450af31e4d870dd45e795d6f1fce27ba04443b7cfa138df6ddd"
 CODEQL_KOTLIN_PROBE_SHA256 = "1120008c8354f7a580198bd3becfe9b185c407e78f18fabdcadd9e4621a1cefe"
 
@@ -156,7 +157,7 @@ def check(root: Path = ROOT) -> None:
     python_steps = action_steps(cross_platform, "actions/setup-python")
     if (
         re.search(r"(?m)^    needs: \[scope\]$", cross_platform) is None
-        or re.search(r"(?m)^    if: needs\.scope\.outputs\.exact == 'true'$", cross_platform) is None
+        or re.search(r"(?m)^    if: needs\.scope\.outputs\.native == 'true'$", cross_platform) is None
         or re.search(r"(?m)^    runs-on: \$\{\{ matrix\.os \}\}$", cross_platform) is None
         or re.search(r"(?m)^        os: \[macos-latest, windows-latest\]$", cross_platform) is None
         or re.search(r"(?m)^    continue-on-error:", cross_platform) is not None
@@ -486,8 +487,12 @@ def check_conformance(conformance: str) -> None:
         r'(?m)^      - id: classify\n        run: python3 scripts/ci_scope\.py --github-output "\$GITHUB_OUTPUT"$',
         scope,
     )
-    if not has_line(scope, "exact: ${{ steps.classify.outputs.exact }}") or classifier is None:
-        raise CiContractError("conformance scope must publish the classifier exact-impact decision")
+    if (
+        not has_line(scope, "exact: ${{ steps.classify.outputs.exact }}")
+        or not has_line(scope, "native: ${{ steps.classify.outputs.native }}")
+        or classifier is None
+    ):
+        raise CiContractError("conformance scope must publish the classifier exact-impact decisions")
     cli_native = slice_job(conformance, "cli-native")
     native_update = (
         "sudo timeout --kill-after=30s 2m apt-get -o Acquire::Retries=3 "
@@ -515,11 +520,12 @@ def check_conformance(conformance: str) -> None:
             raise CiContractError("Native CLI must lint all bundled Python adapters")
     for name in EXACT_IMPACT_JOBS[1:]:
         job = slice_job(conformance, name)
+        gate = "native" if name in NATIVE_IMPACT_JOBS else "exact"
         if (
             "needs: [scope]" not in job
-            or "needs.scope.outputs.exact == 'true'" not in job
+            or f"needs.scope.outputs.{gate} == 'true'" not in job
         ):
-            raise CiContractError(f"{name} must follow the exact-impact scope")
+            raise CiContractError(f"{name} must follow the {gate} scope")
     required = slice_job(conformance, "required")
     if not re.search(r"(?m)^    name: exact-impact$", required):
         raise CiContractError("The required exact-impact context name must remain stable")
@@ -537,8 +543,9 @@ def check_conformance(conformance: str) -> None:
         'require_success scope "$SCOPE_RESULT"',
     ):
         raise CiContractError("The required exact-impact aggregate must bind and check scope")
-    if not has_line(required, "EXACT_REQUIRED: ${{ needs.scope.outputs.exact }}"):
-        raise CiContractError("The required exact-impact aggregate must bind the exact scope")
+    for variable, gate in (("EXACT_REQUIRED", "exact"), ("NATIVE_REQUIRED", "native")):
+        if not has_line(required, f"{variable}: ${{{{ needs.scope.outputs.{gate} }}}}"):
+            raise CiContractError(f"The required exact-impact aggregate must bind the {gate} scope")
     result_bindings = (
         ("exact-impact", "EXACT_RESULT", "needs.exact-impact.result"),
         ("cross-platform-paths", "PATHS_RESULT", "needs.cross-platform-paths.result"),
@@ -547,7 +554,8 @@ def check_conformance(conformance: str) -> None:
         ("phpunit-versions", "PHPUNIT_RESULT", "needs.phpunit-versions.result"),
     )
     for name, variable, source in result_bindings:
-        invocation = f'require_when {name} "${{EXACT_REQUIRED:-true}}" "${variable}"'
+        requirement = "NATIVE_REQUIRED" if name in NATIVE_IMPACT_JOBS else "EXACT_REQUIRED"
+        invocation = f'require_when {name} "${{{requirement}:-true}}" "${variable}"'
         if not has_line(required, f"{variable}: ${{{{ {source} }}}}") or not has_line(
             required,
             invocation,
