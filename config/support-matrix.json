@@ -232,7 +232,7 @@
       ],
       "versions": "Maven 3.9.x; Maven 4 RC keeps the full goal",
       "support": "supported",
-      "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/MavenInjectionTest.java", "conformance/cli-fixtures/maven-cancellation", "core/src/test/kotlin/com/aspix2k/affected/build/CliMavenCancellationConformanceTest.kt", "conformance/cli-fixtures/mixed-gradle-maven", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleMavenConformanceTest.kt"],
+      "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/MavenInjectionTest.java", "conformance/cli-fixtures/maven-cancellation", "core/src/test/kotlin/com/aspix2k/affected/build/CliMavenCancellationConformanceTest.kt", "conformance/cli-fixtures/mixed-gradle-maven", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleMavenConformanceTest.kt", "conformance/cli-fixtures/mixed-maven-node", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedMavenNodeConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
@@ -332,7 +332,7 @@
       ],
       "versions": "Current stable Node.js; Jest 29–30; Vitest 2–5; node --test and Bun 1.4 (tested 1.4.2) test files only, production changes run the package",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/node", "conformance/cli-fixtures/bun", "conformance/cli-fixtures/mixed-gradle-node", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleNodeConformanceTest.kt", "conformance/cli-fixtures/mixed-node-dart", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedNodeDartConformanceTest.kt"],
+      "fixtures": ["conformance/cli-fixtures/node", "conformance/cli-fixtures/bun", "conformance/cli-fixtures/mixed-gradle-node", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleNodeConformanceTest.kt", "conformance/cli-fixtures/mixed-node-dart", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedNodeDartConformanceTest.kt", "conformance/cli-fixtures/mixed-maven-node", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedMavenNodeConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
@@ -1023,6 +1023,12 @@
       "adapters": ["GRADLE", "KOTLIN_TOOLCHAIN"],
       "fixtures": ["conformance/cli-fixtures/mixed-gradle-kotlin-toolchain"],
       "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleKotlinToolchainConformanceTest.kt"]
+    },
+    {
+      "id": "maven-node",
+      "adapters": ["MAVEN", "NODE"],
+      "fixtures": ["conformance/cli-fixtures/mixed-maven-node"],
+      "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/CliMixedMavenNodeConformanceTest.kt"]
     }
   ]
 }

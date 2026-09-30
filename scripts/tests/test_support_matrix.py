@@ -952,6 +952,7 @@ class SupportMatrixTest(unittest.TestCase):
         self.assertIn("| gradle-node |", support)
         self.assertIn("| gradle-maven |", support)
         self.assertIn("| gradle-kotlin-toolchain |", support)
+        self.assertIn("| maven-node |", support)
         self.assertNotIn("| gradle-kmp |", support)
 
     def test_product_verifier_uses_matrix_selected_type_archive_and_failure_levels(
