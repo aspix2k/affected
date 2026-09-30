@@ -37,6 +37,7 @@ class CliGradleSelectionDiagnosticsConformanceTest : BasePlatformTestCase() {
         val repository = CliConformanceRepository.configured
         val root = File(checkNotNull(project.basePath), "gradle-selection-diagnostics")
         val markers = File(root, "markers")
+        var failure: Throwable? = null
         try {
             OwnedSandbox.remove(root)
             assertTrue(repository.fixture("gradle-kmp-fallback").copyRecursively(root, overwrite = true))
@@ -59,9 +60,12 @@ class CliGradleSelectionDiagnosticsConformanceTest : BasePlatformTestCase() {
             assertEquals("ios\n", File(markers, "ios.marker").readText())
             assertEquals("custom\n", File(markers, "custom.marker").readText())
             assertEquals("included\n", File(markers, "included.marker").readText())
+        } catch (thrown: Throwable) {
+            failure = thrown
+            throw thrown
         } finally {
             AffectedRunSessions.getInstance(project).stopOwned()
-            OwnedSandbox.remove(root)
+            OwnedSandbox.remove(root, failure)
         }
     }
 

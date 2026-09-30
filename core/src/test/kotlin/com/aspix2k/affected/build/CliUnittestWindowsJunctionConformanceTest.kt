@@ -5,6 +5,7 @@ import com.aspix2k.affected.build.python.PythonProjects
 import com.aspix2k.affected.build.python.pythonCommands
 import org.junit.Assume.assumeTrue
 import java.io.File
+import java.nio.charset.Charset
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
@@ -130,9 +131,15 @@ class CliUnittestWindowsJunctionConformanceTest {
 
     private fun runProcess(directory: File, arguments: List<String>, timeoutSeconds: Long): Execution {
         check(directory.isDirectory && directory.canRead()) { "Process directory is not readable: $directory" }
-        val result = NativeProcessRunner.run(arguments, directory, timeoutSeconds)
+        val result = NativeProcessRunner.run(
+            arguments,
+            directory,
+            timeoutSeconds,
+            outputLimitBytes = MAX_OUTPUT_BYTES,
+            charset = Charset.defaultCharset(),
+        )
         assertTrue(result.completed, "Timed out: ${arguments.joinToString(" ")}\n${result.output}")
-        assertTrue(result.output.length <= MAX_OUTPUT_BYTES, "Process output exceeded $MAX_OUTPUT_BYTES bytes")
+        assertFalse(result.truncated, "Process output exceeded $MAX_OUTPUT_BYTES bytes")
         return Execution(checkNotNull(result.exitCode), result.output)
     }
 

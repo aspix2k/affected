@@ -12,11 +12,9 @@ internal object BazelNativeRunner {
             val shutdown = runCatching { shutdown(directory, environment) }
             val primary = run.exceptionOrNull()
             val secondary = shutdown.exceptionOrNull()
-            when {
-                primary != null -> throw primary.also { failure -> secondary?.let(failure::addSuppressed) }
-                secondary != null -> throw secondary
-                else -> run.getOrThrow()
-            }
+            if (primary != null) throw primary.also { failure -> secondary?.let(failure::addSuppressed) }
+            secondary?.let { failure -> System.err.println("bazel shutdown failed: ${failure.message}") }
+            run.getOrThrow()
         }
 
     private fun shutdown(directory: File, environment: Map<String, String>) {

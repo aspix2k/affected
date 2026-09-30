@@ -139,35 +139,59 @@ class OwnedSandboxTest {
     }
 
     @Test
-    fun `read-only directory that really cannot be deleted fails visibly`() {
+    fun `read-only nested entries are made writable and deleted`() {
         assumeTrue(FileSystems.getDefault().supportedFileAttributeViews().contains("posix"))
-        var guarded: Path? = null
-        var root: Path? = null
-
-        val failure = runCatching {
-            OwnedSandbox.use("affected-sandbox-readonly") { sandbox ->
-                root = sandbox.root.toPath()
-                val directory = sandbox.directory("guarded")
-                File(directory, "entry.txt").writeText("entry")
-                guarded = directory.toPath()
-                Files.setPosixFilePermissions(directory.toPath(), PosixFilePermissions.fromString("r-xr-xr-x"))
+        val link = Files.createTempFile("affected-sandbox-link-target", ".txt")
+        val outside = Files.createTempDirectory("affected-sandbox-outside")
+        val outsideFile = Files.createFile(outside.resolve("keep.txt"))
+        Files.setPosixFilePermissions(outside, PosixFilePermissions.fromString("r-xr-xr-x"))
+        try {
+            val root = OwnedSandbox.use("affected-sandbox-readonly") { sandbox ->
+                val install = sandbox.directory("install/deep/deeper")
+                val file = File(install, "entry.txt").apply { writeText("entry") }
+                val sibling = File(sandbox.directory("install/deep"), "sibling.txt").apply { writeText("sibling") }
+                Files.createSymbolicLink(sandbox.file("install/outside").toPath(), outside)
+                Files.createSymbolicLink(sandbox.file("install/file-link").toPath(), link)
+                restrict(file, "r--r--r--")
+                restrict(sibling, "r--r--r--")
+                restrict(install, "r-xr-xr-x")
+                restrict(install.parentFile, "r-xr-xr-x")
+                restrict(sandbox.file("install"), "---------")
+                sandbox.root
             }
-        }.exceptionOrNull()
+
+            assertFalse(root.exists())
+            assertTrue(Files.exists(outsideFile))
+            assertEquals(
+                PosixFilePermissions.fromString("r-xr-xr-x"),
+                Files.getPosixFilePermissions(outside),
+            )
+            assertTrue(Files.exists(link))
+        } finally {
+            Files.setPosixFilePermissions(outside, PosixFilePermissions.fromString("rwxr-xr-x"))
+            OwnedSandbox.deleteTree(outside)
+            Files.deleteIfExists(link)
+        }
+    }
+
+    @Test
+    fun `remove attaches an undeletable directory to the primary failure`() {
+        val locked = IOException("simulated locked file")
+        val root = Files.createTempDirectory("affected-sandbox-remove")
+        val primary = IllegalStateException("primary")
 
         try {
-            assumeTrue(
-                "Directory permissions are not enforced for this user",
-                failure != null || !Files.exists(checkNotNull(root)),
-            )
-            assertTrue(failure is AssertionError, failure.toString())
-            assertContains(failure.message.orEmpty(), "Sandbox was not deleted")
-            assertTrue(Files.exists(checkNotNull(root)))
+            OwnedSandbox.remove(root.toFile(), primary) { throw locked }
+
+            assertContains(primary.suppressed.single().message.orEmpty(), "Sandbox was not deleted")
+            assertFailsWith<AssertionError> { OwnedSandbox.remove(root.toFile()) { throw locked } }
         } finally {
-            guarded?.takeIf(Files::exists)?.let {
-                Files.setPosixFilePermissions(it, PosixFilePermissions.fromString("rwxr-xr-x"))
-            }
-            root?.let(OwnedSandbox::deleteTree)
+            OwnedSandbox.deleteTree(root)
         }
+    }
+
+    private fun restrict(file: File, permissions: String) {
+        Files.setPosixFilePermissions(file.toPath(), PosixFilePermissions.fromString(permissions))
     }
 
     private fun populate(sandbox: OwnedSandbox) {

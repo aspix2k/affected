@@ -33,13 +33,17 @@ class AffectedMixedRunNativeTest : BasePlatformTestCase() {
         if (!nativeEnabled()) return@runBlocking
         if (!xcodeAvailable()) return@runBlocking
         val fixture = prepare("mixed-gradle-xcode-success", "test")
+        var failure: Throwable? = null
         try {
             assertTrue(run(fixture))
             assertTrue(File(fixture.root, "affected-gradle-test.marker").isFile)
             assertTrue(File(fixture.iosRoot, "affected-xcode-test.marker").isFile)
             assertAggregate(fixture, expectedExitCode = 0)
+        } catch (thrown: Throwable) {
+            failure = thrown
+            throw thrown
         } finally {
-            cleanup(fixture)
+            cleanup(fixture, failure)
         }
     }
 
@@ -47,13 +51,17 @@ class AffectedMixedRunNativeTest : BasePlatformTestCase() {
         if (!nativeEnabled()) return@runBlocking
         if (!xcodeAvailable()) return@runBlocking
         val fixture = prepare("mixed-gradle-xcode-failure", "failingTest")
+        var failure: Throwable? = null
         try {
             assertFalse(run(fixture))
             assertTrue(File(fixture.root, "affected-gradle-failure.marker").isFile)
             assertTrue(File(fixture.iosRoot, "affected-xcode-test.marker").isFile)
             assertAggregate(fixture, expectedExitCode = 1)
+        } catch (thrown: Throwable) {
+            failure = thrown
+            throw thrown
         } finally {
-            cleanup(fixture)
+            cleanup(fixture, failure)
         }
     }
 
@@ -61,6 +69,7 @@ class AffectedMixedRunNativeTest : BasePlatformTestCase() {
         if (!nativeEnabled()) return@runBlocking
         if (!xcodeAvailable()) return@runBlocking
         val fixture = prepare("mixed-gradle-xcode-cancellation", "slowTest", slowXcode = true)
+        var failure: Throwable? = null
         try {
             val outcome = async { run(fixture) }
             awaitMarker(File(fixture.root, "affected-gradle-started.marker"), outcome)
@@ -73,8 +82,11 @@ class AffectedMixedRunNativeTest : BasePlatformTestCase() {
             assertFalse(File(fixture.iosRoot, "affected-xcode-finished.marker").exists())
             assertEquals(0, AffectedRunSessions.getInstance(project).activeCount())
             assertAggregate(fixture, expectedExitCode = 1)
+        } catch (thrown: Throwable) {
+            failure = thrown
+            throw thrown
         } finally {
-            cleanup(fixture)
+            cleanup(fixture, failure)
         }
     }
 
@@ -148,13 +160,13 @@ class AffectedMixedRunNativeTest : BasePlatformTestCase() {
         assertEquals(expectedExitCode, handler.exitCode)
     }
 
-    private fun cleanup(fixture: PreparedRun) {
+    private fun cleanup(fixture: PreparedRun, primary: Throwable?) {
         File(fixture.root, "release-gradle.marker").writeText("release\n")
         File(fixture.iosRoot, "release-xcode.marker").writeText("release\n")
         AffectedRunSessions.getInstance(project).stopOwned()
         fixture.presentation.dispose()
-        OwnedSandbox.remove(fixture.root)
-        assertFalse(fixture.root.exists())
+        OwnedSandbox.remove(fixture.root, primary)
+        if (primary == null) assertFalse(fixture.root.exists())
     }
 
     private fun claim() = AffectedRunClaim(

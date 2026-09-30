@@ -70,6 +70,7 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
         val unrelatedRoot = File(target, "unrelated")
         var owned: Deferred<Boolean>? = null
         var unrelated: Deferred<Boolean>? = null
+        var failure: Throwable? = null
         try {
             OwnedSandbox.remove(target)
             assertTrue(source.copyRecursively(ownedRoot, overwrite = true))
@@ -94,6 +95,9 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
             File(unrelatedRoot, "markers/release.marker").writeText("release")
             assertTrue(withTimeout(PROCESS_TIMEOUT_MILLIS) { unrelated.await() })
             assertTrue(File(unrelatedRoot, "markers/completed.marker").isFile)
+        } catch (thrown: Throwable) {
+            failure = thrown
+            throw thrown
         } finally {
             File(ownedRoot, "markers/release.marker").runCatching { parentFile.mkdirs(); writeText("release") }
             File(unrelatedRoot, "markers/release.marker").runCatching { parentFile.mkdirs(); writeText("release") }
@@ -101,7 +105,7 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
             withTimeoutOrNull(PROCESS_TIMEOUT_MILLIS) { owned?.await() }
             withTimeoutOrNull(PROCESS_TIMEOUT_MILLIS) { unrelated?.await() }
             disposeRunContents(existingEditors)
-            OwnedSandbox.remove(target)
+            OwnedSandbox.remove(target, failure)
         }
     }
 
@@ -116,6 +120,7 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
         val execution = OwnedExternalTaskExecution(cancelTask = ::cancelExternalTask)
         val stopped = AtomicBoolean()
         val ownedTask = AtomicReference<ExternalSystemTaskId?>()
+        var failure: Throwable? = null
         try {
             OwnedSandbox.remove(target)
             assertTrue(source.copyRecursively(root, overwrite = true))
@@ -151,11 +156,14 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
             assertNull(ExternalSystemProcessingManager.getInstance().findTask(taskId))
             assertFalse(File(root, "markers/started.marker").exists())
             assertFalse(File(root, "markers/completed.marker").exists())
+        } catch (thrown: Throwable) {
+            failure = thrown
+            throw thrown
         } finally {
             File(root, "markers/release.marker").runCatching { parentFile.mkdirs(); writeText("release") }
             sessions.stopOwned()
             disposeRunContents(existingEditors)
-            OwnedSandbox.remove(target)
+            OwnedSandbox.remove(target, failure)
         }
     }
 

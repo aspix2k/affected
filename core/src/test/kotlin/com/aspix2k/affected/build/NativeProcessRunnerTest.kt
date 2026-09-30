@@ -4,11 +4,13 @@ import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -81,9 +83,75 @@ class NativeProcessRunnerTest {
         }
     }
 
+    @Test
+    fun `interruption terminates the parent and every descendant and restores the interrupt flag`() {
+        OwnedSandbox.use("affected-runner-interrupt") { sandbox ->
+            val pids = sandbox.directory("pids")
+            val held = sandbox.file("held.lock")
+            val thrown = AtomicReference<Throwable?>()
+            val interruptRestored = AtomicReference<Boolean?>()
+            val worker = Thread {
+                try {
+                    NativeProcessRunner.run(
+                        treeFixtureCommand(depth = 2, pids = pids, held = held),
+                        sandbox.root,
+                        timeoutSeconds = COMPLETE_TIMEOUT_SECONDS,
+                    )
+                } catch (failure: Throwable) {
+                    thrown.set(failure)
+                } finally {
+                    interruptRestored.set(Thread.currentThread().isInterrupted)
+                }
+            }
+            worker.start()
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(COMPLETE_TIMEOUT_SECONDS)
+            while (System.nanoTime() < deadline && !(0..2).all { depth -> published(pids, depth) != null }) {
+                Thread.sleep(POLL_MILLIS)
+            }
+            val processes = (0..2).map { depth -> checkNotNull(published(pids, depth)) { "pid-$depth not published" } }
+            assertTrue(processes.all { ProcessHandle.of(it).orElse(null)?.isAlive ?: false })
+
+            worker.interrupt()
+            worker.join(TimeUnit.SECONDS.toMillis(COMPLETE_TIMEOUT_SECONDS))
+
+            assertFalse(worker.isAlive)
+            assertIs<InterruptedException>(thrown.get())
+            assertEquals(true, interruptRestored.get())
+            assertTrue(thrown.get()?.suppressed.orEmpty().isEmpty(), thrown.get().toString())
+            processes.forEach { pid ->
+                assertFalse(ProcessHandle.of(pid).orElse(null)?.isAlive ?: false, "Process $pid is still alive")
+            }
+            Files.delete(held.toPath())
+        }
+    }
+
+    @Test
+    fun `output is bounded by bytes and reports truncation`() {
+        OwnedSandbox.use("affected-runner-output") { sandbox ->
+            val truncated = NativeProcessRunner.run(
+                listOf(javaPath(), "-version"),
+                sandbox.root,
+                COMPLETE_TIMEOUT_SECONDS,
+                outputLimitBytes = OUTPUT_LIMIT_BYTES,
+            )
+            assertTrue(truncated.passed)
+            assertTrue(truncated.truncated)
+            assertEquals(OUTPUT_LIMIT_BYTES, truncated.output.toByteArray().size)
+
+            val whole = NativeProcessRunner.run(listOf(javaPath(), "-version"), sandbox.root, COMPLETE_TIMEOUT_SECONDS)
+            assertFalse(whole.truncated)
+            assertTrue(whole.output.length > OUTPUT_LIMIT_BYTES)
+        }
+    }
+
+    private fun published(pids: File, depth: Int): Long? =
+        File(pids, "pid-$depth").takeIf(File::isFile)?.readText()?.trim()?.toLongOrNull()
+
     private companion object {
         const val TREE_TIMEOUT_SECONDS = 8L
         const val COMPLETE_TIMEOUT_SECONDS = 60L
+        const val POLL_MILLIS = 50L
+        const val OUTPUT_LIMIT_BYTES = 8
     }
 }
 
