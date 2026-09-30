@@ -15,13 +15,12 @@ CODEQL = ROOT / ".github/workflows/codeql.yml"
 MUTATION = ROOT / ".github/workflows/mutation.yml"
 QUALITY = ROOT / ".github/workflows/quality.yml"
 GRADLE_ACTION = re.compile(r"uses:\s*gradle/actions/[^\s@]+@([0-9a-f]{40})")
+PACKAGE_TASKS = ("buildPlugin", "verifyPlugin")
 PLUGIN_TASKS = (
     "detekt",
     "test",
     "koverXmlReport",
     "koverVerify",
-    "buildPlugin",
-    "verifyPlugin",
     ":collector:spotbugsMain",
     ":collector:spotbugsMaven",
 )
@@ -72,14 +71,15 @@ def check(root: Path = ROOT) -> None:
     if re.search(r"(?m)^  product-verifier:$", ci) is None or "product-verifier" not in verify:
         raise CiContractError("The product verifier matrix must remain a required gate")
 
-    plugin = slice_job(ci, "plugin")
-    if plugin.count("scripts/run_gradle.sh") != 1 or "./gradlew" in plugin:
-        raise CiContractError("The plugin job must start Gradle exactly once through scripts/run_gradle.sh")
-    for task in PLUGIN_TASKS:
-        if task not in plugin:
-            raise CiContractError(f"The plugin job must keep {task}")
-    if "printVersion" not in plugin and "changelog-section.sh" not in plugin:
-        raise CiContractError("The plugin job must still enforce the changelog section")
+    for job_name, tasks in (("plugin", PLUGIN_TASKS), ("package", PACKAGE_TASKS)):
+        job = slice_job(ci, job_name)
+        if job.count("scripts/run_gradle.sh") != 1 or "./gradlew" in job:
+            raise CiContractError(f"The {job_name} job must start Gradle exactly once through scripts/run_gradle.sh")
+        for task in tasks:
+            if task not in job:
+                raise CiContractError(f"The {job_name} job must keep {task}")
+    if "changelog-section.sh" not in slice_job(ci, "package"):
+        raise CiContractError("The package job must still enforce the changelog section")
     check_product_verifier(ci)
 
     scripts = slice_job(ci, "scripts")
@@ -334,11 +334,11 @@ def check_product_verifier(ci: str) -> None:
         if not has_line(scope, line):
             raise CiContractError("The product verifier matrix must come from support_matrix.py")
     for line in (
-        "needs: [scope, plugin]",
+        "needs: [scope, package]",
         "if: needs.scope.outputs.plugin == 'true'",
         "timeout-minutes: 30",
         "fail-fast: false",
-        "max-parallel: 4",
+        "max-parallel: 9",
         "include: ${{ fromJSON(needs.scope.outputs.verifier) }}",
         "verifyPlugin -x buildPlugin",
         "SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}",
@@ -397,8 +397,9 @@ def check_scope(root: Path, ci: str, codeql: str) -> None:
     graph = read(root / ".github/workflows/dependency-graph.yml")
     if not (root / "scripts/ci_scope.py").is_file():
         raise CiContractError("ci_scope.py is missing")
-    if 'if: needs.scope.outputs.plugin == \'true\'' not in slice_job(ci, "plugin"):
-        raise CiContractError("plugin must run only when ci_scope asks for it")
+    for job_name in ("plugin", "package"):
+        if 'if: needs.scope.outputs.plugin == \'true\'' not in slice_job(ci, job_name):
+            raise CiContractError(f"{job_name} must run only when ci_scope asks for it")
     if 'if: needs.scope.outputs.health == \'true\'' not in slice_job(ci, "health"):
         raise CiContractError("health must run only when ci_scope asks for it")
     verify = slice_job(ci, "verify")
@@ -424,6 +425,12 @@ def check_scope(root: Path, ci: str, codeql: str) -> None:
             'require_when plugin "${PLUGIN_REQUIRED:-true}" "$PLUGIN_RESULT"',
         ),
         (
+            "package",
+            "PACKAGE_RESULT",
+            "needs.package.result",
+            'require_when package "${PLUGIN_REQUIRED:-true}" "$PACKAGE_RESULT"',
+        ),
+        (
             "product-verifier",
             "PRODUCT_VERIFIER_RESULT",
             "needs.product-verifier.result",
@@ -442,9 +449,9 @@ def check_scope(root: Path, ci: str, codeql: str) -> None:
             invocation,
         ):
             raise CiContractError(f"verify must bind and check the {name} result")
-    if 'if [ "$PLUGIN_RESULT" = success ]; then' not in verify:
+    if 'if [ "$PACKAGE_RESULT" = success ]; then' not in verify:
         raise CiContractError(
-            "verify must require product-verifier only after plugin success"
+            "verify must require product-verifier only after package success"
         )
     for variable, source in (
         ("PLUGIN_REQUIRED", "needs.scope.outputs.plugin"),

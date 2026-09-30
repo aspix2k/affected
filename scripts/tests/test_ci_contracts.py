@@ -899,7 +899,7 @@ class CiContractsTest(unittest.TestCase):
                 "include: ${{ fromJSON(needs.scope.outputs.verifier) }}",
                 "include: []",
             ),
-            "parallelism": ("max-parallel: 4", "max-parallel: 18"),
+            "parallelism": ("max-parallel: 9", "max-parallel: 18"),
             "timeout": ("timeout-minutes: 30", "timeout-minutes: 60"),
             "download": (
                 "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",

@@ -195,7 +195,7 @@
           "gate": ".github/workflows/ci.yml",
           "gateMarker": "test koverXmlReport",
           "gateJob": "plugin",
-          "gateStep": "Analyze, test, package and verify"
+          "gateStep": "Analyze and test"
         }
       ],
       "versions": "Gradle 8–9; JDK 17, 21 and 26; in change-aware Affected test runs, exact KMP target narrowing is retained for proven platform source sets; common sources keep every target, Kotlin/Native stays task-level, and missing/stale JVM baselines or class-set drift keep the whole task; fallbacks report fixed reason codes without paths",
@@ -759,7 +759,7 @@
           "gate": ".github/workflows/ci.yml",
           "gateMarker": "koverVerify",
           "gateJob": "plugin",
-          "gateStep": "Analyze, test, package and verify"
+          "gateStep": "Analyze and test"
         }
       ],
       "versions": "Pants 2.x; project-level until target selection and native pants execution are proven",
@@ -782,7 +782,7 @@
           "gate": ".github/workflows/ci.yml",
           "gateMarker": "koverVerify",
           "gateJob": "plugin",
-          "gateStep": "Analyze, test, package and verify"
+          "gateStep": "Analyze and test"
         }
       ],
       "versions": "Buck2; static cells merge content roots, unproved or missing keep the project root",
@@ -805,7 +805,7 @@
           "gate": ".github/workflows/ci.yml",
           "gateMarker": "koverVerify",
           "gateJob": "plugin",
-          "gateStep": "Analyze, test, package and verify"
+          "gateStep": "Analyze and test"
         }
       ],
       "versions": "SwiftPM; project-level until Xcode schemes, target selection and native Swift execution are proven",
@@ -851,7 +851,7 @@
           "gate": ".github/workflows/ci.yml",
           "gateMarker": "koverVerify",
           "gateJob": "plugin",
-          "gateStep": "Analyze, test, package and verify"
+          "gateStep": "Analyze and test"
         }
       ],
       "versions": "dbt; in-repo DuckDB profiles only, warehouse and MotherDuck stay off, native dbt execution stays unclaimed",
@@ -897,7 +897,7 @@
           "gate": ".github/workflows/ci.yml",
           "gateMarker": "koverVerify",
           "gateJob": "plugin",
-          "gateStep": "Analyze, test, package and verify"
+          "gateStep": "Analyze and test"
         }
       ],
       "versions": "Atlas; local atlas.hcl without database URLs, native atlas execution stays unclaimed",
