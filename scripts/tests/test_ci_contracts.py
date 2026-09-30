@@ -762,7 +762,7 @@ class CiContractsTest(unittest.TestCase):
             path.write_text(
                 path.read_text(encoding="utf-8").replace(
                     "-Paffected.codeql.kotlinPluginVersion=2.4.10",
-                    "-Paffected.codeql.kotlinPluginVersion=2.4.20-RC",
+                    "-Paffected.codeql.kotlinPluginVersion=2.4.20",
                     1,
                 ),
                 encoding="utf-8",
@@ -778,8 +778,8 @@ class CiContractsTest(unittest.TestCase):
             path = root / "scripts/codeql-kotlin-compat.init.gradle"
             path.write_text(
                 path.read_text(encoding="utf-8").replace(
-                    'details.requested.version != "2.4.20-RC"',
                     'details.requested.version != "2.4.20"',
+                    'details.requested.version != "2.4.21"',
                     1,
                 ),
                 encoding="utf-8",
@@ -1118,7 +1118,7 @@ class CiContractsTest(unittest.TestCase):
             path = root / "mcp/build.gradle.kts"
             path.write_text(
                 path.read_text(encoding="utf-8").replace(
-                    'add("intellijPlatformDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.2"))\n',
+                    'add("intellijPlatformDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.3"))\n',
                     "",
                     1,
                 ),
@@ -1131,7 +1131,7 @@ class CiContractsTest(unittest.TestCase):
         """The root IntelliJ test-framework runtime still leaked Jackson 2.19.0."""
         marker = (
             'add("intellijPlatformTestDependencies", '
-            'enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.2"))\n'
+            'enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.3"))\n'
         )
         for relative in ("build.gradle.kts", "core/build.gradle.kts", "mcp/build.gradle.kts"):
             with self.subTest(relative):

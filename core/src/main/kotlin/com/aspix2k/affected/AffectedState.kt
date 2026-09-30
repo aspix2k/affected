@@ -1,6 +1,5 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.BuildChanges
 import com.intellij.ide.ActivityTracker
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
@@ -134,11 +133,6 @@ internal class AffectedStateStore(
         }
     }
 
-    fun complete(expectedRevision: Long, modules: List<AffectedModule>): Boolean = complete(
-        expectedRevision,
-        AffectedAnalysis(modules, EMPTY_CHANGES, EMPTY_PLANS),
-    )
-
     fun fail(expectedRevision: Long): Boolean {
         while (true) {
             val current = state.get()
@@ -227,20 +221,6 @@ internal class AffectedStateStore(
         ),
         plans = plans,
     )
-
-    private companion object {
-        val EMPTY_CHANGES = ProjectChanges.Result(emptyList(), emptySet(), emptySet(), comparedToBase = false)
-        val EMPTY_PLANS = Verification.PreparedPlans(
-            testsOnly = Verification.Prepared(
-                Plan(emptyList(), 0, 0),
-                BuildChanges(emptyList(), emptySet(), comparedToBase = false),
-            ),
-            withConsumers = Verification.Prepared(
-                Plan(emptyList(), 0, 0),
-                BuildChanges(emptyList(), emptySet(), comparedToBase = false),
-            ),
-        )
-    }
 }
 
 class AffectedRunClaim internal constructor(

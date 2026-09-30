@@ -3,6 +3,7 @@ package com.aspix2k.affected
 import java.io.File
 import java.util.Properties
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class BundleCompletenessTest {
@@ -38,6 +39,13 @@ class BundleCompletenessTest {
         }
 
         assertTrue(strays.isEmpty(), "extra keys remain from removed strings:\n${strays.joinToString("\n")}")
+    }
+
+    @Test
+    fun `the bundle resolves English values`() {
+        val english = Properties().apply { File(directory, "AffectedBundle.properties").inputStream().use { load(it) } }
+
+        assertEquals(english.getProperty("group.title"), AffectedBundle.message("group.title"))
     }
 
     @Test

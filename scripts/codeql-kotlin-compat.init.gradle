@@ -17,7 +17,7 @@ gradle.settingsEvaluated { settings ->
         if (details.requested.version == compatibilityVersion) {
             return
         }
-        if (details.requested.version != "2.4.20-RC") {
+        if (details.requested.version != "2.4.20") {
             throw new GradleException(
                 "Unsupported Kotlin version for CodeQL compatibility: ${details.requested.version}"
             )

@@ -20,7 +20,7 @@ repositories {
 }
 
 dependencies {
-    implementation("org.tomlj:tomlj:1.1.1")
+    implementation("org.tomlj:tomlj:2.1.1")
 
     intellijPlatform {
         intellijIdea(providers.gradleProperty("affected.idea.version").get())
@@ -28,7 +28,7 @@ dependencies {
         bundledPlugin("org.jetbrains.idea.maven")
         testFramework(TestFrameworkType.Platform)
     }
-    add("intellijPlatformTestDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.2"))
+    add("intellijPlatformTestDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.3"))
 
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")

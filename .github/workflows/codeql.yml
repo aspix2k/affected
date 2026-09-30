@@ -28,18 +28,18 @@ jobs:
           persist-credentials: false
       - id: scope
         run: python3 scripts/ci_scope.py --github-output "$GITHUB_OUTPUT"
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         if: steps.scope.outputs.codeql == 'true'
         with:
           distribution: temurin
           java-version: "21"
-      - uses: gradle/actions/setup-gradle@67621b124fd2e251c5e8a0e6e3b91318f2287669 # v6.3.0
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         if: steps.scope.outputs.codeql == 'true'
       - name: Verify Kotlin compatibility shim
         if: steps.scope.outputs.codeql == 'true'
         run: python3 scripts/codeql_kotlin_compat_probe.py
 
-      - uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+      - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         if: steps.scope.outputs.codeql == 'true'
         with:
           languages: java-kotlin
@@ -64,7 +64,7 @@ jobs:
           --no-daemon --no-build-cache --no-parallel --max-workers=1
           clean classes :core:classes :mcp:classes :collector:classes :collector:mavenClasses
 
-      - uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+      - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         if: steps.scope.outputs.codeql == 'true'
         with:
           upload: never
@@ -89,18 +89,18 @@ jobs:
           persist-credentials: false
       - id: scope
         run: python3 scripts/ci_scope.py --github-output "$GITHUB_OUTPUT"
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         if: steps.scope.outputs.codeql == 'true'
         with:
           distribution: temurin
           java-version: "21"
-      - uses: gradle/actions/setup-gradle@67621b124fd2e251c5e8a0e6e3b91318f2287669 # v6.3.0
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         if: steps.scope.outputs.codeql == 'true'
       - name: Verify Kotlin compatibility shim
         if: steps.scope.outputs.codeql == 'true'
         run: python3 scripts/codeql_kotlin_compat_probe.py
 
-      - uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+      - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         if: steps.scope.outputs.codeql == 'true'
         with:
           languages: java-kotlin
@@ -125,7 +125,7 @@ jobs:
           --no-daemon --no-build-cache --no-parallel --max-workers=1
           clean classes :core:classes :mcp:classes :collector:classes :collector:mavenClasses
 
-      - uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+      - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         if: steps.scope.outputs.codeql == 'true'
         with:
           upload: always

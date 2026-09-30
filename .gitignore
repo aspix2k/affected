@@ -39,3 +39,4 @@
 /conformance/cli-fixtures/meson/builddir/
 /core/src/main/dotnet/**/bin/
 /core/src/main/dotnet/**/obj/
+__pycache__/

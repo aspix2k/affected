@@ -58,6 +58,25 @@ class AffectedToolbarPresentationTest {
     }
 
     @Test
+    fun `a running verification without animation keeps the idle icon and clears the disabled icon`() {
+        val presentation = Presentation().apply { disabledIcon = AffectedIcons.Module }
+        presentAffectedGroup(
+            presentation = presentation,
+            snapshot = snapshot(
+                AnalysisStatus.READY,
+                modules = listOf(module(), module(":two")),
+                verificationStatus = VerificationStatus.RUNNING,
+            ),
+            ideBusy = false,
+            animateWhileRunning = false,
+            projectAvailable = true,
+        )
+
+        assertEquals(AffectedIcons.Action, presentation.icon)
+        assertNull(presentation.disabledIcon)
+    }
+
+    @Test
     fun `a completed analysis shows the current toolbar count`() {
         val presentation = Presentation()
         presentAffectedGroup(

@@ -3,7 +3,7 @@ import com.github.spotbugs.snom.Effort
 
 plugins {
     `java-library`
-    id("com.github.spotbugs") version "6.5.11"
+    id("com.github.spotbugs") version "6.5.12"
 }
 
 val testJavaVersion = providers.gradleProperty("affected.test.javaVersion").orElse("21")
@@ -90,7 +90,7 @@ java {
 }
 
 spotbugs {
-    toolVersion = "4.10.3"
+    toolVersion = "4.10.4"
     ignoreFailures = false
     effort = Effort.MAX
     reportLevel = Confidence.DEFAULT
