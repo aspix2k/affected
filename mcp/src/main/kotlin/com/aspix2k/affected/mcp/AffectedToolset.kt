@@ -8,6 +8,7 @@ import com.aspix2k.affected.AffectedModule
 import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.AffectedState
+import com.aspix2k.affected.AffectedStateSnapshot
 import com.aspix2k.affected.TaskPlanner
 import com.aspix2k.affected.Verification
 import com.aspix2k.affected.build.BuildSystems
@@ -26,6 +27,7 @@ import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.ProjectManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
@@ -87,25 +89,19 @@ class AffectedToolset : McpToolset {
             claim.close()
             return unavailablePlan()
         }
-        if (prepared.plan.isEmpty) {
-            claim.close()
-            return preview.toResult()
-        }
-        if (projectBusy(project)) {
+        if (!prepared.plan.isEmpty && projectBusy(project)) {
             claim.close()
             return busy()
         }
         val outcome = Verification.runClaimedAndWait(project, prepared, claim)
-        return preview.copy(
-            text = "${if (outcome.passed) "Passed" else "Failed"}. ${preview.text}",
-            data = preview.data + ("passed" to outcome.passed),
-        ).toResult()
+        return verificationView(claim.snapshot, outcome).toResult()
     }
 
     @McpTool
-    @McpToolHints(readOnlyHint = McpToolHintValue.FALSE, destructiveHint = McpToolHintValue.FALSE)
+    @McpToolHints(readOnlyHint = McpToolHintValue.FALSE, destructiveHint = McpToolHintValue.TRUE)
     @McpDescription(
-        "Runs a named task on every affected module that declares it, using the same exclusive lease as the toolbar."
+        "Runs any named task declared by an affected module, including tasks that publish or delete, " +
+            "using the same exclusive lease as the toolbar."
     )
     suspend fun affected_run_task(
         @McpDescription("Gradle task name without module path, for example detekt")
@@ -146,6 +142,7 @@ class AffectedToolset : McpToolset {
             validation.copy(
                 text = "${if (passed) "Passed" else "Failed"}. ${validation.text}",
                 data = validation.data + ("passed" to passed),
+                error = !passed,
             ).toResult()
         } finally {
             claim.close()
@@ -223,7 +220,9 @@ class AffectedToolset : McpToolset {
         next.runBeforeCommit = view.data["runBeforeCommit"] as Boolean
         next.runBeforePush = view.data["runBeforePush"] as Boolean
         next.animateWhileRunning = view.data["animateWhileRunning"] as Boolean
-        coroutineContext.project.service<AffectedState>().invalidate()
+        invalidateProjects(ProjectManager.getInstance().openProjects.asList()) {
+            it.service<AffectedState>().invalidate()
+        }
         return view.toResult()
     }
 
@@ -253,6 +252,32 @@ class AffectedToolset : McpToolset {
 internal fun AffectedMcpView.toResult(): McpToolCallResult {
     val structured = data.toJsonObject()
     return if (error) McpToolCallResult.error(text, structured) else McpToolCallResult.text(text, structured)
+}
+
+internal fun verificationView(snapshot: AffectedStateSnapshot, outcome: Verification.Outcome): AffectedMcpView {
+    val plan = AffectedMcpViews.plan(snapshot, outcome.plan)
+    val data = plan.data + ("passed" to outcome.passed)
+    return when (outcome.blocker) {
+        Verification.Blocker.UNRESOLVED_CHANGES -> plan.copy(
+            text = "Failed. Changes exist but no verification could be planned.",
+            data = data + ("reason" to "unresolved-changes"),
+            error = true,
+        )
+        Verification.Blocker.NOT_STARTED -> plan.copy(
+            text = "Failed. Verification did not start because Affected is busy.",
+            data = data + ("reason" to "not-started"),
+            error = true,
+        )
+        null -> plan.copy(
+            text = "${if (outcome.passed) "Passed" else "Failed"}. ${plan.text}",
+            data = data,
+            error = !outcome.passed,
+        )
+    }
+}
+
+internal fun invalidateProjects(projects: List<Project>, invalidate: (Project) -> Unit) {
+    projects.filterNot(Project::isDisposed).forEach(invalidate)
 }
 
 private fun noBasePath() = AffectedMcpView(

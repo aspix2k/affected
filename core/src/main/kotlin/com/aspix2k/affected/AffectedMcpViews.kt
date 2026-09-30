@@ -35,8 +35,13 @@ object AffectedMcpViews {
         notReady(snapshot)?.let { return it }
         val prepared = snapshot.plans?.select(checkConsumers)
             ?: return unavailable("Prepared verification data is not available.")
-        val tasks = prepared.plan.groups.flatMap(TaskGroup::tasks)
-        if (prepared.plan.isEmpty && !snapshot.changes?.files.isNullOrEmpty()) {
+        return plan(snapshot, prepared.plan)
+    }
+
+    fun plan(snapshot: AffectedStateSnapshot, plan: Plan): AffectedMcpView {
+        notReady(snapshot)?.let { return it }
+        val tasks = plan.groups.flatMap(TaskGroup::tasks)
+        if (plan.isEmpty && !snapshot.changes?.files.isNullOrEmpty()) {
             return AffectedMcpView(
                 text = "Changes exist but no verification could be planned.",
                 data = mapOf(
@@ -52,16 +57,16 @@ object AffectedMcpViews {
         }
         return AffectedMcpView(
             text = when {
-                prepared.plan.isEmpty -> "Nothing to verify."
-                else -> "Modules to test: ${prepared.plan.tested}, consumers to compile: ${prepared.plan.compiled}"
+                plan.isEmpty -> "Nothing to verify."
+                else -> "Modules to test: ${plan.tested}, consumers to compile: ${plan.compiled}"
             },
             data = mapOf(
                 "analysisStatus" to "ready",
                 "revision" to snapshot.revision,
-                "tested" to prepared.plan.tested,
-                "compiled" to prepared.plan.compiled,
+                "tested" to plan.tested,
+                "compiled" to plan.compiled,
                 "tasks" to tasks,
-                "groups" to prepared.plan.groups.map { group ->
+                "groups" to plan.groups.map { group ->
                     mapOf("systemId" to group.systemId, "root" to group.root, "tasks" to group.tasks)
                 },
             ),

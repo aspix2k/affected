@@ -1,0 +1,1 @@
+- Mark the MCP named-task tool as destructive, report a blocked or failed MCP verification run as an error with its reason, and refresh every open project after a settings change.
