@@ -224,6 +224,15 @@ class ComposerPackagesTest {
     }
 
     @Test
+    fun `a Pest release pinning an unproven PHPUnit major fails closed`() {
+        val root = monorepo()
+        packageAt(root, ".", "acme/pest", requireDev = mapOf("pestphp/pest" to "5.9.0"), tests = true)
+        pestLock(root, "5.9.0", "14.0.0")
+
+        assertEquals(ComposerPackages.INVALID, ComposerPackages.fallbackTask(root))
+    }
+
+    @Test
     fun `Pest 6 is not claimed before it is proven`() {
         val root = monorepo()
         packageAt(root, ".", "acme/pest", requireDev = mapOf("pestphp/pest" to "6.0.0"), tests = true)

@@ -19,7 +19,7 @@ internal object ComposerPest {
         val packages = lockedPackages(json) ?: return null
         val pest = packages.singleOrNull { it.stringValue("name") == PEST_PACKAGE } ?: return null
         val phpunit = packages.singleOrNull { it.stringValue("name") == PHPUNIT_PACKAGE } ?: return null
-        val phpunitVersion = phpunit.stringValue("version")?.takeIf(STABLE_VERSION::matches) ?: return null
+        val phpunitVersion = phpunit.stringValue("version")?.takeIf(PEST_PHPUNIT_VERSION::matches) ?: return null
         if (!lockedFromGitHub(pest, "v$constraint", PEST_REPOSITORY)) return null
         if (!lockedFromGitHub(phpunit, phpunitVersion, PHPUNIT_REPOSITORY)) return null
         if (!matchesPestContract(pest, phpunitVersion)) return null
@@ -169,7 +169,7 @@ internal object ComposerPest {
     private const val PEST_REPOSITORY = "pestphp/pest"
     private const val PHPUNIT_REPOSITORY = "sebastianbergmann/phpunit"
     private val PEST_VERSION = Regex("""5\.\d+\.\d+""")
-    private val STABLE_VERSION = Regex("""\d+\.\d+\.\d+""")
+    private val PEST_PHPUNIT_VERSION = Regex("""13\.\d+\.\d+""")
     private val GIT_COMMIT = Regex("[0-9a-f]{40}")
     private const val MAX_SUITE_DEPTH = 16
     private const val MAX_SUITE_ENTRIES = 16_384

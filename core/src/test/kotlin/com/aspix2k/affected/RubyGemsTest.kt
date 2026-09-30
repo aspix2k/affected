@@ -262,6 +262,7 @@ class RubyGemsTest {
         assertFalse(RubyTestRunner.MINITEST.supports("5.25.4"))
         assertFalse(RubyTestRunner.TEST_UNIT.supports("3.6.9"))
         assertFalse(RubyTestRunner.RSPEC.supports("4.0.0"))
+        assertFalse(RubyTestRunner.RSPEC.supports("3.12.2"))
     }
 
     @Test

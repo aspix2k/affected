@@ -50,7 +50,7 @@ private fun gradleMayProducePlugins(included: Path): Boolean = runCatching {
 
 private val GRADLE_SKIPPED_DIRECTORIES = setOf("build", ".gradle", ".git", ".idea", "node_modules")
 private val GRADLE_BUILD_SCRIPT_NAMES = setOf("build.gradle.kts", "build.gradle")
-private val GRADLE_PLUGIN_MARKER = Regex("""kotlin-dsl|java-gradle-plugin|\bgradlePlugin\s*\{""")
+private val GRADLE_PLUGIN_MARKER = Regex("""kotlin-dsl|java-gradle-plugin|version-catalog|\bgradlePlugin\s*\{""")
 private val GRADLE_PRECOMPILED_SCRIPT_DIRECTORY = Regex("""/src/main/(kotlin|groovy)/""")
 private val GRADLE_SETTINGS_FILE_NAMES = listOf("settings.gradle.kts", "settings.gradle")
 private val INCLUDE_BUILD_CALL = Regex("""\bincludeBuild\b""")
