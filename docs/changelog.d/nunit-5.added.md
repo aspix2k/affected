@@ -1,1 +1,0 @@
-- Select exact .NET tests for NUnit 5 projects, not only NUnit 4.

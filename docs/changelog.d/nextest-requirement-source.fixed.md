@@ -1,1 +1,0 @@
-- Keep cargo-nextest package selection on cargo-nextest 0.9.146 and newer, which name the configuration source in `show-config version`.

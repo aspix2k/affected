@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.16.0] - 2026-09-30
+
+### Fixed
+
+- Run every project in a Gradle build when its version catalog, wrapper, `buildSrc` or root build configuration changes.
+- Keep cargo-nextest package selection on cargo-nextest 0.9.146 and newer, which name the configuration source in `show-config version`.
+
+### Added
+
+- Select exact .NET tests for NUnit 5 projects, not only NUnit 4.
+- Select exact Vitest files on Vitest 5.
+
 ## [3.15.17] - 2026-08-20
 
 ### Added
@@ -681,7 +693,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.15.17...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.16.0...HEAD
+[3.16.0]: https://github.com/aspix2k/affected/compare/v3.15.17...v3.16.0
 [3.15.17]: https://github.com/aspix2k/affected/compare/v3.15.16...v3.15.17
 [3.15.16]: https://github.com/aspix2k/affected/compare/v3.15.15...v3.15.16
 [3.15.15]: https://github.com/aspix2k/affected/compare/v3.15.14...v3.15.15
