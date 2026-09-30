@@ -38,11 +38,14 @@ analyzer policy. `pre-push` adds ShellCheck. This is the cheap half of CI, not
 Gradle. A cache-redirector 5xx is retried with Maven Central first; compilation
 and test failures still run once.
 
-Pull-request `CI` is the required fast gate. `scripts` always run. Plugin work
-and `buildHealth` run only when `scripts/ci_scope.py` says the diff can affect
-them. The required checks `verify` and `exact-impact` always report. CodeQL
-`pull-request` and dependency `review` keep their names. Unknown paths fail
-closed. Weekly `pitest` fails on meaningful survivors.
+Pull-request `CI` is the fast gate. `scripts` always runs. `plugin` (detekt,
+tests, Kover, SpotBugs), `package` (plugin archive, Plugin Verifier, one product
+verifier per IDE) and `buildHealth` run when `scripts/ci_scope.py` says the diff
+can affect them. `Exact-impact conformance` separates JVM collector proofs
+(`exact`) from native adapter lanes (`native`), so a collector-only change skips
+the CLI toolchains. The required checks `verify` and `exact-impact` always
+report; unknown paths fail closed. Weekly jobs run `pitest` and the release
+currentness check.
 
 Enqueue ready PRs with `gh pr merge --auto --squash` using a user token.
 Do not merge by hand and do not enable auto-merge from Actions
@@ -54,16 +57,12 @@ delete leftover heads and worktrees.
 runners and OS evidence. `docs/SUPPORT.md` and the README / Marketplace summaries
 are generated from it: `python3 scripts/support_matrix.py --write`.
 
-`config/release-currentness.json` governs direct pins. Compatibility entries
-need an exact value, a reason and repository-owned evidence. Update the direct
-manifest and regenerate its lock; do not inventory transitive versions. A
-temporary `security-preview` entry additionally binds the exact official
-preview, the first patched preview and the stable replacement. The gate rejects
-an unpublished or superseded preview and expires the exception when that stable
-release appears. For CVE-2026-53914, the reviewed GitHub advisory narrows the
-older CNA range to Kotlin `2.4.20-Beta1` as the first patched release. The gate
-therefore also requires the advisory's exact JetBrains fix commit to be an
-ancestor of both the minimum patched tag and the selected preview tag.
+`config/release-currentness.json` governs direct pins. A `latest` pin must match
+the newest stable release. A `compatibility` pin names an exact value, a reason
+and repository-owned evidence; use it when a runner contract is proven for one
+version only. The live check runs weekly and before a release, not on pull
+requests. Update the direct manifest and regenerate its lock; do not inventory
+transitive versions.
 
 Every IDE the build or verifier unpacks lives under `~/.gradle/caches`. Old
 transforms are never removed; deleting that cache is safe and it rebuilds.
@@ -85,7 +84,9 @@ errs toward running too much.
 `ModuleGraph` reads Gradle and Maven from imported IDE models and CLI
 integrations from their manifests or metadata commands. Modules are attributed
 to the nearest content root. A changed file outside a known module but below a
-build root belongs to every module in the deepest matching build. Gradle
+build root belongs to every module in the deepest matching build. Gradle build
+logic (`gradle/**`, `buildSrc/**`, root settings, build scripts and
+`gradle.properties`) widens to every project in that build. Gradle
 execution coordinates come from the imported model, so included builds keep
 their ownership while compatible tasks can run through the composite root.
 
@@ -133,37 +134,34 @@ Only a successful complete run replaces the local dependency map.
 
 ## Releasing
 
-A release is not only a tag. A user who never opens the repository sees only
-the last two items:
+Product pull requests add one
+`docs/changelog.d/<slug>.<added|changed|deprecated|removed|fixed|security>.md`
+with a single Marketplace-facing bullet; infrastructure changes add none.
 
-1. `version` in `build.gradle.kts`.
-2. A section for that version in `docs/CHANGELOG.md`. CI fails without it; the same
-   text is the GitHub release notes and Marketplace What's New. Pull requests do
-   not edit `docs/CHANGELOG.md` except the release pull request that also sets
-   `version`. A product change adds one
-   `docs/changelog.d/<slug>.<added|fixed|changed|removed|deprecated|security>.md`
-   file with a single Marketplace-facing bullet. Infrastructure changes add no
-   fragment and never land in a version section. `python3 scripts/changelog_fragments.py render`
-   folds pending fragments into Unreleased before `./gradlew patchChangelog`.
-   After the cut, leave Unreleased empty of plumbing so the next small release
-   cannot pick it up.
-3. `README.md` when the change affects what the plugin does or needs.
-4. The `<description>` in `plugin.xml` when supported systems change.
-5. Getting Started on the Marketplace page — edited in the web form, goes stale
-   silently.
-6. `config/support-matrix.json` and generated `docs/SUPPORT.md` when a system,
-   product, selection unit or minimum IDE version changes.
-
-The pull-request CI job records the verified Git tree and plugin SHA-256 beside
-the zip. After merge, the Release workflow finds that successful CI run, requires
-the verified tree to match `main`, creates `v<version>`, and promotes the same
-zip. It does not rebuild. A missing artifact, a non-green run, or a tree/hash
-mismatch stops the release.
+A release pull request only sets `version` in `build.gradle.kts` and folds the
+pending fragments into `docs/CHANGELOG.md`:
 
 ```sh
+python3 scripts/changelog_fragments.py render
 ./gradlew patchChangelog
-gh workflow run release.yml -f run_id=123456789 -f source_ref=main
 ```
 
-Add `-f retry_marketplace=true` only to retry Marketplace after the GitHub
-release already exists.
+No other pull request edits `docs/CHANGELOG.md`. CI fails when the version has
+no section; that section becomes the GitHub release notes and Marketplace
+What's New.
+
+Merging the release pull request starts `release.yml`. It finds the pull
+request's successful CI run, requires its verified tree to match `main`, tags
+`v<version>` and promotes the same zip to GitHub and Marketplace without
+rebuilding. Rebase the release pull request on `main` before merging, or the
+trees differ and the release stops. To retry by hand:
+
+```sh
+gh workflow run release.yml -f run_id=<ci run id> -f source_ref=main
+```
+
+Add `-f retry_marketplace=true` only when the GitHub release already exists.
+
+When they change, also update `README.md`, the `<description>` in `plugin.xml`,
+`config/support-matrix.json` with the generated `docs/SUPPORT.md`, and the
+Marketplace Getting Started text, which lives only in the web form.

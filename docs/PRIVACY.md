@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 12 August 2026
+Last updated: 30 September 2026
 
 ## The short version
 
@@ -23,12 +23,13 @@ All of it is processed locally.
 
 ## What the plugin stores
 
-Five settings, in your IDE configuration directory:
+Six settings, in your IDE configuration directory:
 
 - the base branch to compare against;
 - whether consumers of a changed API are checked;
 - whether the verification runs before a commit;
 - whether it runs before a push;
+- whether verification stops after the first failure;
 - whether the toolbar icon animates during verification.
 
 Compatible exact-selection adapters also keep a derived cache below the IDE
