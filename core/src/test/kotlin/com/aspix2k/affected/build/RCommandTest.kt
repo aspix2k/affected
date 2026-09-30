@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.build.process.DeferredCliCommand
 import com.intellij.openapi.progress.ProcessCanceledException
 import kotlinx.coroutines.CancellationException
 import java.io.File

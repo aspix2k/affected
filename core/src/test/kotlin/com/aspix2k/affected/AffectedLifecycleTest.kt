@@ -3,6 +3,7 @@ package com.aspix2k.affected
 import com.aspix2k.affected.build.BuildChanges
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.BuildSystem
+import com.aspix2k.affected.build.SuspendingBuildSystem
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.extensions.ExtensionPoint
 import com.intellij.openapi.extensions.ExtensionPointName
@@ -147,7 +148,7 @@ class AffectedLifecycleTest : BasePlatformTestCase() {
 
     private class LifecycleBuildSystem(
         private val root: File,
-    ) : com.aspix2k.affected.build.SuspendingBuildSystem {
+    ) : SuspendingBuildSystem {
         val started = CompletableDeferred<Unit>()
         val stopped = CompletableDeferred<Unit>()
         val cancelled = AtomicBoolean(false)

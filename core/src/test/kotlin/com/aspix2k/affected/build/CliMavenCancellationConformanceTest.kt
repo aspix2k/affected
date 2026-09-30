@@ -1,7 +1,11 @@
 package com.aspix2k.affected.build
 
 import com.aspix2k.affected.AffectedRunSessions
+import com.aspix2k.affected.build.maven.MavenBuildSystem
+import com.aspix2k.affected.build.maven.MavenCollectorArtifacts
+import com.aspix2k.affected.build.maven.MavenCollectorRun
 import com.intellij.execution.executors.DefaultRunExecutor
+import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.execution.ui.RunContentManager
 import com.intellij.openapi.application.ApplicationManager
@@ -194,7 +198,7 @@ class CliMavenCancellationConformanceTest : BasePlatformTestCase() {
                         ready.path,
                     )
                     rootProcess.set(process)
-                    val handler = com.intellij.execution.process.OSProcessHandler(process, "Maven process tree")
+                    val handler = OSProcessHandler(process, "Maven process tree")
                     callback?.processStarted(RunContentDescriptor(null, handler, JPanel(), "Maven"))
                     handler.startNotify()
                 },

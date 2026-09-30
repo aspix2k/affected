@@ -20,6 +20,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -566,7 +567,7 @@ class AffectedState(
     }
 }
 
-internal fun affectedModules(graph: ModuleGraph, files: List<java.io.File>): List<AffectedModule> =
+internal fun affectedModules(graph: ModuleGraph, files: List<File>): List<AffectedModule> =
     affectedModules(files.flatMap(graph::nodesFor))
 
 internal fun affectedModules(graph: ModuleGraph, changes: ProjectChanges.Result): List<AffectedModule> =

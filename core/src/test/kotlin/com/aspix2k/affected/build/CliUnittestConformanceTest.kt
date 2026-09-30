@@ -1,5 +1,10 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.build.process.CliCommand
+import com.aspix2k.affected.build.python.PythonProjects
+import com.aspix2k.affected.build.python.PythonTestRunner
+import com.aspix2k.affected.build.python.pythonCommands
+import com.aspix2k.affected.build.python.pythonDeferredCommands
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.nio.file.Files
@@ -466,7 +471,7 @@ class CliUnittestConformanceTest {
             planned,
             unittestAdapter().toPath(),
             PythonTestRunner.UNITTEST,
-        ) { planned }.single().resolve()!!
+        ) { planned }.single().resolveCommand()
 
         val execution = execute(root, command.arguments)
 

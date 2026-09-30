@@ -1,5 +1,6 @@
 package com.aspix2k.affected.impact
 
+import com.aspix2k.affected.build.cmake.sha256
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs

@@ -2,6 +2,9 @@ package com.aspix2k.affected.build
 
 import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.TaskPlanner
+import com.aspix2k.affected.build.go.GoBuildSystem
+import com.aspix2k.affected.build.go.GoPackages
+import com.aspix2k.affected.build.go.goCommands
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.util.concurrent.TimeUnit

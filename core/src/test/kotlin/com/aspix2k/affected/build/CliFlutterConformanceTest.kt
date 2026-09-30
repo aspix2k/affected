@@ -1,5 +1,8 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.build.dart.flutterCommands
+import com.aspix2k.affected.build.dart.flutterProjectRoot
+import com.aspix2k.affected.build.dart.flutterRootModule
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.util.concurrent.TimeUnit

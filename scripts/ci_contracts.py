@@ -139,7 +139,7 @@ def check(root: Path = ROOT) -> None:
     if "CrossPlatformPathTest" not in cross_platform:
         raise CiContractError("macOS and Windows must still run CrossPlatformPathTest")
     for containment_test in ("ContainedProcessTest", "SequentialProcessCancellationTest"):
-        if cross_platform.count(f"--tests com.aspix2k.affected.build.{containment_test}") != 1:
+        if cross_platform.count(f"--tests com.aspix2k.affected.build.process.{containment_test}") != 1:
             raise CiContractError("macOS and Windows must keep the process containment proof")
     platform_step = named_step(cross_platform, "Run platform-specific core tests")
     platform_run = step_run(platform_step) if platform_step is not None else None
@@ -149,9 +149,9 @@ def check(root: Path = ROOT) -> None:
         "--tests com.aspix2k.affected.CrossPlatformPathTest",
         "--tests com.aspix2k.affected.build.AffectedMixedRunNativeTest",
         "--tests com.aspix2k.affected.build.CliUnittestWindowsJunctionConformanceTest",
-        "--tests com.aspix2k.affected.build.ContainedProcessTest",
-        "--tests com.aspix2k.affected.build.SequentialProcessCancellationTest",
-        "--tests com.aspix2k.affected.build.XcodeNativeTest",
+        "--tests com.aspix2k.affected.build.process.ContainedProcessTest",
+        "--tests com.aspix2k.affected.build.process.SequentialProcessCancellationTest",
+        "--tests com.aspix2k.affected.build.xcode.XcodeNativeTest",
         "-Paffected.cliConformance=true",
         "--rerun-tasks --no-daemon --no-parallel --max-workers=1",
     )

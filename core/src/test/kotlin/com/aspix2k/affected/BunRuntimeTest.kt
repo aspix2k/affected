@@ -1,7 +1,7 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.bunDeclared
-import com.aspix2k.affected.build.bunManager
+import com.aspix2k.affected.build.node.bunDeclared
+import com.aspix2k.affected.build.node.bunManager
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test

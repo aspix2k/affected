@@ -1,8 +1,8 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.ComposerBuildSystem
 import com.aspix2k.affected.build.MAX_CACHED_MODULES
-import com.aspix2k.affected.build.PythonBuildSystem
+import com.aspix2k.affected.build.php.ComposerBuildSystem
+import com.aspix2k.affected.build.python.PythonBuildSystem
 import com.aspix2k.affected.build.retainBuildSnapshot
 import com.aspix2k.affected.build.shouldRetainBuildSnapshot
 import com.intellij.openapi.project.Project

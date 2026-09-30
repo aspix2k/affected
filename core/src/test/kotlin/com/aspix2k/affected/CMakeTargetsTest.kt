@@ -1,6 +1,6 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.CMakeTargets
+import com.aspix2k.affected.build.cmake.CMakeTargets
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test

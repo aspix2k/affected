@@ -1,5 +1,7 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.build.process.CliCommand
+import com.aspix2k.affected.build.process.CommandRunner
 import com.google.gson.JsonParser
 import com.intellij.openapi.project.Project
 import java.io.File

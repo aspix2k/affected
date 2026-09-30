@@ -308,7 +308,7 @@ class CiContractsTest(unittest.TestCase):
             path = root / ".github/workflows/conformance.yml"
             path.write_text(
                 path.read_text(encoding="utf-8").replace(
-                    "          --tests com.aspix2k.affected.build.SequentialProcessCancellationTest\n",
+                    "          --tests com.aspix2k.affected.build.process.SequentialProcessCancellationTest\n",
                     "",
                     1,
                 ),
@@ -484,9 +484,9 @@ class CiContractsTest(unittest.TestCase):
             "run-after": (
                 "          -Paffected.cliConformance=true\n",
                 "",
-                "          --tests com.aspix2k.affected.build.XcodeNativeTest\n"
+                "          --tests com.aspix2k.affected.build.xcode.XcodeNativeTest\n"
                 "          --rerun-tasks --no-daemon --no-parallel --max-workers=1\n",
-                "          --tests com.aspix2k.affected.build.XcodeNativeTest\n"
+                "          --tests com.aspix2k.affected.build.xcode.XcodeNativeTest\n"
                 "          --rerun-tasks --no-daemon --no-parallel --max-workers=1\n"
                 '        env:\n          CONTRACT_DECOY: "-Paffected.cliConformance=true"\n',
             ),
@@ -584,10 +584,10 @@ class CiContractsTest(unittest.TestCase):
                 "          echo scripts/run_gradle.sh :core:test\n",
             ),
             "exit": (
-                "          --tests com.aspix2k.affected.build.XcodeNativeTest\n"
+                "          --tests com.aspix2k.affected.build.xcode.XcodeNativeTest\n"
                 "          -Paffected.cliConformance=true\n"
                 "          --rerun-tasks --no-daemon --no-parallel --max-workers=1\n",
-                "          --tests com.aspix2k.affected.build.XcodeNativeTest\n"
+                "          --tests com.aspix2k.affected.build.xcode.XcodeNativeTest\n"
                 "          -Paffected.cliConformance=true\n"
                 "          --rerun-tasks --no-daemon --no-parallel --max-workers=1 || true\n",
             ),

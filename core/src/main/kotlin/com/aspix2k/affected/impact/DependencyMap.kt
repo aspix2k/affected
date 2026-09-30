@@ -1,5 +1,7 @@
 package com.aspix2k.affected.impact
 
+import com.aspix2k.affected.build.cmake.sha256
+
 data class DependencyMapIdentity(
     val schemaVersion: Int,
     val collectorVersion: String,

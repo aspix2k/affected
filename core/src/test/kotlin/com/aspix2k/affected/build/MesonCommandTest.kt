@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.build.process.CliCommand
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test

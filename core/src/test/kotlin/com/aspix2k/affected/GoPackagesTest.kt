@@ -1,6 +1,6 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.GoPackages
+import com.aspix2k.affected.build.go.GoPackages
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

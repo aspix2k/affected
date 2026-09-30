@@ -70,7 +70,7 @@ class KotlinToolchainNativeEnvironmentTest {
         )
 
         assertEquals("$javaBin${File.pathSeparator}/usr/bin", env["PATH"])
-        assertTrue(env["PATH"]!!.split(File.pathSeparator).count { it == javaBin } == 1)
+        assertTrue(checkNotNull(env["PATH"]).split(File.pathSeparator).count { it == javaBin } == 1)
     }
 
     private fun fakeJdk(name: String): File {

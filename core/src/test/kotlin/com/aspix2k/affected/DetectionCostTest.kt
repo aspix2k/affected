@@ -1,9 +1,9 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.CMakeTargets
-import com.aspix2k.affected.build.ComposerPackages
-import com.aspix2k.affected.build.PythonProjects
-import com.aspix2k.affected.build.RubyGems
+import com.aspix2k.affected.build.cmake.CMakeTargets
+import com.aspix2k.affected.build.php.ComposerPackages
+import com.aspix2k.affected.build.python.PythonProjects
+import com.aspix2k.affected.build.ruby.RubyGems
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test

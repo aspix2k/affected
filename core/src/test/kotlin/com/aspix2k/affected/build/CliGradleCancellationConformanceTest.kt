@@ -2,6 +2,8 @@ package com.aspix2k.affected.build
 
 import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.OwnedExternalTaskExecution
+import com.aspix2k.affected.build.gradle.GradleBuildSystem
+import com.aspix2k.affected.build.gradle.cancelExternalTask
 import com.aspix2k.affected.runOwnedExternalTask
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.ui.RunContentManager

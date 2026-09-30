@@ -1,8 +1,8 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.GradleBuildSystem
-import com.aspix2k.affected.build.MavenBuildSystem
-import com.aspix2k.affected.build.XcodeBuildSystem
+import com.aspix2k.affected.build.gradle.GradleBuildSystem
+import com.aspix2k.affected.build.maven.MavenBuildSystem
+import com.aspix2k.affected.build.xcode.XcodeBuildSystem
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test

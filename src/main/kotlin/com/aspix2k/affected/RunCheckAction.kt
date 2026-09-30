@@ -10,11 +10,12 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.currentThreadCoroutineScope
 import com.intellij.openapi.project.DumbAware
 import kotlinx.coroutines.Dispatchers
+import javax.swing.Icon
 
 abstract class RunCheckAction(
     private val taskName: String,
     private val titleKey: String,
-    private val actionIcon: javax.swing.Icon,
+    private val actionIcon: Icon,
 ) : AnAction(), DumbAware {
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT

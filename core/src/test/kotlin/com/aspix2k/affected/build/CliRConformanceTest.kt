@@ -1,5 +1,10 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.build.process.CliCommand
+import com.aspix2k.affected.build.process.SequentialProcessHandler
+import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessListener
+import com.intellij.openapi.util.Key
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.nio.file.Files
@@ -189,10 +194,10 @@ class CliRConformanceTest {
         )
         val handler = SequentialProcessHandler(root, listOf(command))
         val messages = StringBuilder()
-        handler.addProcessListener(object : com.intellij.execution.process.ProcessListener {
+        handler.addProcessListener(object : ProcessListener {
             override fun onTextAvailable(
-                event: com.intellij.execution.process.ProcessEvent,
-                outputType: com.intellij.openapi.util.Key<*>,
+                event: ProcessEvent,
+                outputType: Key<*>,
             ) {
                 messages.append(event.text)
             }

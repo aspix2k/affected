@@ -1,6 +1,9 @@
 package com.aspix2k.affected.build
 
 import com.aspix2k.affected.TaskGroup
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.junit.Assume.assumeTrue
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -125,7 +128,7 @@ class ExecutionRootGuardTest {
     }
 
     @Test
-    fun `active planning preserves one identity for concurrent groups`() = kotlinx.coroutines.runBlocking {
+    fun `active planning preserves one identity for concurrent groups`() = runBlocking {
         val project = createTempDirectory("execution-root-active")
         val root = project.resolve("module").createDirectory()
         val planned = PlannedExecutionRoot.capture(root)
@@ -138,7 +141,7 @@ class ExecutionRootGuardTest {
     }
 
     @Test
-    fun `active planning does not recapture a replaced root`() = kotlinx.coroutines.runBlocking {
+    fun `active planning does not recapture a replaced root`() = runBlocking {
         val project = createTempDirectory("execution-root-active-replaced")
         val root = project.resolve("module").createDirectory()
         val planned = PlannedExecutionRoot.capture(root)
@@ -154,7 +157,7 @@ class ExecutionRootGuardTest {
     }
 
     @Test
-    fun `a named task group retains the identity captured by its plan`() = kotlinx.coroutines.runBlocking {
+    fun `a named task group retains the identity captured by its plan`() = runBlocking {
         val project = createTempDirectory("execution-root-named-group")
         val root = project.resolve("module").createDirectory()
         val group = TaskGroup("CMAKE", root.toString(), listOf(".:test"))
@@ -170,7 +173,7 @@ class ExecutionRootGuardTest {
     }
 
     @Test
-    fun `a task group does not accept a root created after planning`() = kotlinx.coroutines.runBlocking {
+    fun `a task group does not accept a root created after planning`() = runBlocking {
         val project = createTempDirectory("execution-root-created-late")
         val root = project.resolve("module")
         val group = TaskGroup("CMAKE", root.toString(), listOf(".:test"))
@@ -185,7 +188,7 @@ class ExecutionRootGuardTest {
     }
 
     @Test
-    fun `a replaced task group root stops before adapter invocation`() = kotlinx.coroutines.runBlocking {
+    fun `a replaced task group root stops before adapter invocation`() = runBlocking {
         val project = createTempDirectory("execution-root-pre-adapter")
         val root = project.resolve("module").createDirectory()
         val group = TaskGroup("CMAKE", root.toString(), listOf(".:test"))
@@ -205,7 +208,7 @@ class ExecutionRootGuardTest {
     }
 
     @Test
-    fun `an active root identity is not borrowed by another opened project`() = kotlinx.coroutines.runBlocking {
+    fun `an active root identity is not borrowed by another opened project`() = runBlocking {
         val project = createTempDirectory("execution-root-active-project")
         val otherProject = createTempDirectory("execution-root-other-project")
         val root = project.resolve("module").createDirectory()
@@ -220,7 +223,7 @@ class ExecutionRootGuardTest {
     }
 
     @Test
-    fun `an active plan governs metadata children`() = kotlinx.coroutines.runBlocking {
+    fun `an active plan governs metadata children`() = runBlocking {
         val project = createTempDirectory("execution-root-active-child")
         val root = project.resolve("module").createDirectory()
         val child = root.resolve("metadata").createDirectory()
@@ -232,7 +235,7 @@ class ExecutionRootGuardTest {
     }
 
     @Test
-    fun `an exact nested plan wins over an active parent plan`() = kotlinx.coroutines.runBlocking {
+    fun `an exact nested plan wins over an active parent plan`() = runBlocking {
         val project = createTempDirectory("execution-root-overlap")
         val parent = project.resolve("workspace").createDirectory()
         val child = parent.resolve("backend").createDirectory()
@@ -253,14 +256,14 @@ class ExecutionRootGuardTest {
 
     @Test
     fun `a plan context follows coroutine hops and rejects a retargeted canonical root`() =
-        kotlinx.coroutines.runBlocking {
+        runBlocking {
             val project = createTempDirectory("execution-root-context-hop")
             val root = project.resolve("module").createDirectory()
             val outside = createTempDirectory("execution-root-context-outside")
             val group = TaskGroup("CMAKE", root.toString(), listOf(".:test"))
 
             group.runInPlannedExecutionRoot(project) {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                withContext(Dispatchers.IO) {
                     Files.delete(root)
                     assumeTrue(runCatching { Files.createSymbolicLink(root, outside) }.isSuccess)
                     assertContains(

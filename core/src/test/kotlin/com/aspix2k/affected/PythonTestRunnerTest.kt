@@ -1,7 +1,7 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.PythonTestRunner
-import com.aspix2k.affected.build.pythonTestRunner
+import com.aspix2k.affected.build.python.PythonTestRunner
+import com.aspix2k.affected.build.python.pythonTestRunner
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test

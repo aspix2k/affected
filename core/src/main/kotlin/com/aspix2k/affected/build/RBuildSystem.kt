@@ -1,6 +1,10 @@
 package com.aspix2k.affected.build
 
 import com.aspix2k.affected.ProjectChanges
+import com.aspix2k.affected.build.process.CliCommand
+import com.aspix2k.affected.build.process.CliStep
+import com.aspix2k.affected.build.process.CommandRunner
+import com.aspix2k.affected.build.process.DeferredCliCommand
 import com.aspix2k.affected.toBuildChanges
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project

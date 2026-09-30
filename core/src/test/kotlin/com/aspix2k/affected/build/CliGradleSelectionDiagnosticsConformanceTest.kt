@@ -7,6 +7,7 @@ import com.aspix2k.affected.AffectedStateSnapshot
 import com.aspix2k.affected.AnalysisStatus
 import com.aspix2k.affected.TaskGroup
 import com.aspix2k.affected.VerificationStatus
+import com.aspix2k.affected.build.gradle.GradleBuildSystem
 import com.aspix2k.affected.runClaimedGroupsWithPresentation
 import com.intellij.execution.ExecutionListener
 import com.intellij.execution.ExecutionManager
@@ -16,6 +17,7 @@ import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.openapi.externalSystem.service.execution.ExternalSystemJdkUtil
+import com.intellij.openapi.util.Key
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -77,7 +79,7 @@ class CliGradleSelectionDiagnosticsConformanceTest : BasePlatformTestCase() {
                 handler: ProcessHandler,
             ) {
                 handler.addProcessListener(object : ProcessListener {
-                    override fun onTextAvailable(event: ProcessEvent, outputType: com.intellij.openapi.util.Key<*>) {
+                    override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
                         output.append(event.text)
                     }
                 })

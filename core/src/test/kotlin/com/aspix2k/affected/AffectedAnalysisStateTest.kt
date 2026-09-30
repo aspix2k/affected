@@ -4,6 +4,7 @@ import com.aspix2k.affected.build.BuildChanges
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -91,7 +92,7 @@ class AffectedAnalysisStateTest {
         val current = requireNotNull(state.tryClaimReadyRun())
 
         assertEquals(
-            listOf(java.io.File("/repo/second.kt")),
+            listOf(File("/repo/second.kt")),
             requireNotNull(current.changes).files,
         )
         current.close()
@@ -196,7 +197,7 @@ class AffectedAnalysisStateTest {
 
     private fun analysis(id: String, path: String = "/repo/ready.kt"): AffectedAnalysis {
         val changes = ProjectChanges.Result(
-            files = listOf(java.io.File(path)),
+            files = listOf(File(path)),
             apiTouched = emptySet(),
             exactSelectionEligible = emptySet(),
             comparedToBase = true,

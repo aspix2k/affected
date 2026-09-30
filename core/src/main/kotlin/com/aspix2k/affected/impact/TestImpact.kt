@@ -1,5 +1,7 @@
 package com.aspix2k.affected.impact
 
+import com.aspix2k.affected.build.cmake.sha256
+
 const val DEPENDENCY_MAP_SCHEMA_VERSION = 4
 
 @JvmInline

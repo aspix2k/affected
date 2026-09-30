@@ -3,6 +3,7 @@ package com.aspix2k.affected.build
 import com.aspix2k.affected.impact.CollectorMapReader
 import com.aspix2k.affected.impact.DependencyMapPromotion
 import com.aspix2k.affected.impact.DependencyMapStore
+import java.io.IOException
 import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -126,7 +127,7 @@ private fun deleteTree(path: Path) {
                 return FileVisitResult.CONTINUE
             }
 
-            override fun postVisitDirectory(directory: Path, failure: java.io.IOException?): FileVisitResult {
+            override fun postVisitDirectory(directory: Path, failure: IOException?): FileVisitResult {
                 if (failure != null) throw failure
                 Files.delete(directory)
                 return FileVisitResult.CONTINUE

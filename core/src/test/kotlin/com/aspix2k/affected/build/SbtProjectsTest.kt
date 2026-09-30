@@ -21,7 +21,7 @@ class SbtProjectsTest {
 
         val modules = sbtModules(root)
         assertEquals(listOf("."), modules?.map(BuildModule::executionId))
-        assertTrue(modules!!.single().hasTests)
+        assertTrue(checkNotNull(modules).single().hasTests)
     }
 
     @Test
@@ -44,7 +44,7 @@ class SbtProjectsTest {
             }
         }
 
-        val modules = sbtModules(root)!!.associateBy(BuildModule::executionId)
+        val modules = checkNotNull(sbtModules(root)).associateBy(BuildModule::executionId)
         assertEquals(setOf("root", "alpha", "beta"), modules.keys)
         assertEquals(File(root, "alpha").invariantSeparatorsPath, modules.getValue("alpha").contentRoots.single())
         assertEquals(File(root, "beta").invariantSeparatorsPath, modules.getValue("beta").contentRoots.single())
