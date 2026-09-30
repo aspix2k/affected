@@ -59,7 +59,6 @@ dependencies {
     testImplementation("org.apache.maven:maven-model:$mavenLatestVersion")
     testImplementation("org.codehaus.plexus:plexus-utils:3.6.1")
     testCompileOnly("org.junit.jupiter:junit-jupiter-api:$junitVersion")
-    testImplementation("org.junit.platform:junit-platform-engine:$junitPlatformVersion")
     testImplementation("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$junitVersion")
     testRuntimeOnly("org.junit.vintage:junit-vintage-engine:$junitVersion")

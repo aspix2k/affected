@@ -81,7 +81,7 @@ dependencies {
         bundledModule("intellij.platform.vcs.dvcs.impl")
         bundledPlugin("Git4Idea")
         testFramework(TestFrameworkType.Platform)
-        pluginComposedModule(api(project(":core")))
+        pluginComposedModule(implementation(project(":core")))
         pluginModule(runtimeOnly(project(":mcp")))
     }
     add("intellijPlatformTestDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.3"))
