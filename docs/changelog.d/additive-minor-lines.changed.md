@@ -1,0 +1,1 @@
+- Keep exact PHPUnit and CMake/CTest selection on later minor releases within supported major versions.

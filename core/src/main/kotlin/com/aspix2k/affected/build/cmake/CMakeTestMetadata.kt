@@ -82,7 +82,7 @@ private class CMakeMetadataReader(
         require(codemodelReference.stringValue("kind") == "codemodel")
         val referenceVersion = codemodelReference.objectValue("version").schemaVersion()
         require(referenceVersion.major == CODEMODEL_MAJOR)
-        require(referenceVersion.minor in MIN_CODEMODEL_MINOR..MAX_CODEMODEL_MINOR)
+        require(referenceVersion.minor >= MIN_CODEMODEL_MINOR)
         val codemodel = readJson(replyFile(codemodelReference.stringValue("jsonFile")))
         require(codemodel.stringValue("kind") == "codemodel")
         val codemodelVersion = codemodel.objectValue("version").schemaVersion()
@@ -142,7 +142,7 @@ private class CMakeMetadataReader(
         require(reference.stringValue("kind") == "cmakeFiles")
         val referenceVersion = reference.objectValue("version").schemaVersion()
         require(referenceVersion.major == CMAKE_FILES_MAJOR)
-        require(referenceVersion.minor == CMAKE_FILES_MINOR)
+        require(referenceVersion.minor >= MIN_CMAKE_FILES_MINOR)
         val files = readJson(replyFile(reference.stringValue("jsonFile")))
         require(files.stringValue("kind") == "cmakeFiles")
         require(files.objectValue("version").schemaVersion() == referenceVersion)
@@ -508,12 +508,11 @@ private const val CMAKE_FILES_QUERY = "cmakeFiles-v1"
 private val CMAKE_QUERIES = listOf(CODEMODEL_QUERY, CMAKE_FILES_QUERY)
 private const val CODEMODEL_MAJOR = 2
 private const val CMAKE_FILES_MAJOR = 1
-private const val CMAKE_FILES_MINOR = 1
+private const val MIN_CMAKE_FILES_MINOR = 1
 private const val MIN_CMAKE_MAJOR = 4
 private const val MIN_CTEST_MAJOR = 3
 private const val MIN_CTEST_MINOR = 29
 private const val MIN_CODEMODEL_MINOR = 9
-private const val MAX_CODEMODEL_MINOR = 11
 private const val MAX_TARGETS = 4096
 private const val MAX_SOURCES = 65_536
 private const val MAX_TESTS = 65_536

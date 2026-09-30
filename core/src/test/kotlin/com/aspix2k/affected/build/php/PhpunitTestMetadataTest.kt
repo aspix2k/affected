@@ -154,7 +154,8 @@ class PhpunitTestMetadataTest {
         val fixture = fixture()
 
         assertNull(fixture.state(runtime().copy(phpunit = "13.1.5")))
-        assertNull(fixture.state(runtime().copy(phpunit = "13.4.0")))
+        assertNull(fixture.state(runtime().copy(phpunit = "14.0.0")))
+        assertNotNull(fixture.state(runtime().copy(phpunit = "13.4.0")))
         assertNull(fixture.state(runtime().copy(autoPrependFile = "/tmp/bootstrap.php")))
         fixture.root.resolve("composer.lock").toFile().delete()
         assertNull(fixture.state())

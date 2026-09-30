@@ -36,6 +36,18 @@ class CMakeTestMetadataTest {
     }
 
     @Test
+    fun `accepts later File API minors and rejects a new major`() {
+        val later = metadataFixture()
+        later.rewriteReplies("{\"major\":2,\"minor\":9}" to "{\"major\":2,\"minor\":12}")
+        later.rewriteReplies("{\"major\":1,\"minor\":1}" to "{\"major\":1,\"minor\":2}")
+        assertNotNull(snapshot(later))
+
+        val major = metadataFixture()
+        major.rewriteReplies("{\"major\":2,\"minor\":9}" to "{\"major\":3,\"minor\":0}")
+        assertNull(snapshot(major))
+    }
+
+    @Test
     fun `interface sources cannot hide a second affected target`() {
         val fixture = metadataFixture(
             targetTransform = { name, json ->
@@ -317,6 +329,12 @@ class CMakeTestMetadataTest {
             "\"properties\":[{\"name\":\"RESOURCE_LOCK\",\"value\":[\"db\"]}]"
         const val ENVIRONMENT_PROPERTY =
             "\"properties\":[{\"name\":\"ENVIRONMENT\",\"value\":[\"TOOL=/tmp/tool\"]}]"
+    }
+
+    private fun MetadataFixture.rewriteReplies(replacement: Pair<String, String>) {
+        build.resolve(".cmake/api/v1/reply").toFile().listFiles().orEmpty().forEach { file ->
+            file.writeText(file.readText().replace(replacement.first, replacement.second))
+        }
     }
 
     private data class MetadataFixture(val root: Path, val build: Path, val ctest: String)
