@@ -114,6 +114,7 @@ object CommandRunner {
         )
         ProcessTerminatedListener.attach(handler)
         val completed = AtomicBoolean(false)
+        val aborted = AtomicBoolean(false)
         val terminated = CompletableDeferred<Unit>()
         val sessions = AffectedRunSessions.getInstance(project)
         val presentation = currentAffectedRunPresentation()
@@ -128,7 +129,7 @@ object CommandRunner {
                 handler.addProcessListener(object : ProcessListener {
                     override fun processTerminated(event: ProcessEvent) {
                         terminated.complete(Unit)
-                        complete(event.exitCode == 0)
+                        complete(event.exitCode == 0 && !aborted.get())
                     }
                 })
                 registered = sessions.register(handler as AffectedOwnedSession)
@@ -145,12 +146,12 @@ object CommandRunner {
 
                 ApplicationManager.getApplication().invokeLater {
                     if (!continuation.isActive || project.isDisposed) {
+                        aborted.set(true)
                         if (!handler.isProcessTerminated) handler.destroyProcess()
                         handler.startNotify()
-                        complete(false)
                         return@invokeLater
                     }
-                    showOrFail(show, project, handler, title, workingDirectory, presentation) { complete(false) }
+                    showOrFail(show, project, handler, title, workingDirectory, presentation) { aborted.set(true) }
                 }
             }
         } catch (cancelled: CancellationException) {
@@ -180,9 +181,9 @@ object CommandRunner {
             show(project, handler, title, workingDirectory, presentation)
         } catch (error: Exception) {
             LOG.warn("Affected could not show the run for $title", error)
+            onFailure()
             if (!handler.isProcessTerminated) handler.destroyProcess()
             handler.startNotify()
-            onFailure()
         }
     }
 
