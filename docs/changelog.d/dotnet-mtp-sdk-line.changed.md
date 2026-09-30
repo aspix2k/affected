@@ -1,0 +1,1 @@
+- .NET: native Microsoft Testing Platform exact class selection now works with any .NET SDK 10.0.400 or newer 10.0.x pinned in global.json and any locked xunit.v3 4.x from nuget.org, not only SDK 10.0.400 with xunit.v3 4.0.0; anything unproven still runs the full project.

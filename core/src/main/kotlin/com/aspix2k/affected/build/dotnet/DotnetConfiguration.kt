@@ -158,33 +158,35 @@ internal fun supportsNativeXunit4Mtp(root: String, project: String): Boolean = r
     val reference = references.item(0)
     require(reference.attributes.length == 2)
     require(reference.attributes.getNamedItem("Include")?.nodeValue == "xunit.v3")
-    require(reference.attributes.getNamedItem("Version")?.nodeValue == "[4.0.0]")
+    val requested = requireNotNull(reference.attributes.getNamedItem("Version")?.nodeValue)
+    val xunitVersion = requireNotNull(nativeMtpRequestedXunitVersion(requested))
     require(reference.childNodes.length == 0)
 
     val lock = projectPath.parent.resolve("packages.lock.json")
     require(lock.isSecureImportedFile() && lock.toRealPath() == lock)
     val lockText = ManifestSearch.readText(lock.toFile()) ?: return false
-    val lockJson = JsonParser.parseString(lockText)
-    require(sha256(canonicalDotnetJson(lockJson)) == XUNIT4_MTP_LOCK_IDENTITY)
+    require(nativeMtpLockStructure(JsonParser.parseString(lockText).asJsonObject, xunitVersion))
     true
 }.getOrDefault(false)
 
-internal fun nativeMtpGlobalJson(path: Path): Boolean = runCatching {
+internal fun nativeMtpGlobalJson(path: Path): Boolean = nativeMtpGlobalSdkVersion(path) != null
+
+internal fun nativeMtpGlobalSdkVersion(path: Path): String? = runCatching {
     require(path.isSecureImportedFile() && path.toRealPath() == path)
-    val text = ManifestSearch.readText(path.toFile()) ?: return false
+    val text = ManifestSearch.readText(path.toFile()) ?: return null
     val root = JsonParser.parseString(text).asJsonObject
     require(root.keySet() == setOf("sdk", "test"))
     val sdk = root.getAsJsonObject("sdk")
     require(sdk.keySet() == setOf("version", "rollForward", "allowPrerelease"))
-    require(sdk.get("version").isExactString(NATIVE_MTP_SDK))
+    require(nativeMtpSdkVersion(sdk.get("version")) != null)
     require(sdk.get("rollForward").isExactString("disable"))
     require(sdk.get("allowPrerelease")?.let { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean } == true)
     require(!sdk.get("allowPrerelease").asBoolean)
     val test = root.getAsJsonObject("test")
     require(test.keySet() == setOf("runner"))
     require(test.get("runner").isExactString("Microsoft.Testing.Platform"))
-    true
-}.getOrDefault(false)
+    nativeMtpSdkVersion(sdk.get("version"))
+}.getOrNull()
 
 private fun JsonElement?.isExactString(value: String): Boolean =
     this?.let { it.isJsonPrimitive && it.asJsonPrimitive.isString && it.asString == value } == true
@@ -227,20 +229,6 @@ private fun Document.singleElementText(name: String): String {
     val elements = getElementsByTagNameNS("*", name)
     require(elements.length == 1)
     return elements.item(0).textContent.trim()
-}
-
-private fun canonicalDotnetJson(element: JsonElement): String = when {
-    element.isJsonObject -> element.asJsonObject.entrySet().sortedBy { it.key }
-        .joinToString(separator = ",", prefix = "{", postfix = "}") { (key, value) ->
-            "${com.google.gson.JsonPrimitive(key)}:${canonicalDotnetJson(value)}"
-        }
-    element.isJsonArray -> element.asJsonArray.joinToString(
-        separator = ",",
-        prefix = "[",
-        postfix = "]",
-        transform = ::canonicalDotnetJson,
-    )
-    else -> element.toString()
 }
 
 internal fun secureDotnetDocument(text: String): Document {
@@ -423,5 +411,3 @@ private const val MAX_DOTNET_PACKAGE_FILES = 131_072
 private const val MAX_DOTNET_IMPORT_BYTES = 128L * 1024 * 1024
 private val DOTNET_PREPROCESS_IMPORT = Regex("^<Import(?:\\s|>)")
 private val DOTNET_STABLE_SDK_VERSION = Regex("[0-9]+\\.[0-9]+\\.[0-9]+")
-private val NATIVE_MTP_SDK = Regex("10\\.0\\.400")
-private const val XUNIT4_MTP_LOCK_IDENTITY = "903449ba76017a825dfe05c28d4e46c9459b14c3da38d541b93c95cf404a6f09"

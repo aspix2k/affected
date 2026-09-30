@@ -166,7 +166,8 @@ internal fun dotnetMtpRuntimeProof(
         MTP_METADATA_TIMEOUT,
         MTP_METADATA_MAX_BYTES,
     )?.trim()
-    require(version == "10.0.400")
+    require(version != null && nativeMtpSdkSupported(version))
+    require(nativeMtpGlobalSdkVersion(rootPath.resolve("global.json")) == version)
     val output = capture(
         rootPath.toString(),
         listOf(

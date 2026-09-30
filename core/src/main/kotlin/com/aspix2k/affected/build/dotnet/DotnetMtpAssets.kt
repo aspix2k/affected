@@ -14,30 +14,19 @@ import java.security.MessageDigest
 import java.util.Base64
 import java.util.zip.ZipFile
 
-internal fun nativeMtpAssetsProof(
-    root: String,
-    project: String,
-    expectedArchiveIdentity: String = NATIVE_MTP_ARCHIVE_IDENTITY,
-): Boolean = nativeMtpAssetsEvidence(root, project)?.archiveIdentity == expectedArchiveIdentity
-
-internal fun nativeMtpArchiveIdentity(root: String, project: String): String? =
-    nativeMtpAssetsEvidence(root, project)?.archiveIdentity
-
-private fun nativeMtpAssetsEvidence(root: String, project: String): NativeMtpAssetsEvidence? =
-    nativeMtpAssetOrNull {
-        val rootPath = Path.of(root).toAbsolutePath().normalize().toRealPath()
-        val projectPath = rootPath.resolve(project).normalize().toRealPath()
-        require(projectPath.startsWith(rootPath))
-        val projectDirectory = requireNotNull(projectPath.parent)
-        val lockPath = projectDirectory.resolve("packages.lock.json")
-        val assetsPath = projectDirectory.resolve("obj/project.assets.json")
-        require(symlinkFreeDotnetPath(rootPath, lockPath) && symlinkFreeDotnetPath(rootPath, assetsPath))
-        val expected = nativeMtpLockedPackages(lockPath) ?: return null
-        val assets = nativeMtpAssetsPackages(assetsPath, expected) ?: return null
-        val archives = nativeMtpPackageMetadata(assets.packageRoot, assets.packages) ?: return null
-        val archiveIdentity = nativeMtpArchiveIdentity(archives) ?: return null
-        NativeMtpAssetsEvidence(archiveIdentity)
-    }
+internal fun nativeMtpAssetsProof(root: String, project: String): Boolean = nativeMtpAssetOrNull {
+    val rootPath = Path.of(root).toAbsolutePath().normalize().toRealPath()
+    val projectPath = rootPath.resolve(project).normalize().toRealPath()
+    require(projectPath.startsWith(rootPath))
+    val projectDirectory = requireNotNull(projectPath.parent)
+    val lockPath = projectDirectory.resolve("packages.lock.json")
+    val assetsPath = projectDirectory.resolve("obj/project.assets.json")
+    require(symlinkFreeDotnetPath(rootPath, lockPath) && symlinkFreeDotnetPath(rootPath, assetsPath))
+    val expected = nativeMtpLockedPackages(lockPath) ?: return false
+    val assets = nativeMtpAssetsPackages(assetsPath, expected) ?: return false
+    nativeMtpPackageMetadata(assets.packageRoot, assets.packages) ?: return false
+    true
+} ?: false
 
 private fun nativeMtpLockedPackages(lockPath: Path): Map<String, NativeMtpPackage>? = nativeMtpAssetOrNull {
     require(Files.isRegularFile(lockPath, LinkOption.NOFOLLOW_LINKS))
@@ -83,7 +72,15 @@ private fun nativeMtpAssetsPackages(
     require(frameworkDependencies.keySet() == setOf("xunit.v3"))
     val xunit = frameworkDependencies.getAsJsonObject("xunit.v3")
     require(xunit.get("target").asString == "Package")
-    require(xunit.get("version").asString == "[4.0.0, 4.0.0]")
+    val xunitPackage = packages.single { it.name == "xunit.v3" }
+    require(NATIVE_MTP_XUNIT_VERSION.matches(xunitPackage.version))
+    require(xunit.get("version").asString == "[${xunitPackage.version}, ${xunitPackage.version}]")
+    NATIVE_MTP_EXPECTED_ASSEMBLIES.forEach { (name, assembly) ->
+        val files = packages.single { it.name == name }.files
+        require(
+            files.any { file -> NATIVE_MTP_LIB_PATH.matches(file) && file.endsWith("/$assembly", ignoreCase = true) },
+        )
+    }
 
     val packageFolders = assets.getAsJsonObject("packageFolders")
     require(packageFolders.size() == 1)
@@ -95,9 +92,9 @@ private fun nativeMtpAssetsPackages(
 private fun nativeMtpPackageMetadata(
     packageRoot: Path,
     expected: Collection<NativeMtpPackage>,
-): List<NativeMtpArchive>? = nativeMtpAssetOrNull {
+): Boolean? = nativeMtpAssetOrNull {
     var totalArchiveBytes = 0L
-    expected.map { packageValue ->
+    expected.forEach { packageValue ->
         val packageDirectory = packageRoot.resolve(packageValue.name).resolve(packageValue.version)
         require(packageDirectory.startsWith(packageRoot) && symlinkFreeDotnetPath(packageRoot, packageDirectory))
         require(Files.isDirectory(packageDirectory, LinkOption.NOFOLLOW_LINKS))
@@ -119,18 +116,8 @@ private fun nativeMtpPackageMetadata(
         val archiveHash = ManifestSearch.readText(hashFile.toFile())?.trim()
         require(!archiveHash.isNullOrBlank() && sha512Base64(archive) == archiveHash)
         require(nativeMtpExtractedFilesMatchArchive(packageDirectory, archive, packageValue))
-        NativeMtpArchive("${packageValue.name}/${packageValue.version}", archive)
     }
-}
-
-private fun nativeMtpArchiveIdentity(archives: List<NativeMtpArchive>): String? = nativeMtpAssetOrNull {
-    require(archives.isNotEmpty() && archives.size <= MAX_MTP_PACKAGES)
-    val manifest = archives
-        .sortedBy(NativeMtpArchive::key)
-        .joinToString(separator = "\n", postfix = "\n") { archive ->
-            "${archive.key}=${sha256Hex(archive.path)}"
-        }
-    sha256Hex(manifest.toByteArray(Charsets.UTF_8))
+    true
 }
 
 private fun nativeMtpExtractedFilesMatchArchive(
@@ -222,13 +209,6 @@ private fun sha256(input: InputStream): ByteArray {
     return digest.digest()
 }
 
-private fun sha256Hex(path: Path): String = Files.newInputStream(path).buffered().use { input ->
-    sha256(input).joinToString("") { byte -> "%02x".format(byte) }
-}
-
-private fun sha256Hex(bytes: ByteArray): String =
-    MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { byte -> "%02x".format(byte) }
-
 private fun sha512Base64(path: Path): String {
     val digest = MessageDigest.getInstance("SHA-512")
     Files.newInputStream(path).buffered().use { input ->
@@ -264,8 +244,6 @@ private data class NativeMtpPackage(
 )
 
 private data class NativeMtpAssets(val packageRoot: Path, val packages: List<NativeMtpPackage>)
-private data class NativeMtpArchive(val key: String, val path: Path)
-private data class NativeMtpAssetsEvidence(val archiveIdentity: String)
 
 private const val MAX_MTP_PACKAGES = 128
 private const val MAX_MTP_NUPKG_BYTES = 64L * 1024 * 1024
@@ -275,5 +253,9 @@ private const val MAX_MTP_ARCHIVE_ENTRY_BYTES = 128L * 1024 * 1024
 private const val MAX_MTP_ARCHIVE_EXPANDED_BYTES = 512L * 1024 * 1024
 private const val MTP_DIGEST_BUFFER_BYTES = 64 * 1024
 private const val NUGET_ORG_SOURCE = "https://api.nuget.org/v3/index.json"
-private const val NATIVE_MTP_ARCHIVE_IDENTITY =
-    "b20f9f40b560e9b53a3fe98937474cb628592f0c863f906fa76cdf8c744475ee"
+private val NATIVE_MTP_XUNIT_VERSION = Regex("4\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)")
+private val NATIVE_MTP_LIB_PATH = Regex("lib/[^/]+/[^/]+")
+private val NATIVE_MTP_EXPECTED_ASSEMBLIES = mapOf(
+    "xunit.v3.core.mtp-v2" to "xunit.v3.mtp-v2.dll",
+    "microsoft.testing.platform" to "Microsoft.Testing.Platform.dll",
+)
