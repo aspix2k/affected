@@ -56,6 +56,8 @@ internal interface TransitiveTestConsumersBuildSystem
 
 internal interface WorkspaceChangesBuildSystem {
     fun requiresWorkspace(module: BuildModule, changes: BuildChanges): Boolean
+
+    fun consumerRoots(root: String, candidateRoots: Set<String>): Set<String> = emptySet()
 }
 
 internal interface SuspendingBuildSystem : BuildSystem {

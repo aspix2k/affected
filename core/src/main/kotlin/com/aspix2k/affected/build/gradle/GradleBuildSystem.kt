@@ -66,6 +66,9 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
     override fun requiresWorkspace(module: BuildModule, changes: BuildChanges): Boolean =
         gradleRequiresWorkspace(module.root, changes)
 
+    override fun consumerRoots(root: String, candidateRoots: Set<String>): Set<String> =
+        gradleConsumerRoots(root, candidateRoots)
+
     override fun modules(project: Project): List<BuildModule> =
         runBlockingCancellable { modulesSuspending(project) }
 

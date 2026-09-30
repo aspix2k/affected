@@ -89,6 +89,21 @@ logic (`gradle/**`, `buildSrc/**`, root settings, build scripts and
 `gradle.properties`) widens to every project in that build. Gradle
 execution coordinates come from the imported model, so included builds keep
 their ownership while compatible tasks can run through the composite root.
+A Gradle build-logic change (`gradle/**`, `buildSrc/**`, root settings, build
+scripts or `gradle.properties`) runs every project of that build. A change in a
+separate Gradle root also runs every project of each build that consumes it,
+transitively: a `buildSrc` with its own settings belongs to its parent build, and
+a root named by a literal `includeBuild("path")` in a consumer's
+`settings.gradle(.kts)` belongs to that consumer when it produces Gradle
+plugins: a build script mentions `kotlin-dsl`, `java-gradle-plugin` or a
+`gradlePlugin {` block, or `src/main/kotlin|groovy` holds `*.gradle(.kts)`
+scripts. Plain library builds keep their IDE dependency edges instead. The scan
+is textual; plugin applied through a version-catalog alias is not seen when none
+of those markers appears. An
+`includeBuild` with a non-literal argument, an `apply from` in settings, or an
+unreadable settings file or build script makes that build a consumer of every other Gradle root,
+so the plan widens instead of narrowing. Inclusion declared anywhere else, such
+as a script plugin or init script, is not seen.
 
 `TaskPlanner` makes one group per build system and execution root. One claimed
 plan publishes one `Affected` Run session, with a structured child section for

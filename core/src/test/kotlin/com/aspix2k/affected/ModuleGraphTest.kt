@@ -132,6 +132,114 @@ class ModuleGraphTest {
     }
 
     @Test
+    fun `included build logic widens to every project of the consuming build`() {
+        val root = createTempDirectory("module-graph-included-build").toFile()
+        val settings = "pluginManagement {\n    includeBuild(\"build-logic\")\n}\nincludeBuild('tools/checks')\n"
+        File(root, "settings.gradle.kts").writeText(settings)
+        File(root, "build-logic/settings.gradle.kts").apply { parentFile.mkdirs() }.writeText("")
+        File(root, "build-logic/convention/build.gradle.kts").apply { parentFile.mkdirs() }
+            .writeText("plugins {\n    `kotlin-dsl`\n}\n")
+        File(root, "tools/checks/settings.gradle").apply { parentFile.mkdirs() }.writeText("")
+        File(root, "tools/checks/checks/src/main/groovy/checks.gradle").apply { parentFile.mkdirs() }.writeText("")
+        File(root, "other/settings.gradle.kts").apply { parentFile.mkdirs() }.writeText("")
+        val graph = gradleGraph(
+            module(root, ":app", "app"),
+            module(root, ":lib", "lib"),
+            module(File(root, "build-logic"), ":convention", "convention"),
+            module(File(root, "tools/checks"), ":checks", "checks"),
+            module(File(root, "other"), ":single", "single"),
+        )
+
+        mapOf(
+            "build-logic/convention/src/Plugin.kt" to ":convention",
+            "tools/checks/checks/src/Check.kt" to ":checks",
+        ).forEach { (path, owner) ->
+            assertEquals(setOf(owner, ":app", ":lib"), graph.owners(root.createFile(path)), path)
+        }
+    }
+
+    @Test
+    fun `an included library build without plugins does not widen the consuming build`() {
+        val root = createTempDirectory("module-graph-included-library").toFile()
+        File(root, "settings.gradle.kts").writeText("includeBuild(\"library\")\n")
+        File(root, "library/settings.gradle.kts").apply { parentFile.mkdirs() }.writeText("")
+        File(root, "library/core/build.gradle.kts").apply { parentFile.mkdirs() }
+            .writeText("plugins {\n    `java-library`\n}\n")
+        val graph = gradleGraph(
+            module(root, ":app", "app"),
+            module(root, ":lib", "lib"),
+            module(File(root, "library"), ":core", "core"),
+        )
+
+        val file = root.createFile("library/core/src/main/java/Core.kt")
+
+        assertEquals(setOf(":core"), graph.owners(file))
+    }
+
+    @Test
+    fun `an included build with gradlePlugin declarations widens the consuming build`() {
+        val root = createTempDirectory("module-graph-included-plugin").toFile()
+        File(root, "settings.gradle.kts").writeText("includeBuild(\"plugins\")\n")
+        File(root, "plugins/settings.gradle.kts").apply { parentFile.mkdirs() }.writeText("")
+        File(root, "plugins/build.gradle.kts").writeText("gradlePlugin {\n}\n")
+        val graph = gradleGraph(
+            module(root, ":app", "app"),
+            module(File(root, "plugins"), ":plugins", "src"),
+        )
+
+        val file = root.createFile("plugins/src/Plugin.kt")
+
+        assertEquals(setOf(":app", ":plugins"), graph.owners(file))
+    }
+
+    @Test
+    fun `buildSrc with its own settings widens to the build that owns it`() {
+        val root = createTempDirectory("module-graph-buildsrc-settings").toFile()
+        File(root, "settings.gradle.kts").writeText("rootProject.name = \"app\"\n")
+        File(root, "buildSrc/settings.gradle.kts").apply { parentFile.mkdirs() }.writeText("")
+        val graph = gradleGraph(
+            module(root, ":app", "app"),
+            module(root, ":lib", "lib"),
+            module(File(root, "buildSrc"), ":buildSrc", "src"),
+        )
+
+        val file = root.createFile("buildSrc/src/main/kotlin/Conventions.kt")
+
+        assertEquals(setOf(":app", ":lib", ":buildSrc"), graph.owners(file))
+    }
+
+    @Test
+    fun `an unresolvable includeBuild widens every other Gradle build`() {
+        val root = createTempDirectory("module-graph-dynamic-include").toFile()
+        File(root, "settings.gradle.kts").writeText("includeBuild(rootDir.resolve(name))\n")
+        File(root, "logic/settings.gradle.kts").apply { parentFile.mkdirs() }.writeText("")
+        File(root, "logic/build.gradle.kts").writeText("plugins { `kotlin-dsl` }\n")
+        val graph = gradleGraph(
+            module(root, ":app", "app"),
+            module(File(root, "logic"), ":logic", "logic"),
+        )
+
+        val file = root.createFile("logic/logic/Plugin.kt")
+
+        assertEquals(setOf(":app", ":logic"), graph.owners(file))
+    }
+
+    @Test
+    fun `builds that do not include the changed build stay narrow`() {
+        val root = createTempDirectory("module-graph-unrelated-builds").toFile()
+        File(root, "settings.gradle.kts").writeText("includeBuild(\"elsewhere\")\n")
+        File(root, "logic/settings.gradle.kts").apply { parentFile.mkdirs() }.writeText("")
+        val graph = gradleGraph(
+            module(root, ":app", "app"),
+            module(File(root, "logic"), ":logic", "logic"),
+        )
+
+        val file = root.createFile("logic/logic/Plugin.kt")
+
+        assertEquals(setOf(":logic"), graph.owners(file))
+    }
+
+    @Test
     fun `workspace changes widen both the prepared plan and affected module snapshot`() {
         val root = createTempDirectory("module-graph-workspace").toFile()
         val system = workspaceSystem()
@@ -300,6 +408,16 @@ class ModuleGraphTest {
             parentFile.mkdirs()
             writeText("")
         }
+
+    private fun gradleGraph(vararg modules: BuildModule): ModuleGraph {
+        val system = GradleBuildSystem()
+        return ModuleGraph(modules.map { ModuleGraph.Node(it, system) })
+    }
+
+    private fun ModuleGraph.owners(file: File): Set<String> {
+        val changes = ProjectChanges.Result(listOf(file), emptySet(), setOf(file), comparedToBase = true)
+        return ownersForChanges(changes.toBuildChanges()).getValue(file).mapTo(HashSet()) { it.id }
+    }
 
     private fun graph(vararg modules: BuildModule): ModuleGraph =
         ModuleGraph(modules.map { ModuleGraph.Node(it, system("NODE")) })
