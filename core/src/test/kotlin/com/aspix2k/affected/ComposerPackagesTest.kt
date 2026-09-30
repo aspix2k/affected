@@ -204,6 +204,35 @@ class ComposerPackagesTest {
     }
 
     @Test
+    fun `any Pest 5 release selects the Pest runner with the PHPUnit release it pins`() {
+        val root = monorepo()
+        packageAt(root, ".", "acme/pest", requireDev = mapOf("pestphp/pest" to "5.2.1"), tests = true)
+        pestLock(root, "5.2.1", "13.3.4")
+
+        assertEquals(ComposerPackages.PEST, ComposerPackages.parse(root).single().testTask)
+    }
+
+    @Test
+    fun `a PHPUnit release other than the one Pest pins fails closed`() {
+        val root = monorepo()
+        packageAt(root, ".", "acme/pest", requireDev = mapOf("pestphp/pest" to "5.2.1"), tests = true)
+        pestLock(root, "5.2.1", "13.3.4")
+        val lock = File(root, "composer.lock")
+        lock.writeText(lock.readText().replace("\"version\": \"13.3.4\"", "\"version\": \"13.3.5\""))
+
+        assertEquals(ComposerPackages.INVALID, ComposerPackages.fallbackTask(root))
+    }
+
+    @Test
+    fun `Pest 6 is not claimed before it is proven`() {
+        val root = monorepo()
+        packageAt(root, ".", "acme/pest", requireDev = mapOf("pestphp/pest" to "6.0.0"), tests = true)
+        pestLock(root, "6.0.0", "14.0.0")
+
+        assertEquals(ComposerPackages.INVALID, ComposerPackages.fallbackTask(root))
+    }
+
+    @Test
     fun `a PHPT suite is runnable through the Pest runner`() {
         val root = monorepo()
         packageAt(root, ".", "acme/pest", requireDev = mapOf("pestphp/pest" to "5.1.1"))
