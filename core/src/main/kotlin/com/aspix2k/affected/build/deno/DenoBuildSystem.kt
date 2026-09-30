@@ -42,15 +42,27 @@ internal object DenoTasks {
     const val TEST = "test"
 }
 
-internal fun denoProjectRoot(base: File): File? =
-    nestedBuildRoot(base) { denoConfig(it) != null }
+internal class DenoConfig(val json: JsonObject?)
 
-internal fun denoConfig(root: File): JsonObject? {
-    if (File(root, "package.json").exists()) return null
+internal fun denoProjectRoot(base: File): File? =
+    nestedBuildRoot(base) { denoConfig(it) != null && !nodeOwnsTests(it) }
+
+internal fun denoConfig(root: File): DenoConfig? {
     val configs = CONFIG_NAMES.map { File(root, it) }.filter { it.exists() }
-    val config = configs.singleOrNull()?.takeIf(File::isRegularFileNoFollow) ?: return null
-    val text = ManifestSearch.readText(config) ?: return null
-    return runCatching { JsonParser.parseString(text).asJsonObject }.getOrNull()
+    if (configs.isEmpty()) return null
+    val config = configs.singleOrNull()?.takeIf(File::isRegularFileNoFollow) ?: return DenoConfig(null)
+    val text = ManifestSearch.readText(config) ?: return DenoConfig(null)
+    return DenoConfig(runCatching { JsonParser.parseString(text).asJsonObject }.getOrNull())
+}
+
+private fun nodeOwnsTests(root: File): Boolean {
+    val manifest = File(root, "package.json")
+    if (!manifest.exists()) return false
+    val text = manifest.takeIf(File::isRegularFileNoFollow)?.let(ManifestSearch::readText) ?: return true
+    val json = runCatching { JsonParser.parseString(text).asJsonObject }.getOrNull() ?: return true
+    val scripts = json.get("scripts")
+    return json.has("workspaces") ||
+        (scripts != null && (!scripts.isJsonObject || scripts.asJsonObject.has(DenoTasks.TEST)))
 }
 
 internal fun denoRootModule(root: File): BuildModule {
@@ -73,13 +85,14 @@ internal fun denoCommands(root: File, tasks: List<String>): List<CliCommand> {
 }
 
 private fun denoTestTask(root: File): Boolean {
-    val tasks = denoConfig(root)?.get("tasks") ?: return false
+    val tasks = denoConfig(root)?.json?.get("tasks") ?: return false
     return tasks.isJsonObject && tasks.asJsonObject.has(DenoTasks.TEST)
 }
 
 private fun denoHasTests(root: File): Boolean {
     val config = denoConfig(root) ?: return false
-    if (config.has("test") || denoTestTask(root)) return true
+    val json = config.json ?: return true
+    if (json.has("test") || denoTestTask(root)) return true
     return ManifestSearch.anyFile(root) { file ->
         TEST_FILE.matches(file.name) || (file.name in CONFIG_NAMES && file.parentFile != root)
     } != false

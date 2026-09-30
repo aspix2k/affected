@@ -106,7 +106,11 @@ private fun relatedSelection(
     val relative = changes.map { directory.relativize(it).toString().replace('\\', '/') }.sorted()
     if (relative.any { it.startsWith("../") || it == ".." }) return null
     if (metadata.testFilesOnly && !testFilesOnly(metadata, relative)) return null
-    val references = if (metadata.testFilesOnly) changes.mapTo(HashSet()) { it.fileName.toString() } else emptySet()
+    val references = Regex(
+        changes.joinToString("|", "(?<![A-Za-z0-9_-])(?:", ")(?![A-Za-z0-9_-])") {
+            Regex.escape(it.fileName.toString().substringBeforeLast('.'))
+        },
+    ).takeIf { metadata.testFilesOnly }
     if (!safeStaticNodePackage(directory, nestedModules, references)) return null
     return NodeRelatedTestSelection(metadata, relative)
 }
@@ -245,10 +249,10 @@ private data class NodeScanBudget(
     var directories: Int = 0,
     var files: Int = 0,
     var bytes: Long = 0,
-    val references: Set<String>,
+    val references: Regex?,
 )
 
-private fun safeStaticNodePackage(directory: Path, nestedModules: Set<Path>, references: Set<String>): Boolean {
+private fun safeStaticNodePackage(directory: Path, nestedModules: Set<Path>, references: Regex?): Boolean {
     val queue = ArrayDeque<Pair<Path, Int>>()
     queue += directory to 0
     val budget = NodeScanBudget(references = references)
@@ -305,7 +309,7 @@ private fun safeNodeSource(source: Path, budget: NodeScanBudget): Boolean {
     budget.bytes += size
     if (size > MAX_NODE_FILE_BYTES || budget.bytes > MAX_NODE_TOTAL_BYTES) return false
     val text = runCatching { Files.readString(source, StandardCharsets.UTF_8) }.getOrNull() ?: return false
-    return !hasDynamicNodeDependency(text) && budget.references.none(text::contains)
+    return !hasDynamicNodeDependency(text) && budget.references?.containsMatchIn(text) != true
 }
 
 private val SIMPLE_VERSION = Regex("""[~^]?(\d+)\.\d+(?:\.\d+)?""")

@@ -54,17 +54,42 @@ class DenoCommandTest {
     }
 
     @Test
-    fun `ambiguous or foreign roots stay off the Deno adapter`() {
+    fun `an unparseable or ambiguous config still makes a fully running Deno root`() {
+        val trailing = denoRoot("{ \"tasks\": { \"test\": \"deno test\", }, }")
         val both = denoRoot("{}")
         File(both, "deno.jsonc").writeText("{}")
-        val node = denoRoot("{}")
-        File(node, "package.json").writeText("{}")
-        val invalid = denoRoot("not json")
+
+        listOf(denoRoot("not json"), trailing, both).forEach { root ->
+            assertEquals(root, denoProjectRoot(root))
+            assertNull(denoConfig(root)?.json)
+            assertTrue(denoRootModule(root).hasTests)
+            assertEquals(listOf("deno", "test"), denoCommands(root, listOf(".:test")).single().arguments)
+        }
+    }
+
+    @Test
+    fun `a package json without a test script leaves the root to Deno`() {
+        val plain = denoRoot("{}")
+        File(plain, "package.json").writeText("""{ "scripts": { "build": "tsc" } }""")
+        val bare = denoRoot("{}")
+        File(bare, "package.json").writeText("{}")
+
+        assertEquals(plain, denoProjectRoot(plain))
+        assertEquals(bare, denoProjectRoot(bare))
+    }
+
+    @Test
+    fun `a package json that can run tests keeps the root with Node`() {
+        val script = denoRoot("{}")
+        File(script, "package.json").writeText("""{ "scripts": { "test": "jest" } }""")
+        val workspaces = denoRoot("{}")
+        File(workspaces, "package.json").writeText("""{ "workspaces": ["packages/*"] }""")
+        val invalid = denoRoot("{}")
+        File(invalid, "package.json").writeText("not json")
         val empty = createTempDirectory("deno-none").toFile()
 
-        assertNull(denoConfig(both))
-        assertNull(denoConfig(node))
-        assertNull(denoConfig(invalid))
+        listOf(script, workspaces, invalid).forEach { root -> assertNull(denoProjectRoot(root)) }
+        assertNull(denoConfig(empty))
         assertNull(denoProjectRoot(empty))
     }
 

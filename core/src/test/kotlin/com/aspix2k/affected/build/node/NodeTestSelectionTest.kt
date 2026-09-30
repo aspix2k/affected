@@ -396,6 +396,37 @@ class NodeTestSelectionTest {
     }
 
     @Test
+    fun `an extensionless import of a changed test keeps the full package command`() {
+        listOf(
+            "import './alpha.test'",
+            "require('../test/alpha.test')",
+            "import '../test/alpha.test.js'",
+            "await import(`./alpha.test.mjs`)",
+        ).forEach { reference ->
+            val node = testFilesWorkspace("node --test")
+            node.fixture.source("alpha", "runner.js", reference)
+            assertFull(node.fixture, node.changed)
+        }
+        val bun = testFilesWorkspace("bun test", "alpha.spec.ts").also { File(it.root, "bun.lock").writeText("") }
+        bun.fixture.source("alpha", "runner.ts", "import '../test/alpha.spec'")
+        assertEquals(
+            listOf("bun", "--filter", "@app/alpha", "test"),
+            exactCommands(bun.root, "@app/alpha:test", bun.changed).single().arguments,
+        )
+    }
+
+    @Test
+    fun `an unrelated name sharing a prefix does not block exact test selection`() {
+        val node = testFilesWorkspace("node --test")
+        node.fixture.source("alpha", "runner.js", "require('./beta-alpha.test')")
+
+        assertEquals(
+            listOf("npm", "test", "--workspace", "@app/alpha", "--", "test/alpha.test.js"),
+            exactCommands(node.root, "@app/alpha:test", node.changed).single().arguments,
+        )
+    }
+
+    @Test
     fun `node test keeps the full package command under a Bun manager or with runner configuration`() {
         val bun = testFilesWorkspace("node --test").also { File(it.root, "bun.lock").writeText("") }
         val config = testFilesWorkspace("node --test")
