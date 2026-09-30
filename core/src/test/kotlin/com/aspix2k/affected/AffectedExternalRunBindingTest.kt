@@ -8,6 +8,7 @@ import com.intellij.execution.process.ProcessOutputTypes
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.runners.ProgramRunner
 import com.intellij.execution.ui.RunContentDescriptor
+import com.intellij.openapi.util.Key
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import java.io.OutputStream
 import javax.swing.JPanel
@@ -52,7 +53,7 @@ class AffectedExternalRunBindingTest : BasePlatformTestCase() {
         val output = mutableListOf<String>()
         val handler = RecordingHandler().apply {
             addProcessListener(object : ProcessListener {
-                override fun onTextAvailable(event: ProcessEvent, outputType: com.intellij.openapi.util.Key<*>) {
+                override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
                     output += event.text
                 }
             })

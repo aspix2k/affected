@@ -1,5 +1,8 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.build.process.CliCommand
+import com.aspix2k.affected.build.process.CliStep
+import com.aspix2k.affected.build.python.PythonProjects
 import com.google.gson.JsonParser
 import java.io.File
 import java.nio.file.Path
@@ -83,3 +86,5 @@ internal const val PYTHON_RUNNER_DRIFT_FAILURE =
 internal const val UNITTEST_ADAPTER_DRIFT_FAILURE =
     "import sys; sys.stderr.write(\"Affected could not revalidate the packaged unittest adapter; " +
         "reinstall or rebuild the plugin and run again.\\n\"); raise SystemExit(2)"
+
+internal fun CliStep.resolveCommand(): CliCommand = checkNotNull(resolve())

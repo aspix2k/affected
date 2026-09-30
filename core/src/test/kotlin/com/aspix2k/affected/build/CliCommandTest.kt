@@ -1,5 +1,24 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.build.cargo.CargoNextestMode
+import com.aspix2k.affected.build.cargo.CargoNextestPlan
+import com.aspix2k.affected.build.cargo.cargoCommands
+import com.aspix2k.affected.build.cargo.cargoNextestSnapshot
+import com.aspix2k.affected.build.cargo.cargoNextestTask
+import com.aspix2k.affected.build.cmake.CMakeTestSelection
+import com.aspix2k.affected.build.cmake.cmakeCommands
+import com.aspix2k.affected.build.cmake.cmakeSelectiveCommands
+import com.aspix2k.affected.build.dotnet.DotnetTestSelection
+import com.aspix2k.affected.build.dotnet.dotnetBuildCommand
+import com.aspix2k.affected.build.dotnet.dotnetCommands
+import com.aspix2k.affected.build.dotnet.dotnetTestArguments
+import com.aspix2k.affected.build.go.goCommands
+import com.aspix2k.affected.build.node.nodeCommands
+import com.aspix2k.affected.build.php.composerCommands
+import com.aspix2k.affected.build.process.CliCommand
+import com.aspix2k.affected.build.process.CommandRunner
+import com.aspix2k.affected.build.python.pythonCommands
+import com.aspix2k.affected.build.ruby.rubyCommands
 import com.google.gson.JsonParser
 import java.io.File
 import java.nio.charset.StandardCharsets
@@ -648,7 +667,7 @@ class CliCommandTest {
     private fun cmakeRoot(vararg buildDirectories: String) =
         createTempDirectory("cmake-command").toFile().apply {
             buildDirectories.forEach { path ->
-                java.io.File(this, "$path/CMakeCache.txt").apply {
+                File(this, "$path/CMakeCache.txt").apply {
                     parentFile.mkdirs()
                     writeText("CMAKE_GENERATOR=Ninja\n")
                 }

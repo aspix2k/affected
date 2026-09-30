@@ -1,5 +1,6 @@
 package com.aspix2k.affected.impact
 
+import com.aspix2k.affected.build.cmake.sha256
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path

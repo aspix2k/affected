@@ -1,10 +1,11 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.CargoMetadata
 import com.aspix2k.affected.build.PlannedExecutionRoot
+import com.aspix2k.affected.build.cargo.CargoMetadata
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.attribute.BasicFileAttributes
 import kotlin.io.path.createDirectory
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -105,7 +106,7 @@ class CrossPlatformPathTest {
         val guard = PlannedExecutionRoot.capture(root).bind(project)
         val creationTime = Files.readAttributes(
             root,
-            java.nio.file.attribute.BasicFileAttributes::class.java,
+            BasicFileAttributes::class.java,
         ).creationTime()
 
         assertNull(guard.validationFailure())

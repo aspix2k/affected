@@ -1,7 +1,7 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.isPestPackage
-import com.aspix2k.affected.build.pestDeclared
+import com.aspix2k.affected.build.php.isPestPackage
+import com.aspix2k.affected.build.php.pestDeclared
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test

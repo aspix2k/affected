@@ -6,7 +6,9 @@ import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.nio.file.Path
 import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.attribute.FileTime
 import java.security.MessageDigest
 
 internal object ManifestSearch {
@@ -75,7 +77,7 @@ internal object ManifestSearch {
 
     fun anyFile(
         root: File,
-        excludedRoots: Set<java.nio.file.Path> = emptySet(),
+        excludedRoots: Set<Path> = emptySet(),
         matches: (File) -> Boolean,
     ): Boolean? {
         val queue = ArrayDeque<Pair<File, Int>>()
@@ -105,7 +107,7 @@ internal object ManifestSearch {
 
     private fun collectLayoutMarkers(
         root: File,
-        realRoot: java.nio.file.Path,
+        realRoot: Path,
         maxDepth: Int,
         matches: (File) -> Boolean,
     ): List<String>? {
@@ -125,7 +127,7 @@ internal object ManifestSearch {
     private fun scanAny(
         directory: File,
         depth: Int,
-        excludedRoots: Set<java.nio.file.Path>,
+        excludedRoots: Set<Path>,
         matches: (File) -> Boolean,
         queue: ArrayDeque<Pair<File, Int>>,
     ): Boolean? {
@@ -188,8 +190,8 @@ private fun findComplete(
 }
 
 private fun scanCompleteTree(
-    requestedRoot: java.nio.file.Path,
-    realRoot: java.nio.file.Path,
+    requestedRoot: Path,
+    realRoot: Path,
     limit: Int,
     budgetNanos: Long,
     requireCompleteDepth: Boolean,
@@ -219,7 +221,7 @@ private fun scanCompleteTree(
     return CompleteScanResult(found, visitedDirectories)
 }
 
-private fun completeSearchRoots(root: File): Pair<java.nio.file.Path, java.nio.file.Path>? {
+private fun completeSearchRoots(root: File): Pair<Path, Path>? {
     val requested = root.toPath().toAbsolutePath().normalize()
     if (
         Files.isSymbolicLink(requested) ||
@@ -234,7 +236,7 @@ private fun completeSearchRoots(root: File): Pair<java.nio.file.Path, java.nio.f
 
 private fun completeDirectoriesCurrent(
     directories: Map<File, CompleteDirectoryIdentity>,
-    realRoot: java.nio.file.Path,
+    realRoot: Path,
     started: Long,
     budgetNanos: Long,
 ): Boolean {
@@ -247,7 +249,7 @@ private fun completeDirectoriesCurrent(
 
 private fun completeFilesFingerprint(
     files: List<File>,
-    realRoot: java.nio.file.Path,
+    realRoot: Path,
     started: Long,
     budgetNanos: Long,
 ): String? = runCatching {
@@ -270,7 +272,7 @@ private fun completeFilesFingerprint(
 
 private fun updateCompleteFileFingerprint(
     file: File,
-    realRoot: java.nio.file.Path,
+    realRoot: Path,
     remainingBytes: Long,
     started: Long,
     budgetNanos: Long,
@@ -306,7 +308,7 @@ private fun updateCompleteFileFingerprint(
 private fun processCompleteChild(
     child: File,
     depth: Int,
-    completeRoot: java.nio.file.Path?,
+    completeRoot: Path?,
     matches: (File) -> Boolean,
     found: MutableList<File>,
     queue: ArrayDeque<Pair<File, Int>>,
@@ -327,7 +329,7 @@ private fun processCompleteChild(
 private fun isCompleteChildSafe(
     child: File,
     depth: Int,
-    completeRoot: java.nio.file.Path?,
+    completeRoot: Path?,
     matches: (File) -> Boolean,
 ): Boolean =
     !unsafeTraversalSymlink(
@@ -347,7 +349,7 @@ private fun isTraversableDirectory(file: File): Boolean =
 private fun scanLayout(
     directory: File,
     depth: Int,
-    realRoot: java.nio.file.Path,
+    realRoot: Path,
     maxDepth: Int,
     matches: (File) -> Boolean,
     markers: MutableList<String>,
@@ -376,7 +378,7 @@ private fun addLayoutMarker(
     child: File,
     depth: Int,
     maxDepth: Int,
-    realRoot: java.nio.file.Path,
+    realRoot: Path,
     matches: (File) -> Boolean,
     markers: MutableList<String>,
 ): Boolean {
@@ -401,7 +403,7 @@ private fun hashMarkers(markers: List<String>): String {
     return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
 }
 
-private fun isReadableManifest(path: java.nio.file.Path): Boolean =
+private fun isReadableManifest(path: Path): Boolean =
     !Files.isSymbolicLink(path) &&
         Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) &&
         Files.isReadable(path) &&
@@ -422,7 +424,7 @@ private fun unsafeTraversalSymlink(
         !file.name.startsWith('.')
 }
 
-private fun unsafeCompleteDirectory(file: File, realRoot: java.nio.file.Path): Boolean {
+private fun unsafeCompleteDirectory(file: File, realRoot: Path): Boolean {
     if (file.name in SKIPPED_DIRECTORIES || file.name.startsWith('.')) return false
     val path = file.toPath()
     if (!Files.isDirectory(path)) return false
@@ -431,7 +433,7 @@ private fun unsafeCompleteDirectory(file: File, realRoot: java.nio.file.Path): B
 
 private fun completeDirectoryIdentity(
     directory: File,
-    realRoot: java.nio.file.Path,
+    realRoot: Path,
 ): CompleteDirectoryIdentity? {
     val path = directory.toPath().toAbsolutePath().normalize()
     if (Files.isSymbolicLink(path) || !Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) return null
@@ -444,15 +446,15 @@ private fun completeDirectoryIdentity(
 }
 
 private data class CompleteDirectoryIdentity(
-    val realPath: java.nio.file.Path,
+    val realPath: Path,
     val fileKey: Any?,
-    val modifiedAt: java.nio.file.attribute.FileTime,
+    val modifiedAt: FileTime,
     val size: Long,
 )
 
 private class CompleteScanContext(
     private val limit: Int,
-    private val completeRoot: java.nio.file.Path?,
+    private val completeRoot: Path?,
     private val started: Long,
     private val budgetNanos: Long,
     private val matches: (File) -> Boolean,

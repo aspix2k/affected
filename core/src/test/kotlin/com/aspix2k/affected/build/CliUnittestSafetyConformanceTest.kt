@@ -1,5 +1,8 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.build.process.CliCommand
+import com.aspix2k.affected.build.python.PythonProjects
+import com.aspix2k.affected.build.python.pythonCommands
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.util.concurrent.TimeUnit

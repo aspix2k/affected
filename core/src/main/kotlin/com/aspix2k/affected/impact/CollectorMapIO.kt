@@ -1,5 +1,6 @@
 package com.aspix2k.affected.impact
 
+import com.aspix2k.affected.build.cmake.sha256
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets

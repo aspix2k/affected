@@ -1,5 +1,7 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.build.php.ComposerPackages
+import com.aspix2k.affected.build.php.composerCommands
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.util.concurrent.TimeUnit

@@ -1,5 +1,7 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.ruby.supports
+
 object AffectedMcpInputs {
 
     fun validateNamedTask(snapshot: AffectedStateSnapshot, task: String): AffectedMcpView {

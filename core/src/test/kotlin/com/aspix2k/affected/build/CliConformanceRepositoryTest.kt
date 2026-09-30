@@ -14,7 +14,7 @@ class CliConformanceRepositoryTest {
     @Test
     fun `repository resolution rejects an ambient relative root`() {
         assertFailsWith<IllegalArgumentException> {
-            CliConformanceRepository(java.io.File("."))
+            CliConformanceRepository(File("."))
         }
     }
 

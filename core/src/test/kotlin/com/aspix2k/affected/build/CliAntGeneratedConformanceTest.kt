@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.build.process.CliCommand
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.util.concurrent.TimeUnit

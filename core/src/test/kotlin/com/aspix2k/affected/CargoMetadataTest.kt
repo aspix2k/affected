@@ -1,7 +1,7 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.CargoMetadata
-import com.aspix2k.affected.build.cargoBuildScriptLayout
+import com.aspix2k.affected.build.cargo.CargoMetadata
+import com.aspix2k.affected.build.cargo.cargoBuildScriptLayout
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test

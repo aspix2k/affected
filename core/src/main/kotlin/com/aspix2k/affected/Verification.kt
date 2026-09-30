@@ -4,12 +4,13 @@ import com.aspix2k.affected.build.BuildChanges
 import com.aspix2k.affected.build.BuildSystems
 import com.aspix2k.affected.build.ChangeAwareSuspendingBuildSystem
 import com.aspix2k.affected.build.SuspendingBuildSystem
-import com.aspix2k.affected.build.isAndroidInstrumentationSource
-import com.aspix2k.affected.build.selectAndroidTestTask
+import com.aspix2k.affected.build.gradle.isAndroidInstrumentationSource
+import com.aspix2k.affected.build.gradle.selectAndroidTestTask
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 
 object Verification {
 
@@ -50,7 +51,7 @@ object Verification {
     internal fun prepare(
         graph: ModuleGraph,
         changes: ProjectChanges.Result,
-        owners: Map<java.io.File, List<ModuleGraph.Node>> = changes.files.associateWith(graph::nodesFor),
+        owners: Map<File, List<ModuleGraph.Node>> = changes.files.associateWith(graph::nodesFor),
     ): PreparedPlans {
         val buildChanges = changes.toBuildChanges()
         val plans = verificationPlans(graph, changes, owners)
@@ -142,7 +143,7 @@ private data class VerificationPlans(
 private fun verificationPlans(
     graph: ModuleGraph,
     changes: ProjectChanges.Result,
-    owners: Map<java.io.File, List<ModuleGraph.Node>> = changes.files.associateWith(graph::nodesFor),
+    owners: Map<File, List<ModuleGraph.Node>> = changes.files.associateWith(graph::nodesFor),
 ): VerificationPlans {
     if (changes.files.isEmpty()) {
         val empty = Plan(emptyList(), 0, 0)
@@ -188,7 +189,7 @@ internal fun affectsConsumers(systemId: String, path: String, signatureTouched: 
 
 private fun pathsOwnedBy(
     node: ModuleGraph.Node,
-    owners: Map<java.io.File, List<ModuleGraph.Node>>,
+    owners: Map<File, List<ModuleGraph.Node>>,
 ): List<String> = owners.mapNotNull { (file, nodes) ->
     file.invariantSeparatorsPath.takeIf { node in nodes }
 }

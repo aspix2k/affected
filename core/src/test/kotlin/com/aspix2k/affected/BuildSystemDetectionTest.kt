@@ -1,12 +1,12 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.CMakeBuildSystem
-import com.aspix2k.affected.build.ComposerBuildSystem
-import com.aspix2k.affected.build.DotnetBuildSystem
-import com.aspix2k.affected.build.NodeBuildSystem
-import com.aspix2k.affected.build.PythonBuildSystem
-import com.aspix2k.affected.build.RubyBuildSystem
 import com.aspix2k.affected.build.SbtBuildSystem
+import com.aspix2k.affected.build.cmake.CMakeBuildSystem
+import com.aspix2k.affected.build.dotnet.DotnetBuildSystem
+import com.aspix2k.affected.build.node.NodeBuildSystem
+import com.aspix2k.affected.build.php.ComposerBuildSystem
+import com.aspix2k.affected.build.python.PythonBuildSystem
+import com.aspix2k.affected.build.ruby.RubyBuildSystem
 import com.intellij.openapi.project.Project
 import java.io.File
 import java.lang.reflect.Proxy

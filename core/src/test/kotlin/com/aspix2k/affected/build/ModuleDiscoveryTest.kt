@@ -1,5 +1,7 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.build.cargo.CargoMetadata
+import com.aspix2k.affected.build.go.GoPackages
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals

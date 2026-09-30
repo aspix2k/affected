@@ -1,9 +1,12 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.build.process.windowsFileIdentity
 import kotlinx.coroutines.ThreadContextElement
 import kotlinx.coroutines.withContext
+import java.nio.file.AccessDeniedException
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.attribute.FileTime
@@ -272,9 +275,9 @@ private fun captureIdentity(path: Path, afterFirstRead: () -> Unit = {}): Identi
             ExecutionRootIdentity(path, realPath, before.fileKey, before.creationTime),
             null,
         )
-    } catch (_: java.nio.file.NoSuchFileException) {
+    } catch (_: NoSuchFileException) {
         IdentityResult(null, "does not exist")
-    } catch (_: java.nio.file.AccessDeniedException) {
+    } catch (_: AccessDeniedException) {
         IdentityResult(null, "is not readable")
     } catch (_: SecurityException) {
         IdentityResult(null, "is not readable")

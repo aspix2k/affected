@@ -1,6 +1,6 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.PythonProjects
+import com.aspix2k.affected.build.python.PythonProjects
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test

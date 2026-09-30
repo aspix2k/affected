@@ -1,9 +1,10 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.CMakeTargets
-import com.aspix2k.affected.build.ComposerPackages
+import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.PerformanceBudgets
-import com.aspix2k.affected.build.RubyGems
+import com.aspix2k.affected.build.cmake.CMakeTargets
+import com.aspix2k.affected.build.php.ComposerPackages
+import com.aspix2k.affected.build.ruby.RubyGems
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.nio.file.Files
@@ -15,7 +16,7 @@ class RealMonorepoTest {
     private fun fixture(name: String): File? =
         File(FixtureRepository.root, name).takeIf { it.isDirectory }
 
-    private fun assertGraphIsSound(modules: List<com.aspix2k.affected.build.BuildModule>, minimum: Int) {
+    private fun assertGraphIsSound(modules: List<BuildModule>, minimum: Int) {
         assertTrue(modules.size >= minimum, "expected at least $minimum modules, parsed ${modules.size}")
 
         val missing = modules.map { File(it.contentRoots.single()) }.filterNot { it.isDirectory }
@@ -31,7 +32,7 @@ class RealMonorepoTest {
         val root = fixture("php-symfony")
         assumeTrue(root != null)
 
-        val modules = ComposerPackages.parse(root!!)
+        val modules = ComposerPackages.parse(checkNotNull(root))
 
         assertGraphIsSound(modules, minimum = 50)
         assertTrue(
@@ -46,7 +47,7 @@ class RealMonorepoTest {
         val root = fixture("php-symfony")
         assumeTrue(root != null)
 
-        val modules = ComposerPackages.parse(root!!)
+        val modules = ComposerPackages.parse(checkNotNull(root))
 
         assertTrue(
             modules.any { it.compileTask != null },
@@ -60,7 +61,10 @@ class RealMonorepoTest {
         assumeTrue(root != null)
         assumeTrue(File(root, "activerecord/test").walk().any { Files.isSymbolicLink(it.toPath()) })
 
-        assertTrue(RubyGems.parse(root!!).isEmpty(), "an untrusted suite must fall back to the whole repository")
+        assertTrue(
+            RubyGems.parse(checkNotNull(root)).isEmpty(),
+            "an untrusted suite must fall back to the whole repository",
+        )
     }
 
     @Test
@@ -68,7 +72,7 @@ class RealMonorepoTest {
         val root = fixture("cmake-fmt")
         assumeTrue(root != null)
 
-        val modules = CMakeTargets.parse(root!!)
+        val modules = CMakeTargets.parse(checkNotNull(root))
 
         assertGraphIsSound(modules, minimum = 2)
     }
@@ -78,7 +82,7 @@ class RealMonorepoTest {
         val root = fixture("cmake-spdlog")
         assumeTrue(root != null)
 
-        val modules = CMakeTargets.parse(root!!)
+        val modules = CMakeTargets.parse(checkNotNull(root))
 
         assertGraphIsSound(modules, minimum = 2)
     }
@@ -89,7 +93,7 @@ class RealMonorepoTest {
         assumeTrue(root != null)
 
         val started = System.nanoTime()
-        ComposerPackages.parse(root!!)
+        ComposerPackages.parse(checkNotNull(root))
         val took = (System.nanoTime() - started) / 1_000_000
 
         assertTrue(

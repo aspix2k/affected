@@ -1,8 +1,9 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.CommandRunner
 import com.aspix2k.affected.build.PlannedExecutionRoot
+import com.aspix2k.affected.build.process.CommandRunner
 import com.aspix2k.affected.build.projectExecutionRootGuard
+import com.aspix2k.affected.build.withPlannedExecutionRoot
 import com.aspix2k.affected.impact.TestSelection
 import com.intellij.openapi.project.Project
 import java.nio.file.Path
@@ -46,7 +47,7 @@ data class TaskGroup(val systemId: String, val root: String, val tasks: List<Str
         onInvalid: () -> Unit,
         block: suspend () -> Boolean,
     ): Boolean {
-        return com.aspix2k.affected.build.withPlannedExecutionRoot(plannedExecutionRoot, projectRoot) {
+        return withPlannedExecutionRoot(plannedExecutionRoot, projectRoot) {
             if (projectExecutionRootGuard(Path.of(root), projectRoot).validationFailure() != null) {
                 onInvalid()
                 false
@@ -57,7 +58,7 @@ data class TaskGroup(val systemId: String, val root: String, val tasks: List<Str
     }
 
     internal suspend fun <T> runInPlannedExecutionRoot(projectRoot: Path, block: suspend () -> T): T =
-        com.aspix2k.affected.build.withPlannedExecutionRoot(plannedExecutionRoot, projectRoot, block)
+        withPlannedExecutionRoot(plannedExecutionRoot, projectRoot, block)
 }
 
 internal enum class TaskKind {

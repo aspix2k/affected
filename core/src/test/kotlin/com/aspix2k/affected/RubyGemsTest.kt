@@ -1,8 +1,10 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.RubyGems
-import com.aspix2k.affected.build.RubyTestSuites
+import com.aspix2k.affected.build.ruby.RubyGems
+import com.aspix2k.affected.build.ruby.RubyTestSuites
+import com.aspix2k.affected.build.ruby.rubyCommands
 import java.io.File
+import java.nio.file.Files
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -302,13 +304,13 @@ class RubyGemsTest {
         gem(root, "gems/linked", "acme-linked", specs = true)
         val outside = File(root, "outside_spec.rb").apply { writeText("raise 'outside'\n") }
         val link = File(root, "gems/linked/integration/evil_spec.rb").apply { parentFile.mkdirs() }.toPath()
-        runCatching { java.nio.file.Files.createSymbolicLink(link, outside.toPath()) }.getOrElse { return }
+        runCatching { Files.createSymbolicLink(link, outside.toPath()) }.getOrElse { return }
 
         val module = RubyGems.parse(root).single()
 
         assertEquals(
             emptyList(),
-            com.aspix2k.affected.build.rubyCommands(
+            rubyCommands(
                 root.path,
                 listOf("${module.executionId}:${module.testTask}"),
                 listOf(module),
@@ -323,7 +325,7 @@ class RubyGemsTest {
         gem(root, "gems/linked", "acme-linked")
         val outside = File(root, "outside").apply { mkdirs() }
         val suite = File(root, "gems/linked/test").toPath()
-        runCatching { java.nio.file.Files.createSymbolicLink(suite, outside.toPath()) }.getOrElse { return }
+        runCatching { Files.createSymbolicLink(suite, outside.toPath()) }.getOrElse { return }
 
         assertEquals(emptyList(), RubyGems.parse(root))
     }

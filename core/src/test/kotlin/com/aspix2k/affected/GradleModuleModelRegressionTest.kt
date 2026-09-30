@@ -1,6 +1,6 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.gradleExecutionMetadata
+import com.aspix2k.affected.build.gradle.gradleExecutionMetadata
 import com.intellij.openapi.externalSystem.model.DataNode
 import com.intellij.openapi.externalSystem.model.ProjectKeys
 import com.intellij.openapi.externalSystem.model.internal.InternalExternalProjectInfo

@@ -1,6 +1,6 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.DotnetProjects
+import com.aspix2k.affected.build.dotnet.DotnetProjects
 import org.junit.Assume.assumeTrue
 import java.io.File
 import kotlin.io.path.createTempDirectory

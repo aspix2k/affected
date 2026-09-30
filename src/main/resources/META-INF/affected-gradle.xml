@@ -1,5 +1,5 @@
 <idea-plugin>
     <extensions defaultExtensionNs="com.aspix2k.affected">
-        <buildSystem implementation="com.aspix2k.affected.build.GradleBuildSystem"/>
+        <buildSystem implementation="com.aspix2k.affected.build.gradle.GradleBuildSystem"/>
     </extensions>
 </idea-plugin>

@@ -11,6 +11,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import java.lang.reflect.Proxy
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -149,7 +150,7 @@ class AffectedStateTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         var nextModule = module(":before")
         var analyses = 0
-        val refreshes = java.util.concurrent.atomic.AtomicInteger()
+        val refreshes = AtomicInteger()
         val state = AffectedState(
             project = project(),
             scope = scope,

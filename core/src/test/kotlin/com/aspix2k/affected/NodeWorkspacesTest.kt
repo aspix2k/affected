@@ -1,6 +1,6 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.NodeWorkspaces
+import com.aspix2k.affected.build.node.NodeWorkspaces
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.nio.file.Files

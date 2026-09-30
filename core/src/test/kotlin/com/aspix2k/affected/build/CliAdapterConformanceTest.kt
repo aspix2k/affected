@@ -1,7 +1,43 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.build.cargo.CargoMetadata
+import com.aspix2k.affected.build.cargo.cargoCommands
+import com.aspix2k.affected.build.cmake.CMakeTargets
+import com.aspix2k.affected.build.cmake.CMakeTestSelection
+import com.aspix2k.affected.build.cmake.CMakeTestSnapshot
+import com.aspix2k.affected.build.cmake.cmakeCommands
+import com.aspix2k.affected.build.cmake.hasCMakeCodemodelReply
+import com.aspix2k.affected.build.cmake.readCMakeTestSnapshot
+import com.aspix2k.affected.build.cmake.requestCMakeCodemodel
+import com.aspix2k.affected.build.cmake.selectCMakeTests
+import com.aspix2k.affected.build.go.GoPackages
+import com.aspix2k.affected.build.go.goCommands
+import com.aspix2k.affected.build.node.NodeWorkspaces
+import com.aspix2k.affected.build.node.nodeCommands
+import com.aspix2k.affected.build.php.ComposerPackages
+import com.aspix2k.affected.build.php.PhpunitProjectState
+import com.aspix2k.affected.build.php.PhpunitTestBaselineStore
+import com.aspix2k.affected.build.php.PhpunitTestMetadata
+import com.aspix2k.affected.build.php.PhpunitTestSelection
+import com.aspix2k.affected.build.php.PhpunitTestSnapshot
+import com.aspix2k.affected.build.php.completePhpunitSelection
+import com.aspix2k.affected.build.php.composerCommands
+import com.aspix2k.affected.build.php.phpunitClassFilter
+import com.aspix2k.affected.build.php.promotePhpunitBaseline
+import com.aspix2k.affected.build.php.readPhpunitProjectState
+import com.aspix2k.affected.build.php.readPhpunitRuntime
+import com.aspix2k.affected.build.php.selectPhpunitTests
+import com.aspix2k.affected.build.process.CliCommand
+import com.aspix2k.affected.build.process.SequentialProcessHandler
+import com.aspix2k.affected.build.python.PythonProjects
+import com.aspix2k.affected.build.python.pythonCommands
+import com.aspix2k.affected.build.ruby.RubyGems
+import com.aspix2k.affected.build.ruby.rubyCommands
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessListener
+import com.intellij.openapi.util.Key
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.nio.charset.StandardCharsets
@@ -670,10 +706,10 @@ class CliAdapterConformanceTest {
     private fun executeBatch(directory: File, commands: List<CliCommand>): CommandResult {
         val output = StringBuilder()
         val handler = SequentialProcessHandler(directory, commands)
-        handler.addProcessListener(object : com.intellij.execution.process.ProcessListener {
+        handler.addProcessListener(object : ProcessListener {
             override fun onTextAvailable(
-                event: com.intellij.execution.process.ProcessEvent,
-                outputType: com.intellij.openapi.util.Key<*>,
+                event: ProcessEvent,
+                outputType: Key<*>,
             ) {
                 output.append(event.text)
             }

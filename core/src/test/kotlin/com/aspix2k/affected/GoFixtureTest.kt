@@ -1,7 +1,7 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.CommandRunner
-import com.aspix2k.affected.build.GoPackages
+import com.aspix2k.affected.build.go.GoPackages
+import com.aspix2k.affected.build.process.CommandRunner
 import org.junit.Assume.assumeTrue
 import java.io.File
 import kotlin.test.Test
@@ -26,7 +26,7 @@ class GoFixtureTest {
     fun `real go list output is parsed into packages with dependencies`() {
         val listing = listing()
         assumeTrue(listing != null)
-        val (root, output) = listing!!
+        val (root, output) = checkNotNull(listing)
 
         val modules = GoPackages.parse(output, root.invariantSeparatorsPath)
 
@@ -45,7 +45,7 @@ class GoFixtureTest {
     fun `package directories exist on disk`() {
         val listing = listing()
         assumeTrue(listing != null)
-        val (root, output) = listing!!
+        val (root, output) = checkNotNull(listing)
 
         val missing = GoPackages.parse(output, root.invariantSeparatorsPath)
             .map { File(it.contentRoots.single()) }
@@ -58,7 +58,7 @@ class GoFixtureTest {
     fun `dependencies reference existing packages`() {
         val listing = listing()
         assumeTrue(listing != null)
-        val (root, output) = listing!!
+        val (root, output) = checkNotNull(listing)
 
         val modules = GoPackages.parse(output, root.invariantSeparatorsPath)
         val keys = modules.map { it.key }.toSet()

@@ -3,6 +3,7 @@ package com.aspix2k.affected
 import com.intellij.execution.process.ProcessHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import javax.swing.JPanel
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -186,7 +187,7 @@ class AffectedRunPresentationTest {
     }
 
     private class RecordingChild : AffectedRunChild {
-        override val component = javax.swing.JPanel()
+        override val component = JPanel()
         override val preferredFocus = component
         var stopped = false
         var disposed = false
@@ -213,7 +214,7 @@ class AffectedRunPresentationTest {
     }
 
     private class FailingDisposalChild : AffectedRunChild {
-        override val component = javax.swing.JPanel()
+        override val component = JPanel()
         override val preferredFocus = component
 
         override fun stop() = Unit
