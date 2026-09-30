@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -69,6 +70,7 @@ def run(mode: str, *, runner: Runner | None = None, root: Path = ROOT) -> None:
                 capture_output=True,
                 text=True,
                 timeout=timeout,
+                env=isolated_environment(),
             )
         except subprocess.TimeoutExpired as error:
             raise LocalGateError(f"{name} timed out after {timeout}s") from error
@@ -76,6 +78,11 @@ def run(mode: str, *, runner: Runner | None = None, root: Path = ROOT) -> None:
             detail = (completed.stderr or completed.stdout or "").strip()
             suffix = f": {detail}" if detail else ""
             raise LocalGateError(f"{name} failed{suffix}")
+
+
+def isolated_environment() -> dict[str, str]:
+    """Drop the hook's GIT_* variables so tests cannot write to this repository."""
+    return {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
 
 
 def install(root: Path = ROOT) -> None:

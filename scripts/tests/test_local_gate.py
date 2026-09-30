@@ -56,6 +56,21 @@ class LocalGateTest(unittest.TestCase):
             local_gate.run("commit", runner=runner)
         self.assertEqual(1, len(calls))
 
+    def test_checks_do_not_inherit_the_hook_repository(self) -> None:
+        """A hook exports GIT_DIR; temporary repositories in tests must not reach this clone."""
+        environments: list[dict[str, str]] = []
+
+        def runner(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            environments.append(dict(kwargs["env"]))  # type: ignore[arg-type]
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        hook_environment = {"GIT_DIR": "/repo/.git", "GIT_INDEX_FILE": "/repo/.git/index", "PATH": "/usr/bin"}
+        with patch.dict("os.environ", hook_environment, clear=True):
+            local_gate.run("commit", runner=runner)
+        self.assertTrue(environments)
+        for environment in environments:
+            self.assertEqual({"PATH": "/usr/bin"}, environment)
+
     def test_missing_shellcheck_fails_push_before_quality_sh(self) -> None:
         """Do not skip the shell gate when the binary is absent."""
         with patch.object(local_gate.shutil, "which", return_value=None):
