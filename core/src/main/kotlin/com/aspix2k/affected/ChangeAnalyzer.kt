@@ -16,19 +16,8 @@ class ChangeAnalyzer(
     private val sourceExtensions: Set<String> = DEFAULT_EXTENSIONS,
     private val includeAllFiles: Boolean = false,
     private val gitExecutable: String = "git",
+    private val sourceFileNames: Set<String> = emptySet(),
 ) {
-
-    private var sourceFileNames: Set<String> = emptySet()
-
-    internal constructor(
-        projectDir: File,
-        baseBranch: String,
-        sourceExtensions: Set<String>,
-        sourceFileNames: Set<String>,
-        includeAllFiles: Boolean = false,
-    ) : this(projectDir, baseBranch, sourceExtensions, includeAllFiles) {
-        this.sourceFileNames = sourceFileNames
-    }
 
     class GitFailure(message: String, cause: Throwable? = null) : Exception(message, cause)
 

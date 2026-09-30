@@ -5,6 +5,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.DumbAware
@@ -12,6 +13,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiManager
+import com.intellij.util.concurrency.AppExecutorUtil
 import java.io.File
 
 class AffectedModulesGroup : DefaultActionGroup(), DumbAware {
@@ -61,11 +63,20 @@ class AffectedModulesGroup : DefaultActionGroup(), DumbAware {
         }
 
         private fun open(project: Project) {
+            AppExecutorUtil.getAppExecutorService().execute {
+                val file = resolve() ?: return@execute
+                ApplicationManager.getApplication().invokeLater({ show(project, file) }, project.disposed)
+            }
+        }
+
+        private fun resolve(): VirtualFile? {
             val target = module.testDirectory?.let(::File)
                 ?: BUILD_SCRIPTS.map { File(module.directory, it) }.firstOrNull { it.isFile }
                 ?: File(module.directory)
+            return LocalFileSystem.getInstance().refreshAndFindFileByIoFile(target)
+        }
 
-            val file = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(target) ?: return
+        private fun show(project: Project, file: VirtualFile) {
             if (file.isDirectory) {
                 selectInProjectView(project, file)
             } else {

@@ -43,8 +43,8 @@ object ProjectChanges {
             projectDir,
             AffectedSettings.getInstance().baseBranch,
             extensions,
-            names,
             includeAllFiles,
+            sourceFileNames = names,
         )
 
         if (!analyzer.isUsable()) return local to null
