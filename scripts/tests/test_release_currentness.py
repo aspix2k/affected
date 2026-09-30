@@ -1069,7 +1069,7 @@ class ReleaseCurrentnessTest(unittest.TestCase):
         version, _ = currentness.local_version(
             {"type": "nuget", "name": "xunit.v3"},
         )
-        self.assertEqual("4.0.0", version)
+        self.assertEqual("4.0.1", version)
 
     def test_unpinned_action_fails_discovery(self) -> None:
         """Reject a new Action reference before inventory comparison."""

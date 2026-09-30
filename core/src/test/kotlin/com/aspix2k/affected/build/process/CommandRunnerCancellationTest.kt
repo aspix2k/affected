@@ -93,8 +93,7 @@ class CommandRunnerCancellationTest : BasePlatformTestCase() {
                 timeoutSeconds = 10,
             )
             assertEquals("", output)
-            assertTrue(Files.isRegularFile(pid), "The descendant pid was not published")
-            child = ProcessHandle.of(Files.readString(pid).trim().toLong()).orElse(null)
+            child = ProcessHandle.of(awaitPublishedPid(pid)).orElse(null)
             assertTrue(child?.isAlive == true, "Normal completion terminated the background descendant")
         } finally {
             child?.takeIf(ProcessHandle::isAlive)?.destroyForcibly()
@@ -119,10 +118,7 @@ class CommandRunnerCancellationTest : BasePlatformTestCase() {
 
         try {
             capture.start()
-            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-            while (!Files.isRegularFile(pid) && System.nanoTime() < deadline) Thread.sleep(10)
-            assertTrue(Files.isRegularFile(pid), "The descendant pid was not published")
-            child = ProcessHandle.of(Files.readString(pid).trim().toLong()).orElse(null)
+            child = ProcessHandle.of(awaitPublishedPid(pid)).orElse(null)
             assertTrue(process.waitFor(5, TimeUnit.SECONDS), "The root process did not exit")
             capture.interrupt()
             capture.join(10_000)
@@ -139,6 +135,16 @@ class CommandRunnerCancellationTest : BasePlatformTestCase() {
             Files.deleteIfExists(pid)
             assertTrue(workingDirectory.toFile().deleteRecursively())
         }
+    }
+
+    private fun awaitPublishedPid(pid: Path): Long {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (System.nanoTime() < deadline) {
+            val published = runCatching { Files.readString(pid).trim().toLongOrNull() }.getOrNull()
+            if (published != null) return published
+            Thread.sleep(10)
+        }
+        error("The descendant pid was not published")
     }
 
     private fun java(): String = Path.of(

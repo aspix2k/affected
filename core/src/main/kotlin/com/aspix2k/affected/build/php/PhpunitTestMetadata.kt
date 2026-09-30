@@ -147,9 +147,9 @@ private fun supportedPhpunitRuntime(runtime: PhpunitTestMetadata): Boolean {
     val phpunitMinor = phpunit.component2().toInt()
     if (phpMajor != 8) return false
     return when (phpunitMajor) {
-        11 -> phpMinor >= 2 && phpunitMinor == 5
-        12 -> phpMinor >= 3 && phpunitMinor == 5
-        13 -> phpMinor >= 4 && phpunitMinor in 2..3
+        11 -> phpMinor >= 2 && phpunitMinor >= 5
+        12 -> phpMinor >= 3 && phpunitMinor >= 5
+        13 -> phpMinor >= 4 && phpunitMinor >= 2
         else -> false
     }
 }

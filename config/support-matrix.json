@@ -331,7 +331,7 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": ".NET SDK 8–10 for VSTest; SDK 10.0.400 with xunit.v3 4.0.0 and MTP v2 for standalone projects without ProjectReference or custom extensions, and one public sealed Test/Tests class with an explicit global::Xunit.Fact method in a file-scoped namespace per changed C# file; other metadata or syntax runs the full project",
+      "versions": ".NET SDK 8–10 for VSTest; SDK 10.0.x from 10.0.400 pinned by global.json without roll-forward, with any stable xunit.v3 4.x from nuget.org locked to the exact package and MTP v2, tested at SDK 10.0.401 and xunit.v3 4.0.1, for standalone projects without ProjectReference or custom extensions, and one public sealed Test/Tests class with an explicit global::Xunit.Fact method in a file-scoped namespace per changed C# file; other metadata or syntax runs the full project",
       "support": "supported",
       "fixtures": [
         "conformance/cli-fixtures/dotnet",
@@ -421,7 +421,7 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "PHP 8.2–8.5; PHPUnit 11.5, 12.5, 13.2 and 13.3; Pest 5.1.1 with PHPUnit 13.3 on PHP 8.4–8.5",
+      "versions": "PHP 8.2–8.5; PHPUnit 11.5+, 12.5+ and 13.2+; Pest 5 with the PHPUnit release it pins, tested at Pest 5.2.1 on PHP 8.4–8.5",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/composer", "conformance/cli-fixtures/pest"],
       "gates": [".github/workflows/conformance.yml"]
@@ -444,7 +444,7 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "Ruby 4; lockless RSpec or rubygems.org direct locks tested at RSpec 3.13.2, Minitest 6.0.6 and Test::Unit 3.7.8",
+      "versions": "Ruby 4; lockless RSpec or rubygems.org direct locks for RSpec 3.13+, Minitest 6 and Test::Unit 3.7+, tested at RSpec 3.13.2, Minitest 6.0.6 and Test::Unit 3.7.8",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/ruby"],
       "gates": [".github/workflows/conformance.yml"]

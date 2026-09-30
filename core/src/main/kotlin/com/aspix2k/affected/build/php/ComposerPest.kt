@@ -13,14 +13,16 @@ import java.security.MessageDigest
 internal object ComposerPest {
 
     fun task(root: File, constraint: String): String? {
-        if (constraint != PEST_VERSION) return null
+        if (!PEST_VERSION.matches(constraint)) return null
         val text = ManifestSearch.readText(File(root, "composer.lock")) ?: return null
         val json = runCatching { JsonParser.parseString(text).asJsonObject }.getOrNull() ?: return null
         val packages = lockedPackages(json) ?: return null
         val pest = packages.singleOrNull { it.stringValue("name") == PEST_PACKAGE } ?: return null
         val phpunit = packages.singleOrNull { it.stringValue("name") == PHPUNIT_PACKAGE } ?: return null
-        if (!matchesPackage(pest, PEST_PIN) || !matchesPackage(phpunit, PHPUNIT_PIN)) return null
-        if (!matchesPestContract(pest)) return null
+        val phpunitVersion = phpunit.stringValue("version")?.takeIf(PEST_PHPUNIT_VERSION::matches) ?: return null
+        if (!lockedFromGitHub(pest, "v$constraint", PEST_REPOSITORY)) return null
+        if (!lockedFromGitHub(phpunit, phpunitVersion, PHPUNIT_REPOSITORY)) return null
+        if (!matchesPestContract(pest, phpunitVersion)) return null
         return ComposerPackages.PEST
     }
 
@@ -59,15 +61,15 @@ internal object ComposerPest {
         SuiteInspection(suites, budget.fingerprint())
     }.getOrNull()
 
-    private fun matchesPestContract(pest: JsonObject): Boolean {
+    private fun matchesPestContract(pest: JsonObject, phpunitVersion: String): Boolean {
         val requires = jsonStringValues(pest.objectValue("require") ?: return false) ?: return false
         val conflicts = jsonStringValues(pest.objectValue("conflict") ?: return false) ?: return false
         val binaries = pest.get("bin")?.takeIf { it.isJsonArray }?.asJsonArray ?: return false
         val binary = binaries.singleOrNull()?.takeIf {
             it.isJsonPrimitive && it.asJsonPrimitive.isString
         }?.asString ?: return false
-        return requires[PHPUNIT_PACKAGE] == "^13.3.0" &&
-            conflicts[PHPUNIT_PACKAGE] == ">13.3.0" &&
+        return requires[PHPUNIT_PACKAGE] == "^$phpunitVersion" &&
+            conflicts[PHPUNIT_PACKAGE] == ">$phpunitVersion" &&
             binaries.size() == 1 &&
             binary == "bin/pest"
     }
@@ -85,18 +87,16 @@ internal object ComposerPest {
         return packages
     }
 
-    private fun matchesPackage(packageJson: JsonObject, pin: PackagePin): Boolean {
-        if (packageJson.stringValue("name") != pin.name || packageJson.stringValue("version") != pin.version) {
-            return false
-        }
+    private fun lockedFromGitHub(packageJson: JsonObject, version: String, repository: String): Boolean {
+        if (packageJson.stringValue("version") != version) return false
         val source = packageJson.objectValue("source") ?: return false
         val dist = packageJson.objectValue("dist") ?: return false
+        val reference = source.stringValue("reference")?.takeIf(GIT_COMMIT::matches) ?: return false
         return source.stringValue("type") == "git" &&
-            source.stringValue("url") == pin.sourceUrl &&
-            source.stringValue("reference") == pin.reference &&
+            source.stringValue("url") == "https://github.com/$repository.git" &&
             dist.stringValue("type") == "zip" &&
-            dist.stringValue("url") == pin.distUrl &&
-            dist.stringValue("reference") == pin.reference &&
+            dist.stringValue("url") == "https://api.github.com/repos/$repository/zipball/$reference" &&
+            dist.stringValue("reference") == reference &&
             dist.stringValue("shasum") == ""
     }
 
@@ -163,33 +163,14 @@ internal object ComposerPest {
         private data class ScannedEntry(val realPath: Path, val directory: Boolean, val test: Boolean)
     }
 
-    private data class PackagePin(
-        val name: String,
-        val version: String,
-        val sourceUrl: String,
-        val reference: String,
-        val distUrl: String,
-    )
-
-    private val PEST_PIN = PackagePin(
-        PEST_PACKAGE,
-        "v$PEST_VERSION",
-        "https://github.com/pestphp/pest.git",
-        "208f447a10fc416397edf00a5fc6380aa284d393",
-        "https://api.github.com/repos/pestphp/pest/zipball/208f447a10fc416397edf00a5fc6380aa284d393",
-    )
-    private val PHPUNIT_PIN = PackagePin(
-        PHPUNIT_PACKAGE,
-        "13.3.0",
-        "https://github.com/sebastianbergmann/phpunit.git",
-        "346fcba6ce7ab89bb1b0675feac6bc29c0f7711b",
-        "https://api.github.com/repos/sebastianbergmann/phpunit/zipball/346fcba6ce7ab89bb1b0675feac6bc29c0f7711b",
-    )
-
     private val TEST_DIRECTORIES = listOf("tests", "test", "Tests")
     private const val PEST_PACKAGE = "pestphp/pest"
     private const val PHPUNIT_PACKAGE = "phpunit/phpunit"
-    private const val PEST_VERSION = "5.1.1"
+    private const val PEST_REPOSITORY = "pestphp/pest"
+    private const val PHPUNIT_REPOSITORY = "sebastianbergmann/phpunit"
+    private val PEST_VERSION = Regex("""5\.\d+\.\d+""")
+    private val PEST_PHPUNIT_VERSION = Regex("""13\.\d+\.\d+""")
+    private val GIT_COMMIT = Regex("[0-9a-f]{40}")
     private const val MAX_SUITE_DEPTH = 16
     private const val MAX_SUITE_ENTRIES = 16_384
     private const val NO_PEST_FINGERPRINT = "composer-no-pest"

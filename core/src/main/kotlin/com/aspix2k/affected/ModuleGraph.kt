@@ -85,15 +85,34 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
                 val workspaceSystem = system as? WorkspaceChangesBuildSystem
                 val requiresWorkspace = workspaceSystem != null &&
                     group.any { workspaceSystem.requiresWorkspace(it.module, changes) }
-                if (requiresWorkspace) {
+                val own = if (requiresWorkspace) {
                     workspaceNodes.getOrPut(key) {
                         nodes.filter { it.system === system && it.buildRoot == root }
                     }
                 } else {
                     group
                 }
+                own + consumerNodes(workspaceSystem, system, root)
             }.distinct()
         }
+    }
+
+    private fun consumerNodes(
+        workspaceSystem: WorkspaceChangesBuildSystem?,
+        system: BuildSystem,
+        root: String,
+    ): List<Node> {
+        if (workspaceSystem == null) return emptyList()
+        val sameSystem = nodes.filter { it.system === system }
+        val roots = sameSystem.mapTo(HashSet(), Node::buildRoot)
+        val consumers = LinkedHashSet<String>()
+        var frontier = setOf(root)
+        while (frontier.isNotEmpty()) {
+            frontier = frontier.flatMapTo(LinkedHashSet()) { workspaceSystem.consumerRoots(it, roots) } -
+                consumers - root
+            consumers += frontier
+        }
+        return sameSystem.filter { it.buildRoot in consumers }
     }
 
     fun directDependents(targets: Set<Node>): List<Node> {

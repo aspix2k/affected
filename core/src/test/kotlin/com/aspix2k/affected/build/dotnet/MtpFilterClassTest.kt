@@ -33,7 +33,7 @@ class MtpFilterClassTest {
 
         assertEquals(
             listOf("dotnet", "test", "--project", "tests/App.Tests.csproj"),
-            requireNotNull(dotnetSteps(root.path, tasks) { "10.0.400" }.single().resolve()).arguments,
+            requireNotNull(dotnetSteps(root.path, tasks) { "10.0.401" }.single().resolve()).arguments,
         )
         assertEquals(
             listOf("dotnet", "test", "tests/App.Tests.csproj"),
@@ -54,7 +54,7 @@ class MtpFilterClassTest {
         )
         assertEquals(
             listOf("dotnet", "test", "--project", "tests/App.Tests.csproj"),
-            requireNotNull(dotnetSteps(root.path, tasks) { "10.0.400" }.single().resolve()).arguments,
+            requireNotNull(dotnetSteps(root.path, tasks) { "10.0.401" }.single().resolve()).arguments,
         )
     }
 
@@ -74,7 +74,7 @@ class MtpFilterClassTest {
         listOf(realRoot.path, rootLink.toString()).forEach { root ->
             assertEquals(
                 listOf("dotnet", "test", "--project", "tests/App.Tests.csproj"),
-                requireNotNull(dotnetSteps(root, tasks) { "10.0.400" }.single().resolve()).arguments,
+                requireNotNull(dotnetSteps(root, tasks) { "10.0.401" }.single().resolve()).arguments,
             )
         }
     }
@@ -337,7 +337,7 @@ class MtpFilterClassTest {
     fun `an SDK 8 global runner marker keeps positional full project execution`() {
         val root = createTempDirectory("mtp-global-compatibility").toFile()
         writeNativeXunitProject(root)
-        replace(File(root, "global.json"), "10.0.400", "8.0.100")
+        replace(File(root, "global.json"), "10.0.401", "8.0.100")
 
         val command = dotnetCommands(
             root.path,
@@ -345,6 +345,23 @@ class MtpFilterClassTest {
         ).single()
 
         assertEquals(listOf("dotnet", "test", "tests/App.Tests.csproj"), command.arguments)
+    }
+
+    @Test
+    fun `any later SDK 10 patch and any locked xUnit 4 release keep native exact selection`() {
+        val lines = listOf("10.0.400" to "4.0.0", "10.0.402" to "4.0.2", "10.0.500" to "4.1.0", "10.0.1000" to "4.12.3")
+        lines.forEach { (sdk, xunit) ->
+            val root = createTempDirectory("mtp-line").toFile()
+            writeNativeXunitProject(root, xunitVersion = xunit)
+            replace(File(root, "global.json"), "10.0.401", sdk)
+            val testFile = nativeTestFile(root, "AlphaTests")
+
+            val plan = assertNotNull(
+                dotnetMtpSelectionPlan(root.path, "tests/App.Tests.csproj", commandChanges(testFile)),
+                "$sdk $xunit",
+            )
+            assertEquals(listOf("App.Tests.AlphaTests"), plan.classes)
+        }
     }
 
     @Test
@@ -416,7 +433,9 @@ class MtpFilterClassTest {
     @Test
     fun `unsupported native metadata keeps full project selection`() {
         val mutations = listOf<Pair<String, (File) -> Unit>>(
-            "different SDK" to { root -> replace(File(root, "global.json"), "10.0.400", "10.0.401") },
+            "older SDK band" to { root -> replace(File(root, "global.json"), "10.0.401", "10.0.399") },
+            "future major SDK" to { root -> replace(File(root, "global.json"), "10.0.401", "11.0.400") },
+            "prerelease SDK" to { root -> replace(File(root, "global.json"), "10.0.401", "10.0.401-rc.1") },
             "string boolean" to { root -> replace(File(root, "global.json"), "false", "\"false\"") },
             "extra global key" to { root -> replace(File(root, "global.json"), "\"test\"", "\"paths\": [], \"test\"") },
             "custom restore source" to { root ->
@@ -450,7 +469,17 @@ class MtpFilterClassTest {
             "project extension" to { root ->
                 appendProject(root, "<ItemGroup><ProjectReference Include=\"../Custom.csproj\" /></ItemGroup>")
             },
-            "mutated lock" to { root -> replace(File(root, "tests/packages.lock.json"), "czH4", "dzH4") },
+            "transitive xunit lock entry" to { root ->
+                replace(File(root, "tests/packages.lock.json"), "\"type\": \"Direct\"", "\"type\": \"Transitive\"")
+            },
+            "floating xunit lock range" to { root ->
+                replace(File(root, "tests/packages.lock.json"), "[4.0.1, 4.0.1]", "[4.0.1, )")
+            },
+            "mtp v1 lock entry" to { root ->
+                val v1 = "\"xunit.v3.core.mtp-v1\": {\"type\": \"Transitive\", " +
+                    "\"resolved\": \"4.0.1\", \"contentHash\": \"x\"},"
+                replace(File(root, "tests/packages.lock.json"), "\"xunit.v3.mtp-v2\": {", "$v1 \"xunit.v3.mtp-v2\": {")
+            },
         )
 
         mutations.forEach { (name, mutate) ->
@@ -473,7 +502,7 @@ class MtpFilterClassTest {
     @Test
     fun `unproved SDK 10 MTP metadata keeps the native full project grammar`() {
         val mutations = listOf<(File) -> Unit>(
-            { root -> replace(File(root, "global.json"), "10.0.400", "10.0.401") },
+            { root -> replace(File(root, "global.json"), "10.0.401", "10.0.399") },
             { root -> replace(File(root, "global.json"), "\"test\"", "\"paths\": [], \"test\"") },
         )
 
@@ -526,32 +555,31 @@ class MtpRuntimeProofTest {
             { root -> corruptFirstJsonHash(File(root, "tests/obj/project.assets.json"), "sha512") },
             { root ->
                 replace(
-                    File(root, "packages/xunit.v3/4.0.0/.nupkg.metadata"),
+                    File(root, "packages/xunit.v3/4.0.1/.nupkg.metadata"),
                     "https://api.nuget.org/v3/index.json",
                     "https://example.invalid/v3/index.json",
                 )
             },
-            { root -> File(root, "packages/xunit.v3/4.0.0/xunit.v3.4.0.0.nupkg").appendText("tampered") },
-            { root -> File(root, "packages/xunit.v3/4.0.0/xunit.v3.4.0.0.nupkg.sha512").writeText("invalid") },
+            { root -> File(root, "packages/xunit.v3/4.0.1/xunit.v3.4.0.1.nupkg").appendText("tampered") },
+            { root -> File(root, "packages/xunit.v3/4.0.1/xunit.v3.4.0.1.nupkg.sha512").writeText("invalid") },
+            { root -> File(root, "packages/xunit.v3/4.0.1/build/xunit.v3.props").appendText("tampered") },
             { root ->
-                val directory = File(root, "packages/xunit.v3/4.0.0")
-                val archive = File(directory, "xunit.v3.4.0.0.nupkg").apply { appendText("tampered") }
-                val hash = Base64.getEncoder().encodeToString(
-                    MessageDigest.getInstance("SHA-512").digest(archive.readBytes()),
+                replace(
+                    File(root, "tests/obj/project.assets.json"),
+                    "lib/net8.0/Microsoft.Testing.Platform.dll",
+                    "lib/net8.0/Other.dll",
                 )
-                File(directory, "xunit.v3.4.0.0.nupkg.sha512").writeText(hash)
             },
-            { root -> File(root, "packages/xunit.v3/4.0.0/build/xunit.v3.props").appendText("tampered") },
+            { root -> replace(File(root, "tests/obj/project.assets.json"), "[4.0.1, 4.0.1]", "[4.0.1, )") },
         )
 
-        mutations.forEach { mutate ->
+        mutations.forEachIndexed { index, mutate ->
             val root = createTempDirectory("mtp-assets").toFile()
             writeNativeXunitProject(root)
             writeNativeAssets(root)
-            val identity = assertNotNull(nativeMtpArchiveIdentity(root.path, "tests/App.Tests.csproj"))
-            assertTrue(nativeMtpAssetsProof(root.path, "tests/App.Tests.csproj", identity))
+            assertTrue(nativeMtpAssetsProof(root.path, "tests/App.Tests.csproj"))
             mutate(root)
-            assertEquals(false, nativeMtpAssetsProof(root.path, "tests/App.Tests.csproj", identity))
+            assertEquals(false, nativeMtpAssetsProof(root.path, "tests/App.Tests.csproj"), "mutation $index")
         }
     }
 
@@ -582,9 +610,35 @@ class MtpRuntimeProofTest {
                     setOf(selected.toPath().toRealPath().toString()),
                     importProof = { _, _, _, _, _ -> true },
                 ) { _, _, _, _ ->
-                    if (calls++ == 0) "10.0.400" else compile
+                    if (calls++ == 0) "10.0.401" else compile
                 },
                 config,
+            )
+        }
+    }
+
+    @Test
+    fun `runtime proof requires the active SDK to equal the global json SDK`() {
+        val root = createTempDirectory("mtp-runtime-sdk").toFile()
+        writeNativeXunitProject(root)
+        writeNativeAssets(root)
+        val selected = nativeTestFile(root, "AlphaTests")
+        val compile = nativeMsbuildOutput(root, selected)
+        val files = setOf(selected.toPath().toRealPath().toString())
+
+        listOf("10.0.402" to false, "10.0.399" to false, "10.0.401" to true).forEach { (active, expected) ->
+            var calls = 0
+            assertEquals(
+                expected,
+                dotnetMtpRuntimeProof(
+                    root.path,
+                    "tests/App.Tests.csproj",
+                    files,
+                    importProof = { _, _, _, _, _ -> true },
+                ) { _, _, _, _ ->
+                    if (calls++ == 0) active else compile
+                },
+                active,
             )
         }
     }
@@ -606,7 +660,7 @@ class MtpRuntimeProofTest {
                 setOf(selected.toPath().toRealPath().toString()),
                 importProof = { _, _, _, _, _ -> false },
             ) { _, _, _, _ ->
-                if (calls++ == 0) "10.0.400" else compile
+                if (calls++ == 0) "10.0.401" else compile
             },
         )
     }
@@ -751,7 +805,7 @@ class MtpRuntimeProofTest {
                     setOf(selected.toPath().toRealPath().toString()),
                     importProof = { _, _, _, _, _ -> true },
                 ) { _, _, _, _ ->
-                    if (calls++ == 0) "10.0.400" else compile
+                    if (calls++ == 0) "10.0.401" else compile
                 },
                 namespace,
             )
@@ -782,7 +836,7 @@ class MtpRuntimeProofTest {
                     setOf(selected.toPath().toRealPath().toString()),
                     importProof = { _, _, _, _, _ -> true },
                 ) { _, _, _, _ ->
-                    if (calls++ == 0) "10.0.400" else compile
+                    if (calls++ == 0) "10.0.401" else compile
                 },
                 attribute,
             )
@@ -842,21 +896,26 @@ class MtpRuntimeProofTest {
     }
 }
 
-private fun writeNativeXunitProject(root: File, xunitVersion: String = "4.0.0") {
+private fun writeNativeXunitProject(root: File, xunitVersion: String = "4.0.1") {
     val fixture = fixtureRoot().resolve("dotnet-mtp-xunit4")
     File(root, "global.json").writeText(File(fixture, "global.json").readText())
     File(root, "tests/App.Tests.csproj").apply {
         parentFile.mkdirs()
         writeText(
             File(fixture, "Mtp.Tests/Mtp.Tests.csproj").readText()
-                .replace("[4.0.0]", "[$xunitVersion]"),
+                .replace("[4.0.1]", "[$xunitVersion]"),
         )
     }
     File(root, "tests/packages.lock.json").writeText(
         File(fixture, "Mtp.Tests/packages.lock.json").readText()
-            .replace("4.0.0", xunitVersion),
+            .replace("4.0.1", xunitVersion),
     )
 }
+
+private val NATIVE_ASSEMBLIES = mapOf(
+    "xunit.v3.core.mtp-v2" to "xunit.v3.mtp-v2.dll",
+    "Microsoft.Testing.Platform" to "Microsoft.Testing.Platform.dll",
+)
 
 private fun nativeTestFile(root: File, className: String): File = File(root, "tests/$className.cs").apply {
     parentFile.mkdirs()
@@ -893,7 +952,7 @@ private fun writeNativeAssets(root: File) {
             JsonParser.parseString(
                 """{
                 "restore":{"sources":{"https://api.nuget.org/v3/index.json":{}}},
-                "frameworks":{"net10.0":{"dependencies":{"xunit.v3":{"target":"Package","version":"[4.0.0, 4.0.0]"}}}}
+                "frameworks":{"net10.0":{"dependencies":{"xunit.v3":{"target":"Package","version":"[4.0.1, 4.0.1]"}}}}
                 }""".trimIndent(),
             ),
         )
@@ -922,6 +981,7 @@ private fun writeNativePackageAssets(
         nuspec to "<package><metadata><id>$name</id><version>$version</version></metadata></package>",
         "build/${name.lowercase()}.props" to "<Project />",
     )
+    NATIVE_ASSEMBLIES[name]?.let { assembly -> entries["lib/net8.0/$assembly"] = "assembly" }
     ZipOutputStream(archive.outputStream()).use { zip ->
         entries.forEach { (path, content) ->
             zip.putNextEntry(ZipEntry(path))
@@ -983,8 +1043,8 @@ private fun nativeMsbuildOutput(root: File, vararg sources: File): String {
           "AssemblyName":"App.Tests",
           "Configuration":"Debug",
           "OutputPath":"bin/Debug/net10.0/",
-          "ProjectAssetsFile":${JsonParser.parseString("\"${File(root, "tests/obj/project.assets.json").absolutePath}\"")},
-          "MSBuildSDKsPath":${JsonParser.parseString("\"${File(root, "sdk/10.0.400/Sdks").absolutePath}\"")},
+          "ProjectAssetsFile":${JsonParser.parseString("\"${File(root, "tests/obj/project.assets.json").toPath().toRealPath()}\"")},
+          "MSBuildSDKsPath":${JsonParser.parseString("\"${File(root, "sdk/10.0.401/Sdks").absolutePath}\"")},
           "TestingPlatformCommandLineArguments":"",
           "RunSettingsFilePath":"",
           "VSTestTestCaseFilter":"",

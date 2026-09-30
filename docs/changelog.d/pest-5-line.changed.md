@@ -1,0 +1,1 @@
+- Select Pest tests on every Pest 5 release with the PHPUnit version it pins, not only Pest 5.1.1.

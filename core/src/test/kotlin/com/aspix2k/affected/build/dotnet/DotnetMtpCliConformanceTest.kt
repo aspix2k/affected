@@ -21,7 +21,7 @@ class DotnetMtpCliConformanceTest {
         fixture { root ->
             val environment = executionEnvironment(root)
             val version = execute(root, listOf("dotnet", "--version"), environment).output.trim()
-            assumeTrue(version == "10.0.400")
+            assumeTrue(nativeMtpSdkSupported(version))
             val project = "Mtp.Tests/Mtp.Tests.csproj"
             val alpha = File(root, "Mtp.Tests/AlphaTests.cs")
             val beta = File(root, "Mtp.Tests/BetaTests.cs")
@@ -30,11 +30,7 @@ class DotnetMtpCliConformanceTest {
             val exactChanges = changes(alpha, beta)
             val exactPlan = assertNotNull(dotnetMtpSelectionPlan(root.path, project, exactChanges))
             execute(root, dotnetBuildCommand(project).arguments, environment).requirePassed()
-            val archiveIdentity = nativeMtpArchiveIdentity(root.path, project)
-            assertTrue(
-                nativeMtpAssetsProof(root.path, project),
-                "restored MTP assets are not proven: $archiveIdentity",
-            )
+            assertTrue(nativeMtpAssetsProof(root.path, project), "restored MTP assets are not proven")
             val exactArguments = dotnetMtpTestArguments(root.path, project, exactChanges, exactPlan, { exactChanges })
             assertEquals(
                 listOf(
