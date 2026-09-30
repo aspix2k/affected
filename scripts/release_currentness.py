@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "release-currentness.json"
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_TOTAL_BYTES = 32 * 1024 * 1024
-MAX_RELEASE_ASSET_BYTES = 32 * 1024 * 1024
+MAX_RELEASE_ASSET_BYTES = 64 * 1024 * 1024
 MAX_ENTRIES = 128
 ALLOWED_HOSTS = {
     "api.github.com",
@@ -535,7 +535,7 @@ def github_release_asset_latest(
     if (
         not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository)
         or not tag_prefix
-        or asset_template.count("{version}") != 1
+        or asset_template.count("{version}") > 1
         or any(character in asset_template.replace("{version}", "") for character in "{}")
     ):
         raise CurrentnessError(f"Invalid GitHub release asset source for {repository!r}")

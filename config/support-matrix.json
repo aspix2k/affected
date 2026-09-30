@@ -284,24 +284,55 @@
     {
       "id": "NODE",
       "implementation": "com.aspix2k.affected.build.node.NodeBuildSystem",
-      "ecosystem": "npm, Yarn and pnpm",
+      "ecosystem": "npm, Yarn, pnpm and Bun",
       "languages": ["JavaScript", "TypeScript", "JSX", "TSX", "Vue", "Svelte"],
-      "runners": ["Jest", "Vitest", "package test", "tsc --noEmit"],
+      "runners": ["Jest", "Vitest", "node:test", "bun test", "package test", "tsc --noEmit"],
       "selection": ["file", "package"],
       "selectionProofs": [
         {
           "units": ["file", "package"],
+          "runner": "Jest",
           "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
           "marker": "npm runs exact Jest and Vitest files and preserves full fallback",
           "gate": ".github/workflows/conformance.yml",
           "gateMarker": "--tests '*Cli*ConformanceTest'",
           "gateJob": "cli-native",
           "gateStep": "Run native CLI fixtures"
+        },
+        {
+          "units": ["file", "package"],
+          "runner": "Vitest",
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
+          "marker": "npm runs exact Jest and Vitest files and preserves full fallback",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        },
+        {
+          "units": ["file", "package"],
+          "runner": "node:test",
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliNodeRunnersConformanceTest.kt",
+          "marker": "node test runs exact changed test files and preserves full fallback",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        },
+        {
+          "units": ["file", "package"],
+          "runner": "bun test",
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliNodeRunnersConformanceTest.kt",
+          "marker": "Bun runs exact changed test files and preserves full fallback",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "Current stable Node.js; Jest 29–30; Vitest 2–5",
+      "versions": "Current stable Node.js; Jest 29–30; Vitest 2–5; node --test and Bun 1.3 test files only, production changes run the package",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/node", "conformance/cli-fixtures/mixed-gradle-node", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleNodeConformanceTest.kt", "conformance/cli-fixtures/mixed-node-dart", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedNodeDartConformanceTest.kt"],
+      "fixtures": ["conformance/cli-fixtures/node", "conformance/cli-fixtures/bun", "conformance/cli-fixtures/mixed-gradle-node", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleNodeConformanceTest.kt", "conformance/cli-fixtures/mixed-node-dart", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedNodeDartConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
@@ -913,6 +944,29 @@
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/atlas"],
       "gates": [".github/workflows/ci.yml"]
+    },
+    {
+      "id": "DENO",
+      "implementation": "com.aspix2k.affected.build.deno.DenoBuildSystem",
+      "ecosystem": "Deno",
+      "languages": ["TypeScript", "JavaScript", "JSX", "TSX"],
+      "runners": ["deno test"],
+      "selection": ["project"],
+      "selectionProofs": [
+        {
+          "units": ["project"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliDenoConformanceTest.kt",
+          "marker": "deno test runs every workspace member from the affected root",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        }
+      ],
+      "versions": "Deno 2.9; deno.json or deno.jsonc root without package.json, workspace members run through one root command",
+      "support": "supported",
+      "fixtures": ["conformance/cli-fixtures/deno"],
+      "gates": [".github/workflows/conformance.yml"]
     }
   ],
   "mixedProofs": [

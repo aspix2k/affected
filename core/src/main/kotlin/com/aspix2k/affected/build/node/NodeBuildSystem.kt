@@ -148,9 +148,11 @@ private fun nodeRelatedTestCommand(
     packageName: String,
     selection: NodeRelatedTestSelection,
 ): CliCommand {
+    if (selection.runner.testFilesOnly) return nodeTestFilesCommand(manager, packageName, selection)
     val runner = when (selection.runner) {
         NodeTestRunner.JEST -> listOf("jest", "--findRelatedTests", "--passWithNoTests")
         NodeTestRunner.VITEST -> listOf("vitest", "related", "--run", "--passWithNoTests")
+        else -> error("${selection.runner.displayName} selects test files directly")
     }
     val executable = when (manager) {
         "pnpm" -> if (packageName == ".") {
@@ -172,6 +174,19 @@ private fun nodeRelatedTestCommand(
     return CliCommand(
         "$manager ${selection.runner.displayName} related $packageName",
         executable + runner + selection.files,
+    )
+}
+
+private fun nodeTestFilesCommand(
+    manager: String,
+    packageName: String,
+    selection: NodeRelatedTestSelection,
+): CliCommand {
+    val files = if (selection.runner == NodeTestRunner.BUN) selection.files.map { "./$it" } else selection.files
+    val separator = if (manager == "npm") listOf("--") else emptyList()
+    return CliCommand(
+        "$manager ${selection.runner.displayName} files $packageName",
+        nodeTestCommand(manager, listOf(packageName)) + separator + files,
     )
 }
 

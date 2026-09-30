@@ -1,0 +1,7 @@
+{
+  "name": "@affected/delta",
+  "private": true,
+  "scripts": {
+    "test": "bun test"
+  }
+}

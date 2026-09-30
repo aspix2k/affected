@@ -353,6 +353,107 @@ class NodeTestSelectionTest {
         assertFull(exact.fixture, exact.changed)
     }
 
+    @Test
+    fun `node test receives only changed test files for every manager`() {
+        val npm = testFilesWorkspace("node --test")
+        val pnpm = testFilesWorkspace("node --test").also { File(it.root, "pnpm-lock.yaml").writeText("") }
+        val yarn = testFilesWorkspace("node --test").also { File(it.root, "yarn.lock").writeText("") }
+
+        assertEquals(
+            listOf("npm", "test", "--workspace", "@app/alpha", "--", "test/alpha.test.js"),
+            exactCommands(npm.root, "@app/alpha:test", npm.changed).single().arguments,
+        )
+        assertEquals(
+            listOf("pnpm", "--filter", "@app/alpha", "test", "test/alpha.test.js"),
+            exactCommands(pnpm.root, "@app/alpha:test", pnpm.changed).single().arguments,
+        )
+        assertEquals(
+            listOf("yarn", "workspace", "@app/alpha", "test", "test/alpha.test.js"),
+            exactCommands(yarn.root, "@app/alpha:test", yarn.changed).single().arguments,
+        )
+    }
+
+    @Test
+    fun `node test keeps the full package command without a pure test file change`() {
+        val exact = testFilesWorkspace("node --test")
+        val source = exact.fixture.source("alpha", "alpha.js", "module.exports = 1")
+        val typed = exact.fixture.test("alpha", "typed.test.ts", "")
+        val helper = exact.fixture.test("alpha", "helper.js", "")
+        val spaced = exact.fixture.test("alpha", "a b.test.js", "")
+        val referenced = testFilesWorkspace("node --test")
+        referenced.fixture.source("alpha", "runner.js", "require('../test/alpha.test.js')")
+
+        listOf(source, typed, helper, spaced).forEach { changed -> assertFull(exact.fixture, changed) }
+        assertFull(referenced.fixture, referenced.changed)
+        assertEquals(
+            listOf("npm", "test", "--workspace", "@app/alpha"),
+            nodeCommands(
+                exact.root.path,
+                listOf("@app/alpha:test"),
+                eligibleChanges(exact.changed, source),
+            ).single().arguments,
+        )
+    }
+
+    @Test
+    fun `node test keeps the full package command under a Bun manager or with runner configuration`() {
+        val bun = testFilesWorkspace("node --test").also { File(it.root, "bun.lock").writeText("") }
+        val config = testFilesWorkspace("node --test")
+        File(config.root, "packages/alpha/node.config.json").writeText("{}")
+
+        assertEquals(
+            listOf("bun", "--filter", "@app/alpha", "test"),
+            exactCommands(bun.root, "@app/alpha:test", bun.changed).single().arguments,
+        )
+        assertFull(config.fixture, config.changed)
+    }
+
+    @Test
+    fun `Bun receives changed test files through its package filter`() {
+        val exact = testFilesWorkspace("bun test", "alpha.spec.ts").also { File(it.root, "bun.lock").writeText("") }
+
+        assertEquals(
+            listOf("bun", "--filter", "@app/alpha", "test", "./test/alpha.spec.ts"),
+            exactCommands(exact.root, "@app/alpha:test", exact.changed).single().arguments,
+        )
+    }
+
+    @Test
+    fun `Bun keeps the full package command for production files and unmanaged packages`() {
+        val production = testFilesWorkspace("bun test", "alpha.test.ts")
+            .also { File(it.root, "bun.lock").writeText("") }
+        val source = production.fixture.source("alpha", "alpha.ts", "export const alpha = 1")
+        val configured = testFilesWorkspace("bun test", "alpha.test.ts")
+            .also { File(it.root, "bun.lock").writeText("") }
+        File(configured.root, "bunfig.toml").writeText("[test]\npreload = [\"./setup.ts\"]\n")
+        val npm = testFilesWorkspace("bun test", "alpha.test.ts")
+
+        assertEquals(
+            listOf("bun", "--filter", "@app/alpha", "test"),
+            exactCommands(production.root, "@app/alpha:test", source).single().arguments,
+        )
+        assertEquals(
+            listOf("bun", "--filter", "@app/alpha", "test"),
+            exactCommands(configured.root, "@app/alpha:test", configured.changed).single().arguments,
+        )
+        assertFull(npm.fixture, npm.changed)
+    }
+
+    @Test
+    fun `a single-package Bun project selects changed test files from its root`() {
+        val root = createTempDirectory("bun-exact-root").toFile()
+        File(root, "package.json").writeText("""{ "name": "app", "scripts": { "test": "bun test" } }""")
+        File(root, "bun.lock").writeText("")
+        val changed = File(root, "src/a.test.ts").apply {
+            parentFile.mkdirs()
+            writeText("")
+        }
+
+        val command = nodeCommands(root.path, listOf(".:test"), eligibleChanges(changed)).single()
+
+        assertEquals(listOf("bun", "test", "./src/a.test.ts"), command.arguments)
+    }
+
     private fun exactCommands(root: File, task: String, changed: File): List<CliCommand> =
         nodeCommands(
             root.path,
@@ -370,6 +471,13 @@ class NodeTestSelectionTest {
             listOf("npm", "test", "--workspace", "@app/alpha"),
             exactCommands(fixture.root, "@app/alpha:test", changed).single().arguments,
         )
+    }
+
+    private fun testFilesWorkspace(script: String, testName: String = "alpha.test.js"): ExactWorkspace {
+        val fixture = workspace()
+        val changed = fixture.test("alpha", testName, "")
+        fixture.packageManifest("alpha", script, "1.0.0", dependency = "left-pad")
+        return ExactWorkspace(fixture, changed)
     }
 
     private fun exactJestWorkspace(
