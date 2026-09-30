@@ -494,6 +494,21 @@ class CargoNextestTest {
     }
 
     @Test
+    fun `newer show config output may name the requirement source`() {
+        val root = workspace("nextest-version = { required = '0.9.143' }")
+        val sourced = CONFIGURATION.replace(
+            "- required: 0.9.143",
+            "- required: 0.9.143 (from .config/nextest.toml)",
+        )
+
+        assertEquals(CargoNextestMode.PACKAGES, detectCargoNextest(root, VERSION, configurationOutput = sourced).mode)
+        assertEquals(
+            CargoNextestMode.CARGO_TEST,
+            detectCargoNextest(root, VERSION, configurationOutput = sourced.replace("0.9.143 (", "0.9.142 (")).mode,
+        )
+    }
+
+    @Test
     fun `symlinked and oversized configs retain cargo test`() {
         val symlinkRoot = createTempDirectory("cargo-nextest-symlink").toFile()
         val external = File.createTempFile("nextest", ".toml").apply {

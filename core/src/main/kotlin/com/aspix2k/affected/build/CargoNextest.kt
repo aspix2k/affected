@@ -144,12 +144,17 @@ private fun supportedNextestConfigurationOutput(
     output: String?,
     installed: NextestVersion,
     required: NextestVersion,
-): Boolean = output?.trim() == """
-    current nextest version: $installed
-    version requirements:
-        - required: $required
-    evaluation result: ok
-""".trimIndent()
+): Boolean {
+    val lines = output?.trim()?.lines() ?: return false
+    return lines.size == 4 &&
+        lines[0] == "current nextest version: $installed" &&
+        lines[1] == "version requirements:" &&
+        lines[2].removeSuffixMatching(NEXTEST_REQUIREMENT_SOURCE) == "    - required: $required" &&
+        lines[3] == "evaluation result: ok"
+}
+
+private fun String.removeSuffixMatching(suffix: Regex): String =
+    suffix.find(this)?.let { removeRange(it.range) } ?: this
 
 private fun requiredVersion(config: TomlTable): NextestVersion? {
     val value = config.get("nextest-version") ?: return null
@@ -307,6 +312,7 @@ private val NEXTEST_VERSION = Regex("cargo-nextest ([0-9]+\\.[0-9]+\\.[0-9]+)(?:
 private val NEXTEST_COMMIT = Regex("commit-hash: [0-9a-f]{40}")
 private val NEXTEST_DATE = Regex("commit-date: [0-9]{4}-[0-9]{2}-[0-9]{2}")
 private val NEXTEST_HOST = Regex("host: [A-Za-z0-9_.-]{1,128}")
+private val NEXTEST_REQUIREMENT_SOURCE = Regex(""" \(from [^()\n]+\)$""")
 private val PROFILE_NAME = Regex("[A-Za-z][A-Za-z0-9_-]{0,63}")
 private val EXECUTABLE_IDENTITY = Regex("(?:test|[0-9a-f]{64})")
 

@@ -145,7 +145,7 @@ private fun NodeTestRunner.supports(version: String): Boolean {
     val major = match.groupValues[1].toIntOrNull() ?: return false
     return when (this) {
         NodeTestRunner.JEST -> major in 29..30
-        NodeTestRunner.VITEST -> major in 2..4
+        NodeTestRunner.VITEST -> major in 2..5
     }
 }
 
