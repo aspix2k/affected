@@ -166,6 +166,11 @@ class CiScopeTest(unittest.TestCase):
         self.assertTrue(ci_scope.scope_for(["core/src/test/kotlin/com/aspix2k/affected/build/CliCommandTest.kt"])["native"])
         self.assertTrue(ci_scope.scope_for([".github/workflows/conformance.yml"])["native"])
 
+    def test_scheduled_only_workflows_start_no_expensive_gate(self) -> None:
+        """Weekly-only workflows never run on pull requests, so editing them starts nothing."""
+        for path in (".github/workflows/mutation.yml", ".github/workflows/currentness.yml"):
+            self.assertEqual(ci_scope.empty_scope(), ci_scope.scope_for([path]))
+
     def test_github_output_writes_lowercase_booleans(self) -> None:
         """Actions conditions compare against the string true."""
         with TemporaryDirectory() as directory:
