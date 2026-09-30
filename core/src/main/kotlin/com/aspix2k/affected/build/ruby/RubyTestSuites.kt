@@ -108,8 +108,8 @@ internal fun RubyTestRunner.supports(version: String): Boolean {
     val major = stable[1].toIntOrNull() ?: return false
     val minor = stable[2].toIntOrNull() ?: return false
     return when (this) {
-        RubyTestRunner.RSPEC -> major == 3 && minor == 13
-        RubyTestRunner.MINITEST -> major == 6 && minor == 0
-        RubyTestRunner.TEST_UNIT -> major == 3 && minor == 7
+        RubyTestRunner.RSPEC -> major == 3
+        RubyTestRunner.MINITEST -> major == 6
+        RubyTestRunner.TEST_UNIT -> major == 3 && minor >= 7
     }
 }

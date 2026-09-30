@@ -1,8 +1,10 @@
 package com.aspix2k.affected
 
 import com.aspix2k.affected.build.ruby.RubyGems
+import com.aspix2k.affected.build.ruby.RubyTestRunner
 import com.aspix2k.affected.build.ruby.RubyTestSuites
 import com.aspix2k.affected.build.ruby.rubyCommands
+import com.aspix2k.affected.build.ruby.supports
 import java.io.File
 import java.nio.file.Files
 import kotlin.io.path.createTempDirectory
@@ -250,6 +252,16 @@ class RubyGemsTest {
             """.trimIndent(),
         )
         assertNull(RubyTestSuites.lockedRunners(root))
+    }
+
+    @Test
+    fun `runner support follows the executable lines instead of one minor release`() {
+        assertTrue(RubyTestRunner.RSPEC.supports("3.14.0"))
+        assertTrue(RubyTestRunner.MINITEST.supports("6.1.0"))
+        assertTrue(RubyTestRunner.TEST_UNIT.supports("3.8.0"))
+        assertFalse(RubyTestRunner.MINITEST.supports("5.25.4"))
+        assertFalse(RubyTestRunner.TEST_UNIT.supports("3.6.9"))
+        assertFalse(RubyTestRunner.RSPEC.supports("4.0.0"))
     }
 
     @Test
