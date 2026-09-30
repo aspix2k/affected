@@ -178,6 +178,7 @@ def scoped_proof_condition(value: str) -> bool:
     """Allow only a fail-closed ci_scope proof output as a job or step if."""
     return without_yaml_comment(value) in {
         "needs.scope.outputs.exact == 'true'",
+        "needs.scope.outputs.native == 'true'",
         "needs.scope.outputs.plugin == 'true'",
     }
 

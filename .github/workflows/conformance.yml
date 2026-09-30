@@ -21,6 +21,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       exact: ${{ steps.classify.outputs.exact }}
+      native: ${{ steps.classify.outputs.native }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -93,7 +94,7 @@ jobs:
   cross-platform-paths:
     name: Cross-platform paths / ${{ matrix.os }}
     needs: [scope]
-    if: needs.scope.outputs.exact == 'true'
+    if: needs.scope.outputs.native == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
@@ -139,7 +140,7 @@ jobs:
   cli-native:
     name: CLI native fixtures / Linux
     needs: [scope]
-    if: needs.scope.outputs.exact == 'true'
+    if: needs.scope.outputs.native == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -288,7 +289,7 @@ jobs:
   dotnet-sdks:
     name: .NET exact / SDK ${{ matrix.dotnet-sdk }}
     needs: [scope]
-    if: needs.scope.outputs.exact == 'true'
+    if: needs.scope.outputs.native == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -318,7 +319,7 @@ jobs:
   phpunit-versions:
     name: PHPUnit exact / ${{ matrix.phpunit }}
     needs: [scope]
-    if: needs.scope.outputs.exact == 'true'
+    if: needs.scope.outputs.native == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -367,6 +368,7 @@ jobs:
         env:
           SCOPE_RESULT: ${{ needs.scope.result }}
           EXACT_REQUIRED: ${{ needs.scope.outputs.exact }}
+          NATIVE_REQUIRED: ${{ needs.scope.outputs.native }}
           EXACT_RESULT: ${{ needs.exact-impact.result }}
           PATHS_RESULT: ${{ needs.cross-platform-paths.result }}
           CLI_RESULT: ${{ needs.cli-native.result }}
@@ -396,8 +398,8 @@ jobs:
           }
           require_success scope "$SCOPE_RESULT"
           require_when exact-impact "${EXACT_REQUIRED:-true}" "$EXACT_RESULT"
-          require_when cross-platform-paths "${EXACT_REQUIRED:-true}" "$PATHS_RESULT"
-          require_when cli-native "${EXACT_REQUIRED:-true}" "$CLI_RESULT"
-          require_when dotnet-sdks "${EXACT_REQUIRED:-true}" "$DOTNET_RESULT"
-          require_when phpunit-versions "${EXACT_REQUIRED:-true}" "$PHPUNIT_RESULT"
+          require_when cross-platform-paths "${NATIVE_REQUIRED:-true}" "$PATHS_RESULT"
+          require_when cli-native "${NATIVE_REQUIRED:-true}" "$CLI_RESULT"
+          require_when dotnet-sdks "${NATIVE_REQUIRED:-true}" "$DOTNET_RESULT"
+          require_when phpunit-versions "${NATIVE_REQUIRED:-true}" "$PHPUNIT_RESULT"
           exit "$failed"

@@ -15,13 +15,12 @@ CODEQL = ROOT / ".github/workflows/codeql.yml"
 MUTATION = ROOT / ".github/workflows/mutation.yml"
 QUALITY = ROOT / ".github/workflows/quality.yml"
 GRADLE_ACTION = re.compile(r"uses:\s*gradle/actions/[^\s@]+@([0-9a-f]{40})")
+PACKAGE_TASKS = ("buildPlugin", "verifyPlugin")
 PLUGIN_TASKS = (
     "detekt",
     "test",
     "koverXmlReport",
     "koverVerify",
-    "buildPlugin",
-    "verifyPlugin",
     ":collector:spotbugsMain",
     ":collector:spotbugsMaven",
 )
@@ -33,6 +32,7 @@ EXACT_IMPACT_JOBS = (
     "dotnet-sdks",
     "phpunit-versions",
 )
+NATIVE_IMPACT_JOBS = frozenset({"cross-platform-paths", "cli-native", "dotnet-sdks", "phpunit-versions"})
 CODEQL_KOTLIN_COMPAT_SHA256 = "73a5dd964566b450af31e4d870dd45e795d6f1fce27ba04443b7cfa138df6ddd"
 CODEQL_KOTLIN_PROBE_SHA256 = "1120008c8354f7a580198bd3becfe9b185c407e78f18fabdcadd9e4621a1cefe"
 
@@ -72,14 +72,15 @@ def check(root: Path = ROOT) -> None:
     if re.search(r"(?m)^  product-verifier:$", ci) is None or "product-verifier" not in verify:
         raise CiContractError("The product verifier matrix must remain a required gate")
 
-    plugin = slice_job(ci, "plugin")
-    if plugin.count("scripts/run_gradle.sh") != 1 or "./gradlew" in plugin:
-        raise CiContractError("The plugin job must start Gradle exactly once through scripts/run_gradle.sh")
-    for task in PLUGIN_TASKS:
-        if task not in plugin:
-            raise CiContractError(f"The plugin job must keep {task}")
-    if "printVersion" not in plugin and "changelog-section.sh" not in plugin:
-        raise CiContractError("The plugin job must still enforce the changelog section")
+    for job_name, tasks in (("plugin", PLUGIN_TASKS), ("package", PACKAGE_TASKS)):
+        job = slice_job(ci, job_name)
+        if job.count("scripts/run_gradle.sh") != 1 or "./gradlew" in job:
+            raise CiContractError(f"The {job_name} job must start Gradle exactly once through scripts/run_gradle.sh")
+        for task in tasks:
+            if task not in job:
+                raise CiContractError(f"The {job_name} job must keep {task}")
+    if "changelog-section.sh" not in slice_job(ci, "package"):
+        raise CiContractError("The package job must still enforce the changelog section")
     check_product_verifier(ci)
 
     scripts = slice_job(ci, "scripts")
@@ -156,7 +157,7 @@ def check(root: Path = ROOT) -> None:
     python_steps = action_steps(cross_platform, "actions/setup-python")
     if (
         re.search(r"(?m)^    needs: \[scope\]$", cross_platform) is None
-        or re.search(r"(?m)^    if: needs\.scope\.outputs\.exact == 'true'$", cross_platform) is None
+        or re.search(r"(?m)^    if: needs\.scope\.outputs\.native == 'true'$", cross_platform) is None
         or re.search(r"(?m)^    runs-on: \$\{\{ matrix\.os \}\}$", cross_platform) is None
         or re.search(r"(?m)^        os: \[macos-latest, windows-latest\]$", cross_platform) is None
         or re.search(r"(?m)^    continue-on-error:", cross_platform) is not None
@@ -334,11 +335,11 @@ def check_product_verifier(ci: str) -> None:
         if not has_line(scope, line):
             raise CiContractError("The product verifier matrix must come from support_matrix.py")
     for line in (
-        "needs: [scope, plugin]",
+        "needs: [scope, package]",
         "if: needs.scope.outputs.plugin == 'true'",
         "timeout-minutes: 30",
         "fail-fast: false",
-        "max-parallel: 4",
+        "max-parallel: 9",
         "include: ${{ fromJSON(needs.scope.outputs.verifier) }}",
         "verifyPlugin -x buildPlugin",
         "SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}",
@@ -397,8 +398,9 @@ def check_scope(root: Path, ci: str, codeql: str) -> None:
     graph = read(root / ".github/workflows/dependency-graph.yml")
     if not (root / "scripts/ci_scope.py").is_file():
         raise CiContractError("ci_scope.py is missing")
-    if 'if: needs.scope.outputs.plugin == \'true\'' not in slice_job(ci, "plugin"):
-        raise CiContractError("plugin must run only when ci_scope asks for it")
+    for job_name in ("plugin", "package"):
+        if 'if: needs.scope.outputs.plugin == \'true\'' not in slice_job(ci, job_name):
+            raise CiContractError(f"{job_name} must run only when ci_scope asks for it")
     if 'if: needs.scope.outputs.health == \'true\'' not in slice_job(ci, "health"):
         raise CiContractError("health must run only when ci_scope asks for it")
     verify = slice_job(ci, "verify")
@@ -424,6 +426,12 @@ def check_scope(root: Path, ci: str, codeql: str) -> None:
             'require_when plugin "${PLUGIN_REQUIRED:-true}" "$PLUGIN_RESULT"',
         ),
         (
+            "package",
+            "PACKAGE_RESULT",
+            "needs.package.result",
+            'require_when package "${PLUGIN_REQUIRED:-true}" "$PACKAGE_RESULT"',
+        ),
+        (
             "product-verifier",
             "PRODUCT_VERIFIER_RESULT",
             "needs.product-verifier.result",
@@ -442,9 +450,9 @@ def check_scope(root: Path, ci: str, codeql: str) -> None:
             invocation,
         ):
             raise CiContractError(f"verify must bind and check the {name} result")
-    if 'if [ "$PLUGIN_RESULT" = success ]; then' not in verify:
+    if 'if [ "$PACKAGE_RESULT" = success ]; then' not in verify:
         raise CiContractError(
-            "verify must require product-verifier only after plugin success"
+            "verify must require product-verifier only after package success"
         )
     for variable, source in (
         ("PLUGIN_REQUIRED", "needs.scope.outputs.plugin"),
@@ -479,8 +487,12 @@ def check_conformance(conformance: str) -> None:
         r'(?m)^      - id: classify\n        run: python3 scripts/ci_scope\.py --github-output "\$GITHUB_OUTPUT"$',
         scope,
     )
-    if not has_line(scope, "exact: ${{ steps.classify.outputs.exact }}") or classifier is None:
-        raise CiContractError("conformance scope must publish the classifier exact-impact decision")
+    if (
+        not has_line(scope, "exact: ${{ steps.classify.outputs.exact }}")
+        or not has_line(scope, "native: ${{ steps.classify.outputs.native }}")
+        or classifier is None
+    ):
+        raise CiContractError("conformance scope must publish the classifier exact-impact decisions")
     cli_native = slice_job(conformance, "cli-native")
     native_update = (
         "sudo timeout --kill-after=30s 2m apt-get -o Acquire::Retries=3 "
@@ -508,11 +520,12 @@ def check_conformance(conformance: str) -> None:
             raise CiContractError("Native CLI must lint all bundled Python adapters")
     for name in EXACT_IMPACT_JOBS[1:]:
         job = slice_job(conformance, name)
+        gate = "native" if name in NATIVE_IMPACT_JOBS else "exact"
         if (
             "needs: [scope]" not in job
-            or "needs.scope.outputs.exact == 'true'" not in job
+            or f"needs.scope.outputs.{gate} == 'true'" not in job
         ):
-            raise CiContractError(f"{name} must follow the exact-impact scope")
+            raise CiContractError(f"{name} must follow the {gate} scope")
     required = slice_job(conformance, "required")
     if not re.search(r"(?m)^    name: exact-impact$", required):
         raise CiContractError("The required exact-impact context name must remain stable")
@@ -530,8 +543,9 @@ def check_conformance(conformance: str) -> None:
         'require_success scope "$SCOPE_RESULT"',
     ):
         raise CiContractError("The required exact-impact aggregate must bind and check scope")
-    if not has_line(required, "EXACT_REQUIRED: ${{ needs.scope.outputs.exact }}"):
-        raise CiContractError("The required exact-impact aggregate must bind the exact scope")
+    for variable, gate in (("EXACT_REQUIRED", "exact"), ("NATIVE_REQUIRED", "native")):
+        if not has_line(required, f"{variable}: ${{{{ needs.scope.outputs.{gate} }}}}"):
+            raise CiContractError(f"The required exact-impact aggregate must bind the {gate} scope")
     result_bindings = (
         ("exact-impact", "EXACT_RESULT", "needs.exact-impact.result"),
         ("cross-platform-paths", "PATHS_RESULT", "needs.cross-platform-paths.result"),
@@ -540,7 +554,8 @@ def check_conformance(conformance: str) -> None:
         ("phpunit-versions", "PHPUNIT_RESULT", "needs.phpunit-versions.result"),
     )
     for name, variable, source in result_bindings:
-        invocation = f'require_when {name} "${{EXACT_REQUIRED:-true}}" "${variable}"'
+        requirement = "NATIVE_REQUIRED" if name in NATIVE_IMPACT_JOBS else "EXACT_REQUIRED"
+        invocation = f'require_when {name} "${{{requirement}:-true}}" "${variable}"'
         if not has_line(required, f"{variable}: ${{{{ {source} }}}}") or not has_line(
             required,
             invocation,
