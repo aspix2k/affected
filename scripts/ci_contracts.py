@@ -89,6 +89,7 @@ def check(root: Path = ROOT) -> None:
         "scripts/quality.sh workflows",
         "scripts/quality.sh analyzers",
         "scripts.tests.test_release_currentness",
+        "scripts/release_currentness.py --offline",
         "scripts.tests.test_support_matrix",
         "scripts/support_matrix.py --check",
         "scripts.tests.test_mcp_capabilities",

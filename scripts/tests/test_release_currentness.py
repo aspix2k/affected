@@ -164,6 +164,24 @@ class ReleaseCurrentnessTest(unittest.TestCase):
         with self.assertRaises(currentness.CurrentnessError):
             currentness.newest(["3.0.0-beta.1", "3.0.0-rc-1"])
 
+    def test_offline_mode_checks_local_pins_without_network(self) -> None:
+        """Pull requests catch local pin drift without calling release endpoints."""
+        report = currentness.run_offline()
+
+        self.assertTrue(report)
+        with patch.object(currentness, "load_config", return_value=[
+            {
+                "id": "drifted",
+                "local": {"type": "workflow-value", "name": "java-version", "occurrences": {".github/workflows/ci.yml": 99}},
+                "policy": "compatibility",
+                "expected": "21",
+                "reason": "Offline mode must fail on a stale occurrence count.",
+                "evidence": [".github/workflows/ci.yml"],
+            },
+        ]), patch.object(currentness, "validate_inventory_coverage"):
+            with self.assertRaisesRegex(currentness.CurrentnessError, "drifted"):
+                currentness.run_offline()
+
     def test_series_never_escapes_declared_compatibility_line(self) -> None:
         """Select the newest patch only within the requested compatibility line."""
         self.assertEqual("11.5.56", currentness.newest(["11.5.55", "11.5.56", "12.0.1"], "11.5"))

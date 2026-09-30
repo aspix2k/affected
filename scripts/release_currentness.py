@@ -347,7 +347,7 @@ def local_version(local: dict[str, Any]) -> tuple[str, str | None]:
         classifier = local.get("classifier")
         values: list[str] = []
         for file in ROOT.rglob("*.gradle.kts"):
-            if "build" in file.parts or file.is_symlink():
+            if "build" in file.relative_to(ROOT).parts or file.is_symlink():
                 continue
             text = file.read_text(encoding="utf-8")
             suffix = rf":{re.escape(classifier)}" if classifier else ""
@@ -944,7 +944,7 @@ def iter_gradle_scripts() -> list[Path]:
     return [
         file
         for file in ROOT.rglob("*.gradle.kts")
-        if not file.is_symlink() and not any(part in skip for part in file.parts)
+        if not file.is_symlink() and not any(part in skip for part in file.relative_to(ROOT).parts)
     ]
 
 
@@ -1138,12 +1138,50 @@ def run(transport: Transport | None = None) -> list[str]:
     return report
 
 
+class OfflineRequest(Exception):
+    """Mark the point where a pin check would need an official endpoint."""
+
+
+class OfflineTransport:
+    """Stop a pin check at its first network request."""
+
+    def read(self, url: str) -> bytes:
+        """Refuse network access."""
+        raise OfflineRequest(url)
+
+    def json(self, url: str) -> Any:
+        """Refuse network access."""
+        raise OfflineRequest(url)
+
+    def text(self, url: str) -> str:
+        """Refuse network access."""
+        raise OfflineRequest(url)
+
+
+def run_offline() -> list[str]:
+    """Validate inventory coverage and every local pin without network access."""
+    entries = load_config()
+    validate_inventory_coverage(entries)
+    report = []
+    offline = OfflineTransport()
+    for entry in entries:
+        identifier = entry.get("id", "<unknown>")
+        try:
+            report.append(validate_entry(entry, offline))  # type: ignore[arg-type]
+        except OfflineRequest:
+            report.append(f"{identifier}: local pin readable")
+        except CurrentnessError as error:
+            raise CurrentnessError(f"{identifier}: {error}") from error
+    return report
+
+
 def main() -> int:
     """Run the fail-closed currentness gate from the repository root."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.parse_args()
+    parser.add_argument("--offline", action="store_true", help="check local pins and inventory without network access")
+    arguments = parser.parse_args()
     try:
-        report = run()
+        report = run_offline() if arguments.offline else run()
     except CurrentnessError as error:
         print(f"release-currentness: ERROR: {error}", file=sys.stderr)
         return 1

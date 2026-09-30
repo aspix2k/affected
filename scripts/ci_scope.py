@@ -64,6 +64,7 @@ SCRIPT_ONLY_FILES = frozenset(
 SAFE_WORKFLOWS = frozenset(
     {
         ".github/workflows/mutation.yml",
+        ".github/workflows/currentness.yml",
         ".github/workflows/release.yml",
         ".github/workflows/dependency-graph.yml",
         ".github/workflows/dependency-graph-submit.yml",

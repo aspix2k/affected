@@ -403,3 +403,28 @@ jobs:
           require_when dotnet-sdks "${NATIVE_REQUIRED:-true}" "$DOTNET_RESULT"
           require_when phpunit-versions "${NATIVE_REQUIRED:-true}" "$PHPUNIT_RESULT"
           exit "$failed"
+
+  report:
+    name: Report scheduled failure
+    needs: [required]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TITLE: "Scheduled exact-impact conformance failed"
+        run: |
+          set -euo pipefail
+          number=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number,title \
+            --jq '[.[] | select(.title == env.TITLE)][0].number // empty')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "Failed again: $RUN_URL"
+          else
+            gh issue create --title "$TITLE" --body "The scheduled run failed: $RUN_URL"
+          fi
