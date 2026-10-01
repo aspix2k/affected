@@ -24,12 +24,9 @@ class RBuildSystem : ChangeAwareSuspendingBuildSystem, NamedSourceBuildSystem, A
 
     override val includeGeneratedFiles: Boolean = true
 
-    override fun isPresent(project: Project): Boolean = manifestOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
-    override fun modules(project: Project): List<BuildModule> {
-        val root = manifestOf(project)?.parentFile ?: return emptyList()
-        return listOf(rRootModule(root))
-    }
+    override fun modules(project: Project): List<BuildModule> = rootsOf(project).map(::rRootModule)
 
     override fun run(project: Project, root: String, tasks: List<String>) {
         CommandRunner.runBatch(project, root, rExecutionCommands(File(root), tasks), "Affected R")
@@ -52,8 +49,8 @@ class RBuildSystem : ChangeAwareSuspendingBuildSystem, NamedSourceBuildSystem, A
         "Affected R",
     )
 
-    private fun manifestOf(project: Project): File? =
-        project.basePath?.let(::File)?.let(::rProjectRoot)?.let(::rManifest)
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let(::rProjectRoots).orEmpty()
 }
 
 internal object RTasks {
@@ -61,8 +58,8 @@ internal object RTasks {
     const val CHECK = "check"
 }
 
-internal fun rProjectRoot(base: File): File? =
-    nestedBuildRoot(base) { rManifest(it) != null }
+internal fun rProjectRoots(base: File): List<File> =
+    nestedBuildRoots(base) { rManifest(it) != null }
 
 internal fun rManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null

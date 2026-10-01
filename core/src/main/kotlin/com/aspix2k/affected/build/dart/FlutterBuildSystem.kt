@@ -3,7 +3,7 @@ package com.aspix2k.affected.build.dart
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.SuspendingBuildSystem
 import com.aspix2k.affected.build.isRegularFileNoFollow
-import com.aspix2k.affected.build.nestedBuildRoot
+import com.aspix2k.affected.build.nestedBuildRoots
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CommandRunner
 import com.intellij.openapi.project.Project
@@ -15,12 +15,9 @@ class FlutterBuildSystem : SuspendingBuildSystem {
 
     override val sourceExtensions: Set<String> = setOf("dart", "yaml")
 
-    override fun isPresent(project: Project): Boolean = manifestOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
-    override fun modules(project: Project): List<BuildModule> {
-        val root = manifestOf(project)?.parentFile ?: return emptyList()
-        return listOf(flutterRootModule(root))
-    }
+    override fun modules(project: Project): List<BuildModule> = rootsOf(project).map(::flutterRootModule)
 
     override fun run(project: Project, root: String, tasks: List<String>) {
         CommandRunner.runBatch(project, root, flutterCommands(File(root), tasks), "Affected Flutter")
@@ -29,8 +26,8 @@ class FlutterBuildSystem : SuspendingBuildSystem {
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         CommandRunner.runBatchAndWait(project, root, flutterCommands(File(root), tasks), "Affected Flutter")
 
-    private fun manifestOf(project: Project): File? =
-        project.basePath?.let(::File)?.let(::flutterProjectRoot)?.let(::flutterManifest)
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let(::flutterProjectRoots).orEmpty()
 }
 
 internal object FlutterTasks {
@@ -38,8 +35,8 @@ internal object FlutterTasks {
     const val ANALYZE = "analyze"
 }
 
-internal fun flutterProjectRoot(base: File): File? =
-    nestedBuildRoot(base) { flutterManifest(it) != null }
+internal fun flutterProjectRoots(base: File): List<File> =
+    nestedBuildRoots(base) { flutterManifest(it) != null }
 
 internal fun flutterManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null

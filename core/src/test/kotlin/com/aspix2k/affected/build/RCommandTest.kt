@@ -554,24 +554,38 @@ class RCommandTest {
         val nested = File(base, "pkg")
         rRoot().copyRecursively(nested)
 
-        assertEquals(nested.canonicalFile, rProjectRoot(base)?.canonicalFile)
+        assertEquals(nested.canonicalFile, rProjectRoots(base).singleOrNull()?.canonicalFile)
     }
 
     @Test
-    fun `several first-level nested R packages stay off`() {
+    fun `several nested R packages are all roots`() {
         val base = createTempDirectory("r-many").toFile()
         rRoot().copyRecursively(File(base, "pkg"))
         rRoot().copyRecursively(File(base, "tools"))
 
-        assertNull(rProjectRoot(base))
+        assertEquals(
+            listOf(File(base, "pkg"), File(base, "tools")).map(File::getCanonicalFile),
+            rProjectRoots(base).map(File::getCanonicalFile),
+        )
     }
 
     @Test
-    fun `a deeper nested R package stays off`() {
+    fun `a second-level nested R package is the root`() {
         val base = createTempDirectory("r-deep").toFile()
         rRoot().copyRecursively(File(base, "src/pkg"))
 
-        assertNull(rProjectRoot(base))
+        assertEquals(
+            listOf(File(base, "src/pkg").canonicalFile),
+            rProjectRoots(base).map(File::getCanonicalFile),
+        )
+    }
+
+    @Test
+    fun `an R package deeper than three levels stays off`() {
+        val base = createTempDirectory("r-too-deep").toFile()
+        rRoot().copyRecursively(File(base, "a/b/c/d"))
+
+        assertEquals(emptyList(), rProjectRoots(base))
     }
 
     private fun rRoot(

@@ -127,7 +127,7 @@ class FlutterCommandTest {
         val nested = File(base, "app")
         flutterRoot().copyRecursively(nested)
 
-        assertEquals(nested.canonicalFile, flutterProjectRoot(base)?.canonicalFile)
+        assertEquals(nested.canonicalFile, flutterProjectRoots(base).singleOrNull()?.canonicalFile)
     }
 
     @Test
@@ -135,24 +135,38 @@ class FlutterCommandTest {
         val base = flutterRoot()
         flutterRoot().copyRecursively(File(base, "app"))
 
-        assertEquals(base.canonicalFile, flutterProjectRoot(base)?.canonicalFile)
+        assertEquals(base.canonicalFile, flutterProjectRoots(base).singleOrNull()?.canonicalFile)
     }
 
     @Test
-    fun `several first-level nested Flutter apps stay off`() {
+    fun `several nested Flutter apps are all roots`() {
         val base = createTempDirectory("flutter-many").toFile()
         flutterRoot().copyRecursively(File(base, "app"))
         flutterRoot().copyRecursively(File(base, "admin"))
 
-        assertNull(flutterProjectRoot(base))
+        assertEquals(
+            listOf(File(base, "admin"), File(base, "app")).map(File::getCanonicalFile),
+            flutterProjectRoots(base).map(File::getCanonicalFile),
+        )
     }
 
     @Test
-    fun `a deeper nested Flutter app stays off`() {
+    fun `a second-level nested Flutter app is the root`() {
         val base = createTempDirectory("flutter-deep").toFile()
         flutterRoot().copyRecursively(File(base, "src/app"))
 
-        assertNull(flutterProjectRoot(base))
+        assertEquals(
+            listOf(File(base, "src/app").canonicalFile),
+            flutterProjectRoots(base).map(File::getCanonicalFile),
+        )
+    }
+
+    @Test
+    fun `a Flutter app deeper than three levels stays off`() {
+        val base = createTempDirectory("flutter-too-deep").toFile()
+        flutterRoot().copyRecursively(File(base, "a/b/c/d"))
+
+        assertEquals(emptyList(), flutterProjectRoots(base))
     }
 
     @Test
@@ -168,7 +182,7 @@ class FlutterCommandTest {
             """.trimIndent(),
         )
 
-        assertNull(flutterProjectRoot(base))
+        assertEquals(emptyList(), flutterProjectRoots(base))
     }
 
     private fun flutterRoot(

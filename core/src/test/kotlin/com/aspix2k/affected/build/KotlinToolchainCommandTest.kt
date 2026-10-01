@@ -329,24 +329,38 @@ class KotlinToolchainCommandTest {
         val nested = File(base, "backend")
         toolchainRoot().copyRecursively(nested)
 
-        assertEquals(nested.canonicalFile, kotlinToolchainProjectRoot(base)?.canonicalFile)
+        assertEquals(nested.canonicalFile, kotlinToolchainProjectRoots(base).singleOrNull()?.canonicalFile)
     }
 
     @Test
-    fun `several first-level nested toolchain projects stay off`() {
+    fun `several nested toolchain projects are all roots`() {
         val base = createTempDirectory("toolchain-many").toFile()
         toolchainRoot().copyRecursively(File(base, "backend"))
         toolchainRoot().copyRecursively(File(base, "tools"))
 
-        assertNull(kotlinToolchainProjectRoot(base))
+        assertEquals(
+            listOf(File(base, "backend"), File(base, "tools")).map(File::getCanonicalFile),
+            kotlinToolchainProjectRoots(base).map(File::getCanonicalFile),
+        )
     }
 
     @Test
-    fun `a deeper nested toolchain project stays off`() {
+    fun `a second-level nested toolchain project is the root`() {
         val base = createTempDirectory("toolchain-deep").toFile()
         toolchainRoot().copyRecursively(File(base, "src/backend"))
 
-        assertNull(kotlinToolchainProjectRoot(base))
+        assertEquals(
+            listOf(File(base, "src/backend").canonicalFile),
+            kotlinToolchainProjectRoots(base).map(File::getCanonicalFile),
+        )
+    }
+
+    @Test
+    fun `a toolchain project deeper than three levels stays off`() {
+        val base = createTempDirectory("toolchain-too-deep").toFile()
+        toolchainRoot().copyRecursively(File(base, "a/b/c/d"))
+
+        assertEquals(emptyList(), kotlinToolchainProjectRoots(base))
     }
 
     private fun jvmChange(vararg files: File): BuildChanges =

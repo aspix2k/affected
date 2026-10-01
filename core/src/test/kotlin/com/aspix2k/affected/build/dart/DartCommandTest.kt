@@ -261,7 +261,7 @@ class DartCommandTest {
         val nested = File(base, "pkg")
         dartRoot().copyRecursively(nested)
 
-        assertEquals(nested.canonicalFile, dartProjectRoot(base)?.canonicalFile)
+        assertEquals(nested.canonicalFile, dartProjectRoots(base).singleOrNull()?.canonicalFile)
     }
 
     @Test
@@ -269,24 +269,38 @@ class DartCommandTest {
         val base = dartRoot()
         dartRoot().copyRecursively(File(base, "pkg"))
 
-        assertEquals(base.canonicalFile, dartProjectRoot(base)?.canonicalFile)
+        assertEquals(base.canonicalFile, dartProjectRoots(base).singleOrNull()?.canonicalFile)
     }
 
     @Test
-    fun `several first-level nested Dart packages stay off`() {
+    fun `several nested Dart packages are all roots`() {
         val base = createTempDirectory("dart-many").toFile()
         dartRoot().copyRecursively(File(base, "pkg"))
         dartRoot().copyRecursively(File(base, "cli"))
 
-        assertNull(dartProjectRoot(base))
+        assertEquals(
+            listOf(File(base, "cli"), File(base, "pkg")).map(File::getCanonicalFile),
+            dartProjectRoots(base).map(File::getCanonicalFile),
+        )
     }
 
     @Test
-    fun `a deeper nested Dart package stays off`() {
+    fun `a second-level nested Dart package is the root`() {
         val base = createTempDirectory("dart-deep").toFile()
         dartRoot().copyRecursively(File(base, "src/pkg"))
 
-        assertNull(dartProjectRoot(base))
+        assertEquals(
+            listOf(File(base, "src/pkg").canonicalFile),
+            dartProjectRoots(base).map(File::getCanonicalFile),
+        )
+    }
+
+    @Test
+    fun `a Dart package deeper than three levels stays off`() {
+        val base = createTempDirectory("dart-too-deep").toFile()
+        dartRoot().copyRecursively(File(base, "a/b/c/d"))
+
+        assertEquals(emptyList(), dartProjectRoots(base))
     }
 
     @Test
@@ -305,7 +319,7 @@ class DartCommandTest {
             """.trimIndent(),
         )
 
-        assertNull(dartProjectRoot(base))
+        assertEquals(emptyList(), dartProjectRoots(base))
     }
 
     private fun dartRoot(

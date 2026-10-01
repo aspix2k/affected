@@ -1,14 +1,13 @@
 package com.aspix2k.affected.build
 
 import com.aspix2k.affected.build.dart.dartCommands
-import com.aspix2k.affected.build.dart.dartProjectRoot
+import com.aspix2k.affected.build.dart.dartProjectRoots
 import com.aspix2k.affected.build.dart.dartRootModule
 import org.junit.Assume.assumeTrue
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class CliDartConformanceTest {
@@ -26,7 +25,7 @@ class CliDartConformanceTest {
 
     @Test
     fun `dart runs from a single first-level nested package`() = fixture("dart", nested = true) { root ->
-        val nested = assertNotNull(dartProjectRoot(root))
+        val nested = dartProjectRoots(root).single()
         assertEquals(File(root, "pkg").canonicalFile, nested.canonicalFile)
         val module = dartRootModule(nested)
         val command = dartCommands(listOf("${module.executionId}:${module.testTask}")).single()

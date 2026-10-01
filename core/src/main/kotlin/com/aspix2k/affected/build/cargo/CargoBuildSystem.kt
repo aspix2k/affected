@@ -11,7 +11,7 @@ import com.aspix2k.affected.build.combineFingerprints
 import com.aspix2k.affected.build.continuesAfterFailure
 import com.aspix2k.affected.build.failClosedModules
 import com.aspix2k.affected.build.isRegularFileNoFollow
-import com.aspix2k.affected.build.nestedBuildRoot
+import com.aspix2k.affected.build.nestedBuildRoots
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CommandRunner
 import com.aspix2k.affected.build.retainBuildSnapshot
@@ -22,44 +22,49 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.ConcurrentHashMap
 
 class CargoBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSystem, WorkspaceChangesBuildSystem {
 
-    private data class Snapshot(val root: String, val stamp: String, val modules: List<BuildModule>)
+    private data class Snapshot(val stamp: String, val modules: List<BuildModule>)
 
-    private val cache = AtomicReference<Snapshot?>(null)
+    private val cache = ConcurrentHashMap<String, Snapshot>()
 
     override val id: String = "CARGO"
 
     override val sourceExtensions: Set<String> = setOf("rs", "toml", "lock")
 
-    override fun isPresent(project: Project): Boolean = manifestOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
     override fun modules(project: Project): List<BuildModule> {
-        val manifest = manifestOf(project) ?: return emptyList()
-        val root = manifest.parentFile.invariantSeparatorsPath
-        val manifests = ManifestSearch.find(manifest.parentFile, "Cargo.toml")
+        val roots = rootsOf(project)
+        cache.keys.retainAll(roots.mapTo(HashSet()) { it.invariantSeparatorsPath })
+        return roots.flatMap(::modulesOf)
+    }
+
+    private fun modulesOf(directory: File): List<BuildModule> {
+        val root = directory.invariantSeparatorsPath
+        val manifests = ManifestSearch.find(directory, "Cargo.toml")
         val environment = System.getenv()
         val requestedProfile = cargoNextestProfile(environment)
-        val cargoConfigurationPresent = cargoConfigurationExists(manifest.parentFile, environment)
+        val cargoConfigurationPresent = cargoConfigurationExists(directory, environment)
         val unsupportedEnvironment = unsupportedNextestEnvironment(environment)
         val executableStamp = cargoNextestExecutableStamp(environment)
         val inputStamp = combineFingerprints(
-            cargoManifestFingerprint(manifest.parentFile, manifests),
+            cargoManifestFingerprint(directory, manifests),
             requestedProfile.orEmpty(),
             cargoConfigurationPresent.toString(),
             unsupportedEnvironment.toString(),
             executableStamp,
-            cargoBuildScriptLayout(manifest.parentFile, manifests),
+            cargoBuildScriptLayout(directory, manifests),
         )
         if (inputStamp != null) {
-            cache.get()?.takeIf { it.root == root && it.stamp == inputStamp }?.let {
+            cache[root]?.takeIf { it.stamp == inputStamp }?.let {
                 return it.modules
             }
         }
         val nextest = discoverCargoNextest(
-            manifest.parentFile,
+            directory,
             requestedProfile = requestedProfile,
             cargoConfigurationPresent = cargoConfigurationPresent,
             unsupportedEnvironment = unsupportedEnvironment,
@@ -75,7 +80,7 @@ class CargoBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSy
             }
         }
         val fallbackTask = effectiveNextest.profile?.let { cargoNextestTask(effectiveNextest) } ?: CargoMetadata.TEST
-        val discovery = failClosedModules(manifest.parentFile, fallbackTask, CargoMetadata.COMPILE, discovered)
+        val discovery = failClosedModules(directory, fallbackTask, CargoMetadata.COMPILE, discovered)
         val discoveredManifests = discovery.modules.mapTo(HashSet()) { module ->
             File(module.contentRoots.single(), "Cargo.toml").absoluteFile.normalize().invariantSeparatorsPath
         }
@@ -83,7 +88,7 @@ class CargoBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSy
             it.absoluteFile.normalize().invariantSeparatorsPath
         }
         if (inputStamp != null && discovery.complete && fingerprintedManifests.containsAll(discoveredManifests)) {
-            cache.retainBuildSnapshot(Snapshot(root, inputStamp, discovery.modules), discovery.modules.size)
+            cache.retainBuildSnapshot(root, Snapshot(inputStamp, discovery.modules), discovery.modules.size)
         }
         return discovery.modules
     }
@@ -132,8 +137,8 @@ class CargoBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSy
     override fun requiresWorkspace(module: BuildModule, changes: BuildChanges): Boolean =
         cargoNextestWorkspaceTask(module.testTask) || changes.requireCargoWorkspace(module.root)
 
-    private fun manifestOf(project: Project): File? =
-        project.basePath?.let(::File)?.let(::cargoProjectRoot)?.let(::cargoManifest)
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let(::cargoProjectRoots).orEmpty()
 
     private fun discoverCargoNextest(
         root: File,
@@ -196,8 +201,8 @@ private fun cargoManifestFingerprint(root: File, manifests: List<File>): String?
     return ManifestSearch.fingerprint(root, inputs)
 }
 
-internal fun cargoProjectRoot(base: File): File? =
-    nestedBuildRoot(base) { cargoManifest(it) != null }
+internal fun cargoProjectRoots(base: File): List<File> =
+    nestedBuildRoots(base) { cargoManifest(it) != null }
 
 internal fun cargoManifest(root: File): File? =
     File(root, "Cargo.toml").takeIf(File::isRegularFileNoFollow)

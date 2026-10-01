@@ -4,15 +4,15 @@ import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CommandRunner
 import com.intellij.openapi.project.Project
 import java.io.File
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.ConcurrentHashMap
 
 class SwiftBuildSystem(
     private val describe: (String) -> String? = ::describeSwiftPackage,
 ) : SuspendingBuildSystem, NamedSourceBuildSystem, TransitiveTestConsumersBuildSystem {
 
-    private data class Snapshot(val root: String, val stamp: String, val modules: List<BuildModule>)
+    private data class Snapshot(val stamp: String, val modules: List<BuildModule>)
 
-    private val cache = AtomicReference<Snapshot?>(null)
+    private val cache = ConcurrentHashMap<String, Snapshot>()
 
     override val id: String = "SWIFT"
 
@@ -20,19 +20,22 @@ class SwiftBuildSystem(
 
     override val sourceFileNames: Set<String> = setOf("Package.swift")
 
-    override fun isPresent(project: Project): Boolean = manifestOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
-    override fun modules(project: Project): List<BuildModule> =
-        manifestOf(project)?.parentFile?.let(::modules).orEmpty()
+    override fun modules(project: Project): List<BuildModule> {
+        val roots = rootsOf(project)
+        cache.keys.retainAll(roots.mapTo(HashSet()) { it.invariantSeparatorsPath })
+        return roots.flatMap { modules(it) }
+    }
 
     internal fun modules(root: File): List<BuildModule> {
         val rootPath = root.invariantSeparatorsPath
         val stamp = ManifestSearch.fingerprint(root, manifests(root))
-        if (stamp != null) cache.get()?.takeIf { it.root == rootPath && it.stamp == stamp }?.let { return it.modules }
+        if (stamp != null) cache[rootPath]?.takeIf { it.stamp == stamp }?.let { return it.modules }
 
         val discovered = describe(rootPath)?.let { SwiftTargets.parse(it, root) } ?: listOf(swiftRootModule(root))
         ManifestSearch.fingerprint(root, manifests(root))?.let { settled ->
-            cache.retainBuildSnapshot(Snapshot(rootPath, settled, discovered), discovered.size)
+            cache.retainBuildSnapshot(rootPath, Snapshot(settled, discovered), discovered.size)
         }
         return discovered
     }
@@ -44,9 +47,8 @@ class SwiftBuildSystem(
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         CommandRunner.runBatchAndWait(project, root, swiftCommands(tasks), "Affected Swift")
 
-    private fun manifestOf(project: Project): File? =
-        project.basePath?.let(::File)?.let { nestedBuildRoot(it) { swiftManifest(it) != null } }
-            ?.let(::swiftManifest)
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let { nestedBuildRoots(it) { swiftManifest(it) != null } }.orEmpty()
 
     private fun manifests(root: File): List<File> =
         ManifestSearch.find(root, "Package.swift") + ManifestSearch.find(root, "Package.resolved") +
