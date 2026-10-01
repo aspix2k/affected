@@ -25,7 +25,7 @@
       "support": "platform",
       "since": "2025.3",
       "homeAdapters": ["DOTNET"],
-      "verifier": {"type": "Rider", "endpoints": [{"id": "minimum", "version": "2025.3.5.2", "build": "253.33813.83", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.2.3", "build": "262.10968.135", "gradle": "present", "maven": "unavailable"}]},
+      "verifier": {"type": "Rider", "endpoints": [{"id": "minimum", "version": "2025.3.5.2", "build": "253.33813.83", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.2.3.1", "build": "262.10968.170", "gradle": "present", "maven": "unavailable"}]},
       "fixtures": ["build.gradle.kts"],
       "gates": [".github/workflows/ci.yml"]
     },
@@ -45,7 +45,7 @@
       "support": "platform",
       "since": "2025.3",
       "homeAdapters": ["CMAKE", "MESON", "MAKE", "NINJA"],
-      "verifier": {"type": "CLion", "endpoints": [{"id": "minimum", "version": "2025.3.6.2", "build": "253.33813.80", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.2.3", "build": "262.10968.117", "gradle": "present", "maven": "unavailable"}]},
+      "verifier": {"type": "CLion", "endpoints": [{"id": "minimum", "version": "2025.3.6.2", "build": "253.33813.80", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.2.3.1", "build": "262.10968.176", "gradle": "present", "maven": "unavailable"}]},
       "fixtures": ["src/main/resources/META-INF/plugin.xml"],
       "gates": [".github/workflows/ci.yml"]
     },

@@ -1,1 +1,0 @@
-- Prove mixed Maven and Node roots in one Linux verification session, with sibling ownership isolation.
