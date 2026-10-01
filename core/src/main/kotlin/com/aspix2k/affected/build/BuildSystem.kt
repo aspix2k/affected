@@ -7,6 +7,7 @@ import kotlinx.coroutines.runInterruptible
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.atomic.AtomicReference
 
 data class BuildModule(
@@ -87,13 +88,36 @@ internal interface ChangeAwareSuspendingBuildSystem : SuspendingBuildSystem {
 
 internal fun nestedBuildRoot(base: File, hasMarker: (File) -> Boolean): File? {
     if (hasMarker(base)) return base
-    val children = base.listFiles().orEmpty().filter { child ->
+    return nestedChildren(base).singleOrNull(hasMarker)
+}
+
+internal fun nestedBuildRoots(base: File, hasMarker: (File) -> Boolean): List<File> {
+    if (hasMarker(base)) return listOf(base)
+    val roots = ArrayList<File>()
+    var level = listOf(base)
+    var visited = 0
+    repeat(NESTED_ROOT_DEPTH) {
+        val (found, descend) = level
+            .flatMap(::nestedChildren)
+            .also { visited += it.size }
+            .partition(hasMarker)
+        roots += found
+        if (visited > PerformanceBudgets.MAX_DIRECTORIES || roots.size > PerformanceBudgets.MAX_NESTED_ROOTS) {
+            return emptyList()
+        }
+        level = descend
+    }
+    return roots.sortedBy(File::getPath)
+}
+
+private fun nestedChildren(directory: File): List<File> =
+    directory.listFiles().orEmpty().filter { child ->
         Files.isDirectory(child.toPath(), LinkOption.NOFOLLOW_LINKS) &&
             child.canRead() &&
             child.name !in NESTED_ROOT_SKIP
     }
-    return children.singleOrNull(hasMarker)
-}
+
+private const val NESTED_ROOT_DEPTH = 3
 
 private val NESTED_ROOT_SKIP = setOf(
     ".git",
@@ -167,5 +191,14 @@ internal fun <T> AtomicReference<T?>.retainBuildSnapshot(value: T, moduleCount: 
         return false
     }
     set(value)
+    return true
+}
+
+internal fun <T> ConcurrentMap<String, T>.retainBuildSnapshot(key: String, value: T, moduleCount: Int): Boolean {
+    if (!shouldRetainBuildSnapshot(moduleCount)) {
+        remove(key)
+        return false
+    }
+    put(key, value)
     return true
 }

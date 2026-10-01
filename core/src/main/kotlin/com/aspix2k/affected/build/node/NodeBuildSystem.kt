@@ -8,7 +8,7 @@ import com.aspix2k.affected.build.ManifestSearch
 import com.aspix2k.affected.build.combineFingerprints
 import com.aspix2k.affected.build.failClosedModules
 import com.aspix2k.affected.build.isRegularFileNoFollow
-import com.aspix2k.affected.build.nestedBuildRoot
+import com.aspix2k.affected.build.nestedBuildRoots
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CommandRunner
 import com.aspix2k.affected.build.retainBuildSnapshot
@@ -16,23 +16,28 @@ import com.intellij.openapi.project.Project
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.ConcurrentHashMap
 
 class NodeBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSystem {
 
-    private data class Snapshot(val root: String, val stamp: String, val modules: List<BuildModule>)
+    private data class Snapshot(val stamp: String, val modules: List<BuildModule>)
 
-    private val cache = AtomicReference<Snapshot?>(null)
+    private val cache = ConcurrentHashMap<String, Snapshot>()
 
     override val id: String = "NODE"
 
     override val sourceExtensions: Set<String> =
         setOf("ts", "tsx", "js", "jsx", "mjs", "cjs", "json", "vue", "svelte", "yaml", "yml", "lock")
 
-    override fun isPresent(project: Project): Boolean = rootOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
     override fun modules(project: Project): List<BuildModule> {
-        val root = rootOf(project) ?: return emptyList()
+        val roots = rootsOf(project)
+        cache.keys.retainAll(roots.mapTo(HashSet()) { it.invariantSeparatorsPath })
+        return roots.flatMap(::modulesOf)
+    }
+
+    private fun modulesOf(root: File): List<BuildModule> {
         val packageManifests = NodeWorkspaces.manifestFiles(root)
         val stamp = packageManifests?.let { manifests ->
             combineFingerprints(
@@ -48,12 +53,12 @@ class NodeBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSys
         }
 
         val rootPath = root.invariantSeparatorsPath
-        if (stamp != null) cache.get()?.takeIf { it.root == rootPath && it.stamp == stamp }?.let { return it.modules }
+        if (stamp != null) cache[rootPath]?.takeIf { it.stamp == stamp }?.let { return it.modules }
 
         val discovered = runCatching { NodeWorkspaces.parse(root) }.getOrNull()
         val discovery = failClosedModules(root, NodeWorkspaces.TEST, null, discovered)
         if (stamp != null && discovery.complete) {
-            cache.retainBuildSnapshot(Snapshot(rootPath, stamp, discovery.modules), discovery.modules.size)
+            cache.retainBuildSnapshot(rootPath, Snapshot(stamp, discovery.modules), discovery.modules.size)
         }
         return discovery.modules
     }
@@ -89,8 +94,9 @@ class NodeBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSys
             .map { File(root, it) }
             .filter(File::isFile)
 
-    private fun rootOf(project: Project): File? =
-        project.basePath?.let(::File)?.let { nestedBuildRoot(it) { File(it, "package.json").isRegularFileNoFollow() } }
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let { nestedBuildRoots(it) { File(it, "package.json").isRegularFileNoFollow() } }
+            .orEmpty()
 }
 
 private val NODE_TEST_MARKERS = setOf("__tests__", "test", "tests", "spec")

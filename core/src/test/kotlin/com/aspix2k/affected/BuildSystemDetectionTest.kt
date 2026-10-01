@@ -42,7 +42,7 @@ class BuildSystemDetectionTest {
 
     @Test
     fun `several first-level nested markers stay off`() {
-        systems.forEach { (system, marker) ->
+        systems.filterNot { it.second in MULTI_ROOT_MARKERS }.forEach { (system, marker) ->
             val root = createTempDirectory("nested-many").toFile()
             File(root, "one/$marker").apply {
                 parentFile.mkdirs()
@@ -58,10 +58,25 @@ class BuildSystemDetectionTest {
     }
 
     @Test
-    fun `a deeper nested marker stays off`() {
+    fun `several first-level nested markers are present for multi-root systems`() {
+        systems.filter { it.second in MULTI_ROOT_MARKERS }.forEach { (system, marker) ->
+            val root = createTempDirectory("nested-many-roots").toFile()
+            listOf("one", "two").forEach { name ->
+                File(root, "$name/$marker").apply {
+                    parentFile.mkdirs()
+                    writeText("")
+                }
+            }
+
+            assertTrue(system(projectAt(root)), marker)
+        }
+    }
+
+    @Test
+    fun `a nested marker deeper than three levels stays off`() {
         systems.forEach { (system, marker) ->
             val root = createTempDirectory("nested-deep").toFile()
-            File(root, "src/nested/$marker").apply {
+            File(root, "a/b/c/d/$marker").apply {
                 parentFile.mkdirs()
                 writeText("")
             }
@@ -85,6 +100,8 @@ class BuildSystemDetectionTest {
         } as Project
 
     private companion object {
+        val MULTI_ROOT_MARKERS = setOf("pyproject.toml", "package.json")
+
         val systems = listOf<(Project) -> Boolean>(
             RubyBuildSystem()::isPresent,
             ComposerBuildSystem()::isPresent,
