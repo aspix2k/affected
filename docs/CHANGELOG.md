@@ -6,6 +6,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.19.0] - 2026-10-01
+
+### Changed
+
+- Test-only changes in Dart, Flutter, SwiftPM, Kotlin Toolchain and R projects no longer widen verification to consumer modules.
+- Dependency maps that exceed fixed size limits now fall back to the full test task instead of letting the collector grow without bound.
+- Signature changes in Gradle, Maven and sbt test source sets other than `src/test`, such as `commonTest`, `jvmTest`, `integrationTest` and `testDebug`, no longer trigger checks of consumer modules; `testFixtures` still does.
+
+### Fixed
+
+- CMake projects with several configured build trees, such as CLion's `cmake-build-debug` and `cmake-build-release`, now build and test in the most recently configured tree instead of refusing to run.
+- Python tests now run with the project virtual environment (`.venv` or `venv`) when one exists, and fall back to `python3` when no `python` command is on PATH, as on macOS; uv and Poetry environments are unchanged.
+- Stop treating every file as a test when the project lives under a directory named `test`, `tests` or `spec`; consumer modules are checked again for such projects.
+- A verification no longer passes when some changed source files belong to no known build module: the planned tests still run, but the result reports the unresolved files instead of a green check.
+
+### Added
+
+- Prove mixed Maven and Node roots in one Linux verification session, with sibling ownership isolation.
+- Discover several Go, Node, Python, Cargo, Composer, Ruby, Dart, Flutter, SwiftPM, R, Kotlin Toolchain, Deno and sbt roots up to three levels below the project base (`apps/web` and `apps/admin`, `services/a` and `services/b`) when the base has no marker; workspace members stay inside their root, and more than 64 roots or 16384 scanned directories stay off.
+- Python tests use the interpreter configured for the module or project in the IDE when it is a local Python SDK, before the project virtual environment and PATH.
+
 ## [3.18.0] - 2026-10-01
 
 ### Added
@@ -731,7 +752,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.18.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.19.0...HEAD
+[3.19.0]: https://github.com/aspix2k/affected/compare/v3.18.0...v3.19.0
 [3.18.0]: https://github.com/aspix2k/affected/compare/v3.17.0...v3.18.0
 [3.17.0]: https://github.com/aspix2k/affected/compare/v3.16.0...v3.17.0
 [3.16.0]: https://github.com/aspix2k/affected/compare/v3.15.17...v3.16.0

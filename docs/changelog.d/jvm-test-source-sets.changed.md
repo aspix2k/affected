@@ -1,1 +1,0 @@
-- Signature changes in Gradle, Maven and sbt test source sets other than `src/test`, such as `commonTest`, `jvmTest`, `integrationTest` and `testDebug`, no longer trigger checks of consumer modules; `testFixtures` still does.

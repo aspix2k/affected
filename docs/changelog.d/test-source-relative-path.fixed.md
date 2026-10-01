@@ -1,1 +1,0 @@
-- Stop treating every file as a test when the project lives under a directory named `test`, `tests` or `spec`; consumer modules are checked again for such projects.

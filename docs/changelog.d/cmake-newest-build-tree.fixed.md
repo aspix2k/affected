@@ -1,1 +1,0 @@
-- CMake projects with several configured build trees, such as CLion's `cmake-build-debug` and `cmake-build-release`, now build and test in the most recently configured tree instead of refusing to run.
