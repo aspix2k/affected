@@ -97,6 +97,17 @@ final class AffectedClassInstrumenter {
                     }
                 };
             }
+            if ("fireTestIgnored".equals(name) && ("(" + DESCRIPTION + ")V").equals(descriptor)) {
+                return new AdviceAdapter(Opcodes.ASM9, visitor, access, name, descriptor) {
+                    @Override
+                    protected void onMethodEnter() {
+                        loadArg(0);
+                        invokeStatic(Type.getType(AffectedCollectorAgent.class),
+                            org.jetbrains.org.objectweb.asm.commons.Method.getMethod(
+                                "void junit4Ignored(java.lang.Object)"));
+                    }
+                };
+            }
             if ("fireTestSuiteFinished".equals(name) && ("(" + DESCRIPTION + ")V").equals(descriptor)) {
                 return new AdviceAdapter(Opcodes.ASM9, visitor, access, name, descriptor) {
                     @Override

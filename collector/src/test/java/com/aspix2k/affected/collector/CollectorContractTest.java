@@ -686,6 +686,89 @@ public class CollectorContractTest {
     }
 
     @Test
+    public void listenerRecordsAClassWithADisabledMethodAsUnknown() throws Exception {
+        Path outputRoot = prepareListener(ObservedFixture.class);
+        Launcher launcher = LauncherFactory.create(
+            LauncherConfig.builder().enableTestExecutionListenerAutoRegistration(false).build()
+        );
+        launcher.registerTestExecutionListeners(new AffectedTestExecutionListener());
+
+        launcher.execute(
+            LauncherDiscoveryRequestBuilder.request()
+                .selectors(selectClass(SkippedFixture.class), selectClass(StableJupiterFixture.class))
+                .build()
+        );
+
+        Map<String, String> maps = mapsByTest(onlyWorkerDirectory(outputRoot));
+        assertTrue(maps.get(SkippedFixture.class.getName()).endsWith("unknown=true\n"));
+        assertFalse(maps.get(SkippedFixture.class.getName()).contains("dependency="));
+        assertTrue(maps.get(StableJupiterFixture.class.getName()).contains("dependency="));
+        assertFalse(maps.get(StableJupiterFixture.class.getName()).contains("unknown="));
+    }
+
+    @Test
+    public void listenerRecordsAFullySkippedClassAsUnknown() throws Exception {
+        Path outputRoot = prepareListener(ObservedFixture.class);
+        Launcher launcher = LauncherFactory.create(
+            LauncherConfig.builder().enableTestExecutionListenerAutoRegistration(false).build()
+        );
+        launcher.registerTestExecutionListeners(new AffectedTestExecutionListener());
+
+        launcher.execute(
+            LauncherDiscoveryRequestBuilder.request().selectors(selectClass(DisabledClassFixture.class)).build()
+        );
+
+        Path workerDirectory = onlyWorkerDirectory(outputRoot);
+        assertTrue(mapsByTest(workerDirectory).get(DisabledClassFixture.class.getName()).endsWith("unknown=true\n"));
+        String completion = read(workerDirectory.resolve("complete.manifest"));
+        assertTrue(completion.contains("supported=true"));
+        assertTrue(completion.contains("test=" + encode(DisabledClassFixture.class.getName())));
+    }
+
+    @Test
+    public void testNgSkippedTestRecordsItsClassAsUnknown() throws Exception {
+        Path outputRoot = prepareListener(ObservedFixture.class);
+        System.setProperty(AffectedTestNgListener.ENABLED_PROPERTY, "true");
+        try {
+            AffectedTestNgListener listener = new AffectedTestNgListener();
+            org.testng.ITestClass testClass = testNgClass(RerunFixture.class);
+
+            listener.onTestSkipped(testNgResult(testClass));
+            listener.onExecutionFinish();
+
+            Path workerDirectory = onlyWorkerDirectory(outputRoot);
+            assertTrue(mapsByTest(workerDirectory).get(RerunFixture.class.getName()).endsWith("unknown=true\n"));
+            assertTrue(read(workerDirectory.resolve("complete.manifest")).contains("supported=true"));
+        } finally {
+            System.clearProperty(AffectedTestNgListener.ENABLED_PROPERTY);
+        }
+    }
+
+    @Test
+    public void junit4IgnoredClassOrMethodRecordsItsClassAsUnknown() throws Exception {
+        Path outputRoot = prepareListener(ObservedFixture.class);
+        System.setProperty(AffectedJUnit4Bridge.ENABLED_PROPERTY, "true");
+        try {
+            Object ran = new FakeDescription(StableVintageFixture.class.getName(), "passes", false);
+            Object ignoredMethod = new FakeDescription(RerunFixture.class.getName(), "skipped", false);
+
+            AffectedJUnit4Bridge.started(ran);
+            AffectedCollectorAgent.hit(ObservedFixture.class);
+            AffectedJUnit4Bridge.finished(ran);
+            AffectedJUnit4Bridge.ignored(ignoredMethod);
+            AffectedJUnit4Bridge.runFinished();
+
+            Path workerDirectory = onlyWorkerDirectory(outputRoot);
+            Map<String, String> maps = mapsByTest(workerDirectory);
+            assertTrue(maps.get(RerunFixture.class.getName()).endsWith("unknown=true\n"));
+            assertTrue(maps.get(StableVintageFixture.class.getName()).contains("dependency="));
+            assertTrue(read(workerDirectory.resolve("complete.manifest")).contains("supported=true"));
+        } finally {
+            System.clearProperty(AffectedJUnit4Bridge.ENABLED_PROPERTY);
+        }
+    }
+
+    @Test
     public void nestedClassMapsIncludeOuterContainerDependencies() throws Exception {
         Path outputRoot = prepareListener(ObservedFixture.class, SecondObservedFixture.class);
         Launcher launcher = LauncherFactory.create(
@@ -1159,6 +1242,14 @@ public class CollectorContractTest {
         }
 
         @org.junit.jupiter.api.Disabled
+        @org.junit.jupiter.api.Test
+        void skipped() {
+            AffectedCollectorAgent.hit(ObservedFixture.class);
+        }
+    }
+
+    @org.junit.jupiter.api.Disabled
+    public static final class DisabledClassFixture {
         @org.junit.jupiter.api.Test
         void skipped() {
             AffectedCollectorAgent.hit(ObservedFixture.class);

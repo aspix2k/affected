@@ -676,10 +676,12 @@ public class MavenInjectionTest {
                             .orElseThrow(AssertionError::new)
                             .substring("test=".length());
                         payload.append("record=").append(test).append('|')
-                            .append(lines.stream()
-                                .filter(line -> line.startsWith("dependency="))
-                                .map(line -> line.substring("dependency=".length()))
-                                .collect(Collectors.joining(";")))
+                            .append(lines.contains("unknown=true")
+                                ? "*"
+                                : lines.stream()
+                                    .filter(line -> line.startsWith("dependency="))
+                                    .map(line -> line.substring("dependency=".length()))
+                                    .collect(Collectors.joining(";")))
                             .append('\n');
                         recordCount++;
                     }
@@ -687,7 +689,7 @@ public class MavenInjectionTest {
             }
         }
         String content = new StringBuilder("format=1\n")
-            .append("schema=4\n")
+            .append("schema=5\n")
             .append("collector=").append(encode("fixture-version")).append('\n')
             .append("task=").append(manifest.get("task")).append('\n')
             .append("runtime=").append(manifest.get("runtime")).append('\n')

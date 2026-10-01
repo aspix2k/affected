@@ -484,7 +484,6 @@ class AffectedExpectedTests implements TestListener, Serializable {
 
     @Override
     void afterTest(TestDescriptor descriptor, TestResult result) {
-        if (result.resultType == TestResult.ResultType.SKIPPED) return
         String className = descriptor.className
         if (className == null || className.trim().isEmpty()) supported.set(false)
         else tests.add(className)

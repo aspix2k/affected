@@ -76,7 +76,7 @@ object DependencySelector {
             }
         }
         val selected = baseline.records
-            .filter { record -> record.dependencies.any { it.id in changed } }
+            .filter { it.isAffectedBy(changed) }
             .mapTo(LinkedHashSet(), TestDependencyRecord::testClass)
         val selection = if (selected.isEmpty()) TestSelection.ProvenEmpty else TestSelection.Classes(selected)
 
@@ -155,6 +155,9 @@ private fun identityMismatch(
     baseline.inputFingerprint != current.inputFingerprint -> FullModuleReason.INPUT_MISMATCH
     else -> null
 }
+
+private fun TestDependencyRecord.isAffectedBy(changed: Set<DependencyId>): Boolean =
+    changed.isNotEmpty() && (unknownDependencies || dependencies.any { it.id in changed })
 
 private fun List<ClassDependency>.uniqueById(): Map<DependencyId, ClassDependency>? {
     val grouped = groupBy(ClassDependency::id)

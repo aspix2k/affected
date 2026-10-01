@@ -129,6 +129,37 @@ class CollectorMapIOTest {
     }
 
     @Test
+    fun `a skipped test class stays in the complete map with unknown dependencies`() = withDirectory { root ->
+        val task = task(root)
+        worker(task, "worker-1", "AlphaTest", dependency("Alpha", "alpha-1"))
+        worker(task, "worker-2", "BetaTest", dependency("Beta", "beta-1"))
+        Files.writeString(
+            workerDirectory(task, "worker-2").resolve("test-${sha256("BetaTest")}.map"),
+            "format=1\ntest=${encode("BetaTest")}\nunknown=true\n",
+        )
+
+        val candidate = assertNotNull(CollectorMapReader.read(task, "collector-1", "run-unknown"))
+        val promoted = assertNotNull(DependencyMapPromotion.promote(null, candidate))
+
+        assertEquals(
+            TestDependencyRecord(testClass("BetaTest"), emptySet(), unknownDependencies = true),
+            promoted.records.single { it.testClass == testClass("BetaTest") },
+        )
+        assertEquals(false, promoted.records.single { it.testClass == testClass("AlphaTest") }.unknownDependencies)
+    }
+
+    @Test
+    fun `unknown dependencies cannot be mixed with dependency lines`() = withDirectory { root ->
+        val task = task(root)
+        worker(task, "worker-1", "AlphaTest", dependency("Alpha", "alpha-1"))
+        worker(task, "worker-2", "BetaTest", dependency("Beta", "beta-1"))
+        val map = workerDirectory(task, "worker-2").resolve("test-${sha256("BetaTest")}.map")
+        Files.writeString(map, Files.readString(map) + "unknown=true\n")
+
+        assertNull(CollectorMapReader.read(task, "collector-1", "run-mixed-unknown"))
+    }
+
+    @Test
     fun `a started worker without completion keeps the previous map`() = withDirectory { root ->
         val task = task(root)
         worker(task, "worker-1", "AlphaTest", dependency("Alpha", "alpha-1"))
@@ -201,6 +232,23 @@ class CollectorMapIOTest {
         val store = DependencyMapStore(root.resolve("store"))
         val dependency = dependency("Alpha", "alpha-1")
         val expected = complete(listOf(dependency), listOf(record(testClass("AlphaTest"), dependency)))
+
+        store.write(expected)
+
+        assertEquals(expected, store.read(expected.identity.taskKey))
+    }
+
+    @Test
+    fun `unknown dependencies round trip through the atomic store`() = withDirectory { root ->
+        val store = DependencyMapStore(root.resolve("store"))
+        val dependency = dependency("Alpha", "alpha-1")
+        val expected = complete(
+            listOf(dependency),
+            listOf(
+                record(testClass("AlphaTest"), dependency),
+                TestDependencyRecord(testClass("BetaTest"), emptySet(), unknownDependencies = true),
+            ),
+        )
 
         store.write(expected)
 

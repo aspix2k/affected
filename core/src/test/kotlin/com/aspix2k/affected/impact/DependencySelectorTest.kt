@@ -3,6 +3,7 @@ package com.aspix2k.affected.impact
 import com.aspix2k.affected.build.cmake.sha256
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
@@ -34,6 +35,46 @@ class DependencySelectorTest {
 
         assertEquals(TestSelection.Classes(setOf(betaTest)), impact.selection)
         assertEquals(setOf(beta.id), impact.changedDependencies)
+    }
+
+    @Test
+    fun `unknown dependency classes are selected whenever an artifact changed`() {
+        val unknownTest = testClass("UnknownTest")
+        val baseline = complete(
+            artifacts = listOf(alpha, beta),
+            records = listOf(
+                record(alphaTest, alpha),
+                record(betaTest, beta),
+                TestDependencyRecord(unknownTest, emptySet(), unknownDependencies = true),
+            ),
+        )
+        val current = snapshot(alpha, dependency("Beta", "beta-2"))
+
+        val impact = exact(DependencySelector.select(SelectionRequest(baseline, current)))
+
+        assertEquals(TestSelection.Classes(setOf(betaTest, unknownTest)), impact.selection)
+    }
+
+    @Test
+    fun `unknown dependency classes stay unselected when nothing changed`() {
+        val baseline = complete(
+            artifacts = listOf(alpha),
+            records = listOf(
+                record(alphaTest, alpha),
+                TestDependencyRecord(testClass("UnknownTest"), emptySet(), unknownDependencies = true),
+            ),
+        )
+
+        val impact = exact(DependencySelector.select(SelectionRequest(baseline, snapshot(alpha))))
+
+        assertEquals(TestSelection.ProvenEmpty, impact.selection)
+    }
+
+    @Test
+    fun `unknown dependencies cannot also list dependencies`() {
+        assertFailsWith<IllegalArgumentException> {
+            TestDependencyRecord(alphaTest, setOf(alpha), unknownDependencies = true)
+        }
     }
 
     @Test

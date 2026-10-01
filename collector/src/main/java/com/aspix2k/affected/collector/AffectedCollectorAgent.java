@@ -85,6 +85,10 @@ public final class AffectedCollectorAgent {
         AffectedJUnit4Bridge.finished(description);
     }
 
+    public static void junit4Ignored(Object description) {
+        AffectedJUnit4Bridge.ignored(description);
+    }
+
     public static void junit4SuiteFinished(Object description) {
         AffectedJUnit4Bridge.suiteFinished(description);
     }
@@ -187,6 +191,7 @@ public final class AffectedCollectorAgent {
 
     static void resetForTests() {
         STATE.reset();
+        AffectedJUnit4Bridge.resetForTests();
         mavenConfig = null;
     }
 

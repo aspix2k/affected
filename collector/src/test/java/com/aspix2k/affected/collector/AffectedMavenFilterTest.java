@@ -189,7 +189,7 @@ public class AffectedMavenFilterTest {
             "record=" + encode("fixture.BetaTest") + "|" + betaArtifact + "\n";
         String task = properties.getProperty("affected.collector.task");
         String content = "format=1\n" +
-            "schema=4\n" +
+            "schema=5\n" +
             "collector=" + encode(properties.getProperty("affected.collector.version")) + "\n" +
             "task=" + encode(task) + "\n" +
             "runtime=" + encode(snapshot.getRuntimeFingerprint()) + "\n" +

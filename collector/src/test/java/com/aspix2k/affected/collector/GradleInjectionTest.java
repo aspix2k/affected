@@ -104,7 +104,7 @@ public class GradleInjectionTest {
 
         BuildResult first = run(project, firstOutput);
         assertDecision(first, ":testDebugUnitTest", "full fallback (baseline not collected yet)");
-        assertComplete(firstOutput, 5, first.getOutput());
+        assertComplete(firstOutput, 6, first.getOutput());
         assertEquals(
             setOf("AlphaTest", "BetaTest", "GammaTest", "DeltaTest", "VintageAlphaTest"),
             executedTests(project)
@@ -123,8 +123,8 @@ public class GradleInjectionTest {
         writeAlpha(project, "int result = 1; return result;");
         clearExecuted(project);
         BuildResult exact = run(project, exactOutput);
-        assertDecision(exact, ":testDebugUnitTest", "exact (3 test classes)");
-        assertComplete(exactOutput, 3, false, exact.getOutput());
+        assertDecision(exact, ":testDebugUnitTest", "exact (4 test classes)");
+        assertComplete(exactOutput, 4, false, exact.getOutput());
         assertEquals(setOf("AlphaTest", "GammaTest", "VintageAlphaTest"), executedTests(project));
 
         write(
@@ -133,12 +133,12 @@ public class GradleInjectionTest {
         );
         BuildResult added = run(project, addedOutput);
         assertDecision(added, ":testDebugUnitTest", "full fallback (class set changed)");
-        assertComplete(addedOutput, 5, added.getOutput());
+        assertComplete(addedOutput, 6, added.getOutput());
 
         Files.delete(project.resolve("src/main/java/fixture/Added.java"));
         write(project.resolve("src/main/resources/fixture.properties"), "value=changed\n");
         BuildResult resource = run(project, resourceOutput);
-        assertComplete(resourceOutput, 5, resource.getOutput());
+        assertComplete(resourceOutput, 6, resource.getOutput());
 
         BuildResult tagged = run(project, taggedOutput, "testDebugUnitTest", true, "-PincludeSlow=true");
         BuildResult selected = run(
@@ -152,10 +152,10 @@ public class GradleInjectionTest {
         BuildResult host = run(project, legacyOutput, "testAndroidHostTest", false);
         Files.write(
             baselineMap,
-            baseline.replace("schema=4", "schema=3").getBytes(StandardCharsets.UTF_8)
+            baseline.replace("schema=5", "schema=3").getBytes(StandardCharsets.UTF_8)
         );
         BuildResult stale = run(project, staleOutput);
-        Files.write(baselineMap, "format=1\nschema=4\n".getBytes(StandardCharsets.UTF_8));
+        Files.write(baselineMap, "format=1\nschema=5\n".getBytes(StandardCharsets.UTF_8));
         BuildResult corrupt = run(project, corruptOutput);
         Files.write(baselineMap, baseline.getBytes(StandardCharsets.UTF_8));
 
@@ -164,7 +164,7 @@ public class GradleInjectionTest {
         assertDecision(host, ":testAndroidHostTest", "full fallback (baseline not collected yet)");
         assertDecision(stale, ":testDebugUnitTest", "full fallback (baseline stale)");
         assertDecision(corrupt, ":testDebugUnitTest", "full fallback (baseline corrupt)");
-        assertComplete(taggedOutput, 6, tagged.getOutput());
+        assertComplete(taggedOutput, 7, tagged.getOutput());
         assertComplete(selectedOutput, 1, false, selected.getOutput());
         assertComplete(legacyOutput, 1, host.getOutput());
         assertEquals(manifestValue(firstOutput, "input="), manifestValue(exactOutput, "input="));
@@ -675,14 +675,14 @@ public class GradleInjectionTest {
         writeFixture(project);
 
         BuildResult baseline = execute(project, baselineOutput, "testDebugUnitTest", false, "8.14.5");
-        assertComplete(baselineOutput, 5, baseline.getOutput());
+        assertComplete(baselineOutput, 6, baseline.getOutput());
         promote(baselineOutput, project.resolve(".affected/maps"));
         writeAlpha(project, "int result = 1; return result;");
         clearExecuted(project);
 
         BuildResult exact = execute(project, exactOutput, "testDebugUnitTest", false, "8.14.5");
 
-        assertComplete(exactOutput, 3, false, exact.getOutput());
+        assertComplete(exactOutput, 4, false, exact.getOutput());
         assertEquals(setOf("AlphaTest", "GammaTest", "VintageAlphaTest"), executedTests(project));
     }
 
@@ -700,7 +700,7 @@ public class GradleInjectionTest {
             true,
             "-PattributionParallel=true"
         );
-        assertComplete(baselineOutput, 5, baseline.getOutput());
+        assertComplete(baselineOutput, 6, baseline.getOutput());
         promote(baselineOutput, project.resolve(".affected/maps"));
         writeBeta(project, "int result = 2; return result;");
         clearExecuted(project);
@@ -713,7 +713,7 @@ public class GradleInjectionTest {
             "-PattributionParallel=true"
         );
 
-        assertComplete(exactOutput, 2, false, exact.getOutput());
+        assertComplete(exactOutput, 3, false, exact.getOutput());
         assertEquals(setOf("BetaTest", "DeltaTest"), executedTests(project));
     }
 
@@ -725,7 +725,7 @@ public class GradleInjectionTest {
         writeFixture(project);
 
         BuildResult baseline = run(project, baselineOutput);
-        assertComplete(baselineOutput, 5, baseline.getOutput());
+        assertComplete(baselineOutput, 6, baseline.getOutput());
         promote(baselineOutput, project.resolve(".affected/maps"));
         Path link = project.resolve("test-classes-link");
         PlatformCapabilities.createSymbolicLink(link, project.resolve("build/classes/java/test"));
@@ -968,10 +968,12 @@ public class GradleInjectionTest {
                             .orElseThrow(AssertionError::new)
                             .substring("test=".length());
                         payload.append("record=").append(test).append('|')
-                            .append(lines.stream()
-                                .filter(line -> line.startsWith("dependency="))
-                                .map(line -> line.substring("dependency=".length()))
-                            .collect(Collectors.joining(";")))
+                            .append(lines.contains("unknown=true")
+                                ? "*"
+                                : lines.stream()
+                                    .filter(line -> line.startsWith("dependency="))
+                                    .map(line -> line.substring("dependency=".length()))
+                                    .collect(Collectors.joining(";")))
                             .append('\n');
                         recordCount++;
                     }
@@ -979,7 +981,7 @@ public class GradleInjectionTest {
             }
         }
         StringBuilder content = new StringBuilder("format=1\n")
-            .append("schema=4\n")
+            .append("schema=5\n")
             .append("collector=").append(encode(collectorVersion())).append('\n')
             .append("task=").append(manifest.get("task")).append('\n')
             .append("runtime=").append(manifest.get("runtime")).append('\n')

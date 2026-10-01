@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class AffectedTestExecutionListener implements TestExecutionListener {
     private final Set<String> completedClasses = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+    private final Set<String> skippedClasses = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private final Set<String> expectedClasses = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private final Map<String, String> classesByIdentifier = new ConcurrentHashMap<String, String>();
     private final Map<String, Set<String>> enclosingClasses = new ConcurrentHashMap<String, Set<String>>();
@@ -58,13 +59,30 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
         if (testClass == null) testClass = directClass(testIdentifier);
         if (testClass != null) {
             AffectedCollectorAgent.beginExecution(testIdentifier.getUniqueId(), testClass);
-            boolean maven = "maven".equals(System.getProperty("affected.collector.runner"));
-            if (output == null || (maven && !expectedClasses.contains(testClass))) {
-                prepareOutput(Collections.singleton(testClass));
-            }
+            ensureOutput(testClass);
         } else if (testIdentifier.isTest()) {
             unsupported.set(true);
             prepareUnsupportedOutput(testIdentifier.getUniqueId());
+        }
+    }
+
+    @Override
+    public void executionSkipped(TestIdentifier testIdentifier, String reason) {
+        Set<String> classes = new LinkedHashSet<String>();
+        String uniqueId = testIdentifier.getUniqueId();
+        for (Map.Entry<String, String> entry : classesByIdentifier.entrySet()) {
+            if (entry.getKey().equals(uniqueId) || entry.getKey().startsWith(uniqueId + "/")) {
+                classes.add(entry.getValue());
+            }
+        }
+        if (classes.isEmpty()) {
+            unsupported.set(true);
+            return;
+        }
+        for (String testClass : classes) {
+            skippedClasses.add(testClass);
+            ensureOutput(testClass);
+            completedClasses.add(testClass);
         }
     }
 
@@ -122,6 +140,10 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
         CollectorOutput current = output;
         if (current == null) return;
         try {
+            if (skippedClasses.contains(testClass)) {
+                current.writeUnknownMap(testClass);
+                return;
+            }
             Map<String, AffectedCollectorAgent.Dependency> merged =
                 new LinkedHashMap<String, AffectedCollectorAgent.Dependency>();
             addDependencies(merged, testClass);
@@ -169,6 +191,13 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
         if (source.get() instanceof ClassSource) return ((ClassSource) source.get()).getClassName();
         if (source.get() instanceof MethodSource) return ((MethodSource) source.get()).getClassName();
         return null;
+    }
+
+    private void ensureOutput(String testClass) {
+        boolean maven = "maven".equals(System.getProperty("affected.collector.runner"));
+        if (output == null || (maven && !expectedClasses.contains(testClass))) {
+            prepareOutput(Collections.singleton(testClass));
+        }
     }
 
     private synchronized void prepareOutput(Set<String> discovered) {
