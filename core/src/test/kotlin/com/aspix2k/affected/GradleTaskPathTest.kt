@@ -385,6 +385,13 @@ class GradleTaskPathTest {
     }
 
     @Test
+    fun `a custom source set module resolves to its owning project`() {
+        listOf("integrationTest", "testFixtures", "functionalTest", "testDebug", "jvmTest").forEach {
+            assertEquals(":app", gradleProjectPath(":app:$it", null, true), it)
+        }
+    }
+
+    @Test
     fun `a project named test is not mistaken for a source set`() {
         assertEquals(":test", gradleProjectPath(":test", null, false))
     }

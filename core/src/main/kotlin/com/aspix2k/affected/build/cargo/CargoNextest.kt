@@ -187,7 +187,8 @@ private fun supportedNextestProfiles(config: TomlTable, profiles: TomlTable?): B
 
 internal fun cargoNextestTask(profile: String): String {
     require(validProfileName(profile))
-    return cargoNextestTask(CargoNextestPlan(CargoNextestMode.PACKAGES, profile, "0.9.143", true))
+    val required = MIN_SUPPORTED_NEXTEST.toString()
+    return cargoNextestTask(CargoNextestPlan(CargoNextestMode.PACKAGES, profile, required, true))
 }
 
 internal fun cargoNextestTask(plan: CargoNextestPlan, hasDoctests: Boolean = true): String {

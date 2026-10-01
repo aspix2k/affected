@@ -51,15 +51,15 @@ private fun narrowKmpTasks(
     if (changed.files.toSet() != changed.exactSelectionEligible) {
         reasons += GradleSelectionReason.SOURCE_IDENTITY_UNPROVEN
     }
-    val families = changed.files.map(::kmpFamilyForPath)
-    if (families.any { it == KmpFamily.COMMON }) {
+    val families = changed.files.map(::kmpFamiliesForPath)
+    if (families.any { it?.contains(KmpFamily.COMMON) == true }) {
         reasons += GradleSelectionReason.COMMON_SOURCE_SET_FAN_OUT
     }
     if (families.any { it == null } && tasks.any(::isKmpTargetTask) && changed.files.any(::isKmpSourceSetPath)) {
         reasons += GradleSelectionReason.UNCLASSIFIED_SOURCE_SET
     }
-    if (families.any { it == null || it == KmpFamily.COMMON }) return tasks
-    val allowed = families.filterNotNull().toSet()
+    if (families.any { it == null || KmpFamily.COMMON in it }) return tasks
+    val allowed = families.filterNotNull().flatten().toSet()
     val narrowed = tasks.filter { task ->
         val name = task.substringAfterLast(':')
         val family = KMP_TASK_FAMILIES[name]
@@ -109,12 +109,20 @@ private fun isGradleConfiguration(raw: String): Boolean {
         path.endsWith("/gradle/wrapper/gradle-wrapper.properties")
 }
 
-private fun kmpFamilyForPath(raw: String): KmpFamily? {
+private fun kmpFamiliesForPath(raw: String): Set<KmpFamily>? {
     val sourceSet = sourceSetForPath(raw) ?: return null
-    return KMP_SOURCE_SET_FAMILIES.entries.firstOrNull { (prefix, _) ->
-        sourceSet == prefix || sourceSet.startsWith(prefix)
-    }?.value
+    KMP_COMMON_SOURCE_SETS[sourceSet]?.let { return setOf(it) }
+    val name = sourceSet.removeSuffix("Main").removeSuffix("Test")
+        .takeIf { it != sourceSet && it.isNotEmpty() } ?: return null
+    val families = name.split(KMP_INTERMEDIATE_SEPARATOR)
+        .map { kmpFamilyForSegment(it.replaceFirstChar(Char::lowercaseChar)) }
+    return families.takeIf { null !in it }?.filterNotNull()?.toSet()
 }
+
+private fun kmpFamilyForSegment(segment: String): KmpFamily? =
+    KMP_SOURCE_SET_FAMILIES.entries.firstOrNull { (prefix, _) ->
+        segment.startsWith(prefix) && KMP_VARIANT_SUFFIX.matches(segment.removePrefix(prefix))
+    }?.value
 
 private fun isKmpSourceSetPath(raw: String): Boolean {
     val sourceSet = sourceSetForPath(raw) ?: return false
@@ -147,9 +155,18 @@ private enum class KmpFamily {
     }
 }
 
-private val KMP_SOURCE_SET_FAMILIES = listOf(
+private val KMP_INTERMEDIATE_SEPARATOR = Regex("(?<=[a-z0-9])And(?=[A-Z])")
+
+private val KMP_VARIANT_SUFFIX = Regex(
+    "(?:X64|X86|Arm32|Arm64|SimulatorArm64|DeviceArm64|Js|Wasi|Unit|Instrumented|Debug|Release|Host|Device)*",
+)
+
+private val KMP_COMMON_SOURCE_SETS = mapOf(
     "commonMain" to KmpFamily.COMMON,
     "commonTest" to KmpFamily.COMMON,
+)
+
+private val KMP_SOURCE_SET_FAMILIES = listOf(
     "android" to KmpFamily.ANDROID,
     "ios" to KmpFamily.APPLE,
     "apple" to KmpFamily.APPLE,

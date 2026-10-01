@@ -510,7 +510,7 @@ internal fun findGradleCollectorArtifacts(classPath: Path): GradleCollectorArtif
 internal fun gradleProjectPath(externalId: String, buildName: String?, sourceSet: Boolean): String {
     val parts = externalId.removePrefix(":").split(':').toMutableList()
     if (parts.firstOrNull() == buildName) parts.removeFirst()
-    if (sourceSet && parts.lastOrNull() in SOURCE_SET_NAMES) parts.removeLast()
+    if (sourceSet && parts.isNotEmpty()) parts.removeLast()
     return parts.joinToString(":", prefix = if (parts.isEmpty()) "" else ":")
 }
 
@@ -655,7 +655,6 @@ private val UNIT_TEST_EXCLUDED_PREFIXES = listOf(
     "all",
 )
 
-private val SOURCE_SET_NAMES = setOf("main", "unitTest", "androidTest", "test")
 private const val DIRECTORY_TO_RUN_TASK_PROPERTY = "directoryToRunTask"
 private const val GRADLE_IDENTITY_PATH_PROPERTY = "gradleIdentityPath"
 private const val MAX_PLUGIN_PARENT_DEPTH = 5

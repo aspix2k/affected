@@ -1,6 +1,5 @@
 package com.aspix2k.affected
 
-import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
@@ -9,7 +8,6 @@ import com.intellij.openapi.actionSystem.Presentation
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.currentThreadCoroutineScope
-import com.intellij.openapi.project.Project
 
 class RunAffectedTestsAction : AnAction() {
 
@@ -38,7 +36,7 @@ class RunAffectedTestsAction : AnAction() {
             state,
             ::currentThreadCoroutineScope,
             onEmptyChanges = {
-                notify(
+                notifyAffected(
                     project,
                     AffectedBundle.message("notification.nothing.title"),
                     AffectedBundle.message("notification.nothing.text"),
@@ -46,7 +44,7 @@ class RunAffectedTestsAction : AnAction() {
                 )
             },
             onEmptyPlan = {
-                notify(
+                notifyAffected(
                     project,
                     AffectedBundle.message("notification.unresolved.title"),
                     AffectedBundle.message(
@@ -57,13 +55,6 @@ class RunAffectedTestsAction : AnAction() {
                 )
             },
         )
-    }
-
-    private fun notify(project: Project, title: String, content: String, type: NotificationType) {
-        NotificationGroupManager.getInstance()
-            .getNotificationGroup("AffectedTests")
-            .createNotification(title, content, type)
-            .notify(project)
     }
 }
 

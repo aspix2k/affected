@@ -17,6 +17,7 @@ import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.CancellationException
@@ -35,6 +36,8 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.resume
 
 object CommandRunner {
+
+    private val LOG = logger<CommandRunner>()
 
     internal fun refuseInvalidExecutionRoot(project: Project, workingDirectory: String, title: String) {
         runBatch(project, workingDirectory, emptyList(), title)
@@ -95,6 +98,7 @@ object CommandRunner {
         title: String,
         unresolvedMessage: String? = null,
         continueAfterFailure: Boolean = planContinuesAfterFailure(),
+        show: (Project, ProcessHandler, String, String, AffectedRunPresentation?) -> Unit = ::showHandler,
     ): Boolean {
         if (project.isDisposed) return false
 
@@ -110,6 +114,7 @@ object CommandRunner {
         )
         ProcessTerminatedListener.attach(handler)
         val completed = AtomicBoolean(false)
+        val aborted = AtomicBoolean(false)
         val terminated = CompletableDeferred<Unit>()
         val sessions = AffectedRunSessions.getInstance(project)
         val presentation = currentAffectedRunPresentation()
@@ -124,7 +129,7 @@ object CommandRunner {
                 handler.addProcessListener(object : ProcessListener {
                     override fun processTerminated(event: ProcessEvent) {
                         terminated.complete(Unit)
-                        complete(event.exitCode == 0)
+                        complete(event.exitCode == 0 && !aborted.get())
                     }
                 })
                 registered = sessions.register(handler as AffectedOwnedSession)
@@ -141,12 +146,12 @@ object CommandRunner {
 
                 ApplicationManager.getApplication().invokeLater {
                     if (!continuation.isActive || project.isDisposed) {
+                        aborted.set(true)
                         if (!handler.isProcessTerminated) handler.destroyProcess()
                         handler.startNotify()
-                        complete(false)
                         return@invokeLater
                     }
-                    showHandler(project, handler, title, workingDirectory, presentation)
+                    showOrFail(show, project, handler, title, workingDirectory, presentation) { aborted.set(true) }
                 }
             }
         } catch (cancelled: CancellationException) {
@@ -160,6 +165,25 @@ object CommandRunner {
             throw cancelled
         } finally {
             if (registered) sessions.unregister(handler as AffectedOwnedSession)
+        }
+    }
+
+    private fun showOrFail(
+        show: (Project, ProcessHandler, String, String, AffectedRunPresentation?) -> Unit,
+        project: Project,
+        handler: ProcessHandler,
+        title: String,
+        workingDirectory: String,
+        presentation: AffectedRunPresentation?,
+        onFailure: () -> Unit,
+    ) {
+        try {
+            show(project, handler, title, workingDirectory, presentation)
+        } catch (error: Exception) {
+            LOG.warn("Affected could not show the run for $title", error)
+            onFailure()
+            if (!handler.isProcessTerminated) handler.destroyProcess()
+            handler.startNotify()
         }
     }
 
@@ -221,12 +245,7 @@ object CommandRunner {
         null
     }
 
-    internal fun capture(process: Process, timeoutSeconds: Long, maxBytes: Int): String? {
-        val termination = ProcessTreeTermination(process.toHandle())
-        return capture(process, termination, timeoutSeconds, maxBytes)
-    }
-
-    private fun capture(
+    internal fun capture(
         process: Process,
         termination: ProcessTermination,
         timeoutSeconds: Long,

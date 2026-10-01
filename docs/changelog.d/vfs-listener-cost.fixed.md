@@ -1,0 +1,1 @@
+- Reduce disk access in the file-change listener: generated-file roots are discovered only for build systems present in the project, and presence is probed only for build systems that track all file changes.

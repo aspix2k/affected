@@ -299,6 +299,66 @@ class GradleKmpSourceSetTest {
         )
     }
 
+    @Test
+    fun `a jvmAndAndroidMain change keeps JVM and Android tests and drops every other target`() {
+        assertEquals(
+            listOf(":shared:testDebugUnitTest", ":shared:jvmTest"),
+            gradleTaskNames(allTargets(":shared"), productionChange(sourceFile("jvmAndAndroidMain"))),
+        )
+    }
+
+    @Test
+    fun `a jvmAndAndroidTest change keeps JVM and Android tests`() {
+        assertEquals(
+            listOf(":shared:testDebugUnitTest", ":shared:jvmTest"),
+            gradleTaskNames(allTargets(":shared"), productionChange(sourceFile("jvmAndAndroidTest"))),
+        )
+    }
+
+    @Test
+    fun `an intermediate set and a platform set in one change keep the union of their targets`() {
+        val changes = BuildChanges(
+            listOf(sourceFile("jvmAndAndroidMain").path, sourceFile("iosArm64Main").path),
+            emptySet(),
+            comparedToBase = true,
+        )
+
+        assertEquals(
+            listOf(":shared:testDebugUnitTest", ":shared:iosSimulatorArm64Test", ":shared:jvmTest"),
+            gradleTaskNames(allTargets(":shared"), changes),
+        )
+    }
+
+    @Test
+    fun `a compound name that is not an And intermediate keeps every target`() {
+        for (name in listOf("jvmAndroidMain", "androidNativeMain", "jvmAndUnknownMain", "jvmAndMain")) {
+            assertEquals(
+                allTargets(":shared"),
+                gradleTaskNames(allTargets(":shared"), productionChange(sourceFile(name))),
+                name,
+            )
+        }
+    }
+
+    @Test
+    fun `a jvmAndAndroidMain change explains no fallback for JVM and Android tasks`() {
+        val file = sourceFile("jvmAndAndroidMain")
+
+        val selection = gradleTaskSelection(
+            listOf(":shared:testDebugUnitTest", ":shared:jvmTest", ":shared:jsBrowserTest"),
+            exactChange(file),
+        )
+
+        assertEquals(listOf(":shared:testDebugUnitTest", ":shared:jvmTest"), selection.taskNames)
+        assertEquals(emptyList(), selection.reasons)
+    }
+
+    private fun sourceFile(sourceSet: String): File =
+        File(module(), "shared/src/$sourceSet/kotlin/App.kt").apply {
+            parentFile.mkdirs()
+            writeText("class App")
+        }
+
     private fun module(): File = createTempDirectory("kmp-source-set").toFile()
 
     private fun publicFixtureFile(relative: String): File = CliConformanceRepository.configured.repositoryFile(

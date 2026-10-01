@@ -1,0 +1,51 @@
+package com.aspix2k.affected
+
+import com.intellij.notification.NotificationGroupManager
+import com.intellij.notification.NotificationType
+import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.project.Project
+
+private val LOG = logger<Verification>()
+
+internal suspend fun verifyAndReport(
+    project: Project,
+    onPrepared: (Verification.Prepared) -> Unit = {},
+): Boolean {
+    val prepared = try {
+        Verification.prepare(project)
+    } catch (error: ChangeAnalyzer.GitFailure) {
+        LOG.warn("Could not analyze changes", error)
+        notifyAffected(
+            project,
+            AffectedBundle.message("notification.analysis.failed.title"),
+            AffectedBundle.message("notification.analysis.failed.text"),
+            NotificationType.WARNING,
+        )
+        return false
+    }
+    onPrepared(prepared)
+    val outcome = Verification.runAndWait(project, prepared)
+    when (outcome.blocker) {
+        Verification.Blocker.UNRESOLVED_CHANGES -> notifyAffected(
+            project,
+            AffectedBundle.message("notification.unresolved.title"),
+            AffectedBundle.message("notification.unresolved.text", prepared.changedFiles),
+            NotificationType.WARNING,
+        )
+        Verification.Blocker.NOT_STARTED -> notifyAffected(
+            project,
+            AffectedBundle.message("notification.busy.title"),
+            AffectedBundle.message("action.run.description.busy"),
+            NotificationType.WARNING,
+        )
+        null -> Unit
+    }
+    return outcome.passed
+}
+
+internal fun notifyAffected(project: Project, title: String, content: String, type: NotificationType) {
+    NotificationGroupManager.getInstance()
+        .getNotificationGroup("AffectedTests")
+        .createNotification(title, content, type)
+        .notify(project)
+}

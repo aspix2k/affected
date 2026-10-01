@@ -10,7 +10,6 @@ final class AffectedJUnit4Bridge {
     static final String ENABLED_PROPERTY = "affected.collector.junit4";
 
     private static final Set<String> SEEN = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
-    private static final Set<String> WRITTEN = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private static final AtomicBoolean UNSUPPORTED = new AtomicBoolean();
     private static final AtomicBoolean ENABLED = new AtomicBoolean();
     private static volatile CollectorOutput output;
@@ -76,7 +75,7 @@ final class AffectedJUnit4Bridge {
     }
 
     private static void writeClassMap(String testClass) {
-        if (testClass == null || output == null || !WRITTEN.add(testClass)) return;
+        if (testClass == null || output == null) return;
         try {
             output.writeMap(testClass, AffectedCollectorAgent.dependencies(testClass));
         } catch (Throwable failure) {

@@ -10,13 +10,17 @@ import com.aspix2k.affected.AnalysisStatus
 import com.aspix2k.affected.TaskGroup
 import com.aspix2k.affected.VerificationStatus
 import com.aspix2k.affected.runClaimedGroupsWithPresentation
+import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessHandler
+import com.intellij.execution.process.ProcessListener
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicInteger
 
 class CommandRunnerPresentationTest : BasePlatformTestCase() {
 
@@ -52,6 +56,73 @@ class CommandRunnerPresentationTest : BasePlatformTestCase() {
         assertTrue(failure, passed)
         assertEquals(listOf("Xcode · ${java.io.File(root).name}"), view.labels)
         assertEquals(1, view.publications)
+    }
+
+    fun testFailureWhileShowingTheRunCompletesAsFailedAndReleasesTheSession() = runBlocking {
+        val sessions = AffectedRunSessions.getInstance(project)
+        val root = checkNotNull(project.basePath)
+        Files.createDirectories(Path.of(root))
+        var shown: ProcessHandler? = null
+
+        val passed = withTimeout(10_000) {
+            CommandRunner.runBatchAndWait(
+                project,
+                root,
+                listOf(CliCommand("xcodebuild build", listOf(java(), "-version"))),
+                "Affected Xcode",
+                show = { _, handler, _, _, _ ->
+                    shown = handler
+                    error("console failed")
+                },
+            )
+        }
+
+        assertFalse(passed)
+        assertTrue(checkNotNull(shown).isProcessTerminated)
+        assertEquals(0, sessions.activeCount())
+    }
+
+    fun testFailureWhileShowingARunningCommandCompletesOnlyAfterTerminationAndOnce() = runBlocking {
+        val sessions = AffectedRunSessions.getInstance(project)
+        val root = checkNotNull(project.basePath)
+        Files.createDirectories(Path.of(root))
+        val marker = Path.of(root, "started")
+        val source = Path.of(root, "Sleeper.java")
+        Files.writeString(
+            source,
+            "public class Sleeper { public static void main(String[] a) throws Exception { " +
+                "java.nio.file.Files.writeString(java.nio.file.Path.of(a[0]), \"x\"); Thread.sleep(60_000); } }",
+        )
+        val terminations = AtomicInteger()
+        var shown: ProcessHandler? = null
+
+        val passed = withTimeout(30_000) {
+            CommandRunner.runBatchAndWait(
+                project,
+                root,
+                listOf(CliCommand("sleeper", listOf(java(), source.toString(), marker.toString()))),
+                "Affected Sleeper",
+                show = { _, handler, _, _, _ ->
+                    shown = handler
+                    handler.addProcessListener(object : ProcessListener {
+                        override fun processTerminated(event: ProcessEvent) {
+                            terminations.incrementAndGet()
+                        }
+                    })
+                    handler.startNotify()
+                    val deadline = System.nanoTime() + 20_000_000_000L
+                    while (!Files.exists(marker) && System.nanoTime() < deadline) Thread.sleep(10)
+                    check(Files.exists(marker)) { "The command did not start" }
+                    error("console failed")
+                },
+            )
+        }
+        val terminatedOnReturn = checkNotNull(shown).isProcessTerminated
+
+        assertFalse(passed)
+        assertTrue(terminatedOnReturn)
+        assertEquals(1, terminations.get())
+        assertEquals(0, sessions.activeCount())
     }
 
     private fun claim() = AffectedRunClaim(

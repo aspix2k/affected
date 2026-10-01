@@ -421,6 +421,48 @@ class AffectedRunSessionsTest {
     }
 
     @Test
+    fun `cancellation that never reaches task end is abandoned after the bound`() = runBlocking {
+        val sessions = AffectedRunSessions()
+        val owned = taskId()
+        val execution = OwnedExternalTaskExecution(cancelTask = { true })
+        val launched = CompletableDeferred<Unit>()
+        val release = CountDownLatch(1)
+        val task = async(Dispatchers.Default) {
+            runOwnedExternalTask(sessions, execution, cancellationTimeoutMillis = 200) { listener ->
+                listener.onStart("", owned)
+                launched.complete(Unit)
+                release.await()
+            }
+        }
+        launched.await()
+
+        try {
+            task.cancel()
+            withTimeout(5_000) {
+                assertFailsWith<CancellationException> { task.await() }
+            }
+            assertFalse(execution.isActive())
+            assertEquals(0, sessions.activeCount())
+        } finally {
+            release.countDown()
+        }
+    }
+
+    @Test
+    fun `launcher cancellation is propagated instead of being swallowed`() = runBlocking {
+        val sessions = AffectedRunSessions()
+
+        withTimeout(5_000) {
+            assertFailsWith<CancellationException> {
+                runOwnedExternalTask(sessions, OwnedExternalTaskExecution(cancelTask = { true })) {
+                    throw CancellationException("launcher cancelled")
+                }
+            }
+        }
+        assertEquals(0, sessions.activeCount())
+    }
+
+    @Test
     fun `coroutine cancellation before binding stops the late exact task`() = runBlocking {
         val sessions = AffectedRunSessions()
         val owned = taskId()

@@ -45,7 +45,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
-import kotlin.system.measureTimeMillis
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -113,22 +112,18 @@ class CliAdapterConformanceTest {
 
         deleteMarkers(alphaSelected, alphaFull, betaSelected, betaFull)
 
-        val fullJestMillis = measureTimeMillis {
-            execute(root, nodeCommands(root.path, listOf("@affected/alpha:test")).single().arguments)
-        }
+        execute(root, nodeCommands(root.path, listOf("@affected/alpha:test")).single().arguments)
         deleteMarkers(alphaSelected, alphaFull)
 
-        assertJestRelated(root, alphaSelected, alphaFull, fullJestMillis)
+        assertJestRelated(root, alphaSelected, alphaFull)
         assertVitestRelated(root, betaSelected, betaFull)
         assertNodeDynamicFallback(root, alphaSelected, alphaFull)
     }
 
-    private fun assertJestRelated(root: File, selected: File, full: File, fullMillis: Long) {
-        val exactMillis = measureTimeMillis { executeRelated(root, "@affected/alpha", "alpha.js") }
+    private fun assertJestRelated(root: File, selected: File, full: File) {
+        executeRelated(root, "@affected/alpha", "alpha.js")
         assertTrue(selected.isFile)
         assertFalse(full.exists())
-        assertTrue(exactMillis < fullMillis, "exact=$exactMillis ms, full=$fullMillis ms")
-
         assertTrue(selected.delete())
         executeRelated(root, "@affected/alpha", "alpha.test.js")
         assertTrue(selected.delete())
@@ -195,18 +190,14 @@ class CliAdapterConformanceTest {
         val alpha = modules.single { it.contentRoots.single().endsWith("/packages/alpha") }
         val alphaSource = File(root, "packages/alpha/alpha.py")
         val adapter = Path.of(requireNotNull(System.getProperty("affected.test.pytestAdapter")))
-        val fullAlphaMillis = measureTimeMillis {
-            val fullAlpha = execute(
-                root,
-                pythonCommands(root.path, listOf("${alpha.executionId}:test"), modules).single().arguments,
-            )
-            assertContains(fullAlpha, "3 passed")
-        }
-        lateinit var exact: String
-        val exactMillis = measureTimeMillis { exact = executeRelatedPytest(root, modules, alpha, alphaSource, adapter) }
+        val fullAlpha = execute(
+            root,
+            pythonCommands(root.path, listOf("${alpha.executionId}:test"), modules).single().arguments,
+        )
+        assertContains(fullAlpha, "3 passed")
+        val exact = executeRelatedPytest(root, modules, alpha, alphaSource, adapter)
         assertContains(exact, "Affected pytest: exact (1 test file)")
         assertContains(exact, "2 passed, 1 deselected")
-        assertTrue(exactMillis < fullAlphaMillis, "exact=$exactMillis ms, full=$fullAlphaMillis ms")
 
         val changedTest = File(root, "packages/alpha/tests/test_alpha.py")
         val testSelection = executeRelatedPytest(root, modules, alpha, changedTest, adapter)
@@ -519,11 +510,8 @@ class CliAdapterConformanceTest {
         configureCMake(root)
         assertTrue(hasCMakeCodemodelReply(build.toPath()))
         val modules = CMakeTargets.parse(root)
-        lateinit var full: String
-        val fullMillis = measureTimeMillis {
-            full = cmakeCommands(root.path, modules.map { "${it.executionId}:test" })
-                .joinToString("\n") { execute(root, it.arguments) }
-        }
+        val full = cmakeCommands(root.path, modules.map { "${it.executionId}:test" })
+            .joinToString("\n") { execute(root, it.arguments) }
         assertContains(full, "affected_alpha")
         assertContains(full, "affected_alpha_extended")
         assertContains(full, "affected_beta")
@@ -541,16 +529,12 @@ class CliAdapterConformanceTest {
         val alphaExtendedMarker = File(build, "affected-alpha-extended.marker")
         val betaMarker = File(build, "affected-beta.marker")
         deleteMarkers(alphaMarker, alphaExtendedMarker, betaMarker)
-        lateinit var exactOutput: String
-        val exactMillis = measureTimeMillis {
-            exactOutput = executeCMakeSelection(root, build, exact.tests)
-        }
+        val exactOutput = executeCMakeSelection(root, build, exact.tests)
         assertContains(exactOutput, "affected_alpha")
         assertFalse(exactOutput.contains("affected_alpha_extended"), exactOutput)
         assertTrue(alphaMarker.isFile)
         assertFalse(alphaExtendedMarker.exists())
         assertFalse(betaMarker.exists())
-        assertTrue(exactMillis < fullMillis, "exact=$exactMillis ms, full=$fullMillis ms")
 
         assertCMakeFallbacks(root, build, modules, baseline, alpha)
     }

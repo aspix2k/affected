@@ -86,6 +86,7 @@ internal class SequentialProcessHandler(
     private var lifecycleActive = false
     private var processTermination: ProcessTermination? = null
     private var terminalDecision = false
+    private var pendingStop = false
 
     @Volatile
     private var current: OSProcessHandler? = null
@@ -114,6 +115,7 @@ internal class SequentialProcessHandler(
         var initiate = false
         var pending = emptyList<CliCommand>()
         synchronized(lock) {
+            if (deferStop()) return true
             if (!finished.get() && !terminalDecision && !stopped.get()) {
                 handler = current
                 if (handler != null) termination = checkNotNull(processTermination)
@@ -139,6 +141,12 @@ internal class SequentialProcessHandler(
             }
         }
         return true
+    }
+
+    private fun deferStop(): Boolean {
+        if (pendingStop || !terminalDecision || next >= commands.size) return false
+        pendingStop = !finished.get() && !stopped.get()
+        return pendingStop
     }
 
     override fun detachProcessImpl() {
@@ -305,16 +313,12 @@ internal class SequentialProcessHandler(
                     event.exitCode.takeIf { it != 0 } ?: 1
                 }
                 when {
-                    exitCode == 0 && !stopped.get() -> {
-                        reopenCancellation()
-                        AppExecutorUtil.getAppExecutorService().execute(::startNext)
-                    }
+                    exitCode == 0 && !stopped.get() -> continueSequence(exitCode)
                     shouldContinueAfterFailure(command, exitCode) -> {
                         synchronized(lock) {
                             if (recordedExitCode == 0) recordedExitCode = exitCode
                         }
-                        reopenCancellation()
-                        AppExecutorUtil.getAppExecutorService().execute(::startNext)
+                        continueSequence(exitCode)
                     }
                     else -> finish(exitCode.takeIf { it != 0 } ?: 1)
                 }
@@ -386,8 +390,24 @@ internal class SequentialProcessHandler(
         synchronized(lock) { lifecycleActive = false }
     }
 
-    private fun reopenCancellation() {
-        synchronized(lock) { terminalDecision = false }
+    private fun continueSequence(exitCode: Int) {
+        var skipped = emptyList<CliCommand>()
+        val stopPending = synchronized(lock) {
+            terminalDecision = false
+            pendingStop.also { pending ->
+                if (pending) {
+                    stopped.set(true)
+                    skipped = commands.drop(next).filterIsInstance<CliCommand>()
+                    next = commands.size
+                }
+            }
+        }
+        skipped.forEach(::cleanup)
+        if (stopPending) {
+            finish(exitCode.takeIf { it != 0 } ?: 1)
+        } else {
+            AppExecutorUtil.getAppExecutorService().execute(::startNext)
+        }
     }
 
     private fun cleanup(command: CliCommand): Boolean {

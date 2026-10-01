@@ -1,0 +1,1 @@
+- Stop pressed between two commands of one run now prevents the next command from starting and ends the run as stopped.

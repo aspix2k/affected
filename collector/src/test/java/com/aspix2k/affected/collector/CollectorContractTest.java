@@ -11,6 +11,11 @@ import org.junit.platform.engine.ExecutionRequest;
 import org.junit.platform.engine.TestDescriptor;
 import org.junit.platform.engine.TestExecutionResult;
 import org.junit.platform.engine.TestEngine;
+import org.junit.platform.engine.TestSource;
+import org.junit.platform.engine.support.descriptor.ClassSource;
+import org.junit.platform.engine.support.descriptor.MethodSource;
+import org.junit.platform.launcher.TestExecutionListener;
+import org.junit.platform.launcher.TestIdentifier;
 import org.junit.platform.engine.UniqueId;
 import org.junit.platform.engine.support.descriptor.AbstractTestDescriptor;
 import org.junit.platform.engine.support.descriptor.EngineDescriptor;
@@ -28,6 +33,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.Base64;
@@ -626,6 +632,138 @@ public class CollectorContractTest {
     }
 
     @Test
+    public void listenerRewritesTheClassMapWhenTheSameClassCompletesAgain() throws Exception {
+        Path outputRoot = prepareListener(ObservedFixture.class, SecondObservedFixture.class);
+        RerunFixture.executions.set(0);
+        Launcher launcher = LauncherFactory.create(
+            LauncherConfig.builder().enableTestExecutionListenerAutoRegistration(false).build()
+        );
+        launcher.registerTestExecutionListeners(new AffectedTestExecutionListener());
+
+        for (int attempt = 0; attempt < 2; attempt++) {
+            launcher.execute(
+                LauncherDiscoveryRequestBuilder.request().selectors(selectClass(RerunFixture.class)).build()
+            );
+        }
+
+        assertEquals(2, RerunFixture.executions.get());
+        Path workerDirectory = onlyWorkerDirectory(outputRoot);
+        String map = mapsByTest(workerDirectory).get(RerunFixture.class.getName());
+        assertNotNull(map);
+        assertTrue(map.contains("dependency=" + encode(ObservedFixture.class.getName()) + "|"));
+        assertTrue(map.contains("dependency=" + encode(SecondObservedFixture.class.getName()) + "|"));
+        assertTrue(read(workerDirectory.resolve("complete.manifest")).contains("supported=true"));
+    }
+
+    @Test
+    public void listenerMarksAbortedTestsUnsupported() throws Exception {
+        Path outputRoot = prepareListener(ObservedFixture.class);
+        Launcher launcher = LauncherFactory.create(
+            LauncherConfig.builder().enableTestExecutionListenerAutoRegistration(false).build()
+        );
+        launcher.registerTestExecutionListeners(new AffectedTestExecutionListener());
+
+        launcher.execute(
+            LauncherDiscoveryRequestBuilder.request().selectors(selectClass(AbortedFixture.class)).build()
+        );
+
+        assertTrue(read(onlyWorkerDirectory(outputRoot).resolve("complete.manifest")).contains("supported=false"));
+    }
+
+    @Test
+    public void listenerKeepsTheBaselineSupportedWhenAMethodIsDisabled() throws Exception {
+        Path outputRoot = prepareListener(ObservedFixture.class);
+        Launcher launcher = LauncherFactory.create(
+            LauncherConfig.builder().enableTestExecutionListenerAutoRegistration(false).build()
+        );
+        launcher.registerTestExecutionListeners(new AffectedTestExecutionListener());
+
+        launcher.execute(
+            LauncherDiscoveryRequestBuilder.request().selectors(selectClass(SkippedFixture.class)).build()
+        );
+
+        assertTrue(read(onlyWorkerDirectory(outputRoot).resolve("complete.manifest")).contains("supported=true"));
+    }
+
+    @Test
+    public void nestedClassMapsIncludeOuterContainerDependencies() throws Exception {
+        Path outputRoot = prepareListener(ObservedFixture.class, SecondObservedFixture.class);
+        Launcher launcher = LauncherFactory.create(
+            LauncherConfig.builder().enableTestExecutionListenerAutoRegistration(false).build()
+        );
+        launcher.registerTestExecutionListeners(new AffectedTestExecutionListener());
+
+        launcher.execute(
+            LauncherDiscoveryRequestBuilder.request().selectors(selectClass(NestedFixture.class)).build()
+        );
+
+        Path workerDirectory = onlyWorkerDirectory(outputRoot);
+        String nested = mapsByTest(workerDirectory).get(NestedFixture.Inner.class.getName());
+        assertNotNull(nested);
+        assertTrue(nested.contains("dependency=" + encode(ObservedFixture.class.getName()) + "|"));
+        assertTrue(nested.contains("dependency=" + encode(SecondObservedFixture.class.getName()) + "|"));
+        assertTrue(read(workerDirectory.resolve("complete.manifest")).contains("supported=true"));
+    }
+
+    @Test
+    public void testNgListenerRewritesTheClassMapWhenTheClassRunsAgain() throws Exception {
+        Path outputRoot = prepareListener(ObservedFixture.class, SecondObservedFixture.class);
+        System.setProperty(AffectedTestNgListener.ENABLED_PROPERTY, "true");
+        try {
+            AffectedTestNgListener listener = new AffectedTestNgListener();
+            org.testng.ITestClass testClass = testNgClass(RerunFixture.class);
+            org.testng.ITestResult first = testNgResult(testClass);
+            org.testng.ITestResult second = testNgResult(testClass);
+
+            listener.beforeInvocation(null, first);
+            AffectedCollectorAgent.hit(ObservedFixture.class);
+            listener.afterInvocation(null, first);
+            listener.onAfterClass(testClass);
+            listener.beforeInvocation(null, second);
+            AffectedCollectorAgent.hit(SecondObservedFixture.class);
+            listener.afterInvocation(null, second);
+            listener.onAfterClass(testClass);
+            listener.onExecutionFinish();
+
+            Path workerDirectory = onlyWorkerDirectory(outputRoot);
+            String map = mapsByTest(workerDirectory).get(RerunFixture.class.getName());
+            assertNotNull(map);
+            assertTrue(map.contains("dependency=" + encode(ObservedFixture.class.getName()) + "|"));
+            assertTrue(map.contains("dependency=" + encode(SecondObservedFixture.class.getName()) + "|"));
+        } finally {
+            System.clearProperty(AffectedTestNgListener.ENABLED_PROPERTY);
+        }
+    }
+
+    @Test
+    public void junit4BridgeRewritesTheClassMapWhenTheClassRunsAgain() throws Exception {
+        Path outputRoot = prepareListener(ObservedFixture.class, SecondObservedFixture.class);
+        System.setProperty(AffectedJUnit4Bridge.ENABLED_PROPERTY, "true");
+        try {
+            Object suite = new FakeDescription(RerunFixture.class.getName(), null, true);
+            Object first = new FakeDescription(RerunFixture.class.getName(), "first", false);
+            Object second = new FakeDescription(RerunFixture.class.getName(), "second", false);
+
+            AffectedJUnit4Bridge.started(first);
+            AffectedCollectorAgent.hit(ObservedFixture.class);
+            AffectedJUnit4Bridge.finished(first);
+            AffectedJUnit4Bridge.suiteFinished(suite);
+            AffectedJUnit4Bridge.started(second);
+            AffectedCollectorAgent.hit(SecondObservedFixture.class);
+            AffectedJUnit4Bridge.finished(second);
+            AffectedJUnit4Bridge.runFinished();
+
+            Path workerDirectory = onlyWorkerDirectory(outputRoot);
+            String map = mapsByTest(workerDirectory).get(RerunFixture.class.getName());
+            assertNotNull(map);
+            assertTrue(map.contains("dependency=" + encode(ObservedFixture.class.getName()) + "|"));
+            assertTrue(map.contains("dependency=" + encode(SecondObservedFixture.class.getName()) + "|"));
+        } finally {
+            System.clearProperty(AffectedJUnit4Bridge.ENABLED_PROPERTY);
+        }
+    }
+
+    @Test
     public void listenerMarksSourcelessTestsUnsupported() throws Exception {
         Path outputRoot = prepareListener();
         System.setProperty("affected.collector.runner", "maven");
@@ -644,6 +782,43 @@ public class CollectorContractTest {
         Path workerDirectory = onlyWorkerDirectory(outputRoot);
         assertTrue(read(workerDirectory.resolve("expected.manifest")).contains("supported=false"));
         assertTrue(read(workerDirectory.resolve("complete.manifest")).contains("supported=false"));
+    }
+
+    @Test
+    public void mavenListenerWritesExpectedManifestOncePerPlanAndOncePerDynamicClass() throws Exception {
+        Path outputRoot = prepareListener();
+        System.setProperty("affected.collector.runner", "maven");
+        Launcher launcher = LauncherFactory.create(
+            LauncherConfig.builder()
+                .enableTestEngineAutoRegistration(false)
+                .enableTestExecutionListenerAutoRegistration(false)
+                .addTestEngines(new ManyTestsEngine())
+                .build()
+        );
+        launcher.registerTestExecutionListeners(new AffectedTestExecutionListener());
+        Set<Object> manifestIdentities = new HashSet<Object>();
+        launcher.registerTestExecutionListeners(new TestExecutionListener() {
+            @Override
+            public void executionStarted(TestIdentifier identifier) {
+                try {
+                    Path manifest = onlyWorkerDirectory(outputRoot).resolve("expected.manifest");
+                    BasicFileAttributes attributes = Files.readAttributes(manifest, BasicFileAttributes.class);
+                    manifestIdentities.add(attributes.fileKey() == null ? attributes.creationTime() : attributes.fileKey());
+                } catch (Exception failure) {
+                    throw new AssertionError(failure);
+                }
+            }
+        });
+
+        launcher.execute(LauncherDiscoveryRequestBuilder.request().build());
+
+        assertEquals(2, manifestIdentities.size());
+        String expected = read(onlyWorkerDirectory(outputRoot).resolve("expected.manifest"));
+        assertTrue(expected.contains("supported=true"));
+        for (String testClass : ManyTestsEngine.CLASSES) {
+            assertTrue(expected.contains("test=" + encode(testClass) + "\n"));
+        }
+        assertTrue(expected.contains("test=" + encode(ManyTestsEngine.DYNAMIC_CLASS) + "\n"));
     }
 
     @Test
@@ -765,8 +940,10 @@ public class CollectorContractTest {
 
     private static Path onlyWorkerDirectory(Path outputRoot) throws Exception {
         try (Stream<Path> files = Files.list(outputRoot)) {
-            List<Path> directories = files.collect(Collectors.toList());
-            assertEquals(1, directories.size());
+            List<Path> directories = files
+                .filter(path -> path.getFileName().toString().startsWith("worker-"))
+                .collect(Collectors.toList());
+            assertEquals(directories.toString(), 1, directories.size());
             return directories.get(0);
         }
     }
@@ -860,6 +1037,67 @@ public class CollectorContractTest {
         }
     }
 
+    private static org.testng.ITestClass testNgClass(Class<?> type) {
+        return proxy(org.testng.ITestClass.class, (method, arguments) -> {
+            if ("getRealClass".equals(method.getName())) return type;
+            if ("getName".equals(method.getName())) return type.getName();
+            return null;
+        });
+    }
+
+    private static org.testng.ITestResult testNgResult(org.testng.ITestClass testClass) {
+        return proxy(org.testng.ITestResult.class, (method, arguments) ->
+            "getTestClass".equals(method.getName()) ? testClass : null
+        );
+    }
+
+    private interface Answer {
+        Object answer(java.lang.reflect.Method method, Object[] arguments);
+    }
+
+    private static <T> T proxy(Class<T> type, Answer answer) {
+        return type.cast(java.lang.reflect.Proxy.newProxyInstance(
+            type.getClassLoader(),
+            new Class<?>[] {type},
+            (instance, method, arguments) -> {
+                if (method.getDeclaringClass() == Object.class) {
+                    if ("hashCode".equals(method.getName())) return System.identityHashCode(instance);
+                    if ("equals".equals(method.getName())) return instance == arguments[0];
+                    return type.getSimpleName();
+                }
+                return answer.answer(method, arguments);
+            }
+        ));
+    }
+
+    public static final class FakeDescription {
+        private final String className;
+        private final String methodName;
+        private final boolean suite;
+
+        FakeDescription(String className, String methodName, boolean suite) {
+            this.className = className;
+            this.methodName = methodName;
+            this.suite = suite;
+        }
+
+        public String getClassName() {
+            return className;
+        }
+
+        public String getMethodName() {
+            return methodName;
+        }
+
+        public String getDisplayName() {
+            return className + "." + methodName;
+        }
+
+        public boolean isSuite() {
+            return suite;
+        }
+    }
+
     private static final class ByteArrayLoader extends ClassLoader {
         private ByteArrayLoader(ClassLoader parent) {
             super(parent);
@@ -890,6 +1128,58 @@ public class CollectorContractTest {
         }
     }
 
+    public static final class RerunFixture {
+        private static final AtomicInteger executions = new AtomicInteger();
+
+        @org.junit.jupiter.api.Test
+        void passes() {
+            AffectedCollectorAgent.hit(executions.incrementAndGet() == 1
+                ? ObservedFixture.class
+                : SecondObservedFixture.class);
+        }
+    }
+
+    public static final class AbortedFixture {
+        @org.junit.jupiter.api.Test
+        void aborts() {
+            AffectedCollectorAgent.hit(ObservedFixture.class);
+            org.junit.jupiter.api.Assumptions.assumeTrue(false);
+        }
+
+        @org.junit.jupiter.api.Test
+        void passes() {
+            AffectedCollectorAgent.hit(ObservedFixture.class);
+        }
+    }
+
+    public static final class SkippedFixture {
+        @org.junit.jupiter.api.Test
+        void passes() {
+            AffectedCollectorAgent.hit(ObservedFixture.class);
+        }
+
+        @org.junit.jupiter.api.Disabled
+        @org.junit.jupiter.api.Test
+        void skipped() {
+            AffectedCollectorAgent.hit(ObservedFixture.class);
+        }
+    }
+
+    public static final class NestedFixture {
+        @org.junit.jupiter.api.BeforeAll
+        static void outerSetup() {
+            AffectedCollectorAgent.hit(ObservedFixture.class);
+        }
+
+        @org.junit.jupiter.api.Nested
+        class Inner {
+            @org.junit.jupiter.api.Test
+            void passes() {
+                AffectedCollectorAgent.hit(SecondObservedFixture.class);
+            }
+        }
+    }
+
     public static final class ParallelFixtures {
         private static volatile CyclicBarrier barrier = new CyclicBarrier(2);
 
@@ -907,6 +1197,71 @@ public class CollectorContractTest {
                 barrier.await(5, TimeUnit.SECONDS);
                 AffectedCollectorAgent.hit(SecondObservedFixture.class);
             }
+        }
+    }
+
+    private static final class ManyTestsEngine implements TestEngine {
+        static final List<String> CLASSES = Arrays.asList("fixture.AlphaTest", "fixture.BetaTest", "fixture.GammaTest");
+        static final String DYNAMIC_CLASS = "fixture.DynamicTest";
+
+        @Override
+        public String getId() {
+            return "many";
+        }
+
+        @Override
+        public TestDescriptor discover(EngineDiscoveryRequest request, UniqueId uniqueId) {
+            EngineDescriptor root = new EngineDescriptor(uniqueId, "many");
+            for (String testClass : CLASSES) {
+                TestDescriptor container = descriptor(
+                    uniqueId.append("class", testClass),
+                    TestDescriptor.Type.CONTAINER,
+                    ClassSource.from(testClass)
+                );
+                root.addChild(container);
+                for (int index = 0; index < 50; index++) {
+                    container.addChild(descriptor(
+                        container.getUniqueId().append("test", "t" + index),
+                        TestDescriptor.Type.TEST,
+                        MethodSource.from(testClass, "t" + index)
+                    ));
+                }
+            }
+            return root;
+        }
+
+        @Override
+        public void execute(ExecutionRequest request) {
+            TestDescriptor root = request.getRootTestDescriptor();
+            EngineExecutionListener listener = request.getEngineExecutionListener();
+            listener.executionStarted(root);
+            for (TestDescriptor container : root.getChildren()) {
+                listener.executionStarted(container);
+                for (TestDescriptor test : container.getChildren()) {
+                    listener.executionStarted(test);
+                    listener.executionFinished(test, TestExecutionResult.successful());
+                }
+                listener.executionFinished(container, TestExecutionResult.successful());
+            }
+            TestDescriptor dynamic = descriptor(
+                root.getUniqueId().append("test", "dynamic"),
+                TestDescriptor.Type.TEST,
+                MethodSource.from(DYNAMIC_CLASS, "t")
+            );
+            listener.dynamicTestRegistered(dynamic);
+            listener.executionStarted(dynamic);
+            listener.executionFinished(dynamic, TestExecutionResult.successful());
+            root.removeChild(dynamic);
+            listener.executionFinished(root, TestExecutionResult.successful());
+        }
+
+        private static TestDescriptor descriptor(UniqueId id, TestDescriptor.Type type, TestSource source) {
+            return new AbstractTestDescriptor(id, id.getLastSegment().getValue(), source) {
+                @Override
+                public Type getType() {
+                    return type;
+                }
+            };
         }
     }
 

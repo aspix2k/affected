@@ -430,7 +430,7 @@ class ChangeAnalyzerTest {
         File(dir, "Gemfile").writeText("source 'https://rubygems.org'\n")
         File(dir, "README").writeText("not a build input\n")
 
-        val changes = ChangeAnalyzer(dir, "main", setOf("rb"), setOf("Gemfile")).collect()
+        val changes = ChangeAnalyzer(dir, "main", setOf("rb"), sourceFileNames = setOf("Gemfile")).collect()
 
         assertEquals(listOf("Gemfile"), changes.files.map { it.name })
     }

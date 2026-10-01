@@ -1,77 +1,57 @@
 package com.aspix2k.affected
 
+import com.intellij.execution.ExecutionException
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.CapturingProcessHandler
+import com.intellij.execution.process.ProcessOutput
 import com.intellij.openapi.progress.ProcessCanceledException
 import kotlinx.coroutines.CancellationException
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 class ChangeAnalyzer(
-    private val projectDir: File,
+    internal val projectDir: File,
     private val baseBranch: String,
     private val sourceExtensions: Set<String> = DEFAULT_EXTENSIONS,
     private val includeAllFiles: Boolean = false,
+    private val gitExecutable: String = "git",
+    private val sourceFileNames: Set<String> = emptySet(),
 ) {
 
-    private var sourceFileNames: Set<String> = emptySet()
+    class GitFailure(message: String, cause: Throwable? = null) : Exception(message, cause)
 
-    internal constructor(
-        projectDir: File,
-        baseBranch: String,
-        sourceExtensions: Set<String>,
-        sourceFileNames: Set<String>,
-        includeAllFiles: Boolean = false,
-    ) : this(projectDir, baseBranch, sourceExtensions, includeAllFiles) {
-        this.sourceFileNames = sourceFileNames
+    private val mergeBase: String? by lazy(::resolveMergeBase)
+
+    fun isUsable(): Boolean = projectDir.isDirectory && try {
+        run("rev-parse", "--git-dir").exitCode == 0
+    } catch (error: GitFailure) {
+        if (error.cause is ExecutionException || error.cause is IOException) false else throw error
     }
 
-    data class Changes(val files: List<File>, val apiTouched: Set<File>)
-
-    fun collectPaths(): List<File> = changedFiles(mergeBase())
-
-    fun collect(): Changes {
-        val base = mergeBase()
-        val files = changedFiles(base)
-        return Changes(files, files.filter { apiTouched(it, base) }.toSet())
-    }
-
-    fun isUsable(): Boolean = git("rev-parse", "--git-dir").isNotEmpty()
-
-    fun hasComparisonBase(): Boolean = mergeBase() != null
+    fun hasComparisonBase(): Boolean = mergeBase != null
 
     fun modifiedAgainstBase(): Set<File> {
-        val base = mergeBase() ?: return emptySet()
-        val paths = git("diff", "--name-status", "--no-renames", base)
-            .mapNotNull { line ->
-                val separator = line.indexOf('\t')
-                line.substring(0, separator.takeIf { it > 0 } ?: return@mapNotNull null)
-                    .takeIf { it == "M" }
-                    ?.let { line.substring(separator + 1) }
-            }
+        val base = mergeBase ?: return emptySet()
+        val paths = gitFields("diff", "--name-status", "--no-renames", "-z", base)
+            .chunked(2)
+            .mapNotNull { (status, path) -> path.takeIf { status == "M" } }
         return keepSources(paths).toSet()
     }
 
     fun againstBase(): List<File> {
-        val base = mergeBase() ?: return emptyList()
-        return keepSources(git("diff", "--name-only", "--no-renames", base))
+        val base = mergeBase ?: return emptyList()
+        return keepSources(gitFields("diff", "--name-only", "--no-renames", "-z", base))
     }
 
     fun apiTouchedAmong(files: Collection<File>): Set<File> {
-        val base = mergeBase()
-        return files.filterTo(HashSet()) { apiTouched(it, base) }
+        val relatives = files.associateWith(::relativePath)
+        val candidates = relatives.values.filterNotNull().filter(::needsApiCheck).filterNot(::isGitQuoted)
+        val diffs = diffByFile(candidates)
+        return files.filterTo(HashSet()) { apiTouched(it, relatives[it], diffs) }
     }
 
-    private fun changedFiles(base: String?): List<File> {
-        val paths = LinkedHashSet<String>()
-        if (base != null) paths += git("diff", "--name-only", "--no-renames", base)
-        paths += git("diff", "--name-only", "--no-renames", "HEAD")
-        paths += git("ls-files", "--others", "--exclude-standard")
-
-        return keepSources(paths)
-    }
-
-    private fun keepSources(paths: Collection<String>): List<File> {
+    internal fun keepSources(paths: Collection<String>): List<File> {
         return paths
             .filter { path ->
                 isCollectedSource(path, includeAllFiles, sourceExtensions, sourceFileNames)
@@ -80,16 +60,57 @@ class ChangeAnalyzer(
             .distinct()
     }
 
-    private fun apiTouched(file: File, base: String?): Boolean {
-        val relative = runCatching { file.relativeTo(projectDir).invariantSeparatorsPath }.getOrElse { return true }
-        if (isTestSource(relative)) return false
-        val extension = relative.substringAfterLast('.', "")
-        if (extension !in API_SOURCE_EXTENSIONS) return false
+    private fun diffByFile(paths: List<String>): Map<String, List<String>> {
+        if (paths.isEmpty()) return emptyMap()
+        val ref = mergeBase ?: HEAD.takeIf { run("rev-parse", "--verify", "-q", it).exitCode == 0 } ?: return emptyMap()
+        return pathChunks(paths.distinct()).fold(HashMap()) { diffs, chunk ->
+            diffs.apply {
+                putAll(
+                    parseDiff(
+                        git(DIFF_ARGUMENTS + ref + "--" + chunk)
+                    )
+                )
+            }
+        }
+    }
 
-        val diff = when {
-            base != null -> git("diff", "-U0", base, "--", relative)
-            else -> emptyList()
-        }.ifEmpty { git("diff", "-U0", "HEAD", "--", relative) }
+    private fun parseDiff(patch: String): Map<String, List<String>> {
+        val diffs = HashMap<String, MutableList<String>>()
+        var current: MutableList<String>? = null
+        var oldPath = ""
+        var inHeader = false
+        for (line in patch.lines()) {
+            when {
+                line.startsWith("diff --git ") -> {
+                    inHeader = true
+                    current = null
+                }
+                inHeader && line.startsWith("--- ") -> oldPath = diffPath(line)
+                inHeader && line.startsWith("+++ ") -> {
+                    val path = diffPath(line).takeIf { it != DEV_NULL } ?: oldPath
+                    current = diffs.getOrPut(path) { mutableListOf() }
+                }
+                line.startsWith("@@") -> inHeader = false
+                !inHeader -> current?.add(line)
+            }
+        }
+        return diffs
+    }
+
+    private fun diffPath(header: String): String = header.drop(HEADER_PREFIX_LENGTH).removeSuffix("\t")
+
+    private fun relativePath(file: File): String? =
+        runCatching { file.relativeTo(projectDir).invariantSeparatorsPath }.getOrNull()
+
+    private fun needsApiCheck(relative: String): Boolean =
+        !isTestSource(relative) && relative.substringAfterLast('.', "") in API_SOURCE_EXTENSIONS
+
+    private fun apiTouched(file: File, relative: String?, diffs: Map<String, List<String>>): Boolean {
+        if (relative == null) return true
+        if (!needsApiCheck(relative)) return false
+        if (isGitQuoted(relative)) return true
+
+        val diff = diffs[relative].orEmpty()
 
         if (diff.isEmpty()) {
             if (!file.isFile) return false
@@ -103,7 +124,7 @@ class ChangeAnalyzer(
     }
 
     private fun signatures(diff: List<String>, marker: String): Set<String> = diff
-        .filter { it.startsWith(marker) && !it.startsWith(marker.repeat(3)) }
+        .filter { it.startsWith(marker) }
         .map { it.drop(1) }
         .filter(::isPublicDeclaration)
         .mapTo(HashSet(), ::signatureOf)
@@ -129,35 +150,70 @@ class ChangeAnalyzer(
         return EXPLICIT_MODIFIER.containsMatchIn(line)
     }
 
-    private fun mergeBase(): String? {
-        for (branch in candidateBranches()) {
-            for (ref in listOf("origin/$branch", branch)) {
-                val result = git("merge-base", "HEAD", ref).firstOrNull()
-                if (!result.isNullOrBlank()) return result.trim()
-            }
+    private fun resolveMergeBase(): String? = candidateBranches()
+        .flatMap { listOf("origin/$it", it) }
+        .firstNotNullOfOrNull { ref ->
+            run("merge-base", HEAD, ref).takeIf { it.exitCode == 0 }?.stdout?.trim()?.ifEmpty { null }
         }
-        return null
-    }
 
     private fun candidateBranches(): List<String> =
         (listOf(baseBranch) + FALLBACK_BRANCHES).distinct().filter { it.isNotBlank() }
 
-    private fun git(vararg args: String): List<String> = try {
-        if (!projectDir.isDirectory) return emptyList()
-        val commandLine = GeneralCommandLine(listOf("git") + args)
+    private fun gitFields(vararg args: String): List<String> =
+        git(*args).split(NUL).filter(String::isNotEmpty)
+
+    private fun git(vararg args: String): String = git(args.asList())
+
+    private fun git(args: List<String>): String {
+        val output = run(args)
+        if (output.exitCode != 0) throw GitFailure("git ${args.first()} exited with ${output.exitCode}")
+        return output.stdout
+    }
+
+    private fun run(vararg args: String): ProcessOutput = run(args.asList())
+
+    private fun run(args: List<String>): ProcessOutput = try {
+        if (!projectDir.isDirectory) throw GitFailure("$projectDir is not a directory")
+        val commandLine = GeneralCommandLine(listOf(gitExecutable, "-c", "core.quotePath=false") + args)
             .withWorkDirectory(projectDir)
             .withCharset(Charsets.UTF_8)
+            .withEnvironment("GIT_LITERAL_PATHSPECS", "1")
         val output = CapturingProcessHandler(commandLine).runProcess(GIT_TIMEOUT_MILLIS)
-        if (output.exitCode == 0 && !output.isTimeout && !output.isCancelled) output.stdoutLines else emptyList()
+        ensureFinished(output, args.first())
     } catch (error: CancellationException) {
         throw error
     } catch (error: ProcessCanceledException) {
         throw error
+    } catch (error: GitFailure) {
+        throw error
     } catch (error: Exception) {
-        emptyList()
+        throw GitFailure("git ${args.first()} could not run: ${error.message}", error)
     }
 
     companion object {
+        internal fun ensureFinished(output: ProcessOutput, command: String): ProcessOutput {
+            if (output.isCancelled) throw ProcessCanceledException()
+            if (output.isTimeout) throw GitFailure("git $command did not finish")
+            return output
+        }
+
+        private fun pathChunks(paths: List<String>): List<List<String>> {
+            val chunks = mutableListOf<MutableList<String>>()
+            var length = 0
+            for (path in paths) {
+                if (chunks.isEmpty() || length + path.length > PATHSPEC_CHUNK_LENGTH) {
+                    chunks.add(mutableListOf())
+                    length = 0
+                }
+                chunks.last().add(path)
+                length += path.length + 1
+            }
+            return chunks
+        }
+
+        private fun isGitQuoted(relative: String): Boolean =
+            relative.any { it == '"' || it == '\\' || it.code < SPACE || it.code == DELETE }
+
         val DEFAULT_EXTENSIONS = setOf("kt", "kts", "java", "xml", "json", "pro")
 
         private val API_SOURCE_EXTENSIONS = setOf("kt", "java", "scala", "groovy")
@@ -170,6 +226,16 @@ class ChangeAnalyzer(
             val name = segments.lastOrNull().orEmpty().lowercase()
             return TEST_SOURCE_MATCHERS[systemId]?.invoke(segments, name) ?: false
         }
+        private val DIFF_ARGUMENTS = listOf(
+            "diff", "-U0", "--no-renames", "--no-prefix", "--no-color", "--no-ext-diff", "--no-textconv",
+        )
+        private const val HEAD = "HEAD"
+        private const val NUL = '\u0000'
+        private const val PATHSPEC_CHUNK_LENGTH = 16_000
+        private const val SPACE = 0x20
+        private const val DELETE = 0x7f
+        private const val DEV_NULL = "/dev/null"
+        private const val HEADER_PREFIX_LENGTH = 4
         private val GIT_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(90).toInt()
         private val FALLBACK_BRANCHES = listOf("develop", "main", "master")
 
