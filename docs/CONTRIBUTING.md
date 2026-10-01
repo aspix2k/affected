@@ -129,6 +129,17 @@ Each CLI execution root keeps its planned filesystem identity and is checked
 again before deferred resolution and immediately before every child process.
 Missing, re-created, unreadable, linked or out-of-project roots fail visibly.
 
+An adapter owns the knowledge of its ecosystem. Declare `isTestSource` (the path
+is relative to the build root), `consumersNeedSignatureChange` and
+`singleOwnerPerRoot` on the adapter instead of branching on an adapter id in
+`ChangeAnalyzer`, `Verification` or `ModuleGraph`; the Android instrumentation
+task choice in `Verification` is the one remaining exception. Find roots with
+`nestedBuildRoots`: it returns several roots up to three levels below the
+project base and never descends into a root it found. Key caches, baselines and
+command lookups by root, because `executionId` repeats across roots. A new
+adapter needs its class, one `plugin.xml` line, a `config/support-matrix.json`
+row with a fixture and a test, and a regenerated `docs/SUPPORT.md`.
+
 Native adapter projects live under `conformance/cli-fixtures` and run with
 `./gradlew :core:test --tests '*CliAdapterConformanceTest' -Paffected.cliConformance=true`.
 Parser-only proof is not enough for a release. Exact selection rules belong in
