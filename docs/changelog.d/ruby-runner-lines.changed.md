@@ -1,1 +1,0 @@
-- Keep Ruby test selection on every RSpec 3.13+, Minitest 6 and Test::Unit 3.7+ release instead of one minor version.

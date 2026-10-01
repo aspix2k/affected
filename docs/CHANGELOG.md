@@ -6,6 +6,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.17.0] - 2026-10-01
+
+### Changed
+
+- Keep exact PHPUnit and CMake/CTest selection on later minor releases within supported major versions.
+- .NET: native Microsoft Testing Platform exact class selection now works with any .NET SDK 10.0.400 or newer 10.0.x pinned in global.json and any locked xunit.v3 4.x from nuget.org, not only SDK 10.0.400 with xunit.v3 4.0.0; anything unproven still runs the full project.
+- Select Pest tests on every Pest 5 release with the PHPUnit version it pins, not only Pest 5.1.1.
+- Keep Ruby test selection on every RSpec 3.13+, Minitest 6 and Test::Unit 3.7+ release instead of one minor version.
+
+### Fixed
+
+- Stop skipping tests after reruns, aborted tests and JUnit 5 nested classes by recording complete Gradle and Maven dependency maps, or leaving the baseline unpromoted when completeness is uncertain.
+- Stop pre-push and pre-commit checks from passing when Git cannot list the changed files, and say why.
+- Resolve Gradle modules of custom source sets such as `integrationTest` or `testFixtures` to their owning project.
+- Run every project of a Gradle build when an included plugin build, such as `build-logic`, or a `buildSrc` with its own settings changes.
+- Run the JVM and Android (and other) target tests of intermediate Kotlin Multiplatform source sets such as `jvmAndAndroidMain`; previously such a change ran only the JVM tests.
+- Stop Maven test runs from rewriting the collector's expected-tests file for every test, which slowed large and parallel suites.
+- Mark the MCP named-task tool as destructive, report a blocked or failed MCP verification run as an error with its reason, and refresh every open project after a settings change.
+- Find committed files with non-ASCII names, such as Cyrillic or CJK, when picking affected modules.
+- A run that fails while opening its console or starting its build task now ends as failed instead of staying in the running state, and cancelling a Gradle run that never reports its end no longer blocks the next run.
+- Show a notification instead of silently cancelling a push or commit when changes map to no module or the check cannot start.
+- Stop pressed between two commands of one run now prevents the next command from starting and ends the run as stopped.
+- Reduce disk access in the file-change listener: generated-file roots are discovered only for build systems present in the project, and presence is probed only for build systems that track all file changes.
+
 ## [3.16.0] - 2026-09-30
 
 ### Fixed
@@ -693,7 +717,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.16.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.17.0...HEAD
+[3.17.0]: https://github.com/aspix2k/affected/compare/v3.16.0...v3.17.0
 [3.16.0]: https://github.com/aspix2k/affected/compare/v3.15.17...v3.16.0
 [3.15.17]: https://github.com/aspix2k/affected/compare/v3.15.16...v3.15.17
 [3.15.16]: https://github.com/aspix2k/affected/compare/v3.15.15...v3.15.16

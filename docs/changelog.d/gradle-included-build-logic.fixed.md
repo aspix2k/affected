@@ -1,1 +1,0 @@
-- Run every project of a Gradle build when an included plugin build, such as `build-logic`, or a `buildSrc` with its own settings changes.

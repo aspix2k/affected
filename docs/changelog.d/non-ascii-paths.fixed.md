@@ -1,1 +1,0 @@
-- Find committed files with non-ASCII names, such as Cyrillic or CJK, when picking affected modules.
