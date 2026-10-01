@@ -154,12 +154,29 @@ class CliCommandTest {
     }
 
     @Test
-    fun `CMake refuses a missing or ambiguous build tree`() {
+    fun `CMake refuses a missing build tree`() {
         val missing = createTempDirectory("cmake-missing").toFile()
-        val ambiguous = cmakeRoot("build/first", "build/second")
 
         assertEquals(emptyList(), cmakeCommands(missing.path, listOf("core:test")))
-        assertEquals(emptyList(), cmakeCommands(ambiguous.path, listOf("core:test")))
+    }
+
+    @Test
+    fun `CMake uses the most recently configured of several build trees`() {
+        val root = cmakeRoot("cmake-build-debug", "cmake-build-release")
+        File(root, "cmake-build-debug/CMakeCache.txt").setLastModified(1_000_000_000_000)
+        File(root, "cmake-build-release/CMakeCache.txt").setLastModified(1_000_000_060_000)
+        val tie = cmakeRoot("build/first", "build/second")
+        File(tie, "build/first/CMakeCache.txt").setLastModified(1_000_000_000_000)
+        File(tie, "build/second/CMakeCache.txt").setLastModified(1_000_000_000_000)
+
+        assertEquals(
+            listOf("cmake", "--build", "cmake-build-release"),
+            cmakeCommands(root.path, listOf("core:test")).first().arguments,
+        )
+        assertEquals(
+            listOf("cmake", "--build", "build/first"),
+            cmakeCommands(tie.path, listOf("core:test")).first().arguments,
+        )
     }
 
     @Test
