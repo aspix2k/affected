@@ -18,12 +18,13 @@ import com.aspix2k.affected.build.retainBuildSnapshot
 import com.aspix2k.affected.toBuildChanges
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.PathManager
-import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.module.ModuleUtilCore
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.roots.ProjectRootManager
+import com.intellij.openapi.util.Computable
 import com.intellij.openapi.vfs.LocalFileSystem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -139,13 +140,16 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
         }.orEmpty()
 }
 
-internal fun ideInterpreter(project: Project, root: File): String? = runReadAction {
-    val module = LocalFileSystem.getInstance().findFileByIoFile(root)
-        ?.let { ModuleUtilCore.findModuleForFile(it, project) }
-    val sdk = module?.let { ModuleRootManager.getInstance(it).sdk }
-        ?: ProjectRootManager.getInstance(project).projectSdk
-    configuredPythonInterpreter(sdk?.sdkType?.name, sdk?.homePath)
-}
+internal fun ideInterpreter(project: Project, root: File): String? =
+    ApplicationManager.getApplication().runReadAction(
+        Computable {
+            val module = LocalFileSystem.getInstance().findFileByIoFile(root)
+                ?.let { ModuleUtilCore.findModuleForFile(it, project) }
+            val sdk = module?.let { ModuleRootManager.getInstance(it).sdk }
+                ?: ProjectRootManager.getInstance(project).projectSdk
+            configuredPythonInterpreter(sdk?.sdkType?.name, sdk?.homePath)
+        },
+    )
 
 private val PYTHON_TEST_DIRECTORIES = setOf("test", "tests")
 private val PYTHON_GENERATED_DIRECTORIES = setOf(
