@@ -9,7 +9,6 @@ import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
-import java.security.MessageDigest
 import java.util.Base64
 
 internal object CollectorMapReader {
@@ -153,7 +152,7 @@ internal object CollectorMapReader {
         if (hasExpectedManifest) expectedFiles += EXPECTED_MANIFEST
         require(entries.mapTo(HashSet()) { it.fileName.toString() } == expectedFiles)
         val records = tests.map { test -> parseMap(directory.resolve("test-${sha256(test)}.map"), test) }
-        return ParsedCompleteWorker(workerId, supported, tests.toSet(), records)
+        return ParsedCompleteWorker(workerId, supported, records)
     }
 
     private fun parseMap(path: Path, expectedTest: String): TestDependencyRecord {
@@ -193,7 +192,6 @@ internal object CollectorMapReader {
     private data class ParsedCompleteWorker(
         val workerId: String,
         val supported: Boolean,
-        val tests: Set<String>,
         val records: List<TestDependencyRecord>,
     )
 }
@@ -378,10 +376,6 @@ private fun decode(value: String): String {
 
 private fun encode(value: String): String = Base64.getUrlEncoder().withoutPadding()
     .encodeToString(value.toByteArray(StandardCharsets.UTF_8))
-
-private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
-    .digest(value.toByteArray(StandardCharsets.UTF_8))
-    .joinToString("") { "%02x".format(it) }
 
 private val DEPENDENCY_ORDER = compareBy<ClassDependency>({ it.id.className }, { it.id.codeSource }, { it.sha256 })
 private val SHA256_PATTERN = Regex("[0-9a-f]{64}")
