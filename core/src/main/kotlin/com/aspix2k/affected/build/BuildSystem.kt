@@ -7,6 +7,7 @@ import kotlinx.coroutines.runInterruptible
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.atomic.AtomicReference
 
@@ -102,19 +103,19 @@ internal interface ChangeAwareSuspendingBuildSystem : SuspendingBuildSystem {
 
 internal fun nestedBuildRoot(base: File, hasMarker: (File) -> Boolean): File? {
     if (hasMarker(base)) return base
-    return nestedChildren(base).singleOrNull(hasMarker)
+    return nestedListing(base).directories.singleOrNull(hasMarker)
 }
 
-internal fun nestedBuildRoots(base: File, hasMarker: (File) -> Boolean): List<File> {
+internal fun nestedBuildRoots(base: File, markerNames: Set<String>, hasMarker: (File) -> Boolean): List<File> {
     if (hasMarker(base)) return listOf(base)
     val roots = ArrayList<File>()
     var level = listOf(base)
     var visited = 0
     repeat(NESTED_ROOT_DEPTH) {
         val (found, descend) = level
-            .flatMap(::nestedChildren)
+            .flatMap { nestedListing(it).directories }
             .also { visited += it.size }
-            .partition(hasMarker)
+            .partition { nestedListing(it).names.any(markerNames::contains) && hasMarker(it) }
         roots += found
         if (visited > PerformanceBudgets.MAX_DIRECTORIES || roots.size > PerformanceBudgets.MAX_NESTED_ROOTS) {
             return emptyList()
@@ -124,12 +125,47 @@ internal fun nestedBuildRoots(base: File, hasMarker: (File) -> Boolean): List<Fi
     return roots.sortedBy(File::getPath)
 }
 
-private fun nestedChildren(directory: File): List<File> =
-    directory.listFiles().orEmpty().filter { child ->
-        Files.isDirectory(child.toPath(), LinkOption.NOFOLLOW_LINKS) &&
-            child.canRead() &&
-            child.name !in NESTED_ROOT_SKIP
+private fun nestedListing(directory: File): NestedListing {
+    val now = System.currentTimeMillis()
+    val cached = nestedListings[directory.path]
+    if (cached != null && now - cached.checkedAt < LISTING_RECHECK_MS) return cached
+    val modified = directory.lastModified()
+    if (cached != null && cached.modified == modified) {
+        cached.checkedAt = now
+        return cached
     }
+    val entries = directory.listFiles().orEmpty()
+    val listing = NestedListing(
+        modified = modified,
+        checkedAt = now,
+        directories = entries.filter { child ->
+            Files.isDirectory(child.toPath(), LinkOption.NOFOLLOW_LINKS) &&
+                child.canRead() &&
+                child.name !in NESTED_ROOT_SKIP
+        },
+        names = entries.mapTo(HashSet()) { it.name.lowercase() },
+    )
+    if (now - modified > LISTING_SETTLE_MS) {
+        if (nestedListings.size >= MAX_NESTED_LISTINGS) nestedListings.clear()
+        nestedListings[directory.path] = listing
+    } else {
+        nestedListings.remove(directory.path)
+    }
+    return listing
+}
+
+private class NestedListing(
+    val modified: Long,
+    @Volatile var checkedAt: Long,
+    val directories: List<File>,
+    val names: Set<String>,
+)
+
+private val nestedListings = ConcurrentHashMap<String, NestedListing>()
+
+private const val LISTING_SETTLE_MS = 2_000L
+private const val LISTING_RECHECK_MS = 1_000L
+private const val MAX_NESTED_LISTINGS = 4 * PerformanceBudgets.MAX_DIRECTORIES
 
 private const val NESTED_ROOT_DEPTH = 3
 

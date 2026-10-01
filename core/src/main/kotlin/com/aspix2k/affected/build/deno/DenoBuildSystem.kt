@@ -42,7 +42,7 @@ internal object DenoTasks {
 internal class DenoConfig(val json: JsonObject?)
 
 internal fun denoProjectRoots(base: File): List<File> =
-    nestedBuildRoots(base) { denoConfig(it) != null && !nodeOwnsTests(it) }
+    nestedBuildRoots(base, CONFIG_NAMES.toSet()) { denoConfig(it) != null && !nodeOwnsTests(it) }
 
 internal fun denoConfig(root: File): DenoConfig? {
     val configs = CONFIG_NAMES.map { File(root, it) }.filter { it.exists() }

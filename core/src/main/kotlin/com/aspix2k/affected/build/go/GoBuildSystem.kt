@@ -83,7 +83,7 @@ class GoBuildSystem : SuspendingBuildSystem {
 }
 
 internal fun goProjectRoots(base: File): List<File> =
-    nestedBuildRoots(base) { goManifest(it) != null }
+    nestedBuildRoots(base, setOf("go.mod")) { goManifest(it) != null }
 
 internal fun goManifest(root: File): File? =
     File(root, "go.mod").takeIf(File::isRegularFileNoFollow)

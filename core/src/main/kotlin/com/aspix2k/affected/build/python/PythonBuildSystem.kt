@@ -126,7 +126,7 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
 
     private fun rootsOf(project: Project): List<File> =
         project.basePath?.let(::File)?.let { base ->
-            nestedBuildRoots(base) { File(it, "pyproject.toml").isRegularFileNoFollow() }
+            nestedBuildRoots(base, setOf("pyproject.toml")) { File(it, "pyproject.toml").isRegularFileNoFollow() }
         }.orEmpty()
 }
 

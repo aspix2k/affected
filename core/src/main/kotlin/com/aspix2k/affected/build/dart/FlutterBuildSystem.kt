@@ -39,7 +39,7 @@ internal object FlutterTasks {
 }
 
 internal fun flutterProjectRoots(base: File): List<File> =
-    nestedBuildRoots(base) { flutterManifest(it) != null }
+    nestedBuildRoots(base, setOf("pubspec.yaml")) { flutterManifest(it) != null }
 
 internal fun flutterManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null

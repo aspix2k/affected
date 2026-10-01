@@ -48,7 +48,7 @@ internal object DartTasks {
 }
 
 internal fun dartProjectRoots(base: File): List<File> =
-    nestedBuildRoots(base) { dartManifest(it) != null }
+    nestedBuildRoots(base, setOf("pubspec.yaml")) { dartManifest(it) != null }
 
 internal fun dartManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null
