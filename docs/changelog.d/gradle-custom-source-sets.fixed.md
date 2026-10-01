@@ -1,1 +1,0 @@
-- Resolve Gradle modules of custom source sets such as `integrationTest` or `testFixtures` to their owning project.

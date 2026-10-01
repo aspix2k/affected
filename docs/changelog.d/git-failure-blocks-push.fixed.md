@@ -1,1 +1,0 @@
-- Stop pre-push and pre-commit checks from passing when Git cannot list the changed files, and say why.

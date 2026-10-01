@@ -1,1 +1,0 @@
-- Run the JVM and Android (and other) target tests of intermediate Kotlin Multiplatform source sets such as `jvmAndAndroidMain`; previously such a change ran only the JVM tests.
