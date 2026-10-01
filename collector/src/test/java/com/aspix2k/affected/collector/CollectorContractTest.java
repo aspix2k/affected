@@ -802,7 +802,8 @@ public class CollectorContractTest {
             public void executionStarted(TestIdentifier identifier) {
                 try {
                     Path manifest = onlyWorkerDirectory(outputRoot).resolve("expected.manifest");
-                    manifestIdentities.add(Files.readAttributes(manifest, BasicFileAttributes.class).fileKey());
+                    BasicFileAttributes attributes = Files.readAttributes(manifest, BasicFileAttributes.class);
+                    manifestIdentities.add(attributes.fileKey() == null ? attributes.creationTime() : attributes.fileKey());
                 } catch (Exception failure) {
                     throw new AssertionError(failure);
                 }
