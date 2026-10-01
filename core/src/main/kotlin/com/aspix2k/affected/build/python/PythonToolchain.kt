@@ -42,15 +42,19 @@ internal fun pythonLauncher(
 
 internal fun pythonInterpreter(
     root: File,
+    configured: String? = null,
     path: String? = System.getenv("PATH") ?: System.getenv("Path"),
     pathExt: String? = System.getenv("PATHEXT"),
 ): String =
-    VIRTUAL_ENVIRONMENTS
+    configured ?: VIRTUAL_ENVIRONMENTS
         .flatMap { environment -> VIRTUAL_INTERPRETERS.map { File(root, "$environment/$it") } }
         .firstOrNull { it.isFile && it.canExecute() }
         ?.absolutePath
         ?: INTERPRETERS.firstOrNull { resolveExecutable(it, path, pathExt) != it }
         ?: PYTHON
+
+internal fun configuredPythonInterpreter(sdkType: String?, home: String?): String? =
+    home?.takeIf { sdkType == PYTHON_SDK_TYPE && File(it).let { file -> file.isFile && file.canExecute() } }
 
 internal fun CliStep.withPythonInterpreter(interpreter: String): CliStep = when (this) {
     is CliCommand -> withPythonInterpreter(interpreter)
@@ -113,6 +117,7 @@ private fun defaultToolDirectories(): List<String> {
 }
 
 private const val PYTHON = "python"
+private const val PYTHON_SDK_TYPE = "Python SDK"
 private val INTERPRETERS = listOf(PYTHON, "python3")
 private val VIRTUAL_ENVIRONMENTS = listOf(".venv", "venv")
 private val VIRTUAL_INTERPRETERS = listOf("bin/python", "Scripts/python.exe")

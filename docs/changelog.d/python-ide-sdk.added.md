@@ -1,0 +1,1 @@
+- Python tests use the interpreter configured for the module or project in the IDE when it is a local Python SDK, before the project virtual environment and PATH.

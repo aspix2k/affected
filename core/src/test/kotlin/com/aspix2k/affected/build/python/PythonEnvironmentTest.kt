@@ -40,6 +40,30 @@ class PythonEnvironmentTest {
     }
 
     @Test
+    fun `a local Python SDK configured in the IDE wins over the virtual environment and PATH`() {
+        val root = createTempDirectory("python-sdk").toFile()
+        val sdk = File(root, "sdk/bin/python").apply {
+            parentFile.mkdirs()
+            writeText("#!/bin/sh\n")
+            setExecutable(true)
+        }
+        File(root, ".venv/bin/python").apply {
+            parentFile.mkdirs()
+            writeText("#!/bin/sh\n")
+            setExecutable(true)
+        }
+
+        assertEquals(sdk.path, configuredPythonInterpreter("Python SDK", sdk.path))
+        assertEquals(null, configuredPythonInterpreter("JavaSDK", sdk.path))
+        assertEquals(null, configuredPythonInterpreter("Python SDK", "ssh://user@host/usr/bin/python"))
+        assertEquals(null, configuredPythonInterpreter("Python SDK", null))
+        assertEquals(
+            sdk.path,
+            pythonInterpreter(root, configuredPythonInterpreter("Python SDK", sdk.path), path = "", pathExt = null),
+        )
+    }
+
+    @Test
     fun `uv lock runs pytest selection through a locked uv environment`() {
         val fixture = environmentFixture("uv.lock", pyproject = PYTEST_PROJECT)
 
