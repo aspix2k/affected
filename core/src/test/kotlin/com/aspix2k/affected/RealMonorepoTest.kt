@@ -5,10 +5,12 @@ import com.aspix2k.affected.build.PerformanceBudgets
 import com.aspix2k.affected.build.cmake.CMakeTargets
 import com.aspix2k.affected.build.php.ComposerPackages
 import com.aspix2k.affected.build.ruby.RubyGems
+import com.aspix2k.affected.build.ruby.RubyTestSuites
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class RealMonorepoTest {
@@ -56,14 +58,17 @@ class RealMonorepoTest {
     }
 
     @Test
-    fun `Rails fails closed because a test suite contains a symlink`() {
+    fun `Rails blocks only the gem whose test suite contains a symlink`() {
         val root = fixture("ruby-rails")
         assumeTrue(root != null)
         assumeTrue(File(root, "activerecord/test").walk().any { Files.isSymbolicLink(it.toPath()) })
 
+        val modules = RubyGems.parse(checkNotNull(root)).associateBy { it.id }
+
+        assertEquals(RubyTestSuites.INVALID, modules["activerecord"]?.testTask)
         assertTrue(
-            RubyGems.parse(checkNotNull(root)).isEmpty(),
-            "an untrusted suite must fall back to the whole repository",
+            modules.values.any { it.testTask != RubyTestSuites.INVALID && it.hasTests },
+            "gems with trusted suites must stay runnable",
         )
     }
 

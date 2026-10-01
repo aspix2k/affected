@@ -69,7 +69,7 @@ object RubyGems {
         val name = NAME.find(text)?.groupValues?.get(1)
             ?: gemspec.nameWithoutExtension.takeIf { it.isNotEmpty() }
             ?: return null
-        val testTask = RubyTestSuites.task(directory, lockedRunners) ?: return null
+        val testTask = RubyTestSuites.task(directory, lockedRunners) ?: RubyTestSuites.INVALID
 
         return Described(
             name = name,

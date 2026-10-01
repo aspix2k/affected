@@ -190,7 +190,7 @@ class RubyGemsTest {
     }
 
     @Test
-    fun `an unknown test suite invalidates the complete graph`() {
+    fun `an unknown test suite blocks only its own gem`() {
         val root = monorepo()
         lock(root, "rspec" to "3.13.2")
         gem(root, "gems/known", "acme-known", specs = true)
@@ -198,7 +198,10 @@ class RubyGemsTest {
         File(root, "gems/unknown/test").mkdirs()
         File(root, "gems/unknown/test/widget_test.rb").writeText("puts 'custom runner'\n")
 
-        assertEquals(emptyList(), RubyGems.parse(root))
+        assertEquals(
+            mapOf("acme-known" to "test-rspec", "acme-unknown" to RubyTestSuites.INVALID),
+            RubyGems.parse(root).associate { it.id to it.testTask },
+        )
     }
 
     @Test
@@ -332,15 +335,31 @@ class RubyGemsTest {
     }
 
     @Test
-    fun `a symlinked Ruby suite invalidates the complete graph`() {
+    fun `a symlinked Ruby suite blocks only its own gem`() {
         val root = monorepo()
         lock(root, "minitest" to "6.0.6")
         gem(root, "gems/linked", "acme-linked")
-        val outside = File(root, "outside").apply { mkdirs() }
-        val suite = File(root, "gems/linked/test").toPath()
-        runCatching { Files.createSymbolicLink(suite, outside.toPath()) }.getOrElse { return }
+        gem(root, "gems/plain", "acme-plain")
+        val outside = File(root, "outside_test.rb").apply { writeText("raise 'outside'\n") }
+        val link = File(root, "gems/linked/test/evil_test.rb").apply { parentFile.mkdirs() }.toPath()
+        runCatching { Files.createSymbolicLink(link, outside.toPath()) }.getOrElse { return }
+        File(root, "gems/plain/test").mkdirs()
 
-        assertEquals(emptyList(), RubyGems.parse(root))
+        val modules = RubyGems.parse(root).associateBy { it.id }
+        val linked = modules.getValue("acme-linked")
+        val plain = modules.getValue("acme-plain")
+
+        assertEquals(RubyTestSuites.INVALID, linked.testTask)
+        assertTrue(linked.hasTests)
+        assertEquals(
+            emptyList(),
+            rubyCommands(root.path, listOf("${linked.executionId}:${linked.testTask}"), modules.values.toList()),
+        )
+        assertEquals(
+            listOf(listOf("bundle", "exec", "minitest", "./gems/plain/test")),
+            rubyCommands(root.path, listOf("${plain.executionId}:${plain.testTask}"), modules.values.toList())
+                .map { it.arguments },
+        )
     }
 
     @Test
