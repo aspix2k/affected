@@ -207,6 +207,103 @@ class PitestGateTest(unittest.TestCase):
             with self.assertRaisesRegex(pitest_gate.PitestGateError, "1 surviving"):
                 pitest_gate.check(report)
 
+    def impact_mutation(
+        self,
+        mutated_class: str,
+        method: str,
+        line: int,
+        index: int,
+        mutator: str,
+        description: str = "removed conditional - replaced equality check with false",
+    ) -> str:
+        """Build one surviving impact-package mutation element."""
+        return f"""
+              <mutation detected="false" status="SURVIVED">
+                <mutatedClass>com.aspix2k.affected.impact.{mutated_class}</mutatedClass>
+                <mutatedMethod>{method}</mutatedMethod>
+                <lineNumber>{line}</lineNumber>
+                <mutator>org.pitest.mutationtest.engine.gregor.mutators.{mutator}</mutator>
+                <indexes><index>{index}</index></indexes>
+                <description>{description}</description>
+              </mutation>"""
+
+    def check_impact(self, *mutations: str) -> int:
+        """Run the gate over a report holding only the given mutation elements."""
+        with TemporaryDirectory() as directory:
+            report = Path(directory) / "mutations.xml"
+            report.write_text(f"<mutations>{''.join(mutations)}</mutations>", encoding="utf-8")
+            return pitest_gate.check(report)
+
+    def test_inline_collection_guard_mutants_are_equivalent(self) -> None:
+        """Skipping the Iterable.any fast path leaves the loop to return the same empty result."""
+        self.assertEqual(
+            3,
+            self.check_impact(
+                self.impact_mutation("DependencyMapKt", "isAffectedBy", 178, 30, "RemoveConditionalMutator_EQUAL_ELSE"),
+                self.impact_mutation("DependencyMapKt", "isAffectedBy", 178, 30, "RemoveConditionalMutator_EQUAL_IF"),
+                self.impact_mutation("DependencyMapKt", "isAffectedBy", 178, 34, "RemoveConditionalMutator_EQUAL_ELSE"),
+            ),
+        )
+
+    def test_forcing_the_empty_test_true_in_the_guard_still_fails(self) -> None:
+        """Returning the neutral value for a non-empty collection is observable and must stay killed."""
+        with self.assertRaisesRegex(pitest_gate.PitestGateError, "1 surviving"):
+            self.check_impact(
+                self.impact_mutation("DependencyMapKt", "isAffectedBy", 178, 34, "RemoveConditionalMutator_EQUAL_IF"),
+            )
+
+    def test_classification_does_not_follow_a_drifted_instruction(self) -> None:
+        """The same method and line with another instruction index is a new, unclassified mutant."""
+        with self.assertRaisesRegex(pitest_gate.PitestGateError, "1 surviving"):
+            self.check_impact(
+                self.impact_mutation("DependencyMapKt", "isAffectedBy", 178, 31, "RemoveConditionalMutator_EQUAL_ELSE"),
+            )
+
+    def test_redundant_validation_mutants_are_equivalent(self) -> None:
+        """A removed check that another check on the same path repeats is classified by exact position."""
+        self.assertEqual(
+            1,
+            self.check_impact(
+                self.impact_mutation("CollectorMapIOKt", "readFile", 351, 33, "RemoveConditionalMutator_ORDER_IF"),
+            ),
+        )
+
+    def test_redundant_validation_with_another_mutator_still_fails(self) -> None:
+        """Only the listed mutator at a listed position is classified."""
+        with self.assertRaisesRegex(pitest_gate.PitestGateError, "1 surviving"):
+            self.check_impact(
+                self.impact_mutation("CollectorMapIOKt", "readFile", 351, 33, "RemoveConditionalMutator_EQUAL_IF"),
+            )
+
+    def test_directory_stream_close_is_equivalent_only_for_close_finally(self) -> None:
+        """Dropping the stream close is idle, but another void call at that position is not."""
+        close = self.impact_mutation(
+            "CollectorMapIOKt",
+            "list",
+            344,
+            68,
+            "VoidMethodCallMutator",
+            "removed call to kotlin/jdk7/AutoCloseableKt::closeFinally",
+        )
+        other = self.impact_mutation(
+            "CollectorMapIOKt", "list", 344, 68, "VoidMethodCallMutator", "removed call to java/io/File::delete"
+        )
+        self.assertEqual(1, self.check_impact(close))
+        with self.assertRaisesRegex(pitest_gate.PitestGateError, "1 surviving"):
+            self.check_impact(other)
+
+    def test_classified_impact_positions_stay_on_their_source_lines(self) -> None:
+        """The impact classifications key on lines that must keep holding the checks they describe."""
+        root = Path(__file__).resolve().parents[2] / "core/src/main/kotlin/com/aspix2k/affected/impact"
+        io = (root / "CollectorMapIO.kt").read_text(encoding="utf-8").splitlines()
+        map_source = (root / "DependencyMap.kt").read_text(encoding="utf-8").splitlines()
+        self.assertEqual("    require(size in 1..MAX_FILE_SIZE)", io[350])
+        self.assertEqual("    require(!Files.isSymbolicLink(absolute))", io[337])
+        self.assertEqual("        require(expectedWorkers.size == parsed.size)", io[37])
+        self.assertIn("expectedWorkers.isNotEmpty() && expectedTestClasses.isNotEmpty()", map_source[142])
+        self.assertIn("dependencies.any", map_source[159])
+        self.assertIn("grouped.values.any", map_source[163])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -80,6 +80,7 @@ pitest {
             "com.aspix2k.affected.TestRootResolver*",
             "com.aspix2k.affected.AffectedMcpInputs*",
             "com.aspix2k.affected.build.ExecutablePathKt*",
+            "com.aspix2k.affected.impact.*",
         ),
     )
     targetTests.set(
@@ -88,6 +89,7 @@ pitest {
             "com.aspix2k.affected.AffectedMcpInputsTest*",
             "com.aspix2k.affected.AffectedMcpViewsTest*",
             "com.aspix2k.affected.build.ExecutablePathTest*",
+            "com.aspix2k.affected.impact.*Test*",
         ),
     )
     mutators.set(listOf("STRONGER"))

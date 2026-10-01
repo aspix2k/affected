@@ -1,19 +1,13 @@
 package com.aspix2k.affected.impact
 
-import com.aspix2k.affected.build.cmake.sha256
-import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-import java.nio.file.Path
-import java.security.MessageDigest
-import java.util.Base64
-import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 
-class CollectorMapIOTest {
+class CollectorMapIOTest : CollectorMapFixture() {
 
     @Test
     fun `a complete multi-worker output becomes a promotable candidate`() = withDirectory { root ->
@@ -282,102 +276,5 @@ class CollectorMapIOTest {
         Files.writeString(path, Files.readAllLines(path).dropLast(1).joinToString("\n", postfix = "\n"))
 
         assertNull(store.read(map.identity.taskKey))
-    }
-
-    private fun task(root: Path): Path {
-        val key = "root|:app|testDebugUnitTest"
-        return Files.createDirectory(root.resolve("task-${sha256(key)}")).also { directory ->
-            Files.writeString(
-                directory.resolve("task.manifest"),
-                "format=1\ntask=${encode(key)}\nruntime=${encode("runtime-1")}\ninput=${encode("input-1")}\nall=true\n",
-            )
-            Files.writeString(
-                directory.resolve("expected.manifest"),
-                "format=1\nsupported=true\ntest=${encode("AlphaTest")}\ntest=${encode("BetaTest")}\n",
-            )
-            Files.writeString(
-                directory.resolve("catalog.manifest"),
-                "format=1\n${artifactLine(dependency("Alpha", "alpha-1"))}" +
-                    artifactLine(dependency("Beta", "beta-1")),
-            )
-        }
-    }
-
-    private fun started(task: Path, worker: String): Path = workerDirectory(task, worker).also { directory ->
-        Files.createDirectories(directory)
-        Files.writeString(directory.resolve("started.manifest"), "format=1\nworker=${encode(worker)}\n")
-    }
-
-    private fun worker(
-        task: Path,
-        worker: String,
-        test: String,
-        vararg dependencies: ClassDependency,
-        supported: Boolean = true,
-        expected: String? = null,
-    ) {
-        val directory = started(task, worker)
-        if (expected != null) {
-            Files.writeString(
-                directory.resolve("expected.manifest"),
-                "format=1\nsupported=$supported\ntest=${encode(expected)}\n",
-            )
-        }
-        Files.writeString(
-            directory.resolve("complete.manifest"),
-            "format=1\nworker=${encode(worker)}\nsupported=$supported\ntest=${encode(test)}\n",
-        )
-        Files.writeString(
-            directory.resolve("test-${sha256(test)}.map"),
-            "format=1\ntest=${encode(test)}\n${dependencies.joinToString("") { dependencyLine(it) }}",
-        )
-    }
-
-    private fun workerDirectory(task: Path, worker: String): Path = task.resolve("worker-${sha256(worker)}")
-
-    private fun dependencyLine(dependency: ClassDependency): String =
-        "dependency=${encode(dependency.id.className)}|${encode(dependency.id.codeSource)}|${dependency.sha256}\n"
-
-    private fun artifactLine(dependency: ClassDependency): String =
-        "artifact=${encode(dependency.id.className)}|${encode(dependency.id.codeSource)}|${dependency.sha256}\n"
-
-    private fun dependency(name: String, hashSeed: String) = ClassDependency(
-        DependencyId(name, "file:///classes/"),
-        sha256(hashSeed),
-    )
-
-    private fun testClass(name: String) = TestClassId(name)
-
-    private fun record(test: TestClassId, vararg dependencies: ClassDependency) =
-        TestDependencyRecord(test, dependencies.toSet())
-
-    private fun complete(artifacts: List<ClassDependency>, records: List<TestDependencyRecord>) =
-        CompleteDependencyMap(
-            identity = DependencyMapIdentity(
-                DEPENDENCY_MAP_SCHEMA_VERSION,
-                "collector-1",
-                "root|:app|testDebugUnitTest",
-                "runtime-1",
-                "input-1",
-            ),
-            artifacts = artifacts,
-            records = records,
-            completedRunId = "run-1",
-        )
-
-    private fun encode(value: String): String = Base64.getUrlEncoder().withoutPadding()
-        .encodeToString(value.toByteArray(StandardCharsets.UTF_8))
-
-    private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
-        .digest(value.toByteArray(StandardCharsets.UTF_8))
-        .joinToString("") { "%02x".format(it) }
-
-    private fun withDirectory(block: (Path) -> Unit) {
-        val directory = createTempDirectory("affected-map-test-")
-        try {
-            block(directory)
-        } finally {
-            directory.toFile().deleteRecursively()
-        }
     }
 }
