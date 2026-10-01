@@ -1,6 +1,7 @@
 package com.aspix2k.affected.build.python
 
 import com.aspix2k.affected.build.PYTHON_RUNNER_DISCOVERY_FAILURE
+import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.unittestChanges
 import com.aspix2k.affected.build.unittestModules
 import java.io.File
@@ -12,6 +13,31 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 
 class PythonEnvironmentTest {
+
+    @Test
+    fun `the plain interpreter prefers the project virtual environment, then python, then python3`() {
+        val root = createTempDirectory("python-interpreter").toFile()
+        val tools = createTempDirectory("python-tools").toFile()
+        val only3 = File(tools, "python3").apply { writeText("#!/bin/sh\n"); setExecutable(true) }
+        val pytest = CliCommand("pytest", listOf("python", "-m", "pytest", "."))
+        val managed = CliCommand("pytest", listOf("/opt/bin/uv", "run", "--locked", "python", "-m", "pytest"))
+
+        assertEquals("python", pythonInterpreter(root, path = "", pathExt = null))
+        assertEquals("python3", pythonInterpreter(root, path = tools.path, pathExt = null))
+        File(tools, "python").apply { writeText("#!/bin/sh\n"); setExecutable(true) }
+        assertEquals("python", pythonInterpreter(root, path = tools.path, pathExt = null))
+        val virtual = File(root, ".venv/bin/python").apply {
+            parentFile.mkdirs()
+            only3.copyTo(this)
+            setExecutable(true)
+        }
+        assertEquals(virtual.absolutePath, pythonInterpreter(root, path = tools.path, pathExt = null))
+        assertEquals(
+            listOf(virtual.absolutePath, "-m", "pytest", "."),
+            pytest.withPythonInterpreter(virtual.absolutePath).arguments,
+        )
+        assertEquals(managed, managed.withPythonInterpreter(virtual.absolutePath))
+    }
 
     @Test
     fun `uv lock runs pytest selection through a locked uv environment`() {

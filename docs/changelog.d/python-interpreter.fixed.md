@@ -1,0 +1,1 @@
+- Python tests now run with the project virtual environment (`.venv` or `venv`) when one exists, and fall back to `python3` when no `python` command is on PATH, as on macOS; uv and Poetry environments are unchanged.

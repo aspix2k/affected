@@ -94,8 +94,10 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
         return CommandRunner.runBatchAndWait(project, root, commands, "Affected Python")
     }
 
-    private fun commands(root: String, tasks: List<String>): List<CliCommand> =
-        pythonCommands(root, tasks, modulesOf(File(root)))
+    private fun commands(root: String, tasks: List<String>): List<CliCommand> {
+        val interpreter = pythonInterpreter(File(root))
+        return pythonCommands(root, tasks, modulesOf(File(root))).map { it.withPythonInterpreter(interpreter) }
+    }
 
     private fun commands(
         project: Project,
@@ -109,7 +111,8 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
         val runner = toolchain.runner
         val adapter = configuredPythonAdapter(runner)
             ?: findPythonAdapter(runner, Path.of(PathManager.getJarPathForClass(PythonBuildSystem::class.java)))
-        return when {
+        val interpreter = pythonInterpreter(directory)
+        val steps: List<CliStep> = when {
             adapter == null -> {
                 pythonCommands(root, tasks, discovered, changes)
             }
@@ -122,6 +125,7 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
                 pythonCommands(root, tasks, discovered, changes, adapter)
             }
         }
+        return steps.map { it.withPythonInterpreter(interpreter) }
     }
 
     private fun rootsOf(project: Project): List<File> =
