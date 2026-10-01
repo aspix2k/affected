@@ -18,8 +18,14 @@ import com.aspix2k.affected.build.retainBuildSnapshot
 import com.aspix2k.affected.toBuildChanges
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.PathManager
+import com.intellij.openapi.module.ModuleUtilCore
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.ModuleRootManager
+import com.intellij.openapi.roots.ProjectRootManager
+import com.intellij.openapi.util.Computable
+import com.intellij.openapi.vfs.LocalFileSystem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -78,11 +84,11 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {
-        CommandRunner.runBatch(project, root, commands(root, tasks), "Affected Python")
+        CommandRunner.runBatch(project, root, commands(project, root, tasks), "Affected Python")
     }
 
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
-        CommandRunner.runBatchAndWait(project, root, commands(root, tasks), "Affected Python")
+        CommandRunner.runBatchAndWait(project, root, commands(project, root, tasks), "Affected Python")
 
     override suspend fun runAndWaitSuspending(
         project: Project,
@@ -94,8 +100,8 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
         return CommandRunner.runBatchAndWait(project, root, commands, "Affected Python")
     }
 
-    private fun commands(root: String, tasks: List<String>): List<CliCommand> {
-        val interpreter = pythonInterpreter(File(root))
+    private fun commands(project: Project, root: String, tasks: List<String>): List<CliCommand> {
+        val interpreter = pythonInterpreter(File(root), ideInterpreter(project, File(root)))
         return pythonCommands(root, tasks, modulesOf(File(root))).map { it.withPythonInterpreter(interpreter) }
     }
 
@@ -111,7 +117,7 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
         val runner = toolchain.runner
         val adapter = configuredPythonAdapter(runner)
             ?: findPythonAdapter(runner, Path.of(PathManager.getJarPathForClass(PythonBuildSystem::class.java)))
-        val interpreter = pythonInterpreter(directory)
+        val interpreter = pythonInterpreter(directory, ideInterpreter(project, directory))
         val steps: List<CliStep> = when {
             adapter == null -> {
                 pythonCommands(root, tasks, discovered, changes)
@@ -133,6 +139,17 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
             nestedBuildRoots(base, setOf("pyproject.toml")) { File(it, "pyproject.toml").isRegularFileNoFollow() }
         }.orEmpty()
 }
+
+internal fun ideInterpreter(project: Project, root: File): String? =
+    ApplicationManager.getApplication().runReadAction(
+        Computable {
+            val module = LocalFileSystem.getInstance().findFileByIoFile(root)
+                ?.let { ModuleUtilCore.findModuleForFile(it, project) }
+            val sdk = module?.let { ModuleRootManager.getInstance(it).sdk }
+                ?: ProjectRootManager.getInstance(project).projectSdk
+            configuredPythonInterpreter(sdk?.sdkType?.name, sdk?.homePath)
+        },
+    )
 
 private val PYTHON_TEST_DIRECTORIES = setOf("test", "tests")
 private val PYTHON_GENERATED_DIRECTORIES = setOf(
