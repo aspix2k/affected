@@ -90,6 +90,7 @@ def check(root: Path = ROOT) -> None:
         "scripts/quality.sh analyzers",
         "scripts.tests.test_release_currentness",
         "scripts/release_currentness.py --offline",
+        "Require live release pins when the version changes",
         "scripts.tests.test_support_matrix",
         "scripts/support_matrix.py --check",
         "scripts.tests.test_mcp_capabilities",

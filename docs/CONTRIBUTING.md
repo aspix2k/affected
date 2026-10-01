@@ -60,8 +60,8 @@ are generated from it: `python3 scripts/support_matrix.py --write`.
 `config/release-currentness.json` governs direct pins. A `latest` pin must match
 the newest stable release. A `compatibility` pin names an exact value, a reason
 and repository-owned evidence; use it when a runner contract is proven for one
-version only. The live check runs weekly and before a release, not on pull
-requests. Update the direct manifest and regenerate its lock; do not inventory
+version only. Pull requests check pins offline; the live check runs weekly, on
+pull requests that change `version`, and before a release. Update the direct manifest and regenerate its lock; do not inventory
 transitive versions.
 
 Every IDE the build or verifier unpacks lives under `~/.gradle/caches`. Old
