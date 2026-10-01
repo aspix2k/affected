@@ -2,7 +2,7 @@ package com.aspix2k.affected.impact
 
 import com.aspix2k.affected.build.cmake.sha256
 
-const val DEPENDENCY_MAP_SCHEMA_VERSION = 4
+const val DEPENDENCY_MAP_SCHEMA_VERSION = 5
 
 @JvmInline
 value class TestClassId(val value: String) {
@@ -27,7 +27,12 @@ data class ClassDependency(val id: DependencyId, val sha256: String) {
 data class TestDependencyRecord(
     val testClass: TestClassId,
     val dependencies: Set<ClassDependency>,
-)
+    val unknownDependencies: Boolean = false,
+) {
+    init {
+        require(!unknownDependencies || dependencies.isEmpty())
+    }
+}
 
 sealed interface TestSelection {
 

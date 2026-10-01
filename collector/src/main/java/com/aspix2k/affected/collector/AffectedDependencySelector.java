@@ -21,6 +21,7 @@ public final class AffectedDependencySelector {
     private static final long MAX_FILE_SIZE = 16L * 1024 * 1024;
     private static final int MAX_LINES = 200_000;
     private static final String FORMAT = "format=1";
+    private static final String UNKNOWN_DEPENDENCIES = "*";
 
     private AffectedDependencySelector() {
     }
@@ -66,6 +67,7 @@ public final class AffectedDependencySelector {
                     }
                 }
             }
+            if (!changed.isEmpty()) selected.addAll(baseline.unknown);
             return selected.isEmpty() ? Decision.empty() : Decision.classes(selected);
         } catch (SelectionFailure failure) {
             return Decision.full(failure.reason);
@@ -112,7 +114,7 @@ public final class AffectedDependencySelector {
             if (!lines.get(1).matches("schema=[0-9]+")) {
                 throw new SelectionFailure(Reason.BASELINE_CORRUPT);
             }
-            if (!"schema=4".equals(lines.get(1))) throw new SelectionFailure(Reason.BASELINE_STALE);
+            if (!"schema=5".equals(lines.get(1))) throw new SelectionFailure(Reason.BASELINE_STALE);
             if (lines.size() < 11) throw new SelectionFailure(Reason.BASELINE_CORRUPT);
             if (!collectorVersion.equals(value(lines.get(2), "collector="))) {
                 throw new SelectionFailure(Reason.BASELINE_STALE);
@@ -137,12 +139,13 @@ public final class AffectedDependencySelector {
 
             List<Artifact> artifacts = new ArrayList<Artifact>();
             Map<String, Set<Artifact>> rawRecords = new LinkedHashMap<String, Set<Artifact>>();
+            Set<String> unknown = new LinkedHashSet<String>();
             for (int index = 10; index < lines.size(); index++) {
                 String line = lines.get(index);
                 if (line.startsWith("artifact=")) {
                     artifacts.add(parseArtifact(line.substring("artifact=".length())));
                 } else if (line.startsWith("record=")) {
-                    parseRecord(line.substring("record=".length()), rawRecords);
+                    parseRecord(line.substring("record=".length()), rawRecords, unknown);
                 } else {
                     throw new IllegalStateException("map entry");
                 }
@@ -163,7 +166,7 @@ public final class AffectedDependencySelector {
                 }
                 records.put(rawRecord.getKey(), dependencies);
             }
-            return new Baseline(catalog, records);
+            return new Baseline(catalog, records, unknown);
         } catch (SelectionFailure failure) {
             throw failure;
         } catch (Exception failure) {
@@ -171,13 +174,22 @@ public final class AffectedDependencySelector {
         }
     }
 
-    private static void parseRecord(String value, Map<String, Set<Artifact>> records) throws Exception {
+    private static void parseRecord(
+        String value,
+        Map<String, Set<Artifact>> records,
+        Set<String> unknown
+    ) throws Exception {
         int separator = value.indexOf('|');
         if (separator <= 0) throw new IllegalStateException("record");
         String testClass = decode(value.substring(0, separator));
         if (records.containsKey(testClass)) throw new IllegalStateException("duplicate test");
         if (separator == value.length() - 1) {
             records.put(testClass, Collections.<Artifact>emptySet());
+            return;
+        }
+        if (UNKNOWN_DEPENDENCIES.equals(value.substring(separator + 1))) {
+            records.put(testClass, Collections.<Artifact>emptySet());
+            unknown.add(testClass);
             return;
         }
         String[] values = value.substring(separator + 1).split(";", -1);
@@ -427,10 +439,16 @@ public final class AffectedDependencySelector {
     private static final class Baseline {
         private final Map<ArtifactKey, Artifact> artifacts;
         private final Map<String, Set<ArtifactKey>> records;
+        private final Set<String> unknown;
 
-        private Baseline(Map<ArtifactKey, Artifact> artifacts, Map<String, Set<ArtifactKey>> records) {
+        private Baseline(
+            Map<ArtifactKey, Artifact> artifacts,
+            Map<String, Set<ArtifactKey>> records,
+            Set<String> unknown
+        ) {
             this.artifacts = artifacts;
             this.records = records;
+            this.unknown = unknown;
         }
     }
 }

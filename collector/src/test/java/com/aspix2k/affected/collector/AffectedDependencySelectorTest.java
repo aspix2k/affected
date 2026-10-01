@@ -39,6 +39,41 @@ public class AffectedDependencySelectorTest {
     }
 
     @Test
+    public void unknownDependencyClassesAreSelectedWhenAnyArtifactChanged() throws Exception {
+        Path maps = temporary.newFolder("maps").toPath();
+        artifactMap(maps, "task", true, artifact("Alpha", "alpha-1"), artifact("Beta", "beta-1"));
+
+        AffectedDependencySelector.Decision decision = AffectedDependencySelector.select(
+            maps,
+            "collector",
+            "task",
+            "runtime",
+            "input",
+            Arrays.asList(artifact("Alpha", "alpha-2"), artifact("Beta", "beta-1"))
+        );
+
+        assertEquals(AffectedDependencySelector.Kind.CLASSES, decision.getKind());
+        assertEquals(Arrays.asList("fixture.AlphaTest", "fixture.UnknownTest"), decision.getTestClasses());
+    }
+
+    @Test
+    public void unknownDependencyClassesStayUnselectedWhenNothingChanged() throws Exception {
+        Path maps = temporary.newFolder("maps").toPath();
+        artifactMap(maps, "task", true, artifact("Alpha", "alpha-1"), artifact("Beta", "beta-1"));
+
+        AffectedDependencySelector.Decision decision = AffectedDependencySelector.select(
+            maps,
+            "collector",
+            "task",
+            "runtime",
+            "input",
+            Arrays.asList(artifact("Alpha", "alpha-1"), artifact("Beta", "beta-1"))
+        );
+
+        assertEquals(AffectedDependencySelector.Kind.EMPTY, decision.getKind());
+    }
+
+    @Test
     public void unchangedCatalogProvesAnEmptySelection() throws Exception {
         Path maps = temporary.newFolder("maps").toPath();
         AffectedDependencySelector.Artifact alpha = artifact("Alpha", "alpha-1");
@@ -238,6 +273,15 @@ public class AffectedDependencySelectorTest {
         String task,
         AffectedDependencySelector.Artifact... artifacts
     ) throws Exception {
+        artifactMap(maps, task, false, artifacts);
+    }
+
+    private static void artifactMap(
+        Path maps,
+        String task,
+        boolean withUnknown,
+        AffectedDependencySelector.Artifact... artifacts
+    ) throws Exception {
         StringBuilder payload = new StringBuilder();
         for (AffectedDependencySelector.Artifact artifact : artifacts) {
             payload.append("artifact=").append(serialized(artifact)).append('\n');
@@ -249,15 +293,16 @@ public class AffectedDependencySelectorTest {
                 .append(serialized(artifacts[1])).append('\n');
         }
         payload.append("record=").append(encode("fixture.NoDependenciesTest")).append('|').append('\n');
+        if (withUnknown) payload.append("record=").append(encode("fixture.UnknownTest")).append("|*\n");
         StringBuilder content = new StringBuilder("format=1\n")
-            .append("schema=4\n")
+            .append("schema=5\n")
             .append("collector=").append(encode("collector")).append('\n')
             .append("task=").append(encode(task)).append('\n')
             .append("runtime=").append(encode("runtime")).append('\n')
             .append("input=").append(encode("input")).append('\n')
             .append("run=").append(encode("run")).append('\n')
             .append("artifacts=").append(artifacts.length).append('\n')
-            .append("records=").append(artifacts.length > 1 ? 3 : 2).append('\n')
+            .append("records=").append((artifacts.length > 1 ? 3 : 2) + (withUnknown ? 1 : 0)).append('\n')
             .append("checksum=").append(sha256(payload.toString())).append('\n')
             .append(payload);
         Files.write(

@@ -160,7 +160,11 @@ internal object CollectorMapReader {
         val lines = readFile(path)
         require(lines.size >= MAP_HEADER_LINE_COUNT && lines[0] == FORMAT)
         require(value(lines[1], "test=") == expectedTest)
-        val dependencies = lines.drop(MAP_HEADER_LINE_COUNT).map { line ->
+        val body = lines.drop(MAP_HEADER_LINE_COUNT)
+        if (body == listOf(UNKNOWN_MAP_LINE)) {
+            return TestDependencyRecord(TestClassId(expectedTest), emptySet(), unknownDependencies = true)
+        }
+        val dependencies = body.map { line ->
             require(line.startsWith("dependency="))
             parseDependency(line.removePrefix("dependency="))
         }
@@ -279,7 +283,13 @@ internal class DependencyMapStore(private val root: Path) {
         }
         map.records.sortedBy { it.testClass.value }.forEach { record ->
             append("record=").append(encode(record.testClass.value)).append('|')
-            append(record.dependencies.sortedWith(DEPENDENCY_ORDER).joinToString(";") { serialize(it) })
+            append(
+                if (record.unknownDependencies) {
+                    UNKNOWN_RECORD_PAYLOAD
+                } else {
+                    record.dependencies.sortedWith(DEPENDENCY_ORDER).joinToString(";") { serialize(it) }
+                },
+            )
             append('\n')
         }
     }
@@ -289,6 +299,7 @@ internal class DependencyMapStore(private val root: Path) {
         require(separator > 0)
         val test = TestClassId(decode(value.substring(0, separator)))
         val payload = value.substring(separator + 1)
+        if (payload == UNKNOWN_RECORD_PAYLOAD) return TestDependencyRecord(test, emptySet(), unknownDependencies = true)
         val dependencies = if (payload.isEmpty()) emptyList() else payload.split(';').map(::parseDependency)
         require(dependencies.size == dependencies.toSet().size)
         return TestDependencyRecord(test, dependencies.toSet())
@@ -376,6 +387,8 @@ private val DEPENDENCY_ORDER = compareBy<ClassDependency>({ it.id.className }, {
 private val SHA256_PATTERN = Regex("[0-9a-f]{64}")
 private val WORKER_DIRECTORY_PATTERN = Regex("worker-[0-9a-f]{64}")
 private const val FORMAT = "format=1"
+private const val UNKNOWN_MAP_LINE = "unknown=true"
+private const val UNKNOWN_RECORD_PAYLOAD = "*"
 private const val TASK_MANIFEST = "task.manifest"
 private const val CATALOG_MANIFEST = "catalog.manifest"
 private const val EXPECTED_MANIFEST = "expected.manifest"

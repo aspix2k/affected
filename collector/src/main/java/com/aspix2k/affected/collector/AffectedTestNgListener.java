@@ -6,6 +6,7 @@ import org.testng.IExecutionListener;
 import org.testng.IInvokedMethod;
 import org.testng.IInvokedMethodListener;
 import org.testng.ITestClass;
+import org.testng.ITestListener;
 import org.testng.ITestNGMethod;
 import org.testng.ITestResult;
 
@@ -14,10 +15,11 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public final class AffectedTestNgListener implements IInvokedMethodListener, IClassListener, IExecutionListener {
+public final class AffectedTestNgListener implements IInvokedMethodListener, IClassListener, IExecutionListener, ITestListener {
     static final String ENABLED_PROPERTY = "affected.collector.testng";
 
     private final Set<String> seen = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+    private final Set<String> skipped = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private final AtomicBoolean unsupported = new AtomicBoolean();
     private final AtomicBoolean enabled = new AtomicBoolean();
     private volatile CollectorOutput output;
@@ -49,6 +51,26 @@ public final class AffectedTestNgListener implements IInvokedMethodListener, ICl
         seen.add(testClass);
         try {
             AffectedCollectorAgent.endExecution(token(method, result, testClass));
+        } catch (Throwable failure) {
+            AffectedCollectorAgent.markUnsupported();
+            unsupported.set(true);
+        }
+    }
+
+    @Override
+    public void onTestSkipped(ITestResult result) {
+        if (!enabled()) return;
+        String testClass = className(null, result);
+        if (testClass == null) {
+            unsupported.set(true);
+            return;
+        }
+        try {
+            if (output == null) {
+                output = CollectorOutput.fromSystemProperties(Collections.singleton(testClass));
+            }
+            skipped.add(testClass);
+            seen.add(testClass);
         } catch (Throwable failure) {
             AffectedCollectorAgent.markUnsupported();
             unsupported.set(true);
@@ -95,7 +117,8 @@ public final class AffectedTestNgListener implements IInvokedMethodListener, ICl
     private void writeClassMap(String testClass) {
         if (testClass == null || output == null) return;
         try {
-            output.writeMap(testClass, AffectedCollectorAgent.dependencies(testClass));
+            if (skipped.contains(testClass)) output.writeUnknownMap(testClass);
+            else output.writeMap(testClass, AffectedCollectorAgent.dependencies(testClass));
         } catch (Throwable failure) {
             AffectedCollectorAgent.markUnsupported();
             unsupported.set(true);

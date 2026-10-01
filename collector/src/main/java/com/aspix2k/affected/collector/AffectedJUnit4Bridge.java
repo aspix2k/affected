@@ -9,12 +9,21 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class AffectedJUnit4Bridge {
     static final String ENABLED_PROPERTY = "affected.collector.junit4";
 
+    private static final Set<String> SKIPPED = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private static final Set<String> SEEN = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
     private static final AtomicBoolean UNSUPPORTED = new AtomicBoolean();
     private static final AtomicBoolean ENABLED = new AtomicBoolean();
     private static volatile CollectorOutput output;
 
     private AffectedJUnit4Bridge() {
+    }
+
+    static void resetForTests() {
+        SKIPPED.clear();
+        SEEN.clear();
+        UNSUPPORTED.set(false);
+        ENABLED.set(false);
+        output = null;
     }
 
     static boolean enabled() {
@@ -54,6 +63,23 @@ final class AffectedJUnit4Bridge {
         }
     }
 
+    static void ignored(Object description) {
+        if (!enabled()) return;
+        String testClass = className(description);
+        if (testClass == null) {
+            UNSUPPORTED.set(true);
+            return;
+        }
+        try {
+            prepareOutput(testClass);
+            SKIPPED.add(testClass);
+            SEEN.add(testClass);
+        } catch (Throwable failure) {
+            AffectedCollectorAgent.markUnsupported();
+            UNSUPPORTED.set(true);
+        }
+    }
+
     static void suiteFinished(Object description) {
         if (!enabled() || !isSuite(description)) return;
         writeClassMap(className(description));
@@ -77,7 +103,8 @@ final class AffectedJUnit4Bridge {
     private static void writeClassMap(String testClass) {
         if (testClass == null || output == null) return;
         try {
-            output.writeMap(testClass, AffectedCollectorAgent.dependencies(testClass));
+            if (SKIPPED.contains(testClass)) output.writeUnknownMap(testClass);
+            else output.writeMap(testClass, AffectedCollectorAgent.dependencies(testClass));
         } catch (Throwable failure) {
             AffectedCollectorAgent.markUnsupported();
             UNSUPPORTED.set(true);

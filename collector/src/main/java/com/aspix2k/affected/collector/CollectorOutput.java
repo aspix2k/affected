@@ -109,6 +109,18 @@ public final class CollectorOutput {
                 .append(encode(dependency.getCodeSource())).append('|')
                 .append(dependency.getSha256()).append('\n');
         }
+        writeMapFile(testClass, content);
+    }
+
+    public void writeUnknownMap(String testClass) throws Exception {
+        if (testClass == null || testClass.trim().isEmpty()) throw new IllegalArgumentException("test dependency map");
+        writeMapFile(
+            testClass,
+            new StringBuilder("format=1\ntest=").append(encode(testClass)).append("\nunknown=true\n")
+        );
+    }
+
+    private void writeMapFile(String testClass, StringBuilder content) throws Exception {
         writeAtomically(
             workerDirectory.resolve("test-" + sha256(testClass) + ".map"),
             content.toString().getBytes(StandardCharsets.UTF_8)
