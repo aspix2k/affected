@@ -10,7 +10,7 @@ import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.ChangeAwareSuspendingBuildSystem
 import com.aspix2k.affected.build.WorkspaceChangesBuildSystem
 import com.aspix2k.affected.build.gradleInvocationArguments
-import com.aspix2k.affected.build.isJvmTestSource
+import com.aspix2k.affected.build.isJvmTestSourceSet
 import com.aspix2k.affected.build.moduleDependencyKey
 import com.aspix2k.affected.build.requiredGradleFailureStrategyScript
 import com.aspix2k.affected.build.rootFallbackModule
@@ -58,7 +58,7 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
 
     override val id: String = GradleConstants.SYSTEM_ID.id
 
-    override fun isTestSource(path: String): Boolean = isJvmTestSource(path)
+    override fun isTestSource(path: String): Boolean = isJvmTestSourceSet(path)
 
     override val consumersNeedSignatureChange: Boolean = true
 

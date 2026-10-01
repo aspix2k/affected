@@ -1,6 +1,6 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.isJvmTestSource
+import com.aspix2k.affected.build.isJvmTestSourceSet
 import com.intellij.execution.ExecutionException
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.CapturingProcessHandler
@@ -104,7 +104,7 @@ class ChangeAnalyzer(
         runCatching { file.relativeTo(projectDir).invariantSeparatorsPath }.getOrNull()
 
     private fun needsApiCheck(relative: String): Boolean =
-        !isJvmTestSource(relative) && relative.substringAfterLast('.', "") in API_SOURCE_EXTENSIONS
+        !isJvmTestSourceSet(relative) && relative.substringAfterLast('.', "") in API_SOURCE_EXTENSIONS
 
     private fun apiTouched(file: File, relative: String?, diffs: Map<String, List<String>>): Boolean {
         if (relative == null) return true
