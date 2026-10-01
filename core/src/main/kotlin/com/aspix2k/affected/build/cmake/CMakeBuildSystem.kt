@@ -238,7 +238,7 @@ private fun cmakeBuildDirectory(root: File): String? {
     val queue = ArrayDeque<Pair<File, Int>>()
     queue += root to 0
     var visited = 0
-    while (queue.isNotEmpty() && found.size < 2) {
+    while (queue.isNotEmpty()) {
         if (visited++ >= MAX_CMAKE_DIRECTORIES) return null
         val (directory, depth) = queue.removeFirst()
         val children = directory.listFiles() ?: return null
@@ -252,7 +252,9 @@ private fun cmakeBuildDirectory(root: File): String? {
             directories.forEach { queue += it to depth + 1 }
         }
     }
-    val directory = found.singleOrNull() ?: return null
+    val directory = found.maxWithOrNull(
+        compareBy<File> { File(it, "CMakeCache.txt").lastModified() }.thenByDescending { it.invariantSeparatorsPath },
+    ) ?: return null
     return directory.invariantSeparatorsPath.removePrefix("${root.invariantSeparatorsPath}/").ifEmpty { "." }
 }
 
@@ -278,7 +280,7 @@ private const val CACHE_DIRECTORY = "affected"
 private const val CTEST_METADATA_TIMEOUT_SECONDS = 30L
 private const val CTEST_METADATA_MAX_BYTES = 16 * 1024 * 1024
 private const val CMAKE_RESOLUTION_ERROR =
-    "Affected could not find exactly one configured CMake build tree. Configure one profile and run again."
+    "Affected could not find a configured CMake build tree. Configure a profile and run again."
 
 internal val CMAKE_SOURCE_EXTENSIONS = setOf(
     "c", "cc", "cp", "cpp", "cxx", "c++",
