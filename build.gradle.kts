@@ -1,4 +1,5 @@
 import info.solidsoft.gradle.pitest.PitestTask
+import org.gradle.api.tasks.testing.logging.TestLogEvent
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.tasks.BuildPluginTask
@@ -162,6 +163,14 @@ detekt {
     config.setFrom(files("$rootDir/config/detekt.yml"))
     source.setFrom(files("src", "core/src", "mcp/src"))
     parallel = true
+}
+
+allprojects {
+    tasks.withType<Test>().configureEach {
+        if (providers.environmentVariable("CI").isPresent) {
+            testLogging.events(TestLogEvent.STARTED)
+        }
+    }
 }
 
 subprojects {

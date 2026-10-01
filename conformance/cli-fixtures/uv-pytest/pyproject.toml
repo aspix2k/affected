@@ -1,0 +1,11 @@
+[project]
+name = "affected-uv-pytest"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest==9.1.1"]
+
+[tool.uv]
+package = false

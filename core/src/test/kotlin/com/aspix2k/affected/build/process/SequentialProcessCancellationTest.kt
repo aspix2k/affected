@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build.process
 
+import com.aspix2k.affected.awaitBounded
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
@@ -127,7 +128,7 @@ class SequentialProcessCancellationTest : BasePlatformTestCase() {
             ),
             ownedTemporaryDirectoryCleanup = {
                 cleanupStarted.countDown()
-                releaseCleanup.await()
+                releaseCleanup.awaitBounded()
                 it.toFile().deleteRecursively()
             },
         )
@@ -175,7 +176,7 @@ class SequentialProcessCancellationTest : BasePlatformTestCase() {
             ),
             afterInitialProcessTermination = {
                 initialTermination.countDown()
-                releaseTermination.await()
+                releaseTermination.awaitBounded()
             },
         )
 
@@ -243,7 +244,7 @@ class SequentialProcessCancellationTest : BasePlatformTestCase() {
                     checkNotNull(child)
                     check(child?.isAlive == true)
                     targetExited.countDown()
-                    releaseTargetExit.await()
+                    releaseTargetExit.awaitBounded()
                 })
                 val processHandler = OSProcessHandler(
                     contained.process,
@@ -360,7 +361,7 @@ class SequentialProcessCancellationTest : BasePlatformTestCase() {
             ),
             ownedTemporaryDirectoryCleanup = {
                 cleanupStarted.countDown()
-                releaseCleanup.await()
+                releaseCleanup.awaitBounded()
                 false
             },
         )

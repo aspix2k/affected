@@ -4,8 +4,15 @@ import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CommandRunner
 import com.intellij.openapi.project.Project
 import java.io.File
+import java.util.concurrent.atomic.AtomicReference
 
-class SwiftBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
+class SwiftBuildSystem(
+    private val describe: (String) -> String? = ::describeSwiftPackage,
+) : SuspendingBuildSystem, NamedSourceBuildSystem, TransitiveTestConsumersBuildSystem {
+
+    private data class Snapshot(val root: String, val stamp: String, val modules: List<BuildModule>)
+
+    private val cache = AtomicReference<Snapshot?>(null)
 
     override val id: String = "SWIFT"
 
@@ -15,9 +22,19 @@ class SwiftBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
 
     override fun isPresent(project: Project): Boolean = manifestOf(project) != null
 
-    override fun modules(project: Project): List<BuildModule> {
-        val root = manifestOf(project)?.parentFile ?: return emptyList()
-        return listOf(swiftRootModule(root))
+    override fun modules(project: Project): List<BuildModule> =
+        manifestOf(project)?.parentFile?.let(::modules).orEmpty()
+
+    internal fun modules(root: File): List<BuildModule> {
+        val rootPath = root.invariantSeparatorsPath
+        val stamp = ManifestSearch.fingerprint(root, manifests(root))
+        if (stamp != null) cache.get()?.takeIf { it.root == rootPath && it.stamp == stamp }?.let { return it.modules }
+
+        val discovered = describe(rootPath)?.let { SwiftTargets.parse(it, root) } ?: listOf(swiftRootModule(root))
+        ManifestSearch.fingerprint(root, manifests(root))?.let { settled ->
+            cache.retainBuildSnapshot(Snapshot(rootPath, settled, discovered), discovered.size)
+        }
+        return discovered
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {
@@ -30,7 +47,21 @@ class SwiftBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
     private fun manifestOf(project: Project): File? =
         project.basePath?.let(::File)?.let { nestedBuildRoot(it) { swiftManifest(it) != null } }
             ?.let(::swiftManifest)
+
+    private fun manifests(root: File): List<File> =
+        ManifestSearch.find(root, "Package.swift") + ManifestSearch.find(root, "Package.resolved") +
+            root.listFiles { file -> VERSIONED_MANIFEST.matches(file.name) }.orEmpty()
+
+    private companion object {
+        val VERSIONED_MANIFEST = Regex("Package@swift-.+\\.swift")
+    }
 }
+
+private fun describeSwiftPackage(root: String): String? =
+    CommandRunner.capture(root, DESCRIBE, timeoutSeconds = DESCRIBE_TIMEOUT_SECONDS)
+
+private val DESCRIBE = listOf("swift", "package", "describe", "--type", "json")
+private const val DESCRIBE_TIMEOUT_SECONDS = 120L
 
 internal object SwiftTasks {
     const val TEST = "test"
@@ -51,7 +82,7 @@ internal fun swiftRootModule(root: File): BuildModule {
         testTask = SwiftTasks.TEST,
         compileTask = SwiftTasks.BUILD,
         hasTests = swiftHasTests(root),
-        executionId = ".",
+        executionId = PACKAGE,
     )
 }
 
@@ -62,12 +93,23 @@ internal fun swiftHasTests(root: File): Boolean {
 
 internal fun swiftCommands(tasks: List<String>): List<CliCommand> {
     if (tasks.isEmpty()) return emptyList()
-    val verbs = tasks.map { it.substringAfterLast(':') }.toSet()
-    val verb = if (verbs == setOf(SwiftTasks.BUILD)) SwiftTasks.BUILD else SwiftTasks.TEST
-    return listOf(CliCommand("swift $verb", listOf("swift", verb)))
+    val targets = tasks.groupBy({ it.substringAfterLast(':') }, { it.substringBeforeLast(':') })
+    val unnarrowable = targets.keys.any { it != SwiftTasks.BUILD && it != SwiftTasks.TEST }
+    val tests = if (unnarrowable) listOf(PACKAGE) else targets[SwiftTasks.TEST]
+    return listOfNotNull(
+        targets[SwiftTasks.BUILD]?.let { swiftCommand(SwiftTasks.BUILD, it, "--target") { name -> name } },
+        tests?.let { swiftCommand(SwiftTasks.TEST, it, "--filter") { name -> "^$name\\." } },
+    )
+}
+
+private fun swiftCommand(verb: String, targets: List<String>, option: String, value: (String) -> String): CliCommand {
+    val wholePackage = targets.any { it == PACKAGE || !SwiftTargets.SAFE_NAME.matches(it) }
+    val selection = if (wholePackage) emptyList() else targets.distinct().flatMap { listOf(option, value(it)) }
+    return CliCommand("swift $verb", listOf("swift", verb) + selection)
 }
 
 private fun swiftTestFile(file: File): Boolean =
     file.isFile && file.name.endsWith(".swift")
 
+private const val PACKAGE = "."
 private val FOREIGN_ROOTS = listOf("settings.gradle.kts", "settings.gradle", "pom.xml")

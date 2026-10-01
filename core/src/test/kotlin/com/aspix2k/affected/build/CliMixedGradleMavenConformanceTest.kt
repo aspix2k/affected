@@ -9,6 +9,7 @@ import com.aspix2k.affected.Verification
 import com.aspix2k.affected.build.gradle.GradleBuildSystem
 import com.aspix2k.affected.build.maven.MavenBuildSystem
 import com.aspix2k.affected.runAndWait
+import com.aspix2k.affected.runBoundedBlocking
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.ui.RunContentManager
 import com.intellij.openapi.application.ApplicationManager
@@ -21,7 +22,6 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.testFramework.ExtensionTestUtil
 import com.intellij.testFramework.HeavyPlatformTestCase
 import com.intellij.testFramework.common.ThreadLeakTracker
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.jetbrains.idea.maven.execution.MavenRunner
 import org.jetbrains.idea.maven.execution.MavenRunnerSettings
@@ -84,21 +84,21 @@ class CliMixedGradleMavenConformanceTest : HeavyPlatformTestCase() {
 
     override fun runInDispatchThread(): Boolean = false
 
-    fun testGradleChangeDoesNotOwnTheSiblingMavenProject() = runBlocking {
+    fun testGradleChangeDoesNotOwnTheSiblingMavenProject() = runBoundedBlocking {
         val root = mixedRepo()
         val owners = ModuleGraph.create(project).nodesFor(File(root, GRADLE_SOURCE))
         assertEquals(listOf(GradleConstants.SYSTEM_ID.id), owners.map { it.system.id }.distinct())
         assertTrue(owners.none { it.system.id == "MAVEN" })
     }
 
-    fun testMavenChangeDoesNotOwnTheSiblingGradleProject() = runBlocking {
+    fun testMavenChangeDoesNotOwnTheSiblingGradleProject() = runBoundedBlocking {
         val root = mixedRepo()
         val owners = ModuleGraph.create(project).nodesFor(File(root, MAVEN_SOURCE))
         assertEquals(listOf("MAVEN"), owners.map { it.system.id }.distinct())
         assertTrue(owners.none { it.system.id == GradleConstants.SYSTEM_ID.id })
     }
 
-    fun testImportedAdaptersArePresentAndMavenChangePlansTheMavenGroup() = runBlocking {
+    fun testImportedAdaptersArePresentAndMavenChangePlansTheMavenGroup() = runBoundedBlocking {
         val root = mixedRepo()
         val prepared = prepared(root, MAVEN_SOURCE)
         assertEquals(
@@ -113,7 +113,7 @@ class CliMixedGradleMavenConformanceTest : HeavyPlatformTestCase() {
     fun testSimultaneousChangesRunBothGroupsInOneVerificationSession() {
         if (!nativeEnabled()) return
         val root = mixedRepo()
-        val outcome = runBlocking { runBothGroups(root) }
+        val outcome = runBoundedBlocking { runBothGroups(root) }
         val gradleMarker = File(root, "gradle/mixed-gradle.marker")
         val mavenMarker = File(root, "maven/mixed-maven.marker")
         assertTrue("mixed Gradle+Maven verification failed", outcome.passed)
@@ -131,7 +131,7 @@ class CliMixedGradleMavenConformanceTest : HeavyPlatformTestCase() {
         File(root, "gradle/build.gradle").appendText(
             "\ntasks.named(\"test\") { doLast { throw new GradleException('requested mixed fixture failure') } }\n",
         )
-        val outcome = runBlocking { runBothGroups(root) }
+        val outcome = runBoundedBlocking { runBothGroups(root) }
         assertFalse(outcome.passed)
         assertTrue(
             "Maven group did not finish after the Gradle failure",

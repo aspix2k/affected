@@ -4,6 +4,7 @@ import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.ProjectChanges
 import com.aspix2k.affected.Verification
+import com.aspix2k.affected.runBoundedBlocking
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.ui.RunContentManager
 import com.intellij.openapi.application.ApplicationManager
@@ -14,7 +15,6 @@ import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.project.Project
 import com.intellij.testFramework.ExtensionTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.w3c.dom.Element
 import java.io.File
@@ -22,13 +22,12 @@ import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 import java.nio.file.Files
 import javax.xml.parsers.DocumentBuilderFactory
-import kotlin.io.path.createTempDirectory
 
 class CliMixedRPythonConformanceTest : BasePlatformTestCase() {
 
     private var registeredPoint = false
     private var previousStopAfterFirstFailure = false
-    private val temporaryRoots = mutableListOf<File>()
+    private val sandboxes = mutableListOf<OwnedSandbox>()
 
     override fun setUp() {
         super.setUp()
@@ -50,12 +49,9 @@ class CliMixedRPythonConformanceTest : BasePlatformTestCase() {
 
     override fun tearDown() {
         try {
-            temporaryRoots.toList().forEach { root ->
-                if (root.exists()) {
-                    check(root.deleteRecursively())
-                }
-            }
-            temporaryRoots.clear()
+            val owned = sandboxes.toList()
+            sandboxes.clear()
+            OwnedSandbox.closeAll(owned)
             deleteCopiedRoots()
             AffectedSettings.getInstance().stopAfterFirstFailure = previousStopAfterFirstFailure
             super.tearDown()
@@ -68,21 +64,21 @@ class CliMixedRPythonConformanceTest : BasePlatformTestCase() {
 
     override fun runInDispatchThread(): Boolean = false
 
-    fun testRChangeDoesNotOwnTheSiblingPythonProject() = runBlocking {
+    fun testRChangeDoesNotOwnTheSiblingPythonProject() = runBoundedBlocking {
         val root = mixedRepo()
         val owners = ModuleGraph.create(projectAt(root)).nodesFor(File(root, R_SOURCE))
         assertEquals(listOf("RPROJECT"), owners.map { it.system.id }.distinct())
         assertTrue(owners.none { it.system.id == "PYTHON" })
     }
 
-    fun testPythonChangeDoesNotOwnTheSiblingRProject() = runBlocking {
+    fun testPythonChangeDoesNotOwnTheSiblingRProject() = runBoundedBlocking {
         val root = mixedRepo()
         val owners = ModuleGraph.create(projectAt(root)).nodesFor(File(root, PYTHON_SOURCE))
         assertEquals(listOf("PYTHON"), owners.map { it.system.id }.distinct())
         assertTrue(owners.none { it.system.id == "RPROJECT" })
     }
 
-    fun testRChangePlansOnlyTheRGroup() = runBlocking {
+    fun testRChangePlansOnlyTheRGroup() = runBoundedBlocking {
         val root = mixedRepo()
         val prepared = prepared(root, R_SOURCE)
         assertEquals(listOf("RPROJECT"), prepared.plan.groups.map { it.systemId }.distinct())
@@ -90,7 +86,7 @@ class CliMixedRPythonConformanceTest : BasePlatformTestCase() {
         assertEquals(File(root, "stats").canonicalPath, File(prepared.plan.groups.single().root).canonicalPath)
     }
 
-    fun testPythonChangePlansOnlyThePythonGroup() = runBlocking {
+    fun testPythonChangePlansOnlyThePythonGroup() = runBoundedBlocking {
         val root = mixedRepo()
         val prepared = prepared(root, PYTHON_SOURCE)
         assertEquals(listOf("PYTHON"), prepared.plan.groups.map { it.systemId }.distinct())
@@ -98,7 +94,7 @@ class CliMixedRPythonConformanceTest : BasePlatformTestCase() {
         assertEquals(File(root, "analysis").canonicalPath, File(prepared.plan.groups.single().root).canonicalPath)
     }
 
-    fun testProductionRegistrySeesBothAdaptersAndPlansBothSides() = runBlocking {
+    fun testProductionRegistrySeesBothAdaptersAndPlansBothSides() = runBoundedBlocking {
         val root = mixedRepo()
         val target = projectAt(root)
         val prepared = prepared(target, root, R_SOURCE, PYTHON_SOURCE)
@@ -111,7 +107,7 @@ class CliMixedRPythonConformanceTest : BasePlatformTestCase() {
     fun testSimultaneousChangesRunBothGroupsInOneVerificationSession() {
         if (!nativeEnabled()) return
         val root = mixedRepo()
-        val outcome = runBlocking { runPrepared(root, R_SOURCE, PYTHON_SOURCE) }
+        val outcome = runBoundedBlocking { runPrepared(root, R_SOURCE, PYTHON_SOURCE) }
         assertTrue(outcome.passed)
         assertEquals(setOf("RPROJECT", "PYTHON"), outcome.plan.groups.map { it.systemId }.toSet())
         assertTrue("R marker was not written", markerExists(root, R_MARKER))
@@ -127,7 +123,7 @@ class CliMixedRPythonConformanceTest : BasePlatformTestCase() {
                 "raise AssertionError('requested mixed fixture failure')",
             ),
         )
-        val outcome = runBlocking { runPrepared(root, R_SOURCE, PYTHON_SOURCE) }
+        val outcome = runBoundedBlocking { runPrepared(root, R_SOURCE, PYTHON_SOURCE) }
         assertFalse(outcome.passed)
         assertTrue("R group did not finish after the Python failure", markerExists(root, R_MARKER))
     }
@@ -164,8 +160,9 @@ class CliMixedRPythonConformanceTest : BasePlatformTestCase() {
 
     private fun mixedRepo(): File {
         val source = CliConformanceRepository.configured.fixture("mixed-r-python")
-        val root = createTempDirectory("affected-mixed-r-python").toFile()
-        temporaryRoots += root
+        val sandbox = OwnedSandbox.open("affected-mixed-r-python")
+        sandboxes += sandbox
+        val root = sandbox.root
         source.listFiles().orEmpty().forEach { child ->
             check(child.copyRecursively(File(root, child.name), overwrite = true))
         }

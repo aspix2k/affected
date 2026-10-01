@@ -831,6 +831,42 @@ class ReleaseCurrentnessTest(unittest.TestCase):
         self.assertEqual("0.9.143", version)
         self.assertEqual({"b" * 64}, digests)
 
+    def test_github_release_asset_accepts_an_unversioned_asset_name(self) -> None:
+        """Bind a tool pin to a release asset whose file name carries no version."""
+        repository = "denoland/deno"
+        source = {
+            "type": "github-release-asset",
+            "name": repository,
+            "tagPrefix": "v",
+            "asset": "deno-x86_64-unknown-linux-gnu.zip",
+        }
+        transport = FakeTransport(
+            {
+                f"https://api.github.com/repos/{repository}/git/matching-refs/tags/v": [
+                    {"ref": "refs/tags/v2.9.6"},
+                    {"ref": "refs/tags/v2.9.7"},
+                ],
+                f"https://api.github.com/repos/{repository}/releases/tags/v2.9.7": {
+                    "tag_name": "v2.9.7",
+                    "draft": False,
+                    "prerelease": False,
+                    "assets": [
+                        {
+                            "name": "deno-x86_64-unknown-linux-gnu.zip",
+                            "state": "uploaded",
+                            "size": 1_000_000,
+                            "digest": f"sha256:{'c' * 64}",
+                        }
+                    ],
+                },
+            },
+        )
+
+        version, digests = currentness.remote_version(source, "latest", None, transport)
+
+        self.assertEqual("2.9.7", version)
+        self.assertEqual({"c" * 64}, digests)
+
     def test_github_release_asset_rejects_missing_or_malformed_digest(self) -> None:
         """Fail closed when the selected official asset has no usable SHA-256 digest."""
         repository = "nextest-rs/nextest"
@@ -904,7 +940,7 @@ class ReleaseCurrentnessTest(unittest.TestCase):
             release = dict(valid)
             release.pop(field)
             invalid.append(release)
-        for field, value in (("state", "new"), ("size", 0), ("size", 33 * 1024 * 1024)):
+        for field, value in (("state", "new"), ("size", 0), ("size", 65 * 1024 * 1024)):
             release = dict(valid)
             release["assets"] = [dict(valid["assets"][0], **{field: value})]
             invalid.append(release)

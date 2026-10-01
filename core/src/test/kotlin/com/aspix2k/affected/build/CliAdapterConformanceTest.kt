@@ -44,7 +44,6 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
-import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -274,16 +273,17 @@ class CliAdapterConformanceTest {
         val alpha = modules.single { it.executionId == "affected/fixture-alpha" }
         val runtime = assertNotNull(readPhpunitRuntime(root.toPath()))
         val before = phpunitState(root, alpha, adapter, runtime)
-        val store = PhpunitTestBaselineStore(createTempDirectory("phpunit-conformance-store"))
-        val fullOutput = createTempDirectory("phpunit-conformance-full").resolve("run.json")
-        val fullContext = phpunitContext(root.toPath(), before, fullOutput, full = true)
+        val store = PhpunitTestBaselineStore(directory("phpunit-store").toPath())
+        val fullOutput = file("phpunit-full-run.json").toPath()
+        val fullContext = phpunitContext(this, root.toPath(), before, fullOutput, full = true)
         val full = executePhpunit(root, adapter, fullContext, "packages/alpha")
         assertTrue(full.contains("OK (2 tests") || full.contains("Tests: 2"), full)
         assertTrue(promotePhpunitBaseline(store, before, before, fullOutput, full = true, passed = true))
-        assertExactPhpunit(root, alpha, adapter, runtime, before, store)
+        assertExactPhpunit(this, root, alpha, adapter, runtime, before, store)
     }
 
     private fun assertExactPhpunit(
+        sandbox: OwnedSandbox,
         root: File,
         alpha: BuildModule,
         adapter: Path,
@@ -321,8 +321,8 @@ class CliAdapterConformanceTest {
             ),
         )
         assertEquals(listOf(expectedClass), selection.classes)
-        val selectedOutput = createTempDirectory("phpunit-conformance-selected").resolve("run.json")
-        val selectedContext = phpunitContext(root.toPath(), current, selectedOutput, full = false)
+        val selectedOutput = sandbox.file("phpunit-selected-run.json").toPath()
+        val selectedContext = phpunitContext(sandbox, root.toPath(), current, selectedOutput, full = false)
         val selected = executePhpunit(
             root,
             adapter,
@@ -466,8 +466,14 @@ class CliAdapterConformanceTest {
         )
     }
 
-    private fun phpunitContext(root: Path, state: PhpunitProjectState, output: Path, full: Boolean): Path {
-        val context = createTempDirectory("phpunit-conformance-context").resolve("context.json")
+    private fun phpunitContext(
+        sandbox: OwnedSandbox,
+        root: Path,
+        state: PhpunitProjectState,
+        output: Path,
+        full: Boolean,
+    ): Path {
+        val context = sandbox.file(if (full) "phpunit-full-context.json" else "phpunit-selected-context.json").toPath()
         val json = JsonObject().apply {
             addProperty("schema", 1)
             addProperty("root", root.toAbsolutePath().normalize().toString())
@@ -638,16 +644,14 @@ class CliAdapterConformanceTest {
         markers.filter(File::exists).forEach { assertTrue(it.delete()) }
     }
 
-    private fun fixture(name: String, block: (File) -> Unit) {
+    private fun fixture(name: String, block: OwnedSandbox.(File) -> Unit) {
         assumeTrue(System.getProperty(CONFORMANCE_PROPERTY) == "true")
         val source = fixtureRoot().resolve(name)
         assertTrue(source.isDirectory, "Missing CLI conformance fixture: $source")
-        val target = createTempDirectory("affected-cli-$name").toFile()
-        try {
+        OwnedSandbox.use("affected-cli-$name") { sandbox ->
+            val target = sandbox.directory("fixture")
             assertTrue(source.copyRecursively(target, overwrite = true), "Could not copy $source")
-            block(target)
-        } finally {
-            target.deleteRecursively()
+            sandbox.block(target)
         }
     }
 
@@ -670,21 +674,8 @@ class CliAdapterConformanceTest {
         environment: Map<String, String> = emptyMap(),
         timeoutSeconds: Long = COMMAND_TIMEOUT_SECONDS,
     ): CommandResult {
-        val output = File.createTempFile("affected-cli-output", ".log")
-        try {
-            val builder = ProcessBuilder(arguments)
-                .directory(directory)
-                .redirectErrorStream(true)
-                .redirectOutput(output)
-            builder.environment().putAll(environment)
-            val process = builder.start()
-            val completed = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
-            if (!completed) process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)
-            val text = output.readText()
-            return CommandResult(completed, completed && process.exitValue() == 0, text)
-        } finally {
-            output.delete()
-        }
+        val result = NativeProcessRunner.run(arguments, directory, timeoutSeconds, environment)
+        return CommandResult(result.completed, result.passed, result.output)
     }
 
     private fun executeBatch(directory: File, commands: List<CliCommand>): CommandResult {

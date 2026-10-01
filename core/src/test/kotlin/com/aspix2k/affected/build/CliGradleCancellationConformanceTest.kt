@@ -4,6 +4,7 @@ import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.OwnedExternalTaskExecution
 import com.aspix2k.affected.build.gradle.GradleBuildSystem
 import com.aspix2k.affected.build.gradle.cancelExternalTask
+import com.aspix2k.affected.runBoundedBlocking
 import com.aspix2k.affected.runOwnedExternalTask
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.ui.RunContentManager
@@ -24,7 +25,6 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -60,8 +60,8 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
 
     override fun runInDispatchThread(): Boolean = false
 
-    fun testOwnedGradleCancellationLeavesAnUnrelatedIdeTaskRunning() = runBlocking {
-        if (!nativeEnabled()) return@runBlocking
+    fun testOwnedGradleCancellationLeavesAnUnrelatedIdeTaskRunning() = runBoundedBlocking {
+        if (!nativeEnabled()) return@runBoundedBlocking
         val source = fixtureRoot()
         assertTrue(source.isDirectory, "Missing CLI conformance fixture: $source")
         val target = File(checkNotNull(project.basePath), "gradle-cancellation")
@@ -70,8 +70,9 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
         val unrelatedRoot = File(target, "unrelated")
         var owned: Deferred<Boolean>? = null
         var unrelated: Deferred<Boolean>? = null
+        var failure: Throwable? = null
         try {
-            target.deleteRecursively()
+            OwnedSandbox.remove(target)
             assertTrue(source.copyRecursively(ownedRoot, overwrite = true))
             assertTrue(source.copyRecursively(unrelatedRoot, overwrite = true))
             installWrapper(ownedRoot)
@@ -94,6 +95,9 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
             File(unrelatedRoot, "markers/release.marker").writeText("release")
             assertTrue(withTimeout(PROCESS_TIMEOUT_MILLIS) { unrelated.await() })
             assertTrue(File(unrelatedRoot, "markers/completed.marker").isFile)
+        } catch (thrown: Throwable) {
+            failure = thrown
+            throw thrown
         } finally {
             File(ownedRoot, "markers/release.marker").runCatching { parentFile.mkdirs(); writeText("release") }
             File(unrelatedRoot, "markers/release.marker").runCatching { parentFile.mkdirs(); writeText("release") }
@@ -101,12 +105,12 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
             withTimeoutOrNull(PROCESS_TIMEOUT_MILLIS) { owned?.await() }
             withTimeoutOrNull(PROCESS_TIMEOUT_MILLIS) { unrelated?.await() }
             disposeRunContents(existingEditors)
-            target.deleteRecursively()
+            OwnedSandbox.remove(target, failure)
         }
     }
 
-    fun testOwnedGradleCancellationRetriesAfterTheEnvironmentIsPrepared() = runBlocking {
-        if (!nativeEnabled()) return@runBlocking
+    fun testOwnedGradleCancellationRetriesAfterTheEnvironmentIsPrepared() = runBoundedBlocking {
+        if (!nativeEnabled()) return@runBoundedBlocking
         val source = fixtureRoot()
         assertTrue(source.isDirectory, "Missing CLI conformance fixture: $source")
         val target = File(checkNotNull(project.basePath), "gradle-cancellation-startup")
@@ -116,8 +120,9 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
         val execution = OwnedExternalTaskExecution(cancelTask = ::cancelExternalTask)
         val stopped = AtomicBoolean()
         val ownedTask = AtomicReference<ExternalSystemTaskId?>()
+        var failure: Throwable? = null
         try {
-            target.deleteRecursively()
+            OwnedSandbox.remove(target)
             assertTrue(source.copyRecursively(root, overwrite = true))
             installWrapper(root)
             linkGradleProject(root)
@@ -151,11 +156,14 @@ class CliGradleCancellationConformanceTest : BasePlatformTestCase() {
             assertNull(ExternalSystemProcessingManager.getInstance().findTask(taskId))
             assertFalse(File(root, "markers/started.marker").exists())
             assertFalse(File(root, "markers/completed.marker").exists())
+        } catch (thrown: Throwable) {
+            failure = thrown
+            throw thrown
         } finally {
             File(root, "markers/release.marker").runCatching { parentFile.mkdirs(); writeText("release") }
             sessions.stopOwned()
             disposeRunContents(existingEditors)
-            target.deleteRecursively()
+            OwnedSandbox.remove(target, failure)
         }
     }
 

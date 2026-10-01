@@ -39,6 +39,19 @@ class CiContractsTest(unittest.TestCase):
             with self.assertRaisesRegex(ci_contracts.CiContractError, "exactly once"):
                 ci_contracts.check(root)
 
+    def test_plugin_job_must_keep_hang_diagnostics(self) -> None:
+        """A silent Gradle hang must leave thread dumps in the uploaded reports."""
+        for required in ("AFFECTED_GRADLE_HANG_DIR: build/hang-dumps\n", "            build/hang-dumps\n"):
+            with self.subTest(required=required), TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.copy_workflows(root)
+                ci = root / ".github/workflows/ci.yml"
+                workflow = ci.read_text(encoding="utf-8")
+                self.assertIn(required, workflow)
+                ci.write_text(workflow.replace(required, "", 1), encoding="utf-8")
+                with self.assertRaisesRegex(ci_contracts.CiContractError, "hang diagnostics"):
+                    ci_contracts.check(root)
+
     def test_wrapper_must_not_use_a_single_ten_second_fetch(self) -> None:
         """A 10s timeout with retries=0 is how CI died on services.gradle.org."""
         with TemporaryDirectory() as directory:

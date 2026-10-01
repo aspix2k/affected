@@ -2,7 +2,6 @@ package com.aspix2k.affected
 
 import com.intellij.execution.process.ProcessHandler
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
 import javax.swing.JPanel
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -116,7 +115,7 @@ class AffectedRunPresentationTest {
     }
 
     @Test
-    fun `one presentation follows every claimed group across dispatchers`() = runBlocking {
+    fun `one presentation follows every claimed group across dispatchers`() = runBoundedBlocking {
         val view = RecordingView()
         val claim = claim()
         val presentation = AffectedRunPresentation(claim, view)

@@ -15,7 +15,7 @@ internal fun kotlinToolchainNativeEnvironment(
         base[pathKey] = if (path.isEmpty()) javaBin else "$javaBin${File.pathSeparator}$path"
     }
     base["JAVA_HOME"] = home
-    base["KOTLIN_CLI_JAVA_HOME"] = home
+    base["KOTLIN_CLI_JAVA_HOME"] = resolveJavaHome(base["KOTLIN_CLI_JAVA_HOME"]) ?: home
     return base
 }
 

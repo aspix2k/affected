@@ -8,8 +8,6 @@ import com.aspix2k.affected.build.python.pythonDeferredCommands
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.nio.file.Files
-import java.util.concurrent.TimeUnit
-import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -299,7 +297,7 @@ class CliUnittestConformanceTest {
     fun `unittest symlink drift fails closed without executing the linked test`() = fixture("unittest") { root ->
         val selected = File(root, "packages/alpha/test_alpha.py")
         val command = unittestCommand(root, selected)
-        val outside = createTempDirectory("affected-unittest-outside").toFile()
+        val outside = directory("outside")
         val sentinel = File(outside, "outside.marker")
         val linked = File(outside, "test_linked.py").apply {
             writeText(
@@ -316,21 +314,17 @@ class CliUnittestConformanceTest {
         selected.delete()
         Files.createSymbolicLink(selected.toPath(), linked.toPath())
 
-        try {
-            val execution = execute(root, command.arguments)
+        val execution = execute(root, command.arguments)
 
-            assertTrue(execution.completed, execution.output)
-            assertFalse(execution.passed, execution.output)
-            assertFalse(sentinel.exists(), execution.output)
-        } finally {
-            outside.deleteRecursively()
-        }
+        assertTrue(execution.completed, execution.output)
+        assertFalse(execution.passed, execution.output)
+        assertFalse(sentinel.exists(), execution.output)
     }
 
     @Test
     fun `unittest suffix discovery rejects a linked test before execution`() = fixture("unittest") { root ->
         val command = unittestCommand(root, File(root, "packages/alpha/test_helpers.py"))
-        val outside = createTempDirectory("affected-unittest-suffix-link").toFile()
+        val outside = directory("outside")
         val sentinel = File(outside, "outside.marker")
         val linked = File(outside, "linked_test.py").apply {
             writeText(
@@ -346,21 +340,17 @@ class CliUnittestConformanceTest {
         }
         Files.createSymbolicLink(File(root, "packages/alpha/linked_test.py").toPath(), linked.toPath())
 
-        try {
-            val execution = execute(root, command.arguments)
+        val execution = execute(root, command.arguments)
 
-            assertTrue(execution.completed, execution.output)
-            assertFalse(execution.passed, execution.output)
-            assertTrue(execution.output.contains("unsafe discovery (discovery-symlink)"), execution.output)
-            assertFalse(sentinel.exists(), execution.output)
-        } finally {
-            outside.deleteRecursively()
-        }
+        assertTrue(execution.completed, execution.output)
+        assertFalse(execution.passed, execution.output)
+        assertTrue(execution.output.contains("unsafe discovery (discovery-symlink)"), execution.output)
+        assertFalse(sentinel.exists(), execution.output)
     }
 
     @Test
     fun `unittest rejects a linked package initializer before import`() = fixture("unittest") { root ->
-        val outside = createTempDirectory("affected-unittest-init-link").toFile()
+        val outside = directory("outside")
         val sentinel = File(outside, "outside.marker")
         val linked = File(outside, "init.py").apply {
             writeText(
@@ -371,18 +361,14 @@ class CliUnittestConformanceTest {
         packageInit.delete()
         Files.createSymbolicLink(packageInit.toPath(), linked.toPath())
 
-        try {
-            val execution = execute(
-                root,
-                unittestCommand(root, File(root, "packages/alpha/test_alpha.py")).arguments,
-            )
+        val execution = execute(
+            root,
+            unittestCommand(root, File(root, "packages/alpha/test_alpha.py")).arguments,
+        )
 
-            assertTrue(execution.completed, execution.output)
-            assertFalse(execution.passed, execution.output)
-            assertFalse(sentinel.exists(), execution.output)
-        } finally {
-            outside.deleteRecursively()
-        }
+        assertTrue(execution.completed, execution.output)
+        assertFalse(execution.passed, execution.output)
+        assertFalse(sentinel.exists(), execution.output)
     }
 
     @Test
@@ -405,7 +391,7 @@ class CliUnittestConformanceTest {
     @Test
     fun `unittest rejects namespace ancestors before an external package can shadow them`() =
         fixture("unittest") { root ->
-            val outside = createTempDirectory("affected-unittest-shadow").toFile()
+            val outside = directory("outside")
             val sentinel = File(outside, "outside.marker")
             File(root, "packages/__init__.py").delete()
             File(outside, "packages/__init__.py").apply {
@@ -415,19 +401,15 @@ class CliUnittestConformanceTest {
                 )
             }
 
-            try {
-                val execution = execute(
-                    root,
-                    unittestCommand(root, File(root, "packages/alpha/test_alpha.py")).arguments,
-                    mapOf("PYTHONPATH" to outside.path),
-                )
+            val execution = execute(
+                root,
+                unittestCommand(root, File(root, "packages/alpha/test_alpha.py")).arguments,
+                mapOf("PYTHONPATH" to outside.path),
+            )
 
-                assertTrue(execution.completed, execution.output)
-                assertFalse(execution.passed, execution.output)
-                assertFalse(sentinel.exists(), execution.output)
-            } finally {
-                outside.deleteRecursively()
-            }
+            assertTrue(execution.completed, execution.output)
+            assertFalse(execution.passed, execution.output)
+            assertFalse(sentinel.exists(), execution.output)
         }
 
     @Test
@@ -528,16 +510,14 @@ class CliUnittestConformanceTest {
         assertTrue(File(root, "packages/alpha/other.marker").exists())
     }
 
-    private fun fixture(name: String, block: (File) -> Unit) {
+    private fun fixture(name: String, block: OwnedSandbox.(File) -> Unit) {
         assumeTrue(System.getProperty("affected.cliConformance") == "true")
         val source = File(fixtureRoot(), name)
         assertTrue(source.isDirectory, "Missing CLI conformance fixture: $source")
-        val target = createTempDirectory("affected-cli-$name").toFile()
-        try {
+        OwnedSandbox.use("affected-cli-$name") { sandbox ->
+            val target = sandbox.directory("repo")
             assertTrue(source.copyRecursively(target, overwrite = true), "Could not copy $source")
-            block(target)
-        } finally {
-            target.deleteRecursively()
+            sandbox.block(target)
         }
     }
 
@@ -581,22 +561,9 @@ class CliUnittestConformanceTest {
         arguments: List<String>,
         environment: Map<String, String> = emptyMap(),
     ): Execution {
-        val output = File.createTempFile("affected-cli-output", ".log")
-        try {
-            val builder = ProcessBuilder(arguments)
-                .directory(directory)
-                .redirectErrorStream(true)
-                .redirectOutput(output)
-            builder.environment().putAll(environment)
-            val process = builder.start()
-            val completed = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            if (!completed) process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)
-            val text = output.readText()
-            assertTrue(completed, "Timed out: ${arguments.joinToString(" ")}\n$text")
-            return Execution(completed, process.exitValue(), text)
-        } finally {
-            output.delete()
-        }
+        val result = NativeProcessRunner.run(arguments, directory, COMMAND_TIMEOUT_SECONDS, environment)
+        assertTrue(result.completed, "Timed out: ${arguments.joinToString(" ")}\n${result.output}")
+        return Execution(result.completed, checkNotNull(result.exitCode), result.output)
     }
 
     private companion object {

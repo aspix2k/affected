@@ -200,7 +200,7 @@
       ],
       "versions": "Gradle 8–9; JDK 17, 21 and 26; in change-aware Affected test runs, exact KMP target narrowing is retained for proven platform source sets and xAndY intermediate source sets such as jvmAndAndroidMain, while other compound names keep every target; common sources keep every target, Kotlin/Native stays task-level, and missing/stale JVM baselines or class-set drift keep the whole task; fallbacks report fixed reason codes without paths",
       "support": "supported",
-      "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java", "conformance/cli-fixtures/gradle-cancellation", "conformance/cli-fixtures/gradle-kmp-fallback", "conformance/cli-fixtures/mixed-gradle-node", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleCancellationConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleSelectionDiagnosticsConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleNodeConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/gradle/GradleKmpSourceSetTest.kt", "conformance/cli-fixtures/mixed-gradle-maven", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleMavenConformanceTest.kt"],
+      "fixtures": ["collector/src/test/java/com/aspix2k/affected/collector/GradleInjectionTest.java", "conformance/cli-fixtures/gradle-cancellation", "conformance/cli-fixtures/gradle-kmp-fallback", "conformance/cli-fixtures/mixed-gradle-node", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleCancellationConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/CliGradleSelectionDiagnosticsConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleNodeConformanceTest.kt", "core/src/test/kotlin/com/aspix2k/affected/build/gradle/GradleKmpSourceSetTest.kt", "conformance/cli-fixtures/mixed-gradle-maven", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleMavenConformanceTest.kt", "conformance/cli-fixtures/mixed-gradle-kotlin-toolchain", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleKotlinToolchainConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml", ".github/workflows/ci.yml"]
     },
     {
@@ -284,24 +284,55 @@
     {
       "id": "NODE",
       "implementation": "com.aspix2k.affected.build.node.NodeBuildSystem",
-      "ecosystem": "npm, Yarn and pnpm",
+      "ecosystem": "npm, Yarn, pnpm and Bun",
       "languages": ["JavaScript", "TypeScript", "JSX", "TSX", "Vue", "Svelte"],
-      "runners": ["Jest", "Vitest", "package test", "tsc --noEmit"],
+      "runners": ["Jest", "Vitest", "node:test", "bun test", "package test", "tsc --noEmit"],
       "selection": ["file", "package"],
       "selectionProofs": [
         {
           "units": ["file", "package"],
+          "runner": "Jest",
           "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
           "marker": "npm runs exact Jest and Vitest files and preserves full fallback",
           "gate": ".github/workflows/conformance.yml",
           "gateMarker": "--tests '*Cli*ConformanceTest'",
           "gateJob": "cli-native",
           "gateStep": "Run native CLI fixtures"
+        },
+        {
+          "units": ["file", "package"],
+          "runner": "Vitest",
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliAdapterConformanceTest.kt",
+          "marker": "npm runs exact Jest and Vitest files and preserves full fallback",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        },
+        {
+          "units": ["file", "package"],
+          "runner": "node:test",
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliNodeRunnersConformanceTest.kt",
+          "marker": "node test runs exact changed test files and preserves full fallback",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        },
+        {
+          "units": ["file", "package"],
+          "runner": "bun test",
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliNodeRunnersConformanceTest.kt",
+          "marker": "Bun runs exact changed test files and preserves full fallback",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "Current stable Node.js; Jest 29–30; Vitest 2–5",
+      "versions": "Current stable Node.js; Jest 29–30; Vitest 2–5; node --test and Bun 1.4 (tested 1.4.2) test files only, production changes run the package",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/node", "conformance/cli-fixtures/mixed-gradle-node", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleNodeConformanceTest.kt", "conformance/cli-fixtures/mixed-node-dart", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedNodeDartConformanceTest.kt"],
+      "fixtures": ["conformance/cli-fixtures/node", "conformance/cli-fixtures/bun", "conformance/cli-fixtures/mixed-gradle-node", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleNodeConformanceTest.kt", "conformance/cli-fixtures/mixed-node-dart", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedNodeDartConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
@@ -380,9 +411,9 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "Current stable Python; pytest 8–9; standard-library unittest exact files only when every selected module contributes owned tests; zero-test, import, load_tests, or content drift widens to bounded package discovery in the same process, while unsafe layouts or incomplete runner discovery fail visibly",
+      "versions": "Current stable Python; pytest 8–9; standard-library unittest exact files only when every selected module contributes owned tests; zero-test, import, load_tests, or content drift widens to bounded package discovery, while unsafe layouts or incomplete runner discovery fail visibly; environments only from uv.lock (`uv run --locked`, syncs `.venv`, also from a workspace root) or poetry.lock (`poetry run`, pre-installed); a missing tool or ambiguous markers fail visibly; tox and nox are not inspected",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/python", "conformance/cli-fixtures/unittest", "conformance/cli-fixtures/mixed-r-python", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedRPythonConformanceTest.kt"],
+      "fixtures": ["conformance/cli-fixtures/python", "conformance/cli-fixtures/uv-pytest", "conformance/cli-fixtures/uv-workspace", "core/src/test/kotlin/com/aspix2k/affected/build/CliPythonEnvironmentConformanceTest.kt", "conformance/cli-fixtures/unittest", "conformance/cli-fixtures/mixed-r-python", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedRPythonConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
@@ -553,7 +584,7 @@
       ],
       "versions": "Kotlin Toolchain 0.11.x Alpha; named modules use -m and proven @platform dirs use -p when the wrapper pins 0.11.x; common or unproved keep the broader command",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/kotlin-toolchain", "conformance/cli-fixtures/kotlin-toolchain-multi"],
+      "fixtures": ["conformance/cli-fixtures/kotlin-toolchain", "conformance/cli-fixtures/kotlin-toolchain-multi", "conformance/cli-fixtures/mixed-gradle-kotlin-toolchain", "core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleKotlinToolchainConformanceTest.kt"],
       "gates": [".github/workflows/conformance.yml"]
     },
     {
@@ -796,8 +827,17 @@
       "ecosystem": "Swift",
       "languages": ["Swift", "Objective-C"],
       "runners": ["swift test", "swift build"],
-      "selection": ["project"],
+      "selection": ["target", "project"],
       "selectionProofs": [
+        {
+          "units": ["target"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/SwiftPmNativeTest.kt",
+          "marker": "SwiftPM discovers targets and runs only affected test targets",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "SwiftPmNativeTest",
+          "gateJob": "cross-platform-paths",
+          "gateStep": "Run platform-specific core tests"
+        },
         {
           "units": ["project"],
           "path": "core/src/test/kotlin/com/aspix2k/affected/build/SwiftCommandTest.kt",
@@ -808,10 +848,10 @@
           "gateStep": "Analyze and test"
         }
       ],
-      "versions": "SwiftPM; project-level until Xcode schemes, target selection and native Swift execution are proven",
+      "versions": "SwiftPM, proven on a tools-version 6.0 package with XCTest and Swift Testing targets on the Swift toolchain of macos-latest; targets come from swift package describe --type json and test targets run by anchored swift test --filter, while unresolved or unsupported target layouts and unknown tasks keep the project-level swift test",
       "support": "supported",
-      "fixtures": ["conformance/cli-fixtures/swift"],
-      "gates": [".github/workflows/ci.yml"]
+      "fixtures": ["conformance/cli-fixtures/swiftpm"],
+      "gates": [".github/workflows/ci.yml", ".github/workflows/conformance.yml"]
     },
     {
       "id": "XCODE",
@@ -904,6 +944,29 @@
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/atlas"],
       "gates": [".github/workflows/ci.yml"]
+    },
+    {
+      "id": "DENO",
+      "implementation": "com.aspix2k.affected.build.deno.DenoBuildSystem",
+      "ecosystem": "Deno",
+      "languages": ["TypeScript", "JavaScript", "JSX", "TSX"],
+      "runners": ["deno test"],
+      "selection": ["project"],
+      "selectionProofs": [
+        {
+          "units": ["project"],
+          "path": "core/src/test/kotlin/com/aspix2k/affected/build/CliDenoConformanceTest.kt",
+          "marker": "deno test runs every workspace member from the affected root",
+          "gate": ".github/workflows/conformance.yml",
+          "gateMarker": "--tests '*Cli*ConformanceTest'",
+          "gateJob": "cli-native",
+          "gateStep": "Run native CLI fixtures"
+        }
+      ],
+      "versions": "Deno 2.9 (tested 2.9.7); deno.json or deno.jsonc root, an unparseable or ambiguous config runs the full root command, a package.json with a test script or workspaces keeps the root with the Node adapter and leaves Deno off, workspace members run through one root command",
+      "support": "supported",
+      "fixtures": ["conformance/cli-fixtures/deno"],
+      "gates": [".github/workflows/conformance.yml"]
     }
   ],
   "mixedProofs": [
@@ -954,6 +1017,12 @@
       "adapters": ["GRADLE", "MAVEN"],
       "fixtures": ["conformance/cli-fixtures/mixed-gradle-maven"],
       "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleMavenConformanceTest.kt"]
+    },
+    {
+      "id": "gradle-kotlin-toolchain",
+      "adapters": ["GRADLE", "KOTLIN_TOOLCHAIN"],
+      "fixtures": ["conformance/cli-fixtures/mixed-gradle-kotlin-toolchain"],
+      "tests": ["core/src/test/kotlin/com/aspix2k/affected/build/CliMixedGradleKotlinToolchainConformanceTest.kt"]
     }
   ]
 }

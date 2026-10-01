@@ -7,8 +7,6 @@ import com.aspix2k.affected.build.go.GoPackages
 import com.aspix2k.affected.build.go.goCommands
 import org.junit.Assume.assumeTrue
 import java.io.File
-import java.util.concurrent.TimeUnit
-import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -59,12 +57,9 @@ class CliGoConformanceTest {
         assumeTrue(System.getProperty(CONFORMANCE_PROPERTY) == "true")
         val source = fixtureRoot()
         assertTrue(source.isDirectory, "Missing CLI conformance fixture: $source")
-        val target = createTempDirectory("affected-cli-go").toFile().canonicalFile
-        try {
-            assertTrue(source.copyRecursively(target, overwrite = true), "Could not copy $source")
-            block(target)
-        } finally {
-            target.deleteRecursively()
+        OwnedSandbox.use("affected-cli-go", canonical = true) { sandbox ->
+            assertTrue(source.copyRecursively(sandbox.root, overwrite = true), "Could not copy $source")
+            block(sandbox.root)
         }
     }
 
@@ -86,20 +81,8 @@ class CliGoConformanceTest {
         arguments: List<String>,
         environment: Map<String, String> = emptyMap(),
     ): CommandResult {
-        val output = File.createTempFile("affected-cli-go-output", ".log")
-        try {
-            val builder = ProcessBuilder(arguments)
-                .directory(directory)
-                .redirectErrorStream(true)
-                .redirectOutput(output)
-            builder.environment().putAll(environment)
-            val process = builder.start()
-            val completed = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            if (!completed) process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)
-            return CommandResult(completed, completed && process.exitValue() == 0, output.readText())
-        } finally {
-            output.delete()
-        }
+        val result = NativeProcessRunner.run(arguments, directory, COMMAND_TIMEOUT_SECONDS, environment)
+        return CommandResult(result.completed, result.passed, result.output)
     }
 
     private data class CommandResult(val completed: Boolean, val passed: Boolean, val output: String)

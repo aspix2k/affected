@@ -1,10 +1,10 @@
 package com.aspix2k.affected.build.xcode
 
+import com.aspix2k.affected.build.NativeProcessRunner
+import com.aspix2k.affected.build.OwnedSandbox
 import com.aspix2k.affected.build.process.CommandRunner
 import org.junit.Assume.assumeTrue
 import java.io.File
-import java.util.concurrent.TimeUnit
-import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -21,8 +21,8 @@ class XcodeNativeTest {
             .map { File(it, "conformance/cli-fixtures/xcode") }
             .firstOrNull(File::isDirectory)
             ?: error("Missing public Xcode fixture")
-        val fixture = createTempDirectory("affected-xcode-native").toFile()
-        try {
+        OwnedSandbox.use("affected-xcode-native") { sandbox ->
+            val fixture = sandbox.root
             assertTrue(source.copyRecursively(fixture, overwrite = true))
             assertEquals(
                 66,
@@ -54,43 +54,16 @@ class XcodeNativeTest {
                     timeoutSeconds = 120,
                 ),
             )
-        } finally {
-            assertTrue(fixture.deleteRecursively())
         }
     }
 
     private fun exitCode(root: File, arguments: List<String>): Int {
-        val process = ProcessBuilder(arguments)
-            .directory(root)
-            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-            .redirectError(ProcessBuilder.Redirect.DISCARD)
-            .start()
-        var terminated = false
-        try {
-            if (!process.waitFor(120, TimeUnit.SECONDS)) error("xcodebuild timed out")
-            terminated = true
-            return process.exitValue()
-        } finally {
-            if (!terminated) check(terminate(process))
-        }
+        val result = NativeProcessRunner.run(arguments, root, XCODEBUILD_TIMEOUT_SECONDS)
+        check(result.completed) { "xcodebuild timed out" }
+        return checkNotNull(result.exitCode)
     }
 
-    private fun terminate(process: Process): Boolean {
-        var interrupted = Thread.interrupted()
-        return try {
-            val handles = process.toHandle().descendants().toList() + process.toHandle()
-            handles.forEach(ProcessHandle::destroyForcibly)
-            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
-            while (handles.any(ProcessHandle::isAlive) && System.nanoTime() < deadline) {
-                try {
-                    Thread.sleep(20)
-                } catch (_: InterruptedException) {
-                    interrupted = true
-                }
-            }
-            handles.none(ProcessHandle::isAlive)
-        } finally {
-            if (interrupted) Thread.currentThread().interrupt()
-        }
+    private companion object {
+        const val XCODEBUILD_TIMEOUT_SECONDS = 120L
     }
 }

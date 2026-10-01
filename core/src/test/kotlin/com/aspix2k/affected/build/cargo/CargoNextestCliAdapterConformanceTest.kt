@@ -1,6 +1,8 @@
 package com.aspix2k.affected.build.cargo
 
 import com.aspix2k.affected.build.CliConformanceRepository
+import com.aspix2k.affected.build.NativeProcessRunner
+import com.aspix2k.affected.build.OwnedSandbox
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.SequentialProcessHandler
 import com.intellij.execution.process.ProcessEvent
@@ -9,7 +11,6 @@ import com.intellij.openapi.util.Key
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.util.concurrent.TimeUnit
-import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -178,12 +179,9 @@ class CargoNextestCliAdapterConformanceTest {
         assumeTrue(System.getProperty(CONFORMANCE_PROPERTY) == "true")
         val source = fixtureRoot()
         assertTrue(source.isDirectory, "Missing CLI conformance fixture: $source")
-        val target = createTempDirectory("affected-cli-cargo").toFile()
-        try {
-            assertTrue(source.copyRecursively(target, overwrite = true), "Could not copy $source")
-            block(target)
-        } finally {
-            target.deleteRecursively()
+        OwnedSandbox.use("affected-cli-cargo") { sandbox ->
+            assertTrue(source.copyRecursively(sandbox.root, overwrite = true), "Could not copy $source")
+            block(sandbox.root)
         }
     }
 
@@ -193,25 +191,7 @@ class CargoNextestCliAdapterConformanceTest {
         directory: File,
         arguments: List<String>,
         environmentOverrides: Map<String, String> = emptyMap(),
-    ): String {
-        val output = File.createTempFile("affected-cli-output", ".log")
-        try {
-            val process = ProcessBuilder(arguments)
-                .directory(directory)
-                .redirectErrorStream(true)
-                .redirectOutput(output)
-                .apply { environment().putAll(environmentOverrides) }
-                .start()
-            val completed = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            if (!completed) process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)
-            val text = output.readText()
-            assertTrue(completed, "Timed out: ${arguments.joinToString(" ")}\n$text")
-            assertEquals(0, process.exitValue(), "Failed: ${arguments.joinToString(" ")}\n$text")
-            return text
-        } finally {
-            output.delete()
-        }
-    }
+    ): String = NativeProcessRunner.execute(arguments, directory, COMMAND_TIMEOUT_SECONDS, environmentOverrides)
 
     private fun executeBatch(
         directory: File,

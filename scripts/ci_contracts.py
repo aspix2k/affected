@@ -79,6 +79,14 @@ def check(root: Path = ROOT) -> None:
         for task in tasks:
             if task not in job:
                 raise CiContractError(f"The {job_name} job must keep {task}")
+    plugin_job = slice_job(ci, "plugin")
+    for token in (
+        "AFFECTED_GRADLE_HANG_DIR: build/hang-dumps",
+        "AFFECTED_GRADLE_IDLE_SECONDS:",
+        "            build/hang-dumps\n",
+    ):
+        if token not in plugin_job:
+            raise CiContractError(f"The plugin job must keep hang diagnostics: {token.strip()}")
     if "changelog-section.sh" not in slice_job(ci, "package"):
         raise CiContractError("The package job must still enforce the changelog section")
     check_product_verifier(ci)
@@ -152,6 +160,7 @@ def check(root: Path = ROOT) -> None:
         "--tests com.aspix2k.affected.build.CliUnittestWindowsJunctionConformanceTest",
         "--tests com.aspix2k.affected.build.process.ContainedProcessTest",
         "--tests com.aspix2k.affected.build.process.SequentialProcessCancellationTest",
+        "--tests com.aspix2k.affected.build.SwiftPmNativeTest",
         "--tests com.aspix2k.affected.build.xcode.XcodeNativeTest",
         "-Paffected.cliConformance=true",
         "--rerun-tasks --no-daemon --no-parallel --max-workers=1",

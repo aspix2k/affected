@@ -1,6 +1,8 @@
 package com.aspix2k.affected.build.process
 
 import com.aspix2k.affected.AffectedRunSessions
+import com.aspix2k.affected.awaitBounded
+import com.aspix2k.affected.runBoundedBlocking
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import kotlinx.coroutines.CancellationException
@@ -8,7 +10,6 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
@@ -29,14 +30,14 @@ class CommandRunnerCancellationTest : BasePlatformTestCase() {
 
     override fun runInDispatchThread(): Boolean = false
 
-    fun testCancellationBeforeEdtLaunchCleansOwnedOutputBeforeReturning() = runBlocking {
+    fun testCancellationBeforeEdtLaunchCleansOwnedOutputBeforeReturning() = runBoundedBlocking {
         val sessions = AffectedRunSessions.getInstance(project)
         val temporary = Files.createTempDirectory("affected-command-prestart-")
         val edtBlocked = CompletableDeferred<Unit>()
         val releaseEdt = CountDownLatch(1)
         ApplicationManager.getApplication().invokeLater {
             edtBlocked.complete(Unit)
-            releaseEdt.await()
+            releaseEdt.awaitBounded()
         }
         edtBlocked.await()
         val running = async(Dispatchers.Default) {
@@ -209,7 +210,7 @@ private class BlockingInputStream : InputStream() {
     override fun read(): Int {
         while (true) {
             try {
-                released.await()
+                released.awaitBounded()
                 throw IOException("released")
             } catch (_: InterruptedException) {
                 continue

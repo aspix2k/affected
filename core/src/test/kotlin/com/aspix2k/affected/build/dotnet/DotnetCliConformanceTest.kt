@@ -3,12 +3,12 @@ package com.aspix2k.affected.build.dotnet
 import com.aspix2k.affected.build.BuildChanges
 import com.aspix2k.affected.build.CliConformanceRepository
 import com.aspix2k.affected.build.ManifestSearch
+import com.aspix2k.affected.build.NativeProcessRunner
+import com.aspix2k.affected.build.OwnedSandbox
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.concurrent.TimeUnit
-import kotlin.io.path.createTempDirectory
 import kotlin.system.measureTimeMillis
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -364,35 +364,16 @@ class DotnetCliConformanceTest {
         assumeTrue(System.getProperty(CONFORMANCE_PROPERTY) == "true")
         val source = fixtureRoot().resolve("dotnet")
         assertTrue(source.isDirectory, "Missing CLI conformance fixture: $source")
-        val target = createTempDirectory("affected-cli-dotnet").toFile()
-        try {
-            assertTrue(source.copyRecursively(target, overwrite = true), "Could not copy $source")
-            block(target)
-        } finally {
-            target.deleteRecursively()
+        OwnedSandbox.use("affected-cli-dotnet") { sandbox ->
+            assertTrue(source.copyRecursively(sandbox.root, overwrite = true), "Could not copy $source")
+            block(sandbox.root)
         }
     }
 
     private fun fixtureRoot(): File = CliConformanceRepository.configured.fixturesRoot()
 
-    private fun execute(directory: File, arguments: List<String>): String {
-        val output = File.createTempFile("affected-dotnet-output", ".log")
-        try {
-            val process = ProcessBuilder(arguments)
-                .directory(directory)
-                .redirectErrorStream(true)
-                .redirectOutput(output)
-                .start()
-            val completed = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            if (!completed) process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)
-            val text = output.readText()
-            assertTrue(completed, "Timed out: ${arguments.joinToString(" ")}\n$text")
-            assertEquals(0, process.exitValue(), "Failed: ${arguments.joinToString(" ")}\n$text")
-            return text
-        } finally {
-            output.delete()
-        }
-    }
+    private fun execute(directory: File, arguments: List<String>): String =
+        NativeProcessRunner.execute(arguments, directory, COMMAND_TIMEOUT_SECONDS)
 
     private data class Context(
         val root: File,

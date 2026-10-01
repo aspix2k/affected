@@ -4,6 +4,7 @@ import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.ProjectChanges
 import com.aspix2k.affected.Verification
+import com.aspix2k.affected.runBoundedBlocking
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.ui.RunContentManager
 import com.intellij.openapi.application.ApplicationManager
@@ -14,22 +15,19 @@ import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.project.Project
 import com.intellij.testFramework.ExtensionTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.w3c.dom.Element
 import java.io.File
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 import java.nio.file.Files
-import java.util.concurrent.TimeUnit
 import javax.xml.parsers.DocumentBuilderFactory
-import kotlin.io.path.createTempDirectory
 
 class CliMixedNodeDartConformanceTest : BasePlatformTestCase() {
 
     private var registeredPoint = false
     private var previousStopAfterFirstFailure = false
-    private val temporaryRoots = mutableListOf<File>()
+    private val sandboxes = mutableListOf<OwnedSandbox>()
 
     override fun setUp() {
         super.setUp()
@@ -51,12 +49,9 @@ class CliMixedNodeDartConformanceTest : BasePlatformTestCase() {
 
     override fun tearDown() {
         try {
-            temporaryRoots.toList().forEach { root ->
-                if (root.exists()) {
-                    check(root.deleteRecursively())
-                }
-            }
-            temporaryRoots.clear()
+            val owned = sandboxes.toList()
+            sandboxes.clear()
+            OwnedSandbox.closeAll(owned)
             deleteCopiedRoots()
             AffectedSettings.getInstance().stopAfterFirstFailure = previousStopAfterFirstFailure
             super.tearDown()
@@ -69,21 +64,21 @@ class CliMixedNodeDartConformanceTest : BasePlatformTestCase() {
 
     override fun runInDispatchThread(): Boolean = false
 
-    fun testNodeChangeDoesNotOwnTheSiblingDartProject() = runBlocking {
+    fun testNodeChangeDoesNotOwnTheSiblingDartProject() = runBoundedBlocking {
         val root = mixedRepo()
         val owners = ModuleGraph.create(projectAt(root)).nodesFor(File(root, NODE_SOURCE))
         assertEquals(listOf("NODE"), owners.map { it.system.id }.distinct())
         assertTrue(owners.none { it.system.id == "DART" })
     }
 
-    fun testDartChangeDoesNotOwnTheSiblingNodeProject() = runBlocking {
+    fun testDartChangeDoesNotOwnTheSiblingNodeProject() = runBoundedBlocking {
         val root = mixedRepo()
         val owners = ModuleGraph.create(projectAt(root)).nodesFor(File(root, DART_SOURCE))
         assertEquals(listOf("DART"), owners.map { it.system.id }.distinct())
         assertTrue(owners.none { it.system.id == "NODE" })
     }
 
-    fun testNodeChangePlansOnlyTheNodeGroup() = runBlocking {
+    fun testNodeChangePlansOnlyTheNodeGroup() = runBoundedBlocking {
         val root = mixedRepo()
         val prepared = prepared(root, NODE_SOURCE)
         assertEquals(listOf("NODE"), prepared.plan.groups.map { it.systemId }.distinct())
@@ -91,7 +86,7 @@ class CliMixedNodeDartConformanceTest : BasePlatformTestCase() {
         assertEquals(File(root, "node").canonicalPath, File(prepared.plan.groups.single().root).canonicalPath)
     }
 
-    fun testDartChangePlansOnlyTheDartGroup() = runBlocking {
+    fun testDartChangePlansOnlyTheDartGroup() = runBoundedBlocking {
         val root = mixedRepo()
         val prepared = prepared(root, DART_SOURCE)
         assertEquals(listOf("DART"), prepared.plan.groups.map { it.systemId }.distinct())
@@ -99,7 +94,7 @@ class CliMixedNodeDartConformanceTest : BasePlatformTestCase() {
         assertEquals(File(root, "dart").canonicalPath, File(prepared.plan.groups.single().root).canonicalPath)
     }
 
-    fun testProductionRegistrySeesBothAdaptersAndPlansBothSides() = runBlocking {
+    fun testProductionRegistrySeesBothAdaptersAndPlansBothSides() = runBoundedBlocking {
         val root = mixedRepo()
         val target = projectAt(root)
         val prepared = prepared(target, root, NODE_SOURCE, DART_SOURCE)
@@ -113,7 +108,7 @@ class CliMixedNodeDartConformanceTest : BasePlatformTestCase() {
         if (!nativeEnabled()) return
         val root = mixedRepo()
         resolve(root)
-        val outcome = runBlocking { runPrepared(root, NODE_SOURCE, DART_SOURCE) }
+        val outcome = runBoundedBlocking { runPrepared(root, NODE_SOURCE, DART_SOURCE) }
         assertTrue(outcome.passed)
         assertEquals(setOf("NODE", "DART"), outcome.plan.groups.map { it.systemId }.toSet())
         assertTrue("Node marker was not written", markerExists(root, NODE_MARKER))
@@ -125,7 +120,7 @@ class CliMixedNodeDartConformanceTest : BasePlatformTestCase() {
         val root = mixedRepo()
         File(root, NODE_SOURCE).appendText("\nthrow new Error('requested mixed fixture failure');\n")
         resolve(root)
-        val outcome = runBlocking { runPrepared(root, NODE_SOURCE, DART_SOURCE) }
+        val outcome = runBoundedBlocking { runPrepared(root, NODE_SOURCE, DART_SOURCE) }
         assertFalse(outcome.passed)
         assertTrue("Dart group did not finish after the Node failure", markerExists(root, DART_MARKER))
     }
@@ -162,8 +157,9 @@ class CliMixedNodeDartConformanceTest : BasePlatformTestCase() {
 
     private fun mixedRepo(): File {
         val source = CliConformanceRepository.configured.fixture("mixed-node-dart")
-        val root = createTempDirectory("affected-mixed-node-dart").toFile()
-        temporaryRoots += root
+        val sandbox = OwnedSandbox.open("affected-mixed-node-dart")
+        sandboxes += sandbox
+        val root = sandbox.root
         source.listFiles().orEmpty().forEach { child ->
             check(child.copyRecursively(File(root, child.name), overwrite = true))
         }
@@ -175,21 +171,7 @@ class CliMixedNodeDartConformanceTest : BasePlatformTestCase() {
     }
 
     private fun execute(directory: File, arguments: List<String>) {
-        val output = File.createTempFile("affected-mixed-node-dart", ".log")
-        try {
-            val process = ProcessBuilder(arguments)
-                .directory(directory)
-                .redirectErrorStream(true)
-                .redirectOutput(output)
-                .start()
-            val completed = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            if (!completed) process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)
-            val text = output.readText()
-            assertTrue("Timed out: ${arguments.joinToString(" ")}\n$text", completed)
-            assertEquals("Failed: ${arguments.joinToString(" ")}\n$text", 0, process.exitValue())
-        } finally {
-            output.delete()
-        }
+        NativeProcessRunner.execute(arguments, directory, COMMAND_TIMEOUT_SECONDS)
     }
 
     private fun deleteCopiedRoots() {

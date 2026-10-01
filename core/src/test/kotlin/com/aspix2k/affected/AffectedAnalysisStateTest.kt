@@ -3,7 +3,6 @@ package com.aspix2k.affected
 import com.aspix2k.affected.build.BuildChanges
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.runBlocking
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -129,7 +128,7 @@ class AffectedAnalysisStateTest {
     }
 
     @Test
-    fun `a cancelled scope releases a claim before the coroutine body starts`() = runBlocking {
+    fun `a cancelled scope releases a claim before the coroutine body starts`() = runBoundedBlocking {
         val state = AffectedStateStore()
         val revision = state.invalidate()
         assertTrue(state.complete(revision, analysis(":ready")))

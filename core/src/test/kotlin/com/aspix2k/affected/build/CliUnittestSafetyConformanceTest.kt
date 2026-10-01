@@ -5,8 +5,6 @@ import com.aspix2k.affected.build.python.PythonProjects
 import com.aspix2k.affected.build.python.pythonCommands
 import org.junit.Assume.assumeTrue
 import java.io.File
-import java.util.concurrent.TimeUnit
-import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -221,12 +219,9 @@ class CliUnittestSafetyConformanceTest {
         assumeTrue(System.getProperty("affected.cliConformance") == "true")
         val source = File(fixtureRoot(), "unittest")
         assertTrue(source.isDirectory, "Missing CLI conformance fixture: $source")
-        val target = createTempDirectory("affected-cli-unittest-safety").toFile()
-        try {
-            assertTrue(source.copyRecursively(target, overwrite = true), "Could not copy $source")
-            block(target)
-        } finally {
-            target.deleteRecursively()
+        OwnedSandbox.use("affected-cli-unittest-safety") { sandbox ->
+            assertTrue(source.copyRecursively(sandbox.root, overwrite = true), "Could not copy $source")
+            block(sandbox.root)
         }
     }
 
@@ -256,21 +251,9 @@ class CliUnittestSafetyConformanceTest {
     }
 
     private fun execute(directory: File, arguments: List<String>): Execution {
-        val output = File.createTempFile("affected-cli-output", ".log")
-        try {
-            val process = ProcessBuilder(arguments)
-                .directory(directory)
-                .redirectErrorStream(true)
-                .redirectOutput(output)
-                .start()
-            val completed = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            if (!completed) process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)
-            val text = output.readText()
-            assertTrue(completed, "Timed out: ${arguments.joinToString(" ")}\n$text")
-            return Execution(completed, process.exitValue(), text)
-        } finally {
-            output.delete()
-        }
+        val result = NativeProcessRunner.run(arguments, directory, COMMAND_TIMEOUT_SECONDS)
+        assertTrue(result.completed, "Timed out: ${arguments.joinToString(" ")}\n${result.output}")
+        return Execution(result.completed, checkNotNull(result.exitCode), result.output)
     }
 
     private companion object {

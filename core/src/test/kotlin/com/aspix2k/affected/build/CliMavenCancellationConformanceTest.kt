@@ -1,9 +1,11 @@
 package com.aspix2k.affected.build
 
 import com.aspix2k.affected.AffectedRunSessions
+import com.aspix2k.affected.awaitBounded
 import com.aspix2k.affected.build.maven.MavenBuildSystem
 import com.aspix2k.affected.build.maven.MavenCollectorArtifacts
 import com.aspix2k.affected.build.maven.MavenCollectorRun
+import com.aspix2k.affected.runBoundedBlocking
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.ui.RunContentDescriptor
@@ -18,7 +20,6 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.jetbrains.idea.maven.execution.MavenRunner
 import org.jetbrains.idea.maven.execution.MavenRunnerSettings
@@ -38,8 +39,8 @@ class CliMavenCancellationConformanceTest : BasePlatformTestCase() {
 
     override fun runInDispatchThread(): Boolean = false
 
-    fun testMavenCancellationDuringCollectorPublicationRemovesOwnedOutput() = runBlocking {
-        if (System.getProperty(CONFORMANCE_PROPERTY) != "true") return@runBlocking
+    fun testMavenCancellationDuringCollectorPublicationRemovesOwnedOutput() = runBoundedBlocking {
+        if (System.getProperty(CONFORMANCE_PROPERTY) != "true") return@runBoundedBlocking
         val sessions = AffectedRunSessions.getInstance(project)
         val collectorPublished = CompletableDeferred<File>()
         val releaseCollector = CountDownLatch(1)
@@ -59,7 +60,7 @@ class CliMavenCancellationConformanceTest : BasePlatformTestCase() {
                 },
                 onCollectorPublished = { collector ->
                     collectorPublished.complete(checkNotNull(collector).outputRoot.toFile())
-                    releaseCollector.await()
+                    releaseCollector.awaitBounded()
                 },
                 onLaunchQueued = {},
             ).runAndWaitSuspending(project, checkNotNull(project.basePath), listOf(":validate"))
@@ -85,8 +86,8 @@ class CliMavenCancellationConformanceTest : BasePlatformTestCase() {
         }
     }
 
-    fun testMavenCancellationBeforeLaunchDoesNotStartTask() = runBlocking {
-        if (System.getProperty(CONFORMANCE_PROPERTY) != "true") return@runBlocking
+    fun testMavenCancellationBeforeLaunchDoesNotStartTask() = runBoundedBlocking {
+        if (System.getProperty(CONFORMANCE_PROPERTY) != "true") return@runBoundedBlocking
         val source = CliConformanceRepository.configured.fixture("maven-cancellation")
         assertTrue(source.isDirectory, "Missing CLI conformance fixture: $source")
         val target = File(checkNotNull(project.basePath), "maven-cancellation")
@@ -122,7 +123,7 @@ class CliMavenCancellationConformanceTest : BasePlatformTestCase() {
             val edtBlocked = CompletableDeferred<Unit>()
             ApplicationManager.getApplication().invokeLater {
                 edtBlocked.complete(Unit)
-                releaseEdt.await()
+                releaseEdt.awaitBounded()
             }
             edtBlocked.await()
             cancelled = async(Dispatchers.Default) {
@@ -166,7 +167,7 @@ class CliMavenCancellationConformanceTest : BasePlatformTestCase() {
         }
     }
 
-    fun testRunningMavenCancellationTerminatesChildrenBeforeCollectorCleanup() = runBlocking {
+    fun testRunningMavenCancellationTerminatesChildrenBeforeCollectorCleanup() = runBoundedBlocking {
         val sessions = AffectedRunSessions.getInstance(project)
         val target = File(checkNotNull(project.basePath), "maven-running-cancellation")
         val artifactsDirectory = File(target, "artifacts")
@@ -262,7 +263,7 @@ class CliMavenCancellationConformanceTest : BasePlatformTestCase() {
     }
 
     private fun assertDeleted(file: File) {
-        assertTrue(!file.exists() || file.deleteRecursively(), "Failed to delete $file")
+        OwnedSandbox.remove(file)
         assertFalse(file.exists(), "Cleanup left $file")
     }
 

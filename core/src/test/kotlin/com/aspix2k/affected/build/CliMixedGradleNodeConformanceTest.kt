@@ -9,6 +9,7 @@ import com.aspix2k.affected.Verification
 import com.aspix2k.affected.build.gradle.GradleBuildSystem
 import com.aspix2k.affected.build.node.NodeBuildSystem
 import com.aspix2k.affected.runAndWait
+import com.aspix2k.affected.runBoundedBlocking
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.ui.RunContentManager
 import com.intellij.openapi.application.ApplicationManager
@@ -19,7 +20,6 @@ import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.externalSystem.service.execution.ExternalSystemJdkUtil
 import com.intellij.testFramework.ExtensionTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.jetbrains.plugins.gradle.settings.DistributionType
 import org.jetbrains.plugins.gradle.settings.GradleProjectSettings
@@ -68,28 +68,28 @@ class CliMixedGradleNodeConformanceTest : BasePlatformTestCase() {
 
     override fun runInDispatchThread(): Boolean = false
 
-    fun testGradleChangeDoesNotOwnTheSiblingNodeProject() = runBlocking {
+    fun testGradleChangeDoesNotOwnTheSiblingNodeProject() = runBoundedBlocking {
         val root = mixedRepo()
         val owners = ModuleGraph.create(project).nodesFor(File(root, GRADLE_SOURCE))
         assertEquals(listOf(GradleConstants.SYSTEM_ID.id), owners.map { it.system.id }.distinct())
         assertTrue(owners.none { it.system.id == "NODE" })
     }
 
-    fun testNodeChangeDoesNotOwnTheSiblingGradleProject() = runBlocking {
+    fun testNodeChangeDoesNotOwnTheSiblingGradleProject() = runBoundedBlocking {
         val root = mixedRepo()
         val owners = ModuleGraph.create(project).nodesFor(File(root, NODE_SOURCE))
         assertEquals(listOf("NODE"), owners.map { it.system.id }.distinct())
         assertTrue(owners.none { it.system.id == GradleConstants.SYSTEM_ID.id })
     }
 
-    fun testNodeChangePlansOnlyTheNodeGroup() = runBlocking {
+    fun testNodeChangePlansOnlyTheNodeGroup() = runBoundedBlocking {
         val root = mixedRepo()
         val prepared = prepared(root, NODE_SOURCE)
         assertEquals(listOf("NODE"), prepared.plan.groups.map { it.systemId }.distinct())
         assertEquals(listOf(".:test"), prepared.plan.groups.single().tasks)
     }
 
-    fun testProductionRegistrySeesBothAdaptersAndPlansTheNodeSide() = runBlocking {
+    fun testProductionRegistrySeesBothAdaptersAndPlansTheNodeSide() = runBoundedBlocking {
         val root = mixedRepo()
         val prepared = prepared(root, GRADLE_SOURCE, NODE_SOURCE)
         assertEquals(setOf(GradleConstants.SYSTEM_ID.id, "NODE"), BuildSystems.of(project).map { it.id }.toSet())
@@ -99,7 +99,7 @@ class CliMixedGradleNodeConformanceTest : BasePlatformTestCase() {
     fun testSimultaneousChangesRunBothGroupsInOneVerificationSession() {
         if (!nativeEnabled()) return
         val root = mixedRepo()
-        val outcome = runBlocking { runBothGroups(root) }
+        val outcome = runBoundedBlocking { runBothGroups(root) }
         assertTrue(outcome.passed)
         assertEquals(setOf(GradleConstants.SYSTEM_ID.id, "NODE"), outcome.plan.groups.map { it.systemId }.toSet())
         assertTrue(File(root, "backend/affected-gradle-test.marker").isFile)
@@ -110,7 +110,7 @@ class CliMixedGradleNodeConformanceTest : BasePlatformTestCase() {
         if (!nativeEnabled()) return
         val root = mixedRepo()
         File(root, NODE_SOURCE).appendText("\nthrow new Error('requested mixed fixture failure');\n")
-        val outcome = runBlocking { runBothGroups(root) }
+        val outcome = runBoundedBlocking { runBothGroups(root) }
         assertFalse(outcome.passed)
         assertTrue(File(root, "backend/affected-gradle-test.marker").isFile)
     }

@@ -6,7 +6,6 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.yield
@@ -23,18 +22,18 @@ import kotlin.test.assertTrue
 class AffectedRunClaimTest {
 
     @Test
-    fun `claim publication is atomic with stop`() = runBlocking {
+    fun `claim publication is atomic with stop`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val creating = CountDownLatch(1)
         val allowPublication = CountDownLatch(1)
         val claimed = async(Dispatchers.Default) {
             sessions.claim {
                 creating.countDown()
-                allowPublication.await()
+                allowPublication.awaitBounded()
                 claim()
             }
         }
-        creating.await()
+        creating.awaitBounded()
         val stopped = async(Dispatchers.Default) { sessions.stopOwned() }
 
         assertNull(withTimeoutOrNull(100) { stopped.await() })
@@ -48,19 +47,19 @@ class AffectedRunClaimTest {
     }
 
     @Test
-    fun `stop cannot overtake an in-flight run transition`() = runBlocking {
+    fun `stop cannot overtake an in-flight run transition`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val marking = CountDownLatch(1)
         val allowRunning = CountDownLatch(1)
         val claim = requireNotNull(sessions.claim {
             claim(markRunning = {
                 marking.countDown()
-                allowRunning.await()
+                allowRunning.awaitBounded()
                 true
             })
         })
         val marked = async(Dispatchers.Default) { claim.markRunning() }
-        marking.await()
+        marking.awaitBounded()
         val stopped = async(Dispatchers.Default) { sessions.stopOwned() }
 
         assertNull(withTimeoutOrNull(100) { stopped.await() })
@@ -73,18 +72,18 @@ class AffectedRunClaimTest {
     }
 
     @Test
-    fun `successful completion unregisters the run before publishing its result`() = runBlocking {
+    fun `successful completion unregisters the run before publishing its result`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val releasing = CountDownLatch(1)
         val allowRelease = CountDownLatch(1)
         val claim = requireNotNull(sessions.claim {
             claim(release = {
                 releasing.countDown()
-                allowRelease.await()
+                allowRelease.awaitBounded()
             })
         })
         val completed = async(Dispatchers.Default) { claim.complete(passed = true) }
-        releasing.await()
+        releasing.awaitBounded()
 
         assertEquals(0, sessions.stopOwned())
         allowRelease.countDown()
@@ -147,7 +146,7 @@ class AffectedRunClaimTest {
     }
 
     @Test
-    fun `stop cannot overtake owned process completion`() = runBlocking {
+    fun `stop cannot overtake owned process completion`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val completing = CountDownLatch(1)
         val allowCompletion = CountDownLatch(1)
@@ -157,10 +156,10 @@ class AffectedRunClaimTest {
             execution.finish { accepted ->
                 assertTrue(accepted)
                 completing.countDown()
-                allowCompletion.await()
+                allowCompletion.awaitBounded()
             }
         }
-        completing.await()
+        completing.awaitBounded()
         val stopped = async(Dispatchers.Default) { sessions.stopOwned() }
 
         assertNull(withTimeoutOrNull(100) { stopped.await() })
@@ -188,7 +187,7 @@ class AffectedRunClaimTest {
     }
 
     @Test
-    fun `cancelled process ownership remains pending until cleanup finishes`() = runBlocking {
+    fun `cancelled process ownership remains pending until cleanup finishes`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val execution = OwnedProcessExecution()
         sessions.register(execution)
@@ -204,7 +203,7 @@ class AffectedRunClaimTest {
     }
 
     @Test
-    fun `stop before claimed group dispatch prevents adapter invocation`() = runBlocking {
+    fun `stop before claimed group dispatch prevents adapter invocation`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val claim = requireNotNull(sessions.claim(::claim))
         var invoked = false
@@ -227,7 +226,7 @@ class AffectedRunClaimTest {
     }
 
     @Test
-    fun `stop terminates a running group and prevents its pending sibling`() = runBlocking {
+    fun `stop terminates a running group and prevents its pending sibling`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val claim = requireNotNull(sessions.claim(::claim))
         val entered = CompletableDeferred<Unit>()
@@ -271,7 +270,7 @@ class AffectedRunClaimTest {
     }
 
     @Test
-    fun `first failed group prevents pending sibling dispatch`() = runBlocking {
+    fun `first failed group prevents pending sibling dispatch`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val claim = requireNotNull(sessions.claim(::claim))
         val invoked = mutableListOf<String>()
@@ -298,7 +297,7 @@ class AffectedRunClaimTest {
     }
 
     @Test
-    fun `first failed group stops running sibling and waits for its cleanup`() = runBlocking {
+    fun `first failed group stops running sibling and waits for its cleanup`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val claim = requireNotNull(sessions.claim(::claim))
         val siblingStarted = CompletableDeferred<Unit>()
@@ -343,7 +342,7 @@ class AffectedRunClaimTest {
     }
 
     @Test
-    fun `disabled fail fast lets every group finish`() = runBlocking {
+    fun `disabled fail fast lets every group finish`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val claim = requireNotNull(sessions.claim(::claim))
         val invoked = mutableListOf<String>()
@@ -370,7 +369,7 @@ class AffectedRunClaimTest {
     }
 
     @Test
-    fun `failed run does not cancel the next claim`() = runBlocking {
+    fun `failed run does not cancel the next claim`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val first = requireNotNull(sessions.claim(::claim))
 
@@ -398,7 +397,7 @@ class AffectedRunClaimTest {
     }
 
     @Test
-    fun `failed run does not reject an unrelated late session`() = runBlocking {
+    fun `failed run does not reject an unrelated late session`() = runBoundedBlocking {
         val sessions = AffectedRunSessions()
         val claim = requireNotNull(sessions.claim(::claim))
         val siblingStarted = CompletableDeferred<Unit>()

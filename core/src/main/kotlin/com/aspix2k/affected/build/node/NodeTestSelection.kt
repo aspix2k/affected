@@ -14,6 +14,8 @@ import java.nio.file.Path
 internal enum class NodeTestRunner(val displayName: String) {
     JEST("Jest"),
     VITEST("Vitest"),
+    NODE_TEST("node:test"),
+    BUN("Bun"),
 }
 
 internal data class NodeRelatedTestSelection(
@@ -27,15 +29,12 @@ internal fun nodeRelatedTestSelections(
     buildChanges: BuildChanges,
 ): Map<String, NodeRelatedTestSelection> = runCatching {
     val rootPath = root.toPath().toAbsolutePath().normalize()
-    if (Files.isSymbolicLink(rootPath) || !Files.isDirectory(rootPath, LinkOption.NOFOLLOW_LINKS)) return emptyMap()
-    if (unambiguousNodeManager(root) == null) return emptyMap()
+    if (!plainDirectory(rootPath)) return emptyMap()
+    val manager = bunManager(root) ?: unambiguousNodeManager(root) ?: return emptyMap()
 
     val modules = NodeWorkspaces.parse(root)
     if (modules.isEmpty()) return emptyMap()
-    val testPackages = tasks
-        .filter { it.substringAfterLast(':') == NodeWorkspaces.TEST }
-        .map { it.substringBeforeLast(':') }
-        .distinct()
+    val testPackages = nodeTestPackages(tasks)
     if (testPackages.isEmpty()) return emptyMap()
 
     val changes = buildChanges.files.map { Path.of(it).toAbsolutePath().normalize() }.filter(rootPath::contains)
@@ -55,12 +54,21 @@ internal fun nodeRelatedTestSelections(
             val packageChanges = owners.filterValues { it == module }.keys
             if (packageChanges.isEmpty()) return@forEach
             if (!eligible.containsAll(packageChanges)) return@forEach
-            val selection = relatedSelection(rootPath, directory, moduleRoots - directory, packageChanges)
+            val selection = relatedSelection(manager, rootPath, directory, moduleRoots - directory, packageChanges)
                 ?: return@forEach
             put(packageName, selection)
         }
     }
 }.getOrDefault(emptyMap())
+
+private fun plainDirectory(path: Path): Boolean =
+    !Files.isSymbolicLink(path) && Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)
+
+private fun nodeTestPackages(tasks: List<String>): List<String> =
+    tasks
+        .filter { it.substringAfterLast(':') == NodeWorkspaces.TEST }
+        .map { it.substringBeforeLast(':') }
+        .distinct()
 
 private fun Path.contains(path: Path): Boolean = path.startsWith(this)
 
@@ -82,6 +90,7 @@ private fun nodeOwner(modules: List<BuildModule>, changed: Path): BuildModule? {
 }
 
 private fun relatedSelection(
+    manager: String,
     root: Path,
     directory: Path,
     nestedModules: Set<Path>,
@@ -93,10 +102,16 @@ private fun relatedSelection(
     if (changes.any { changed -> changed.fileName.toString() in NODE_CONFIG_FILES }) return null
     if (changes.any { changed -> changed.extension.lowercase() !in RELATED_SOURCE_EXTENSIONS }) return null
 
-    val metadata = nodeRunner(root, directory) ?: return null
-    if (!safeStaticNodePackage(directory, nestedModules)) return null
+    val metadata = nodeRunner(manager, root, directory) ?: return null
     val relative = changes.map { directory.relativize(it).toString().replace('\\', '/') }.sorted()
     if (relative.any { it.startsWith("../") || it == ".." }) return null
+    if (metadata.testFilesOnly && !testFilesOnly(metadata, relative)) return null
+    val references = Regex(
+        changes.joinToString("|", "(?<![A-Za-z0-9_-])(?:", ")(?![A-Za-z0-9_-])") {
+            Regex.escape(it.fileName.toString().substringBeforeLast('.'))
+        },
+    ).takeIf { metadata.testFilesOnly }
+    if (!safeStaticNodePackage(directory, nestedModules, references)) return null
     return NodeRelatedTestSelection(metadata, relative)
 }
 
@@ -109,12 +124,19 @@ private fun unsafeNodePath(directory: Path, changed: Path): Boolean =
 private val Path.extension: String
     get() = fileName.toString().substringAfterLast('.', "")
 
-private fun nodeRunner(root: Path, directory: Path): NodeTestRunner? {
+private fun testFilesOnly(runner: NodeTestRunner, relative: List<String>): Boolean =
+    relative.all { path ->
+        SAFE_TEST_PATH.matches(path) && runner.testFileSuffixes.any { suffix -> path.endsWith(suffix) }
+    }
+
+private fun nodeRunner(manager: String, root: Path, directory: Path): NodeTestRunner? {
     val manifest = readJson(directory.resolve("package.json")) ?: return null
     val rootManifest = if (directory == root) manifest else readJson(root.resolve("package.json")) ?: return null
     val manifests = listOf(manifest, rootManifest)
     if (manifests.any(::hasUnsafeRunnerFields) || hasRunnerConfig(root, directory)) return null
     val runner = runnerFromScript(manifest.objectString("scripts", "test")) ?: return null
+    if (!runner.manager(manager)) return null
+    if (runner.testFilesOnly) return runner
     val versions = manifests.map { it.dependencyVersions() ?: return null }
     if (versions.any { dependencies -> dependencies.keys.any(TRANSFORM_DEPENDENCIES::contains) }) return null
     val version = versions.firstNotNullOfOrNull { it[runner.packageName] } ?: return null
@@ -125,6 +147,8 @@ private fun runnerFromScript(script: String?): NodeTestRunner? =
     when (script?.trim()) {
         "jest" -> NodeTestRunner.JEST
         "vitest", "vitest run", "vitest --run" -> NodeTestRunner.VITEST
+        "node --test" -> NodeTestRunner.NODE_TEST
+        "bun test" -> NodeTestRunner.BUN
         else -> null
     }
 
@@ -141,7 +165,21 @@ private val NodeTestRunner.packageName: String
     get() = when (this) {
         NodeTestRunner.JEST -> "jest"
         NodeTestRunner.VITEST -> "vitest"
+        NodeTestRunner.NODE_TEST, NodeTestRunner.BUN -> error("$displayName has no package version")
     }
+
+internal val NodeTestRunner.testFilesOnly: Boolean
+    get() = this == NodeTestRunner.NODE_TEST || this == NodeTestRunner.BUN
+
+private val NodeTestRunner.testFileSuffixes: List<String>
+    get() = when (this) {
+        NodeTestRunner.NODE_TEST -> listOf(".test.js", ".test.mjs", ".test.cjs")
+        NodeTestRunner.BUN -> BUN_TEST_SUFFIXES
+        else -> emptyList()
+    }
+
+private fun NodeTestRunner.manager(manager: String): Boolean =
+    if (this == NodeTestRunner.BUN) manager == "bun" else manager != "bun"
 
 private fun NodeTestRunner.supports(version: String): Boolean {
     val match = SIMPLE_VERSION.matchEntire(version.trim()) ?: return false
@@ -149,6 +187,7 @@ private fun NodeTestRunner.supports(version: String): Boolean {
     return when (this) {
         NodeTestRunner.JEST -> major in 29..30
         NodeTestRunner.VITEST -> major in 2..5
+        NodeTestRunner.NODE_TEST, NodeTestRunner.BUN -> false
     }
 }
 
@@ -210,12 +249,13 @@ private data class NodeScanBudget(
     var directories: Int = 0,
     var files: Int = 0,
     var bytes: Long = 0,
+    val references: Regex?,
 )
 
-private fun safeStaticNodePackage(directory: Path, nestedModules: Set<Path>): Boolean {
+private fun safeStaticNodePackage(directory: Path, nestedModules: Set<Path>, references: Regex?): Boolean {
     val queue = ArrayDeque<Pair<Path, Int>>()
     queue += directory to 0
-    val budget = NodeScanBudget()
+    val budget = NodeScanBudget(references = references)
     while (queue.isNotEmpty()) {
         if (budget.directories++ >= MAX_NODE_DIRECTORIES) return false
         val (current, depth) = queue.removeFirst()
@@ -269,12 +309,15 @@ private fun safeNodeSource(source: Path, budget: NodeScanBudget): Boolean {
     budget.bytes += size
     if (size > MAX_NODE_FILE_BYTES || budget.bytes > MAX_NODE_TOTAL_BYTES) return false
     val text = runCatching { Files.readString(source, StandardCharsets.UTF_8) }.getOrNull() ?: return false
-    return !hasDynamicNodeDependency(text)
+    return !hasDynamicNodeDependency(text) && budget.references?.containsMatchIn(text) != true
 }
 
 private val SIMPLE_VERSION = Regex("""[~^]?(\d+)\.\d+(?:\.\d+)?""")
 private val DEPENDENCY_FIELDS = listOf("dependencies", "devDependencies", "optionalDependencies", "peerDependencies")
 private val RELATED_SOURCE_EXTENSIONS = setOf("js", "jsx", "ts", "tsx", "mjs", "cjs")
+private val SAFE_TEST_PATH = Regex("""[A-Za-z0-9_][A-Za-z0-9_./-]*""")
+private val BUN_TEST_SUFFIXES = listOf("js", "jsx", "ts", "tsx", "mjs", "cjs")
+    .flatMap { extension -> listOf(".test.$extension", ".spec.$extension") }
 private val SCANNED_SOURCE_EXTENSIONS = RELATED_SOURCE_EXTENSIONS
 private val TRANSFORMED_SOURCE_EXTENSIONS = setOf("vue", "svelte")
 private val ROOT_FALLBACK_FILES = setOf(
@@ -293,6 +336,8 @@ private val NODE_CONFIG_FILES = setOf(
     ".babelrc.mjs",
     ".babelrc.json",
     ".swcrc",
+    "bunfig.toml",
+    "node.config.json",
     "babel.config.js",
     "babel.config.cjs",
     "babel.config.mjs",

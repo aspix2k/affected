@@ -68,6 +68,9 @@ tasks.test {
         providers.gradleProperty("affected.cliConformance").orElse("false").get(),
     )
     System.getProperty("affected.phpunitVersion")?.let { systemProperty("affected.phpunitVersion", it) }
+    doFirst {
+        environment("KOTLIN_CLI_JAVA_HOME", javaLauncher.get().metadata.installationPath.asFile.absolutePath)
+    }
     testLogging { events("passed", "failed", "skipped") }
 }
 

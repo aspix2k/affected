@@ -1,0 +1,4 @@
+{
+  // Deno workspace with two members that own tests and one that does not.
+  "workspace": ["./packages/alpha", "./packages/beta", "./packages/gamma"]
+}
