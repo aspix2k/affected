@@ -148,7 +148,7 @@ private fun verificationPlans(
         nodes.filter { node ->
             affectsConsumers(
                 system = node.system,
-                path = file.invariantSeparatorsPath,
+                path = node.pathInBuildRoot(file),
                 signatureTouched = file in changes.apiTouched,
             )
         }
@@ -181,6 +181,9 @@ internal fun ProjectChanges.Result.toBuildChanges(): BuildChanges = BuildChanges
 
 internal fun affectsConsumers(system: BuildSystem, path: String, signatureTouched: Boolean): Boolean =
     signatureTouched || !system.consumersNeedSignatureChange && !system.isTestSource(path)
+
+private fun ModuleGraph.Node.pathInBuildRoot(file: File): String =
+    file.invariantSeparatorsPath.removePrefix("${buildRoot.trimEnd('/')}/")
 
 private fun pathsOwnedBy(
     node: ModuleGraph.Node,
