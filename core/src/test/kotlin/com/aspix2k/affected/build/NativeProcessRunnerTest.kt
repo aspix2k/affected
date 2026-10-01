@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.build.process.testJavaClassPathArgument
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.Files
@@ -157,8 +158,7 @@ class NativeProcessRunnerTest {
 
 internal fun treeFixtureCommand(depth: Int, pids: File, held: File): List<String> = listOf(
     javaPath(),
-    "-cp",
-    System.getProperty("java.class.path"),
+    testJavaClassPathArgument(pids.toPath().toAbsolutePath().parent),
     TreeFixture::class.java.name,
     depth.toString(),
     pids.path,
