@@ -11,7 +11,7 @@ import com.aspix2k.affected.build.WorkspaceChangesBuildSystem
 import com.aspix2k.affected.build.combineFingerprints
 import com.aspix2k.affected.build.failClosedModules
 import com.aspix2k.affected.build.isRegularFileNoFollow
-import com.aspix2k.affected.build.nestedBuildRoot
+import com.aspix2k.affected.build.nestedBuildRoots
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CommandRunner
 import com.aspix2k.affected.build.retainBuildSnapshot
@@ -24,7 +24,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.ConcurrentHashMap
 
 class ComposerBuildSystem :
     ChangeAwareSuspendingBuildSystem,
@@ -32,18 +32,23 @@ class ComposerBuildSystem :
     TransitiveTestConsumersBuildSystem,
     WorkspaceChangesBuildSystem {
 
-    private data class Snapshot(val root: String, val stamp: String, val modules: List<BuildModule>)
+    private data class Snapshot(val stamp: String, val modules: List<BuildModule>)
 
-    private val cache = AtomicReference<Snapshot?>(null)
+    private val cache = ConcurrentHashMap<String, Snapshot>()
 
     override val id: String = "COMPOSER"
 
     override val sourceExtensions: Set<String> = setOf("php", "json", "neon", "xml", "lock")
 
-    override fun isPresent(project: Project): Boolean = rootOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
     override fun modules(project: Project): List<BuildModule> {
-        val root = rootOf(project) ?: return emptyList()
+        val roots = rootsOf(project)
+        cache.keys.retainAll(roots.mapTo(HashSet()) { it.invariantSeparatorsPath })
+        return roots.flatMap(::modulesOf)
+    }
+
+    private fun modulesOf(root: File): List<BuildModule> {
         val stamp = combineFingerprints(
             ManifestSearch.fingerprint(
                 root,
@@ -57,7 +62,7 @@ class ComposerBuildSystem :
         )
 
         val rootPath = root.invariantSeparatorsPath
-        if (stamp != null) cache.get()?.takeIf { it.root == rootPath && it.stamp == stamp }?.let { return it.modules }
+        if (stamp != null) cache[rootPath]?.takeIf { it.stamp == stamp }?.let { return it.modules }
 
         val discovered = runCatching { ComposerPackages.parse(root) }.getOrNull()
         val discovery = if (discovered.isNullOrEmpty()) {
@@ -66,17 +71,17 @@ class ComposerBuildSystem :
             ModuleDiscovery(discovered, complete = true)
         }
         if (stamp != null && discovery.complete) {
-            cache.retainBuildSnapshot(Snapshot(rootPath, stamp, discovery.modules), discovery.modules.size)
+            cache.retainBuildSnapshot(rootPath, Snapshot(stamp, discovery.modules), discovery.modules.size)
         }
         return discovery.modules
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {
-        CommandRunner.runBatch(project, root, commands(project, root, tasks), "Affected Composer")
+        CommandRunner.runBatch(project, root, commands(root, tasks), "Affected Composer")
     }
 
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
-        CommandRunner.runBatchAndWait(project, root, commands(project, root, tasks), "Affected Composer")
+        CommandRunner.runBatchAndWait(project, root, commands(root, tasks), "Affected Composer")
 
     override suspend fun runAndWaitSuspending(
         project: Project,
@@ -88,16 +93,16 @@ class ComposerBuildSystem :
             return CommandRunner.runBatchAndWait(
                 project,
                 root,
-                composerCommands(root, tasks, modules(project), changes),
+                composerCommands(root, tasks, modulesOf(File(root)), changes),
                 "Affected Composer",
             )
         }
         val adapter = configuredPhpunitAdapter()
             ?: findPhpunitAdapter(Path.of(PathManager.getJarPathForClass(ComposerBuildSystem::class.java)))
-            ?: return CommandRunner.runBatchAndWait(project, root, commands(project, root, tasks), "Affected Composer")
+            ?: return CommandRunner.runBatchAndWait(project, root, commands(root, tasks), "Affected Composer")
         val selective = withContext(Dispatchers.IO) {
-            PhpunitSelectiveRun.create(project, Path.of(root), tasks, modules(project), changes, adapter)
-        } ?: return CommandRunner.runBatchAndWait(project, root, commands(project, root, tasks), "Affected Composer")
+            PhpunitSelectiveRun.create(project, Path.of(root), tasks, modulesOf(File(root)), changes, adapter)
+        } ?: return CommandRunner.runBatchAndWait(project, root, commands(root, tasks), "Affected Composer")
         return try {
             val passed = CommandRunner.runBatchAndWait(project, root, selective.commands, "Affected Composer")
             passed && withContext(Dispatchers.IO) { selective.complete() }
@@ -110,14 +115,13 @@ class ComposerBuildSystem :
         return changes.files.any { pestWorkspaceChange(module.root, it) }
     }
 
-    private fun commands(project: Project, root: String, tasks: List<String>): List<CliCommand> {
-        return composerCommands(root, tasks, modules(project))
-    }
+    private fun commands(root: String, tasks: List<String>): List<CliCommand> =
+        composerCommands(root, tasks, modulesOf(File(root)))
 
-    private fun rootOf(project: Project): File? =
+    private fun rootsOf(project: Project): List<File> =
         project.basePath?.let(::File)?.let { base ->
-            nestedBuildRoot(base) { File(it, "composer.json").isRegularFileNoFollow() }
-        }
+            nestedBuildRoots(base) { File(it, "composer.json").isRegularFileNoFollow() }
+        }.orEmpty()
 }
 
 private fun configuredPhpunitAdapter(): Path? = System.getProperty(PHPUNIT_ADAPTER_PROPERTY)

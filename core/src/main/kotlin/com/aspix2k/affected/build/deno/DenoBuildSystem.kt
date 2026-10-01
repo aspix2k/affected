@@ -5,7 +5,7 @@ import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.ManifestSearch
 import com.aspix2k.affected.build.SuspendingBuildSystem
 import com.aspix2k.affected.build.isRegularFileNoFollow
-import com.aspix2k.affected.build.nestedBuildRoot
+import com.aspix2k.affected.build.nestedBuildRoots
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CommandRunner
 import com.google.gson.JsonObject
@@ -20,12 +20,9 @@ class DenoBuildSystem : SuspendingBuildSystem, AllFileChangesBuildSystem {
     override val sourceExtensions: Set<String> =
         setOf("ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts", "json", "jsonc", "lock")
 
-    override fun isPresent(project: Project): Boolean = rootOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
-    override fun modules(project: Project): List<BuildModule> {
-        val root = rootOf(project) ?: return emptyList()
-        return listOf(denoRootModule(root))
-    }
+    override fun modules(project: Project): List<BuildModule> = rootsOf(project).map(::denoRootModule)
 
     override fun run(project: Project, root: String, tasks: List<String>) {
         CommandRunner.runBatch(project, root, denoCommands(File(root), tasks), "Affected Deno")
@@ -34,8 +31,8 @@ class DenoBuildSystem : SuspendingBuildSystem, AllFileChangesBuildSystem {
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         CommandRunner.runBatchAndWait(project, root, denoCommands(File(root), tasks), "Affected Deno")
 
-    private fun rootOf(project: Project): File? =
-        project.basePath?.let(::File)?.let(::denoProjectRoot)
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let(::denoProjectRoots).orEmpty()
 }
 
 internal object DenoTasks {
@@ -44,8 +41,8 @@ internal object DenoTasks {
 
 internal class DenoConfig(val json: JsonObject?)
 
-internal fun denoProjectRoot(base: File): File? =
-    nestedBuildRoot(base) { denoConfig(it) != null && !nodeOwnsTests(it) }
+internal fun denoProjectRoots(base: File): List<File> =
+    nestedBuildRoots(base) { denoConfig(it) != null && !nodeOwnsTests(it) }
 
 internal fun denoConfig(root: File): DenoConfig? {
     val configs = CONFIG_NAMES.map { File(root, it) }.filter { it.exists() }

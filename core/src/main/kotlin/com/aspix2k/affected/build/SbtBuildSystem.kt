@@ -12,13 +12,12 @@ class SbtBuildSystem : SuspendingBuildSystem, WorkspaceChangesBuildSystem {
     override val sourceExtensions: Set<String> =
         setOf("scala", "sc", "sbt", "java", "kt", "groovy", "properties")
 
-    override fun isPresent(project: Project): Boolean = manifestOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
-    override fun modules(project: Project): List<BuildModule> {
-        val manifest = manifestOf(project) ?: return emptyList()
-        val root = manifest.parentFile
-        return failClosedModules(root, SbtTasks.TEST, SbtTasks.COMPILE, sbtModules(root)).modules
-    }
+    override fun modules(project: Project): List<BuildModule> =
+        rootsOf(project).flatMap { root ->
+            failClosedModules(root, SbtTasks.TEST, SbtTasks.COMPILE, sbtModules(root)).modules
+        }
 
     override fun requiresWorkspace(module: BuildModule, changes: BuildChanges): Boolean =
         sbtRequiresWorkspace(module.root, changes)
@@ -30,9 +29,9 @@ class SbtBuildSystem : SuspendingBuildSystem, WorkspaceChangesBuildSystem {
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         CommandRunner.runBatchAndWait(project, root, sbtCommands(tasks), "Affected sbt")
 
-    private fun manifestOf(project: Project): File? =
-        project.basePath?.let(::File)?.let { nestedBuildRoot(it) { File(it, "build.sbt").isRegularFileNoFollow() } }
-            ?.let { File(it, "build.sbt") }
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let { nestedBuildRoots(it) { File(it, "build.sbt").isRegularFileNoFollow() } }
+            .orEmpty()
 }
 
 internal object SbtTasks {

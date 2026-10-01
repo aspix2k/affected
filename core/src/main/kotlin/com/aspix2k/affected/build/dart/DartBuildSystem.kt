@@ -6,7 +6,7 @@ import com.aspix2k.affected.build.SuspendingBuildSystem
 import com.aspix2k.affected.build.WorkspaceChangesBuildSystem
 import com.aspix2k.affected.build.failClosedModules
 import com.aspix2k.affected.build.isRegularFileNoFollow
-import com.aspix2k.affected.build.nestedBuildRoot
+import com.aspix2k.affected.build.nestedBuildRoots
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CommandRunner
 import com.intellij.openapi.project.Project
@@ -18,12 +18,12 @@ class DartBuildSystem : SuspendingBuildSystem, WorkspaceChangesBuildSystem {
 
     override val sourceExtensions: Set<String> = setOf("dart", "yaml")
 
-    override fun isPresent(project: Project): Boolean = manifestOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
-    override fun modules(project: Project): List<BuildModule> {
-        val root = manifestOf(project)?.parentFile ?: return emptyList()
-        return failClosedModules(root, DartTasks.TEST, DartTasks.ANALYZE, dartModules(root)).modules
-    }
+    override fun modules(project: Project): List<BuildModule> =
+        rootsOf(project).flatMap { root ->
+            failClosedModules(root, DartTasks.TEST, DartTasks.ANALYZE, dartModules(root)).modules
+        }
 
     override fun requiresWorkspace(module: BuildModule, changes: BuildChanges): Boolean =
         dartRequiresWorkspace(module.root, changes)
@@ -35,8 +35,8 @@ class DartBuildSystem : SuspendingBuildSystem, WorkspaceChangesBuildSystem {
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         CommandRunner.runBatchAndWait(project, root, dartCommands(File(root), tasks), "Affected Dart")
 
-    private fun manifestOf(project: Project): File? =
-        project.basePath?.let(::File)?.let(::dartProjectRoot)?.let(::dartManifest)
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let(::dartProjectRoots).orEmpty()
 }
 
 internal object DartTasks {
@@ -44,8 +44,8 @@ internal object DartTasks {
     const val ANALYZE = "analyze"
 }
 
-internal fun dartProjectRoot(base: File): File? =
-    nestedBuildRoot(base) { dartManifest(it) != null }
+internal fun dartProjectRoots(base: File): List<File> =
+    nestedBuildRoots(base) { dartManifest(it) != null }
 
 internal fun dartManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null

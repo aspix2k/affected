@@ -11,17 +11,17 @@ class KotlinToolchainBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceCh
 
     override val sourceExtensions: Set<String> = setOf("kt", "kts", "java", "yaml")
 
-    override fun isPresent(project: Project): Boolean = manifestOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
-    override fun modules(project: Project): List<BuildModule> {
-        val root = manifestOf(project)?.parentFile ?: return emptyList()
-        return failClosedModules(
-            root,
-            KotlinToolchainTasks.TEST,
-            KotlinToolchainTasks.BUILD,
-            kotlinToolchainModules(root),
-        ).modules
-    }
+    override fun modules(project: Project): List<BuildModule> =
+        rootsOf(project).flatMap { root ->
+            failClosedModules(
+                root,
+                KotlinToolchainTasks.TEST,
+                KotlinToolchainTasks.BUILD,
+                kotlinToolchainModules(root),
+            ).modules
+        }
 
     override fun requiresWorkspace(module: BuildModule, changes: BuildChanges): Boolean =
         kotlinToolchainRequiresWorkspace(module.root, changes)
@@ -50,8 +50,8 @@ class KotlinToolchainBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceCh
         "Affected Kotlin Toolchain",
     )
 
-    private fun manifestOf(project: Project): File? =
-        project.basePath?.let(::File)?.let(::kotlinToolchainProjectRoot)?.let(::kotlinToolchainManifest)
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let(::kotlinToolchainProjectRoots).orEmpty()
 }
 
 internal object KotlinToolchainTasks {
@@ -59,8 +59,8 @@ internal object KotlinToolchainTasks {
     const val BUILD = "build"
 }
 
-internal fun kotlinToolchainProjectRoot(base: File): File? =
-    nestedBuildRoot(base) { kotlinToolchainManifest(it) != null }
+internal fun kotlinToolchainProjectRoots(base: File): List<File> =
+    nestedBuildRoots(base) { kotlinToolchainManifest(it) != null }
 
 internal fun kotlinToolchainManifest(root: File): File? {
     if (GRADLE_SETTINGS.any { File(root, it).isRegularFileNoFollow() }) return null

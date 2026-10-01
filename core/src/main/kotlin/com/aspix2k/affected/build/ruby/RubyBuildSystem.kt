@@ -7,19 +7,19 @@ import com.aspix2k.affected.build.NamedSourceBuildSystem
 import com.aspix2k.affected.build.SuspendingBuildSystem
 import com.aspix2k.affected.build.combineFingerprints
 import com.aspix2k.affected.build.isRegularFileNoFollow
-import com.aspix2k.affected.build.nestedBuildRoot
+import com.aspix2k.affected.build.nestedBuildRoots
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CommandRunner
 import com.aspix2k.affected.build.retainBuildSnapshot
 import com.intellij.openapi.project.Project
 import java.io.File
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.ConcurrentHashMap
 
 class RubyBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
 
-    private data class Snapshot(val root: String, val stamp: String, val modules: List<BuildModule>)
+    private data class Snapshot(val stamp: String, val modules: List<BuildModule>)
 
-    private val cache = AtomicReference<Snapshot?>(null)
+    private val cache = ConcurrentHashMap<String, Snapshot>()
 
     override val id: String = "RUBY"
 
@@ -27,10 +27,15 @@ class RubyBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
 
     override val sourceFileNames: Set<String> = setOf("Gemfile", "Rakefile")
 
-    override fun isPresent(project: Project): Boolean = rootOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
     override fun modules(project: Project): List<BuildModule> {
-        val root = rootOf(project) ?: return emptyList()
+        val roots = rootsOf(project)
+        cache.keys.retainAll(roots.mapTo(HashSet()) { it.invariantSeparatorsPath })
+        return roots.flatMap(::modulesOf)
+    }
+
+    private fun modulesOf(root: File): List<BuildModule> {
         val stamp = combineFingerprints(
             ManifestSearch.fingerprint(
                 root,
@@ -41,7 +46,7 @@ class RubyBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
         )
 
         val rootPath = root.invariantSeparatorsPath
-        if (stamp != null) cache.get()?.takeIf { it.root == rootPath && it.stamp == stamp }?.let { return it.modules }
+        if (stamp != null) cache[rootPath]?.takeIf { it.stamp == stamp }?.let { return it.modules }
 
         val discovered = runCatching { RubyGems.parse(root) }.getOrNull()
         val discovery = if (discovered.isNullOrEmpty()) {
@@ -51,24 +56,24 @@ class RubyBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
             ModuleDiscovery(discovered, complete = true)
         }
         if (stamp != null && discovery.complete) {
-            cache.retainBuildSnapshot(Snapshot(rootPath, stamp, discovery.modules), discovery.modules.size)
+            cache.retainBuildSnapshot(rootPath, Snapshot(stamp, discovery.modules), discovery.modules.size)
         }
         return discovery.modules
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {
-        CommandRunner.runBatch(project, root, commands(project, root, tasks), "Affected Bundler")
+        CommandRunner.runBatch(project, root, commands(root, tasks), "Affected Bundler")
     }
 
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
-        CommandRunner.runBatchAndWait(project, root, commands(project, root, tasks), "Affected Bundler")
+        CommandRunner.runBatchAndWait(project, root, commands(root, tasks), "Affected Bundler")
 
-    private fun commands(project: Project, root: String, tasks: List<String>): List<CliCommand> {
-        return rubyCommands(root, tasks, modules(project))
-    }
+    private fun commands(root: String, tasks: List<String>): List<CliCommand> =
+        rubyCommands(root, tasks, modulesOf(File(root)))
 
-    private fun rootOf(project: Project): File? =
-        project.basePath?.let(::File)?.let { nestedBuildRoot(it) { File(it, "Gemfile").isRegularFileNoFollow() } }
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let { nestedBuildRoots(it) { File(it, "Gemfile").isRegularFileNoFollow() } }
+            .orEmpty()
 }
 
 private val RUBY_TEST_DIRECTORIES = setOf("test", "spec")

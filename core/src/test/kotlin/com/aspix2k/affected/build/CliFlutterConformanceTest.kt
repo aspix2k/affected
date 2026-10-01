@@ -1,14 +1,13 @@
 package com.aspix2k.affected.build
 
 import com.aspix2k.affected.build.dart.flutterCommands
-import com.aspix2k.affected.build.dart.flutterProjectRoot
+import com.aspix2k.affected.build.dart.flutterProjectRoots
 import com.aspix2k.affected.build.dart.flutterRootModule
 import org.junit.Assume.assumeTrue
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class CliFlutterConformanceTest {
@@ -26,7 +25,7 @@ class CliFlutterConformanceTest {
 
     @Test
     fun `flutter runs from a single first-level nested app`() = fixture("flutter", nested = true) { root ->
-        val nested = assertNotNull(flutterProjectRoot(root))
+        val nested = flutterProjectRoots(root).single()
         assertEquals(File(root, "app").canonicalFile, nested.canonicalFile)
         val module = flutterRootModule(nested)
         val command = flutterCommands(listOf("${module.executionId}:${module.testTask}")).single()

@@ -1,7 +1,14 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.KotlinToolchainBuildSystem
+import com.aspix2k.affected.build.RBuildSystem
 import com.aspix2k.affected.build.SbtBuildSystem
+import com.aspix2k.affected.build.SwiftBuildSystem
+import com.aspix2k.affected.build.cargo.CargoBuildSystem
 import com.aspix2k.affected.build.cmake.CMakeBuildSystem
+import com.aspix2k.affected.build.dart.DartBuildSystem
+import com.aspix2k.affected.build.dart.FlutterBuildSystem
+import com.aspix2k.affected.build.deno.DenoBuildSystem
 import com.aspix2k.affected.build.dotnet.DotnetBuildSystem
 import com.aspix2k.affected.build.node.NodeBuildSystem
 import com.aspix2k.affected.build.php.ComposerBuildSystem
@@ -21,9 +28,9 @@ class BuildSystemDetectionTest {
     fun `a root marker does not require a populated module graph`() {
         systems.forEach { (system, marker) ->
             val root = createTempDirectory("detection").toFile()
-            File(root, marker).writeText("")
+            marker.writeTo(root)
 
-            assertTrue(system(projectAt(root)), marker)
+            assertTrue(system(projectAt(root)), marker.file)
         }
     }
 
@@ -31,44 +38,31 @@ class BuildSystemDetectionTest {
     fun `a single first-level nested marker is present`() {
         systems.forEach { (system, marker) ->
             val root = createTempDirectory("nested-detection").toFile()
-            File(root, "nested/$marker").apply {
-                parentFile.mkdirs()
-                writeText("")
-            }
+            marker.writeTo(File(root, "nested"))
 
-            assertTrue(system(projectAt(root)), marker)
+            assertTrue(system(projectAt(root)), marker.file)
         }
     }
 
     @Test
     fun `several first-level nested markers stay off`() {
-        systems.filterNot { it.second in MULTI_ROOT_MARKERS }.forEach { (system, marker) ->
+        systems.filterNot { it.second.multiRoot }.forEach { (system, marker) ->
             val root = createTempDirectory("nested-many").toFile()
-            File(root, "one/$marker").apply {
-                parentFile.mkdirs()
-                writeText("")
-            }
-            File(root, "two/$marker").apply {
-                parentFile.mkdirs()
-                writeText("")
-            }
+            marker.writeTo(File(root, "one"))
+            marker.writeTo(File(root, "two"))
 
-            assertFalse(system(projectAt(root)), marker)
+            assertFalse(system(projectAt(root)), marker.file)
         }
     }
 
     @Test
     fun `several first-level nested markers are present for multi-root systems`() {
-        systems.filter { it.second in MULTI_ROOT_MARKERS }.forEach { (system, marker) ->
+        systems.filter { it.second.multiRoot }.forEach { (system, marker) ->
             val root = createTempDirectory("nested-many-roots").toFile()
-            listOf("one", "two").forEach { name ->
-                File(root, "$name/$marker").apply {
-                    parentFile.mkdirs()
-                    writeText("")
-                }
-            }
+            marker.writeTo(File(root, "one"))
+            marker.writeTo(File(root, "two"))
 
-            assertTrue(system(projectAt(root)), marker)
+            assertTrue(system(projectAt(root)), marker.file)
         }
     }
 
@@ -76,12 +70,9 @@ class BuildSystemDetectionTest {
     fun `a nested marker deeper than three levels stays off`() {
         systems.forEach { (system, marker) ->
             val root = createTempDirectory("nested-deep").toFile()
-            File(root, "a/b/c/d/$marker").apply {
-                parentFile.mkdirs()
-                writeText("")
-            }
+            marker.writeTo(File(root, "a/b/c/d"))
 
-            assertFalse(system(projectAt(root)), marker)
+            assertFalse(system(projectAt(root)), marker.file)
         }
     }
 
@@ -99,26 +90,37 @@ class BuildSystemDetectionTest {
             }
         } as Project
 
-    private companion object {
-        val MULTI_ROOT_MARKERS = setOf("pyproject.toml", "package.json")
+    private class Marker(
+        val file: String,
+        val multiRoot: Boolean = true,
+        val content: String = "",
+        val extras: Map<String, String> = emptyMap(),
+    ) {
+        fun writeTo(directory: File) {
+            directory.mkdirs()
+            File(directory, file).writeText(content)
+            extras.forEach { (name, text) -> File(directory, name).writeText(text) }
+        }
+    }
 
-        val systems = listOf<(Project) -> Boolean>(
-            RubyBuildSystem()::isPresent,
-            ComposerBuildSystem()::isPresent,
-            PythonBuildSystem()::isPresent,
-            CMakeBuildSystem()::isPresent,
-            NodeBuildSystem()::isPresent,
-            DotnetBuildSystem()::isPresent,
-            SbtBuildSystem()::isPresent,
-        ).zip(
-            listOf(
-                "Gemfile",
-                "composer.json",
-                "pyproject.toml",
-                "CMakeLists.txt",
-                "package.json",
-                "app.csproj",
-                "build.sbt",
+    private companion object {
+        val systems = listOf<Pair<(Project) -> Boolean, Marker>>(
+            RubyBuildSystem()::isPresent to Marker("Gemfile"),
+            ComposerBuildSystem()::isPresent to Marker("composer.json"),
+            PythonBuildSystem()::isPresent to Marker("pyproject.toml"),
+            CMakeBuildSystem()::isPresent to Marker("CMakeLists.txt", multiRoot = false),
+            NodeBuildSystem()::isPresent to Marker("package.json"),
+            DotnetBuildSystem()::isPresent to Marker("app.csproj", multiRoot = false),
+            SbtBuildSystem()::isPresent to Marker("build.sbt"),
+            CargoBuildSystem()::isPresent to Marker("Cargo.toml"),
+            SwiftBuildSystem()::isPresent to Marker("Package.swift"),
+            RBuildSystem()::isPresent to Marker("DESCRIPTION", content = "Package: probe\n"),
+            KotlinToolchainBuildSystem()::isPresent to Marker("project.yaml", extras = mapOf("kotlin" to "")),
+            DenoBuildSystem()::isPresent to Marker("deno.json", content = "{}"),
+            DartBuildSystem()::isPresent to Marker("pubspec.yaml", content = "name: probe\n"),
+            FlutterBuildSystem()::isPresent to Marker(
+                "pubspec.yaml",
+                content = "name: probe\ndependencies:\n  flutter:\n    sdk: flutter\n",
             ),
         )
     }

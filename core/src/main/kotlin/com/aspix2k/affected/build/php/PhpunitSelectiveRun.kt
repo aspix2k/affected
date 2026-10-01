@@ -65,7 +65,7 @@ internal class PhpunitSelectiveRun private constructor(
                         requireNotNull(phpunitDependencyRoots(module, modules)),
                         changes,
                         adapter,
-                        cache.resolve(sha256(executionId)),
+                        cache.resolve(sha256("${realRoot.toFile().invariantSeparatorsPath}|$executionId")),
                     )
                     packageRuns += packageRun
                     commands += DeferredCliCommand(

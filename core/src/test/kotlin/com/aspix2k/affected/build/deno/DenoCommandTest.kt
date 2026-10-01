@@ -60,7 +60,7 @@ class DenoCommandTest {
         File(both, "deno.jsonc").writeText("{}")
 
         listOf(denoRoot("not json"), trailing, both).forEach { root ->
-            assertEquals(root, denoProjectRoot(root))
+            assertEquals(listOf(root), denoProjectRoots(root))
             assertNull(denoConfig(root)?.json)
             assertTrue(denoRootModule(root).hasTests)
             assertEquals(listOf("deno", "test"), denoCommands(root, listOf(".:test")).single().arguments)
@@ -74,8 +74,8 @@ class DenoCommandTest {
         val bare = denoRoot("{}")
         File(bare, "package.json").writeText("{}")
 
-        assertEquals(plain, denoProjectRoot(plain))
-        assertEquals(bare, denoProjectRoot(bare))
+        assertEquals(listOf(plain), denoProjectRoots(plain))
+        assertEquals(listOf(bare), denoProjectRoots(bare))
     }
 
     @Test
@@ -88,9 +88,9 @@ class DenoCommandTest {
         File(invalid, "package.json").writeText("not json")
         val empty = createTempDirectory("deno-none").toFile()
 
-        listOf(script, workspaces, invalid).forEach { root -> assertNull(denoProjectRoot(root)) }
+        listOf(script, workspaces, invalid).forEach { root -> assertEquals(emptyList(), denoProjectRoots(root)) }
         assertNull(denoConfig(empty))
-        assertNull(denoProjectRoot(empty))
+        assertEquals(emptyList(), denoProjectRoots(empty))
     }
 
     private fun denoRoot(config: String, name: String = "deno.json"): File {

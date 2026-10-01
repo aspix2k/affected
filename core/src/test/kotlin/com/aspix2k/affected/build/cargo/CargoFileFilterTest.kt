@@ -6,7 +6,6 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CargoFileFilterTest {
@@ -63,24 +62,38 @@ class CargoFileFilterTest {
         val nested = File(base, "backend")
         cargoToml().copyRecursively(nested)
 
-        assertEquals(nested.canonicalFile, cargoProjectRoot(base)?.canonicalFile)
+        assertEquals(nested.canonicalFile, cargoProjectRoots(base).singleOrNull()?.canonicalFile)
     }
 
     @Test
-    fun `several first-level nested Cargo projects stay off`() {
+    fun `several nested Cargo projects are all roots`() {
         val base = createTempDirectory("cargo-many").toFile()
         cargoToml().copyRecursively(File(base, "backend"))
         cargoToml().copyRecursively(File(base, "tools"))
 
-        assertNull(cargoProjectRoot(base))
+        assertEquals(
+            listOf(File(base, "backend"), File(base, "tools")).map(File::getCanonicalFile),
+            cargoProjectRoots(base).map(File::getCanonicalFile),
+        )
     }
 
     @Test
-    fun `a deeper nested Cargo project stays off`() {
+    fun `a second-level nested Cargo project is the root`() {
         val base = createTempDirectory("cargo-deep").toFile()
         cargoToml().copyRecursively(File(base, "src/backend"))
 
-        assertNull(cargoProjectRoot(base))
+        assertEquals(
+            listOf(File(base, "src/backend").canonicalFile),
+            cargoProjectRoots(base).map(File::getCanonicalFile),
+        )
+    }
+
+    @Test
+    fun `a Cargo project deeper than three levels stays off`() {
+        val base = createTempDirectory("cargo-too-deep").toFile()
+        cargoToml().copyRecursively(File(base, "a/b/c/d"))
+
+        assertEquals(emptyList(), cargoProjectRoots(base))
     }
 
     private fun cargoToml(): File {
