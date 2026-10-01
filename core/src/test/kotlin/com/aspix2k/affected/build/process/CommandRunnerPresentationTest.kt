@@ -118,6 +118,8 @@ class CommandRunnerPresentationTest : BasePlatformTestCase() {
             )
         }
         val terminatedOnReturn = checkNotNull(shown).isProcessTerminated
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (terminations.get() == 0 && System.nanoTime() < deadline) Thread.sleep(10)
 
         assertFalse(passed)
         assertTrue(terminatedOnReturn)
