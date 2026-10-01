@@ -47,7 +47,7 @@ ALLOWED_HOSTS = {
     "static.rust-lang.org",
     "teamcity.jetbrains.com",
     "www.php.net",
-    "www.python.org",
+    "raw.githubusercontent.com",
     "www.jetbrains.com",
 }
 MAVEN_CENTRAL_METADATA_BASES = (
@@ -750,8 +750,10 @@ def remote_version(source: dict[str, Any], policy: str, series: str | None, tran
             raise CurrentnessError(f"Expected one stable .NET channel {target}")
         return normalize_version(str(matches[0].get("latest-sdk", ""))), None
     if kind == "python":
-        data = transport.json("https://www.python.org/api/v2/downloads/release/?is_published=true&pre_release=false")
-        return newest([str(item.get("name", "")).removeprefix("Python ") for item in data if item.get("is_published") and not item.get("pre_release")]), None
+        data = transport.json("https://raw.githubusercontent.com/actions/python-versions/main/versions-manifest.json")
+        if not isinstance(data, list):
+            raise CurrentnessError("Invalid actions/python-versions manifest")
+        return newest([str(item.get("version", "")) for item in data if isinstance(item, dict) and item.get("stable") is True]), None
     if kind == "ruby":
         text = transport.text("https://cache.ruby-lang.org/pub/ruby/index.txt")
         return newest(re.findall(r"(?m)^ruby-(\d+\.\d+\.\d+)\t", text)), None
