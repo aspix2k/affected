@@ -1,0 +1,1 @@
+- Discover several Go, Node and Python roots up to three levels below the project base (`apps/web` and `apps/admin`, `services/a` and `services/b`) when the base has no marker; workspace members stay inside their root, and more than 64 roots or 16384 scanned directories stay off.

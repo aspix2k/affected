@@ -5,12 +5,14 @@ import com.aspix2k.affected.TaskPlanner
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.BuildSystem
 import com.aspix2k.affected.build.ChangeAwareSuspendingBuildSystem
+import com.intellij.openapi.project.Project
 import java.io.File
+import java.lang.reflect.Proxy
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class GoCommandTest {
 
@@ -85,25 +87,63 @@ class GoCommandTest {
         val nested = File(base, "backend")
         goMod().copyRecursively(nested)
 
-        assertEquals(nested.canonicalFile, goProjectRoot(base)?.canonicalFile)
+        assertEquals(nested.canonicalFile, goProjectRoots(base).singleOrNull()?.canonicalFile)
     }
 
     @Test
-    fun `several first-level nested Go modules stay off`() {
+    fun `several nested Go modules are all roots`() {
         val base = createTempDirectory("go-many").toFile()
         goMod().copyRecursively(File(base, "backend"))
         goMod().copyRecursively(File(base, "tools"))
 
-        assertNull(goProjectRoot(base))
+        assertEquals(
+            listOf(File(base, "backend"), File(base, "tools")).map(File::getCanonicalFile),
+            goProjectRoots(base).map(File::getCanonicalFile),
+        )
     }
 
     @Test
-    fun `a deeper nested Go module stays off`() {
+    fun `a second-level nested Go module is the root`() {
         val base = createTempDirectory("go-deep").toFile()
         goMod().copyRecursively(File(base, "src/backend"))
 
-        assertNull(goProjectRoot(base))
+        assertEquals(listOf(File(base, "src/backend").canonicalFile), goProjectRoots(base).map(File::getCanonicalFile))
     }
+
+    @Test
+    fun `a Go module deeper than three levels stays off`() {
+        val base = createTempDirectory("go-too-deep").toFile()
+        goMod().copyRecursively(File(base, "a/b/c/d"))
+
+        assertEquals(emptyList(), goProjectRoots(base))
+    }
+
+    @Test
+    fun `two Go modules without a root manifest produce modules for both and commands per root`() {
+        val base = createTempDirectory("go-multi").toFile()
+        val roots = listOf("a", "b").map { File(base, "services/$it") }
+        roots.forEach { goMod().copyRecursively(it) }
+        val system = GoBuildSystem()
+        val project = project(base)
+
+        val modules = system.modules(project)
+        val plan = TaskPlanner.plan(modules.map { ModuleGraph.Node(it, system).info() }, emptyList())
+
+        assertTrue(system.isPresent(project))
+        assertEquals(roots.map { it.invariantSeparatorsPath }.toSet(), modules.map { it.root }.toSet())
+        assertEquals(roots.map { it.invariantSeparatorsPath }.toSet(), plan.groups.map { it.root }.toSet())
+        plan.groups.forEach { assertEquals(listOf("go", "test", "./..."), goCommands(it.tasks).single().arguments) }
+    }
+
+    private fun project(root: File): Project = Proxy.newProxyInstance(
+        Project::class.java.classLoader,
+        arrayOf(Project::class.java),
+    ) { _, method, _ ->
+        when (method.name) {
+            "getBasePath" -> root.path
+            else -> error("Unexpected Project call: ${method.name}")
+        }
+    } as Project
 
     private fun goMod(): File {
         val root = createTempDirectory("go-mod").toFile()

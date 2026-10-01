@@ -9,7 +9,7 @@ import com.aspix2k.affected.build.ManifestSearch
 import com.aspix2k.affected.build.combineFingerprints
 import com.aspix2k.affected.build.failClosedModules
 import com.aspix2k.affected.build.isRegularFileNoFollow
-import com.aspix2k.affected.build.nestedBuildRoot
+import com.aspix2k.affected.build.nestedBuildRoots
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CliStep
 import com.aspix2k.affected.build.process.CommandRunner
@@ -27,22 +27,27 @@ import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.util.Base64
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.ConcurrentHashMap
 
 class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSystem {
 
-    private data class Snapshot(val root: String, val stamp: String, val modules: List<BuildModule>)
+    private data class Snapshot(val stamp: String, val modules: List<BuildModule>)
 
-    private val cache = AtomicReference<Snapshot?>(null)
+    private val cache = ConcurrentHashMap<String, Snapshot>()
 
     override val id: String = "PYTHON"
 
     override val sourceExtensions: Set<String> = setOf("py", "pyi", "toml", "cfg", "ini", "lock")
 
-    override fun isPresent(project: Project): Boolean = rootOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
     override fun modules(project: Project): List<BuildModule> {
-        val root = rootOf(project) ?: return emptyList()
+        val roots = rootsOf(project)
+        cache.keys.retainAll(roots.mapTo(HashSet()) { it.invariantSeparatorsPath })
+        return roots.flatMap(::modulesOf)
+    }
+
+    private fun modulesOf(root: File): List<BuildModule> {
         val stamp = combineFingerprints(
             ManifestSearch.fingerprint(
                 root,
@@ -55,22 +60,22 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
         )
 
         val rootPath = root.invariantSeparatorsPath
-        if (stamp != null) cache.get()?.takeIf { it.root == rootPath && it.stamp == stamp }?.let { return it.modules }
+        if (stamp != null) cache[rootPath]?.takeIf { it.stamp == stamp }?.let { return it.modules }
 
         val discovered = runCatching { PythonProjects.parse(root) }.getOrNull()
         val discovery = failClosedModules(root, PythonProjects.TEST, null, discovered)
         if (stamp != null && discovery.complete) {
-            cache.retainBuildSnapshot(Snapshot(rootPath, stamp, discovery.modules), discovery.modules.size)
+            cache.retainBuildSnapshot(rootPath, Snapshot(stamp, discovery.modules), discovery.modules.size)
         }
         return discovery.modules
     }
 
     override fun run(project: Project, root: String, tasks: List<String>) {
-        CommandRunner.runBatch(project, root, commands(project, root, tasks), "Affected Python")
+        CommandRunner.runBatch(project, root, commands(root, tasks), "Affected Python")
     }
 
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
-        CommandRunner.runBatchAndWait(project, root, commands(project, root, tasks), "Affected Python")
+        CommandRunner.runBatchAndWait(project, root, commands(root, tasks), "Affected Python")
 
     override suspend fun runAndWaitSuspending(
         project: Project,
@@ -82,9 +87,8 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
         return CommandRunner.runBatchAndWait(project, root, commands, "Affected Python")
     }
 
-    private fun commands(project: Project, root: String, tasks: List<String>): List<CliCommand> {
-        return pythonCommands(root, tasks, modules(project))
-    }
+    private fun commands(root: String, tasks: List<String>): List<CliCommand> =
+        pythonCommands(root, tasks, modulesOf(File(root)))
 
     private fun commands(
         project: Project,
@@ -93,7 +97,7 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
         changes: BuildChanges,
     ): List<CliStep> {
         val directory = File(root)
-        val discovered = modules(project)
+        val discovered = modulesOf(File(root))
         val toolchain = pythonToolchain(directory)
         val runner = toolchain.runner
         val adapter = configuredPythonAdapter(runner)
@@ -113,10 +117,10 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
         }
     }
 
-    private fun rootOf(project: Project): File? =
+    private fun rootsOf(project: Project): List<File> =
         project.basePath?.let(::File)?.let { base ->
-            nestedBuildRoot(base) { File(it, "pyproject.toml").isRegularFileNoFollow() }
-        }
+            nestedBuildRoots(base) { File(it, "pyproject.toml").isRegularFileNoFollow() }
+        }.orEmpty()
 }
 
 private val PYTHON_TEST_DIRECTORIES = setOf("test", "tests")

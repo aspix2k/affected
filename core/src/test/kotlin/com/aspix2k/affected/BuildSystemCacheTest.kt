@@ -8,6 +8,7 @@ import com.aspix2k.affected.build.shouldRetainBuildSnapshot
 import com.intellij.openapi.project.Project
 import java.io.File
 import java.lang.reflect.Proxy
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -29,6 +30,15 @@ class BuildSystemCacheTest {
         assertNull(cache.get())
         assertTrue(cache.retainBuildSnapshot("ok", 2))
         assertEquals("ok", cache.get())
+    }
+
+    @Test
+    fun `an oversized module snapshot is evicted from a keyed cache`() {
+        val cache = ConcurrentHashMap<String, String>(mapOf("a" to "previous", "b" to "other"))
+        assertFalse(cache.retainBuildSnapshot("a", "huge", MAX_CACHED_MODULES + 1))
+        assertEquals(mapOf("b" to "other"), cache.toMap())
+        assertTrue(cache.retainBuildSnapshot("a", "ok", 2))
+        assertEquals(mapOf("a" to "ok", "b" to "other"), cache.toMap())
     }
 
     @Test
@@ -117,7 +127,7 @@ class BuildSystemCacheTest {
     private fun cachedModuleCount(system: Any): Int {
         val field = system.javaClass.getDeclaredField("cache")
         field.isAccessible = true
-        val snapshot = (field.get(system) as AtomicReference<*>).get()
+        val snapshot = (field.get(system) as ConcurrentHashMap<*, *>).values.single()
         val modules = snapshot.javaClass.getDeclaredField("modules")
         modules.isAccessible = true
         return (modules.get(snapshot) as List<*>).size
