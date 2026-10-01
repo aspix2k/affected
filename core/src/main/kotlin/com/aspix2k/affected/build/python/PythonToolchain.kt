@@ -3,6 +3,8 @@ package com.aspix2k.affected.build.python
 import com.aspix2k.affected.build.ManifestSearch
 import com.aspix2k.affected.build.isRegularFileNoFollow
 import com.aspix2k.affected.build.process.CliCommand
+import com.aspix2k.affected.build.process.CliStep
+import com.aspix2k.affected.build.process.DeferredCliCommand
 import com.aspix2k.affected.build.resolveExecutable
 import java.io.File
 import java.nio.file.FileSystems
@@ -37,6 +39,26 @@ internal fun pythonLauncher(
         ?: return PythonLauncher(failure = "$lock exists but $tool is not on PATH or in common install directories")
     return PythonLauncher(listOf(resolved) + launcher.drop(1))
 }
+
+internal fun pythonInterpreter(
+    root: File,
+    path: String? = System.getenv("PATH") ?: System.getenv("Path"),
+    pathExt: String? = System.getenv("PATHEXT"),
+): String =
+    VIRTUAL_ENVIRONMENTS
+        .flatMap { environment -> VIRTUAL_INTERPRETERS.map { File(root, "$environment/$it") } }
+        .firstOrNull { it.isFile && it.canExecute() }
+        ?.absolutePath
+        ?: INTERPRETERS.firstOrNull { resolveExecutable(it, path, pathExt) != it }
+        ?: PYTHON
+
+internal fun CliStep.withPythonInterpreter(interpreter: String): CliStep = when (this) {
+    is CliCommand -> withPythonInterpreter(interpreter)
+    else -> DeferredCliCommand.command { resolve()?.withPythonInterpreter(interpreter) }
+}
+
+internal fun CliCommand.withPythonInterpreter(interpreter: String): CliCommand =
+    if (arguments.first() == PYTHON) copy(arguments = listOf(interpreter) + arguments.drop(1)) else this
 
 internal fun CliCommand.inPythonLauncher(launcher: PythonLauncher): CliCommand {
     val plain = launcher.arguments.isEmpty() || arguments.firstOrNull() != "python" || arguments.getOrNull(1) == "-c"
@@ -90,6 +112,10 @@ private fun defaultToolDirectories(): List<String> {
     return listOf("$home/.local/bin", "$home/.cargo/bin", "/opt/homebrew/bin", "/usr/local/bin")
 }
 
+private const val PYTHON = "python"
+private val INTERPRETERS = listOf(PYTHON, "python3")
+private val VIRTUAL_ENVIRONMENTS = listOf(".venv", "venv")
+private val VIRTUAL_INTERPRETERS = listOf("bin/python", "Scripts/python.exe")
 private const val PYPROJECT = "pyproject.toml"
 private const val UV_LOCK = "uv.lock"
 private const val POETRY_LOCK = "poetry.lock"
