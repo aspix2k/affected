@@ -10,6 +10,7 @@ import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.ChangeAwareSuspendingBuildSystem
 import com.aspix2k.affected.build.WorkspaceChangesBuildSystem
 import com.aspix2k.affected.build.gradleInvocationArguments
+import com.aspix2k.affected.build.isJvmTestSource
 import com.aspix2k.affected.build.moduleDependencyKey
 import com.aspix2k.affected.build.requiredGradleFailureStrategyScript
 import com.aspix2k.affected.build.rootFallbackModule
@@ -56,6 +57,12 @@ import java.util.concurrent.atomic.AtomicReference
 class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuildSystem {
 
     override val id: String = GradleConstants.SYSTEM_ID.id
+
+    override fun isTestSource(path: String): Boolean = isJvmTestSource(path)
+
+    override val consumersNeedSignatureChange: Boolean = true
+
+    override val singleOwnerPerRoot: Boolean = true
 
     override val sourceExtensions: Set<String> =
         JVM_SOURCE_EXTENSIONS + setOf("gradle", "kts", "properties", "toml", "xml", "json", "pro")

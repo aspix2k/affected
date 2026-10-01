@@ -1,7 +1,7 @@
 package com.aspix2k.affected.build.gradle
 
-import com.aspix2k.affected.ChangeAnalyzer
 import com.aspix2k.affected.build.BuildChanges
+import com.aspix2k.affected.build.isJvmTestSource
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
@@ -23,7 +23,7 @@ internal fun selectTestNgClasses(changes: BuildChanges): List<String>? = runCatc
         require(
             fileName.endsWith(".java") || fileName.endsWith(".kt") || fileName.endsWith(".groovy"),
         )
-        require(ChangeAnalyzer.isTestSource("GRADLE", real.toString().replace('\\', '/')))
+        require(isJvmTestSource(real.toString()))
         val text = Files.readString(real)
         names += requireNotNull(gradleExactTestClass(fileName, text))
     }

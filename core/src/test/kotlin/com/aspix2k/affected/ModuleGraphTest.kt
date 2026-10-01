@@ -13,6 +13,7 @@ import com.aspix2k.affected.build.cargo.cargoNextestTask
 import com.aspix2k.affected.build.gradle.GradleBuildSystem
 import com.aspix2k.affected.build.php.ComposerBuildSystem
 import com.aspix2k.affected.build.php.ComposerPackages
+import com.aspix2k.affected.build.python.PythonBuildSystem
 import com.intellij.openapi.project.Project
 import java.io.File
 import kotlin.io.path.createTempDirectory
@@ -57,8 +58,8 @@ class ModuleGraphTest {
         val content = File(root, "shared").apply { mkdirs() }
         val graph = ModuleGraph(
             listOf(
-                ModuleGraph.Node(module(root, "app", "shared"), system("GRADLE")),
-                ModuleGraph.Node(module(root, "app.main", "shared"), system("GRADLE")),
+                ModuleGraph.Node(module(root, "app", "shared"), GradleBuildSystem()),
+                ModuleGraph.Node(module(root, "app.main", "shared"), GradleBuildSystem()),
             ),
         )
 
@@ -442,6 +443,30 @@ class ModuleGraphTest {
     private fun ModuleGraph.owners(file: File): Set<String> {
         val changes = ProjectChanges.Result(listOf(file), emptySet(), setOf(file), comparedToBase = true)
         return ownersForChanges(changes.toBuildChanges()).getValue(file).mapTo(HashSet()) { it.id }
+    }
+
+    @Test
+    fun `a build root under a directory named test still reaches consumers`() {
+        val root = File(createTempDirectory("module-graph-test-dir").toFile(), "test/repo").apply { mkdirs() }
+        val alpha = module(root, "alpha", "alpha")
+        val beta = module(root, "beta", "beta").copy(
+            hasTests = false,
+            compileTask = "build",
+            dependencies = setOf(alpha.key),
+        )
+        val python = PythonBuildSystem()
+        val graph = ModuleGraph(listOf(ModuleGraph.Node(alpha, python), ModuleGraph.Node(beta, python)))
+        val production = File(root, "alpha/core.py").apply { writeText("VALUE = 1\n") }
+        val test = File(root, "alpha/tests/test_core.py").apply { parentFile.mkdirs(); writeText("def test(): pass\n") }
+        val plans = { file: File ->
+            Verification.prepare(
+                graph,
+                ProjectChanges.Result(listOf(file), emptySet(), setOf(file), comparedToBase = true),
+            )
+        }
+
+        assertEquals(listOf("alpha:test", "beta:build"), plans(production).withConsumers.plan.groups.single().tasks)
+        assertEquals(listOf("alpha:test"), plans(test).withConsumers.plan.groups.single().tasks)
     }
 
     private fun graph(vararg modules: BuildModule): ModuleGraph =

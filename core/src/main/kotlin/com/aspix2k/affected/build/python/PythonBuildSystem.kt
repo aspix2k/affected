@@ -10,6 +10,7 @@ import com.aspix2k.affected.build.combineFingerprints
 import com.aspix2k.affected.build.failClosedModules
 import com.aspix2k.affected.build.isRegularFileNoFollow
 import com.aspix2k.affected.build.nestedBuildRoots
+import com.aspix2k.affected.build.pathSegments
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CliStep
 import com.aspix2k.affected.build.process.CommandRunner
@@ -36,6 +37,12 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
     private val cache = ConcurrentHashMap<String, Snapshot>()
 
     override val id: String = "PYTHON"
+
+    override fun isTestSource(path: String): Boolean {
+        val segments = pathSegments(path)
+        val name = segments.last().lowercase()
+        return segments.any { it == "test" || it == "tests" } || name.startsWith("test_") || name.endsWith("_test.py")
+    }
 
     override val sourceExtensions: Set<String> = setOf("py", "pyi", "toml", "cfg", "ini", "lock")
 

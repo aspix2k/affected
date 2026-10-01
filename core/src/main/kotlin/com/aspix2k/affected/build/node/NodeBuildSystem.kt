@@ -9,6 +9,7 @@ import com.aspix2k.affected.build.combineFingerprints
 import com.aspix2k.affected.build.failClosedModules
 import com.aspix2k.affected.build.isRegularFileNoFollow
 import com.aspix2k.affected.build.nestedBuildRoots
+import com.aspix2k.affected.build.pathSegments
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CommandRunner
 import com.aspix2k.affected.build.retainBuildSnapshot
@@ -25,6 +26,12 @@ class NodeBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSys
     private val cache = ConcurrentHashMap<String, Snapshot>()
 
     override val id: String = "NODE"
+
+    override fun isTestSource(path: String): Boolean {
+        val segments = pathSegments(path)
+        val name = segments.last().lowercase()
+        return segments.any { it in NODE_TEST_DIRECTORIES } || name.contains(".test.") || name.contains(".spec.")
+    }
 
     override val sourceExtensions: Set<String> =
         setOf("ts", "tsx", "js", "jsx", "mjs", "cjs", "json", "vue", "svelte", "yaml", "yml", "lock")
@@ -98,6 +105,8 @@ class NodeBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSys
         project.basePath?.let(::File)?.let { nestedBuildRoots(it) { File(it, "package.json").isRegularFileNoFollow() } }
             .orEmpty()
 }
+
+private val NODE_TEST_DIRECTORIES = setOf("test", "tests", "spec", "specs", "__tests__")
 
 private val NODE_TEST_MARKERS = setOf("__tests__", "test", "tests", "spec")
 

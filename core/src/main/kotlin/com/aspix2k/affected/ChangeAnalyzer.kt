@@ -1,5 +1,6 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.isJvmTestSource
 import com.intellij.execution.ExecutionException
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.CapturingProcessHandler
@@ -103,7 +104,7 @@ class ChangeAnalyzer(
         runCatching { file.relativeTo(projectDir).invariantSeparatorsPath }.getOrNull()
 
     private fun needsApiCheck(relative: String): Boolean =
-        !isTestSource(relative) && relative.substringAfterLast('.', "") in API_SOURCE_EXTENSIONS
+        !isJvmTestSource(relative) && relative.substringAfterLast('.', "") in API_SOURCE_EXTENSIONS
 
     private fun apiTouched(file: File, relative: String?, diffs: Map<String, List<String>>): Boolean {
         if (relative == null) return true
@@ -218,14 +219,6 @@ class ChangeAnalyzer(
 
         private val API_SOURCE_EXTENSIONS = setOf("kt", "java", "scala", "groovy")
 
-        internal fun isTestSource(path: String): Boolean = isTestSource("GRADLE", path)
-
-        internal fun isTestSource(systemId: String, path: String): Boolean {
-            val normalised = path.replace('\\', '/')
-            val segments = normalised.split('/')
-            val name = segments.lastOrNull().orEmpty().lowercase()
-            return TEST_SOURCE_MATCHERS[systemId]?.invoke(segments, name) ?: false
-        }
         private val DIFF_ARGUMENTS = listOf(
             "diff", "-U0", "--no-renames", "--no-prefix", "--no-color", "--no-ext-diff", "--no-textconv",
         )
@@ -263,36 +256,6 @@ class ChangeAnalyzer(
         private val PARAMETER = Regex("""^\s*(?:@\w+\s*)*[A-Za-z_]\w*\s*:\s*[\w<>\[\]?., ]+,?\s*$""")
     }
 }
-
-private typealias TestSourceMatcher = (List<String>, String) -> Boolean
-
-private val TEST_SOURCE_MATCHERS: Map<String, TestSourceMatcher> = mapOf(
-    "GRADLE" to { segments, _ -> isJvmTestSource(segments) },
-    "MAVEN" to { segments, _ -> isJvmTestSource(segments) },
-    "CARGO" to { segments, _ -> segments.any { it == "tests" || it == "benches" } },
-    "GO" to { _, name -> name.endsWith("_test.go") },
-    "NODE" to { segments, name ->
-        segments.any { it in NODE_TEST_DIRECTORIES } || name.contains(".test.") || name.contains(".spec.")
-    },
-    "PYTHON" to { segments, name ->
-        segments.any { it == "test" || it == "tests" } ||
-            name.startsWith("test_") || name.endsWith("_test.py")
-    },
-    "COMPOSER" to { segments, _ ->
-        segments.any { it.equals("tests", ignoreCase = true) || it == "test" }
-    },
-    "RUBY" to { segments, name ->
-        segments.any { it == "test" || it == "spec" } ||
-            name.endsWith("_spec.rb") || name.endsWith("_test.rb")
-    },
-    "SBT" to { segments, _ -> isJvmTestSource(segments) },
-)
-
-private fun isJvmTestSource(segments: List<String>): Boolean =
-    segments.windowed(2).any { it[0] == "src" && it[1] == "test" } ||
-        segments.any { it == "androidTest" || it == "androidUnitTest" }
-
-private val NODE_TEST_DIRECTORIES = setOf("test", "tests", "spec", "specs", "__tests__")
 
 fun isProjectDocumentation(path: String): Boolean {
     val normalized = path.replace('\\', '/').trimStart('/')

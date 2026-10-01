@@ -1,0 +1,1 @@
+- Test-only changes in Dart, Flutter, SwiftPM, Kotlin Toolchain and R projects no longer widen verification to consumer modules.

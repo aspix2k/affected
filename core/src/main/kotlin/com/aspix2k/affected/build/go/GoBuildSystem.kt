@@ -6,6 +6,7 @@ import com.aspix2k.affected.build.SuspendingBuildSystem
 import com.aspix2k.affected.build.failClosedModules
 import com.aspix2k.affected.build.isRegularFileNoFollow
 import com.aspix2k.affected.build.nestedBuildRoots
+import com.aspix2k.affected.build.pathSegments
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CommandRunner
 import com.aspix2k.affected.build.retainBuildSnapshot
@@ -20,6 +21,9 @@ class GoBuildSystem : SuspendingBuildSystem {
     private val cache = ConcurrentHashMap<String, Snapshot>()
 
     override val id: String = "GO"
+
+    override fun isTestSource(path: String): Boolean =
+        pathSegments(path).last().lowercase().endsWith("_test.go")
 
     override val sourceExtensions: Set<String> = setOf("go", "mod", "sum", "work")
 

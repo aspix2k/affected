@@ -166,7 +166,7 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
     }
 
     private fun contentOwners(candidates: List<Node>): List<Node> {
-        val (singleOwner, multiOwner) = candidates.distinct().partition { it.system.id in SINGLE_OWNER_SYSTEMS }
+        val (singleOwner, multiOwner) = candidates.distinct().partition { it.system.singleOwnerPerRoot }
         return multiOwner + singleOwner
             .groupBy { it.system.id to it.module.root }
             .values
@@ -187,5 +187,3 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
         }
     }
 }
-
-private val SINGLE_OWNER_SYSTEMS = setOf("GRADLE", "MAVEN")

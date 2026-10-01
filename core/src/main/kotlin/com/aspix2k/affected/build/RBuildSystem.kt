@@ -18,6 +18,8 @@ class RBuildSystem : ChangeAwareSuspendingBuildSystem, NamedSourceBuildSystem, A
 
     override val id: String = "RPROJECT"
 
+    override fun isTestSource(path: String): Boolean = "tests" in pathSegments(path)
+
     override val sourceExtensions: Set<String> = setOf("r", "R")
 
     override val sourceFileNames: Set<String> = setOf("DESCRIPTION", "renv.lock")
