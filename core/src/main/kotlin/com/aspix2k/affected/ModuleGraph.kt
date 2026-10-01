@@ -12,6 +12,10 @@ import java.io.File
 
 class ModuleGraph internal constructor(private val nodes: List<Node>) {
 
+    internal val sourceExtensions: Set<String> by lazy {
+        nodes.flatMapTo(HashSet()) { it.system.sourceExtensions }
+    }
+
     data class Node(val module: BuildModule, val system: BuildSystem) {
 
         val id: String get() = module.id

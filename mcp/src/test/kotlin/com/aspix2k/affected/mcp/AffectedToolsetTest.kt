@@ -79,6 +79,12 @@ class AffectedToolsetTest {
         assertTrue(unresolved.error)
         assertEquals("unresolved-changes", unresolved.data["reason"])
         assertEquals(false, unresolved.data["passed"])
+        val partlyUnresolved =
+            verificationView(snapshot(), Verification.Outcome(plan, false, Verification.Blocker.UNRESOLVED_CHANGES))
+        assertTrue(partlyUnresolved.error)
+        assertEquals("unresolved-changes", partlyUnresolved.data["reason"])
+        assertEquals(listOf(":alpha:test"), partlyUnresolved.data["tasks"])
+        assertTrue(partlyUnresolved.text.contains("belong to no known build module"))
     }
 
     @Test

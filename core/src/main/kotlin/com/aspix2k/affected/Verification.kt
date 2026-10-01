@@ -21,6 +21,7 @@ object Verification {
     class Prepared internal constructor(
         val plan: Plan,
         internal val changes: BuildChanges,
+        val unresolvedFiles: Int = 0,
     ) {
         val changedFiles: Int get() = changes.files.size
     }
@@ -51,8 +52,8 @@ object Verification {
         val buildChanges = changes.toBuildChanges()
         val plans = verificationPlans(graph, changes, owners)
         return PreparedPlans(
-            testsOnly = Prepared(plans.testsOnly, buildChanges),
-            withConsumers = Prepared(plans.withConsumers, buildChanges),
+            testsOnly = Prepared(plans.testsOnly, buildChanges, plans.unresolvedFiles),
+            withConsumers = Prepared(plans.withConsumers, buildChanges, plans.unresolvedFiles),
         )
     }
 
@@ -95,7 +96,7 @@ object Verification {
                     }
                 }
             }
-            return Outcome(plan, passed)
+            return completedOutcome(plan, passed, prepared.unresolvedFiles)
         } finally {
             claim.close()
         }
@@ -106,6 +107,13 @@ object Verification {
         return Outcome(prepared.plan, passed, Blocker.UNRESOLVED_CHANGES.takeUnless { passed })
     }
 }
+
+internal fun completedOutcome(plan: Plan, passed: Boolean, unresolvedFiles: Int): Verification.Outcome =
+    if (passed && unresolvedFiles > 0) {
+        Verification.Outcome(plan, passed = false, Verification.Blocker.UNRESOLVED_CHANGES)
+    } else {
+        Verification.Outcome(plan, passed)
+    }
 
 internal fun verificationPassesWithoutWork(prepared: Verification.Prepared): Boolean =
     prepared.plan.isEmpty && prepared.changes.files.isEmpty()
@@ -120,6 +128,7 @@ fun <T> runWithRequiredAdapter(
 private data class VerificationPlans(
     val testsOnly: Plan,
     val withConsumers: Plan,
+    val unresolvedFiles: Int = 0,
 )
 
 private fun verificationPlans(
@@ -155,6 +164,9 @@ private fun verificationPlans(
             testsOnly
         } else {
             TaskPlanner.plan(tested, consumers.map { it.info() })
+        },
+        unresolvedFiles = changes.files.count { file ->
+            effectiveOwners[file].isNullOrEmpty() && file.extension.lowercase() in graph.sourceExtensions
         },
     )
 }
