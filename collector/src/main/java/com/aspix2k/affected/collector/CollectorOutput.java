@@ -121,10 +121,9 @@ public final class CollectorOutput {
     }
 
     private void writeMapFile(String testClass, StringBuilder content) throws Exception {
-        writeAtomically(
-            workerDirectory.resolve("test-" + sha256(testClass) + ".map"),
-            content.toString().getBytes(StandardCharsets.UTF_8)
-        );
+        byte[] bytes = content.toString().getBytes(StandardCharsets.UTF_8);
+        if (bytes.length > CollectorBudgets.MAX_MAP_BYTES) throw new IOException("map size budget");
+        writeAtomically(workerDirectory.resolve("test-" + sha256(testClass) + ".map"), bytes);
     }
 
     public void writeCompletion(boolean supported, Set<String> testClasses) throws Exception {

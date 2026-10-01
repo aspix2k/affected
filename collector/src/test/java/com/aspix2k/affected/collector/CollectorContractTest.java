@@ -287,6 +287,84 @@ public class CollectorContractTest {
     }
 
     @Test
+    public void dependencyBudgetPerTestClassFailsClosedOnePastTheCap() throws Exception {
+        AffectedCollectorAgent.CollectorState state = configuredState();
+
+        recordDistinct(state, "fixture.ExampleTest", 0, CollectorBudgets.MAX_DEPENDENCIES_PER_TEST);
+        assertTrue(state.isSupported());
+
+        recordDistinct(state, "fixture.ExampleTest", CollectorBudgets.MAX_DEPENDENCIES_PER_TEST, 1);
+        assertFalse(state.isSupported());
+    }
+
+    @Test
+    public void recordedDependencyBudgetPerWorkerFailsClosedOnePastTheCap() throws Exception {
+        AffectedCollectorAgent.CollectorState state = configuredState();
+        int tests = CollectorBudgets.MAX_RECORDED_PER_WORKER / CollectorBudgets.MAX_DEPENDENCIES_PER_TEST;
+
+        for (int test = 0; test < tests; test++) {
+            recordDistinct(state, "fixture.Test" + test, 0, CollectorBudgets.MAX_DEPENDENCIES_PER_TEST);
+        }
+        assertTrue(state.isSupported());
+
+        recordDistinct(state, "fixture.TestOverflow", 0, 1);
+        assertFalse(state.isSupported());
+    }
+
+    @Test
+    public void classCatalogBudgetFailsClosedOnePastTheCap() throws Exception {
+        AffectedCollectorAgent.CollectorState state = configuredState();
+
+        for (int index = 0; index < CollectorBudgets.MAX_CATALOG_ENTRIES; index++) {
+            state.catalogPut("c" + index, distinctDependency(index));
+        }
+        assertTrue(state.isSupported());
+
+        state.catalogPut("overflow", distinctDependency(CollectorBudgets.MAX_CATALOG_ENTRIES));
+        assertFalse(state.isSupported());
+    }
+
+    @Test
+    public void budgetsResetWithTheCollectorState() throws Exception {
+        AffectedCollectorAgent.CollectorState state = configuredState();
+        recordDistinct(state, "fixture.ExampleTest", 0, CollectorBudgets.MAX_DEPENDENCIES_PER_TEST);
+
+        state.configure(Collections.singleton(codeSource(ObservedFixture.class)));
+        recordDistinct(state, "fixture.ExampleTest", 0, CollectorBudgets.MAX_DEPENDENCIES_PER_TEST);
+
+        assertTrue(state.isSupported());
+    }
+
+    @Test
+    public void outputRejectsAMapAboveTheByteBudgetWithoutWritingIt() throws Exception {
+        Path outputRoot = temporary.getRoot().toPath().resolve("output");
+        System.setProperty(CollectorOutput.OUTPUT_PROPERTY, outputRoot.toString());
+        System.setProperty(CollectorOutput.WORKER_PROPERTY, "budget-worker");
+        CollectorOutput output = CollectorOutput.fromSystemProperties();
+        List<AffectedCollectorAgent.Dependency> oversized = new java.util.ArrayList<AffectedCollectorAgent.Dependency>();
+        int count = CollectorBudgets.MAX_DEPENDENCIES_PER_TEST;
+        for (int index = 0; index < count; index++) {
+            oversized.add(new AffectedCollectorAgent.Dependency(
+                "fixture.Generated" + index + LONG_NAME,
+                "file:///budget/",
+                DIGEST
+            ));
+        }
+
+        try {
+            output.writeMap("fixture.ExampleTest", oversized);
+            fail("oversized map must be rejected");
+        } catch (java.io.IOException expected) {
+            assertEquals("map size budget", expected.getMessage());
+        }
+
+        try (Stream<Path> files = Files.list(onlyWorkerDirectory(outputRoot))) {
+            assertTrue(files.noneMatch(path -> path.getFileName().toString().endsWith(".map")));
+        }
+        output.writeMap("fixture.ExampleTest", Collections.singletonList(dependency()));
+    }
+
+    @Test
     public void unattributedNonProductionReflectionDoesNotFailTheCollector() throws Exception {
         AffectedCollectorAgent.CollectorState state = configuredState(ObservedFixture.class);
 
@@ -1010,6 +1088,22 @@ public class CollectorContractTest {
             }
         }
         return result;
+    }
+
+    private static final String DIGEST = String.format("%064d", 0);
+    private static final String LONG_NAME = String.format("%400s", "").replace(' ', 'x');
+
+    private static AffectedCollectorAgent.Dependency distinctDependency(int index) {
+        return new AffectedCollectorAgent.Dependency("fixture.Generated" + index, "file:///budget/", DIGEST);
+    }
+
+    private static void recordDistinct(
+        AffectedCollectorAgent.CollectorState state,
+        String testClass,
+        int from,
+        int count
+    ) {
+        for (int index = from; index < from + count; index++) state.record(testClass, distinctDependency(index));
     }
 
     private static AffectedCollectorAgent.Dependency dependency() throws Exception {

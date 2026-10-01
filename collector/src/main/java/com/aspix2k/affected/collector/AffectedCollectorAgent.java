@@ -30,6 +30,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
@@ -258,6 +259,8 @@ public final class AffectedCollectorAgent {
         private static final int MAX_CLASSES = 1_000_000;
         private final AtomicBoolean initialized = new AtomicBoolean();
         private final AtomicLong executionIds = new AtomicLong();
+        private final AtomicInteger recorded = new AtomicInteger();
+        private final AtomicInteger cataloged = new AtomicInteger();
         private final AtomicReference<Throwable> failure = new AtomicReference<Throwable>();
         private final ConcurrentMap<String, Dependency> catalog = new ConcurrentHashMap<String, Dependency>();
         private final ConcurrentMap<String, ConcurrentMap<String, Dependency>> dependencies =
@@ -286,6 +289,8 @@ public final class AffectedCollectorAgent {
         void configure(Collection<Path> sources, Collection<Path> testSources) throws Exception {
             initialized.set(false);
             executionIds.set(0L);
+            recorded.set(0);
+            cataloged.set(0);
             Arrays.fill(THREAD_EXECUTION_IDS, 0L);
             failure.set(null);
             dependencies.clear();
@@ -387,7 +392,7 @@ public final class AffectedCollectorAgent {
             }
             byte[] bytes = Files.readAllBytes(classFile);
             Dependency dependency = new Dependency(className, codeSource, sha256(bytes));
-            Dependency previous = catalog.putIfAbsent(key, dependency);
+            Dependency previous = catalogPut(key, dependency);
             if (previous != null && !previous.equals(dependency)) throw new IllegalStateException(dependency.getClassName());
             return true;
         }
@@ -505,7 +510,15 @@ public final class AffectedCollectorAgent {
             return false;
         }
 
-        private void record(String testClass, Dependency dependency) {
+        Dependency catalogPut(String key, Dependency dependency) {
+            Dependency previous = catalog.putIfAbsent(key, dependency);
+            if (previous == null && cataloged.incrementAndGet() > CollectorBudgets.MAX_CATALOG_ENTRIES) {
+                fail(new IllegalStateException("class catalog budget"));
+            }
+            return previous;
+        }
+
+        void record(String testClass, Dependency dependency) {
             ConcurrentMap<String, Dependency> observed = dependencies.get(testClass);
             if (observed == null) {
                 ConcurrentMap<String, Dependency> created = new ConcurrentHashMap<String, Dependency>();
@@ -515,6 +528,11 @@ public final class AffectedCollectorAgent {
             String key = dependency.className + "\n" + dependency.codeSource;
             Dependency previous = observed.putIfAbsent(key, dependency);
             if (previous != null && !previous.equals(dependency)) throw new IllegalStateException(dependency.className);
+            if (previous == null
+                && (observed.size() > CollectorBudgets.MAX_DEPENDENCIES_PER_TEST
+                    || recorded.incrementAndGet() > CollectorBudgets.MAX_RECORDED_PER_WORKER)) {
+                fail(new IllegalStateException("dependency budget"));
+            }
         }
 
         void fail(Throwable exception) {
@@ -558,6 +576,8 @@ public final class AffectedCollectorAgent {
         void reset() {
             initialized.set(false);
             executionIds.set(0L);
+            recorded.set(0);
+            cataloged.set(0);
             Arrays.fill(THREAD_EXECUTION_IDS, 0L);
             failure.set(null);
             dependencies.clear();
@@ -627,7 +647,7 @@ public final class AffectedCollectorAgent {
             Dependency dependency = catalog.get(key);
             if (dependency != null) return dependency;
             Dependency created = new Dependency(className, codeSource, sha256(Files.readAllBytes(artifact.file)));
-            Dependency previous = catalog.putIfAbsent(key, created);
+            Dependency previous = catalogPut(key, created);
             return previous == null ? created : previous;
         }
 
