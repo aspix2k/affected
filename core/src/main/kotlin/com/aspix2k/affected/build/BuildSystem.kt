@@ -60,6 +60,18 @@ internal fun isJvmTestSource(path: String): Boolean {
         segments.any { it == "androidTest" || it == "androidUnitTest" }
 }
 
+internal fun isJvmTestSourceSet(path: String): Boolean {
+    val segments = pathSegments(path)
+    return segments.windowed(2).any { it[0] == "src" && isTestSourceSetName(it[1]) } ||
+        segments.any { it == "androidTest" || it == "androidUnitTest" }
+}
+
+private fun isTestSourceSetName(name: String): Boolean =
+    name == "test" || name.endsWith("Test") ||
+        name != "testFixtures" && name.startsWith("test") && name.getOrNull(TEST_PREFIX_LENGTH)?.isUpperCase() == true
+
+private const val TEST_PREFIX_LENGTH = 4
+
 internal interface NamedSourceBuildSystem {
     val sourceFileNames: Set<String>
 }

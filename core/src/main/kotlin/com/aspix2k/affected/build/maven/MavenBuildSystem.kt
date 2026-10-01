@@ -9,7 +9,7 @@ import com.aspix2k.affected.affectedRunLabel
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.SuspendingBuildSystem
 import com.aspix2k.affected.build.gradle.JVM_SOURCE_EXTENSIONS
-import com.aspix2k.affected.build.isJvmTestSource
+import com.aspix2k.affected.build.isJvmTestSourceSet
 import com.aspix2k.affected.build.mavenInvocationArguments
 import com.aspix2k.affected.build.process.ProcessTreeTermination
 import com.aspix2k.affected.currentAffectedRunPresentation
@@ -94,7 +94,7 @@ class MavenBuildSystem internal constructor(
 
     override val id: String = "MAVEN"
 
-    override fun isTestSource(path: String): Boolean = isJvmTestSource(path)
+    override fun isTestSource(path: String): Boolean = isJvmTestSourceSet(path)
 
     override val consumersNeedSignatureChange: Boolean = true
 

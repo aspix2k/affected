@@ -9,7 +9,7 @@ class SbtBuildSystem : SuspendingBuildSystem, WorkspaceChangesBuildSystem {
 
     override val id: String = "SBT"
 
-    override fun isTestSource(path: String): Boolean = isJvmTestSource(path)
+    override fun isTestSource(path: String): Boolean = isJvmTestSourceSet(path)
 
     override val sourceExtensions: Set<String> =
         setOf("scala", "sc", "sbt", "java", "kt", "groovy", "properties")

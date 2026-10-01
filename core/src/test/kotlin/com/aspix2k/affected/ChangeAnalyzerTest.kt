@@ -105,6 +105,30 @@ class ChangeAnalyzerTest {
     }
 
     @Test
+    fun `test source sets do not change the API but test fixtures do`() = repo { dir ->
+        val testSets = listOf("commonTest", "jvmTest", "integrationTest", "testDebug", "androidUnitTest")
+        testSets.forEach { set ->
+            File(dir, "lib/src/$set/kotlin/Sample$set.kt").apply {
+                parentFile.mkdirs()
+                writeText("class Sample { fun check() {} }")
+            }
+        }
+        val fixture = File(dir, "lib/src/testFixtures/kotlin/Fixture.kt").apply {
+            parentFile.mkdirs()
+            writeText("class Fixture { fun build() {} }")
+        }
+        val latest = File(dir, "lib/src/latest/kotlin/Latest.kt").apply {
+            parentFile.mkdirs()
+            writeText("class Latest { fun value() {} }")
+        }
+
+        val changes = analyze(dir)
+
+        assertEquals(testSets.size + 2, changes.files.size)
+        assertEquals(setOf(fixture.name, latest.name), changes.apiTouched.mapTo(HashSet()) { it.name })
+    }
+
+    @Test
     fun `an XML resource does not change the API`() = repo { dir ->
         File(dir, "lib/src/main/res/values").mkdirs()
         File(dir, "lib/src/main/res/values/colors.xml")
