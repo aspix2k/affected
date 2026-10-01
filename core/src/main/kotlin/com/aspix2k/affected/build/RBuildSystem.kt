@@ -61,7 +61,7 @@ internal object RTasks {
 }
 
 internal fun rProjectRoots(base: File): List<File> =
-    nestedBuildRoots(base) { rManifest(it) != null }
+    nestedBuildRoots(base, setOf("description", "renv.lock")) { rManifest(it) != null }
 
 internal fun rManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null

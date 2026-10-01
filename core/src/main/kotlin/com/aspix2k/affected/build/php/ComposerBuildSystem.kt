@@ -124,7 +124,7 @@ class ComposerBuildSystem :
 
     private fun rootsOf(project: Project): List<File> =
         project.basePath?.let(::File)?.let { base ->
-            nestedBuildRoots(base) { File(it, "composer.json").isRegularFileNoFollow() }
+            nestedBuildRoots(base, setOf("composer.json")) { File(it, "composer.json").isRegularFileNoFollow() }
         }.orEmpty()
 }
 

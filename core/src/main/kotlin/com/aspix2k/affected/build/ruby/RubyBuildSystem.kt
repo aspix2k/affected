@@ -79,7 +79,8 @@ class RubyBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
         rubyCommands(root, tasks, modulesOf(File(root)))
 
     private fun rootsOf(project: Project): List<File> =
-        project.basePath?.let(::File)?.let { nestedBuildRoots(it) { File(it, "Gemfile").isRegularFileNoFollow() } }
+        project.basePath?.let(::File)
+            ?.let { nestedBuildRoots(it, setOf("gemfile")) { File(it, "Gemfile").isRegularFileNoFollow() } }
             .orEmpty()
 }
 

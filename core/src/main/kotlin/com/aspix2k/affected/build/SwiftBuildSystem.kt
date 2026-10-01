@@ -50,7 +50,9 @@ class SwiftBuildSystem(
         CommandRunner.runBatchAndWait(project, root, swiftCommands(tasks), "Affected Swift")
 
     private fun rootsOf(project: Project): List<File> =
-        project.basePath?.let(::File)?.let { nestedBuildRoots(it) { swiftManifest(it) != null } }.orEmpty()
+        project.basePath?.let(::File)
+            ?.let { nestedBuildRoots(it, setOf("package.swift")) { swiftManifest(it) != null } }
+            .orEmpty()
 
     private fun manifests(root: File): List<File> =
         ManifestSearch.find(root, "Package.swift") + ManifestSearch.find(root, "Package.resolved") +

@@ -102,7 +102,8 @@ class NodeBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSys
             .filter(File::isFile)
 
     private fun rootsOf(project: Project): List<File> =
-        project.basePath?.let(::File)?.let { nestedBuildRoots(it) { File(it, "package.json").isRegularFileNoFollow() } }
+        project.basePath?.let(::File)
+            ?.let { nestedBuildRoots(it, setOf("package.json")) { File(it, "package.json").isRegularFileNoFollow() } }
             .orEmpty()
 }
 

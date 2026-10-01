@@ -32,7 +32,8 @@ class SbtBuildSystem : SuspendingBuildSystem, WorkspaceChangesBuildSystem {
         CommandRunner.runBatchAndWait(project, root, sbtCommands(tasks), "Affected sbt")
 
     private fun rootsOf(project: Project): List<File> =
-        project.basePath?.let(::File)?.let { nestedBuildRoots(it) { File(it, "build.sbt").isRegularFileNoFollow() } }
+        project.basePath?.let(::File)
+            ?.let { nestedBuildRoots(it, setOf("build.sbt")) { File(it, "build.sbt").isRegularFileNoFollow() } }
             .orEmpty()
 }
 

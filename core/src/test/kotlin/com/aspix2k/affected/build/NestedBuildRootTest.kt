@@ -54,7 +54,7 @@ class NestedBuildRootTest {
         val base = createTempDirectory("nested-second").toFile()
         markers(base, "src/cpp")
 
-        assertEquals(listOf(File(base, "src/cpp")), nestedBuildRoots(base, ::hasCMakeLists))
+        assertEquals(listOf(File(base, "src/cpp")), nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists))
     }
 
     @Test
@@ -62,7 +62,7 @@ class NestedBuildRootTest {
         val base = createTempDirectory("nested-too-deep").toFile()
         markers(base, "a/b/c/d")
 
-        assertEquals(emptyList(), nestedBuildRoots(base, ::hasCMakeLists))
+        assertEquals(emptyList(), nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists))
     }
 
     @Test
@@ -70,7 +70,7 @@ class NestedBuildRootTest {
         val base = createTempDirectory("nested-roots-base").toFile()
         markers(base, ".", "apps/web")
 
-        assertEquals(listOf(base), nestedBuildRoots(base, ::hasCMakeLists))
+        assertEquals(listOf(base), nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists))
     }
 
     @Test
@@ -80,7 +80,7 @@ class NestedBuildRootTest {
 
         assertEquals(
             listOf(File(base, "apps/admin"), File(base, "apps/web")),
-            nestedBuildRoots(base, ::hasCMakeLists),
+            nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists),
         )
     }
 
@@ -89,7 +89,7 @@ class NestedBuildRootTest {
         val base = createTempDirectory("nested-three").toFile()
         markers(base, "services/api/core")
 
-        assertEquals(listOf(File(base, "services/api/core")), nestedBuildRoots(base, ::hasCMakeLists))
+        assertEquals(listOf(File(base, "services/api/core")), nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists))
     }
 
     @Test
@@ -99,7 +99,7 @@ class NestedBuildRootTest {
 
         assertEquals(
             listOf(File(base, "apps/admin"), File(base, "apps/web")),
-            nestedBuildRoots(base, ::hasCMakeLists),
+            nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists),
         )
     }
 
@@ -108,7 +108,7 @@ class NestedBuildRootTest {
         val base = createTempDirectory("nested-skip").toFile()
         markers(base, "apps/web", "node_modules/pkg", "apps/build/out", "target/x")
 
-        assertEquals(listOf(File(base, "apps/web")), nestedBuildRoots(base, ::hasCMakeLists))
+        assertEquals(listOf(File(base, "apps/web")), nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists))
     }
 
     @Test
@@ -119,18 +119,18 @@ class NestedBuildRootTest {
         markers(base, "apps/api")
         assumeTrue(runCatching { Files.createSymbolicLink(File(base, "linked").toPath(), external.toPath()) }.isSuccess)
 
-        assertEquals(listOf(File(base, "apps/api")), nestedBuildRoots(base, ::hasCMakeLists))
+        assertEquals(listOf(File(base, "apps/api")), nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists))
     }
 
     @Test
     fun `the root cap is inclusive and one more root returns no roots`() {
         val base = createTempDirectory("nested-many-roots").toFile()
         markers(base, *(1..PerformanceBudgets.MAX_NESTED_ROOTS).map { "apps/p$it" }.toTypedArray())
-        assertEquals(PerformanceBudgets.MAX_NESTED_ROOTS, nestedBuildRoots(base, ::hasCMakeLists).size)
+        assertEquals(PerformanceBudgets.MAX_NESTED_ROOTS, nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists).size)
 
         markers(base, "apps/extra")
 
-        assertEquals(emptyList(), nestedBuildRoots(base, ::hasCMakeLists))
+        assertEquals(emptyList(), nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists))
     }
 
     @Test
@@ -139,7 +139,7 @@ class NestedBuildRootTest {
         markers(base, "apps/web")
         repeat(PerformanceBudgets.MAX_DIRECTORIES) { File(base, "empty/d$it").mkdirs() }
 
-        assertEquals(emptyList(), nestedBuildRoots(base, ::hasCMakeLists))
+        assertEquals(emptyList(), nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists))
     }
 
     private fun markers(base: File, vararg paths: String) = paths.forEach { path ->
@@ -176,4 +176,35 @@ class NestedBuildRootTest {
 
     private fun hasCMakeLists(directory: File): Boolean =
         File(directory, "CMakeLists.txt").isRegularFileNoFollow()
+
+    @Test
+    fun `a settled tree is listed once and a directory change is seen after the recheck window`() {
+        val base = createTempDirectory("nested-roots-cache").toFile()
+        File(base, "apps/web").mkdirs()
+        File(base, "apps/web/CMakeLists.txt").writeText("")
+        File(base, "apps/admin").mkdirs()
+        val past = System.currentTimeMillis() - 10_000
+        base.walkBottomUp().filter(File::isDirectory).forEach { it.setLastModified(past) }
+        var probes = 0
+        val marker = { directory: File ->
+            probes += 1
+            hasCMakeLists(directory)
+        }
+
+        assertEquals(listOf(File(base, "apps/web")), nestedBuildRoots(base, CMAKE_LISTS, marker))
+        val first = probes
+        assertEquals(listOf(File(base, "apps/web")), nestedBuildRoots(base, CMAKE_LISTS, marker))
+        assertEquals(2, first, "the base and the one directory that holds a marker name")
+        assertEquals(first * 2, probes)
+
+        File(base, "apps/admin/CMakeLists.txt").writeText("")
+        Thread.sleep(1_100)
+
+        assertEquals(
+            listOf(File(base, "apps/admin"), File(base, "apps/web")),
+            nestedBuildRoots(base, CMAKE_LISTS, marker),
+        )
+    }
 }
+
+private val CMAKE_LISTS = setOf("cmakelists.txt")

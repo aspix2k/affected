@@ -63,7 +63,7 @@ internal object KotlinToolchainTasks {
 }
 
 internal fun kotlinToolchainProjectRoots(base: File): List<File> =
-    nestedBuildRoots(base) { kotlinToolchainManifest(it) != null }
+    nestedBuildRoots(base, TOOLCHAIN_YAML.toSet()) { kotlinToolchainManifest(it) != null }
 
 internal fun kotlinToolchainManifest(root: File): File? {
     if (GRADLE_SETTINGS.any { File(root, it).isRegularFileNoFollow() }) return null
