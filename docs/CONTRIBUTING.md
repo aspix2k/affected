@@ -169,10 +169,12 @@ Merging the release pull request starts `release.yml`. It finds the pull
 request's successful CI run, requires its verified tree to match `main`, tags
 `v<version>` and promotes the same zip to GitHub and Marketplace without
 rebuilding. Rebase the release pull request on `main` before merging, or the
-trees differ and the release stops. To retry by hand:
+trees differ and the release stops. A later merge whose CI built no plugin
+passes only when its version is already released. To retry by hand, pass the
+release pull request's CI run and merge commit:
 
 ```sh
-gh workflow run release.yml -f run_id=<ci run id> -f source_ref=main
+gh workflow run release.yml -f run_id=<ci run id> -f source_ref=<merge commit sha>
 ```
 
 Add `-f retry_marketplace=true` only when the GitHub release already exists.

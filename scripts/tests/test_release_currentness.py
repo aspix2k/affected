@@ -1115,6 +1115,16 @@ class ReleaseCurrentnessTest(unittest.TestCase):
         self.assertIn('trusted_main=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)', inspect)
         self.assertIn('if [ "$current_commit" != "$trusted_main" ]', inspect)
 
+    def test_release_skips_only_already_released_versions_without_an_artifact(self) -> None:
+        """Let unbuilt merges pass only when their version is already published."""
+        workflow = (currentness.ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        resolve = workflow.split("  resolve:", 1)[1].split("  release:", 1)[0]
+        self.assertIn('select(.name == "plugin" and .expired == false)', resolve)
+        self.assertIn('[ -z "$REQUESTED_RUN_ID" ] && [ -n "$version" ] && gh release view "v$version"', resolve)
+        self.assertIn("promote=false", resolve)
+        self.assertIn("exit 1", resolve.split("promote=false", 1)[1])
+        self.assertIn("if: needs.resolve.outputs.promote == 'true'", workflow.split("  release:", 1)[1])
+
 
 if __name__ == "__main__":
     unittest.main()
