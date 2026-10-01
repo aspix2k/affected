@@ -511,14 +511,17 @@ public final class AffectedCollectorAgent {
         }
 
         Dependency catalogPut(String key, Dependency dependency) {
-            Dependency previous = catalog.putIfAbsent(key, dependency);
-            if (previous == null && cataloged.incrementAndGet() > CollectorBudgets.MAX_CATALOG_ENTRIES) {
+            Dependency existing = catalog.get(key);
+            if (existing != null) return existing;
+            if (cataloged.incrementAndGet() > CollectorBudgets.MAX_CATALOG_ENTRIES) {
                 fail(new IllegalStateException("class catalog budget"));
+                return null;
             }
-            return previous;
+            return catalog.putIfAbsent(key, dependency);
         }
 
         void record(String testClass, Dependency dependency) {
+            if (failure.get() != null) return;
             ConcurrentMap<String, Dependency> observed = dependencies.get(testClass);
             if (observed == null) {
                 ConcurrentMap<String, Dependency> created = new ConcurrentHashMap<String, Dependency>();
