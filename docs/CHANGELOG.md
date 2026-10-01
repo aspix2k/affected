@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.18.0] - 2026-10-01
+
+### Added
+
+- Prove mixed Gradle and Kotlin Toolchain roots in one Linux verification session, with sibling ownership isolation.
+- Run only changed test files for `node --test` and `bun test` packages (including Bun workspaces) and fall back to the full package for any production change, and run `deno test` for Deno workspaces from the project root.
+- Run exact Python pytest and unittest selection, and mypy, inside the project's managed environment: `uv run --locked` when a uv.lock exists in the build root or in a uv workspace root that lists it as a member, and `poetry run` when the build root has a poetry.lock; a lock whose tool cannot be found, or ambiguous uv and Poetry markers, fail visibly instead of using the plain interpreter. Environment managers are chosen only by uv and Poetry locks; tox and nox configs are not inspected.
+- Swift: discover SwiftPM targets with `swift package describe --type json` and run only the affected test targets, including tests of dependent targets, with `swift test --filter` for XCTest and Swift Testing; a failed discovery is cached until the manifests change, and unresolved targets or unknown tasks keep the whole-package `swift test`.
+
+### Fixed
+
+- A Ruby gem whose test suite contains a symlink or an unknown runner now blocks only runs that affect that gem, instead of sending the whole repository to a run that cannot start.
+- Stop tests skipped by conditions such as `@EnabledOnOs`, JUnit 4 `@Ignore` or TestNG skips from being missed after later changes by rerunning their classes whenever any dependency changes.
+
 ## [3.17.0] - 2026-10-01
 
 ### Changed
@@ -717,7 +731,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.17.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.18.0...HEAD
+[3.18.0]: https://github.com/aspix2k/affected/compare/v3.17.0...v3.18.0
 [3.17.0]: https://github.com/aspix2k/affected/compare/v3.16.0...v3.17.0
 [3.16.0]: https://github.com/aspix2k/affected/compare/v3.15.17...v3.16.0
 [3.15.17]: https://github.com/aspix2k/affected/compare/v3.15.16...v3.15.17

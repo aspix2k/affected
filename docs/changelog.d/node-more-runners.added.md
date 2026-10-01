@@ -1,1 +1,0 @@
-- Run only changed test files for `node --test` and `bun test` packages (including Bun workspaces) and fall back to the full package for any production change, and run `deno test` for Deno workspaces from the project root.
