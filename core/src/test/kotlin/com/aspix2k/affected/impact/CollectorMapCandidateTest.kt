@@ -128,6 +128,14 @@ class CollectorMapCandidateTest : CollectorMapFixture() {
     }
 
     @Test
+    fun `a blank worker id cannot form a candidate`() = withDirectory { root ->
+        val task = task(root)
+        worker(task, " ", "AlphaTest", dependency("Alpha", "alpha-1"))
+
+        assertNull(CollectorMapReader.read(task, "collector-1", "run-1"))
+    }
+
+    @Test
     fun `a task output with no expectation or a root expectation beside workers is invalid`() = withDirectory { root ->
         val none = task(Files.createDirectory(root.resolve("none")))
         Files.delete(none.resolve("expected.manifest"))
