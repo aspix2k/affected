@@ -7,6 +7,7 @@ import com.aspix2k.affected.build.WorkspaceChangesBuildSystem
 import com.aspix2k.affected.build.failClosedModules
 import com.aspix2k.affected.build.isRegularFileNoFollow
 import com.aspix2k.affected.build.nestedBuildRoots
+import com.aspix2k.affected.build.pathSegments
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CommandRunner
 import com.intellij.openapi.project.Project
@@ -15,6 +16,8 @@ import java.io.File
 class DartBuildSystem : SuspendingBuildSystem, WorkspaceChangesBuildSystem {
 
     override val id: String = "DART"
+
+    override fun isTestSource(path: String): Boolean = "test" in pathSegments(path)
 
     override val sourceExtensions: Set<String> = setOf("dart", "yaml")
 

@@ -1,6 +1,7 @@
 package com.aspix2k.affected
 
 import com.aspix2k.affected.build.BuildChanges
+import com.aspix2k.affected.build.BuildSystem
 import com.aspix2k.affected.build.BuildSystems
 import com.aspix2k.affected.build.ChangeAwareSuspendingBuildSystem
 import com.aspix2k.affected.build.SuspendingBuildSystem
@@ -146,7 +147,7 @@ private fun verificationPlans(
     val apiNodes = effectiveOwners.flatMapTo(HashSet()) { (file, nodes) ->
         nodes.filter { node ->
             affectsConsumers(
-                systemId = node.system.id,
+                system = node.system,
                 path = file.invariantSeparatorsPath,
                 signatureTouched = file in changes.apiTouched,
             )
@@ -178,8 +179,8 @@ internal fun ProjectChanges.Result.toBuildChanges(): BuildChanges = BuildChanges
     comparedToBase = comparedToBase,
 )
 
-internal fun affectsConsumers(systemId: String, path: String, signatureTouched: Boolean): Boolean =
-    signatureTouched || systemId !in JVM_BUILD_SYSTEMS && !ChangeAnalyzer.isTestSource(systemId, path)
+internal fun affectsConsumers(system: BuildSystem, path: String, signatureTouched: Boolean): Boolean =
+    signatureTouched || !system.consumersNeedSignatureChange && !system.isTestSource(path)
 
 private fun pathsOwnedBy(
     node: ModuleGraph.Node,
@@ -199,5 +200,3 @@ private fun androidTestInfo(node: ModuleGraph.Node, changedPaths: List<String>):
         ),
     )
 }
-
-private val JVM_BUILD_SYSTEMS = setOf("GRADLE", "MAVEN")

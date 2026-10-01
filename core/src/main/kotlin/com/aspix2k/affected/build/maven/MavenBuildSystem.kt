@@ -9,6 +9,7 @@ import com.aspix2k.affected.affectedRunLabel
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.SuspendingBuildSystem
 import com.aspix2k.affected.build.gradle.JVM_SOURCE_EXTENSIONS
+import com.aspix2k.affected.build.isJvmTestSource
 import com.aspix2k.affected.build.mavenInvocationArguments
 import com.aspix2k.affected.build.process.ProcessTreeTermination
 import com.aspix2k.affected.currentAffectedRunPresentation
@@ -92,6 +93,12 @@ class MavenBuildSystem internal constructor(
     internal constructor(onLaunchQueued: () -> Unit) : this(null, {}, onLaunchQueued)
 
     override val id: String = "MAVEN"
+
+    override fun isTestSource(path: String): Boolean = isJvmTestSource(path)
+
+    override val consumersNeedSignatureChange: Boolean = true
+
+    override val singleOwnerPerRoot: Boolean = true
 
     override val sourceExtensions: Set<String> =
         JVM_SOURCE_EXTENSIONS + setOf("xml", "properties")

@@ -57,8 +57,8 @@ class ModuleGraphTest {
         val content = File(root, "shared").apply { mkdirs() }
         val graph = ModuleGraph(
             listOf(
-                ModuleGraph.Node(module(root, "app", "shared"), system("GRADLE")),
-                ModuleGraph.Node(module(root, "app.main", "shared"), system("GRADLE")),
+                ModuleGraph.Node(module(root, "app", "shared"), GradleBuildSystem()),
+                ModuleGraph.Node(module(root, "app.main", "shared"), GradleBuildSystem()),
             ),
         )
 

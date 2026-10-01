@@ -12,6 +12,7 @@ import com.aspix2k.affected.build.combineFingerprints
 import com.aspix2k.affected.build.failClosedModules
 import com.aspix2k.affected.build.isRegularFileNoFollow
 import com.aspix2k.affected.build.nestedBuildRoots
+import com.aspix2k.affected.build.pathSegments
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CommandRunner
 import com.aspix2k.affected.build.retainBuildSnapshot
@@ -37,6 +38,9 @@ class ComposerBuildSystem :
     private val cache = ConcurrentHashMap<String, Snapshot>()
 
     override val id: String = "COMPOSER"
+
+    override fun isTestSource(path: String): Boolean =
+        pathSegments(path).any { it.equals("tests", ignoreCase = true) || it == "test" }
 
     override val sourceExtensions: Set<String> = setOf("php", "json", "neon", "xml", "lock")
 

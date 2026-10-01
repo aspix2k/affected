@@ -4,6 +4,7 @@ import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.SuspendingBuildSystem
 import com.aspix2k.affected.build.isRegularFileNoFollow
 import com.aspix2k.affected.build.nestedBuildRoots
+import com.aspix2k.affected.build.pathSegments
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CommandRunner
 import com.intellij.openapi.project.Project
@@ -12,6 +13,8 @@ import java.io.File
 class FlutterBuildSystem : SuspendingBuildSystem {
 
     override val id: String = "FLUTTER"
+
+    override fun isTestSource(path: String): Boolean = "test" in pathSegments(path)
 
     override val sourceExtensions: Set<String> = setOf("dart", "yaml")
 

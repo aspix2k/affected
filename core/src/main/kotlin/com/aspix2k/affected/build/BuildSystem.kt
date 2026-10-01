@@ -43,6 +43,20 @@ interface BuildSystem {
     fun run(project: Project, root: String, tasks: List<String>)
 
     fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean
+
+    fun isTestSource(path: String): Boolean = false
+
+    val consumersNeedSignatureChange: Boolean get() = false
+
+    val singleOwnerPerRoot: Boolean get() = false
+}
+
+internal fun pathSegments(path: String): List<String> = path.replace('\\', '/').split('/')
+
+internal fun isJvmTestSource(path: String): Boolean {
+    val segments = pathSegments(path)
+    return segments.windowed(2).any { it[0] == "src" && it[1] == "test" } ||
+        segments.any { it == "androidTest" || it == "androidUnitTest" }
 }
 
 internal interface NamedSourceBuildSystem {

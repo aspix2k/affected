@@ -8,6 +8,7 @@ import com.aspix2k.affected.build.SuspendingBuildSystem
 import com.aspix2k.affected.build.combineFingerprints
 import com.aspix2k.affected.build.isRegularFileNoFollow
 import com.aspix2k.affected.build.nestedBuildRoots
+import com.aspix2k.affected.build.pathSegments
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CommandRunner
 import com.aspix2k.affected.build.retainBuildSnapshot
@@ -22,6 +23,12 @@ class RubyBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
     private val cache = ConcurrentHashMap<String, Snapshot>()
 
     override val id: String = "RUBY"
+
+    override fun isTestSource(path: String): Boolean {
+        val segments = pathSegments(path)
+        val name = segments.last().lowercase()
+        return segments.any { it == "test" || it == "spec" } || name.endsWith("_spec.rb") || name.endsWith("_test.rb")
+    }
 
     override val sourceExtensions: Set<String> = setOf("rb", "gemspec", "rake", "ru", "lock")
 

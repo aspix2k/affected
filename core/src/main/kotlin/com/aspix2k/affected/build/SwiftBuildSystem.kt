@@ -16,6 +16,8 @@ class SwiftBuildSystem(
 
     override val id: String = "SWIFT"
 
+    override fun isTestSource(path: String): Boolean = "Tests" in pathSegments(path)
+
     override val sourceExtensions: Set<String> = setOf("swift", "h", "m", "mm")
 
     override val sourceFileNames: Set<String> = setOf("Package.swift")

@@ -9,6 +9,9 @@ class KotlinToolchainBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceCh
 
     override val id: String = "KOTLIN_TOOLCHAIN"
 
+    override fun isTestSource(path: String): Boolean =
+        pathSegments(path).any { it == "test" || it.startsWith("test@") }
+
     override val sourceExtensions: Set<String> = setOf("kt", "kts", "java", "yaml")
 
     override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()

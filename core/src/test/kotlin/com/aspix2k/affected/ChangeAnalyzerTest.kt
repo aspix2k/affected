@@ -1,7 +1,17 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.KotlinToolchainBuildSystem
+import com.aspix2k.affected.build.RBuildSystem
+import com.aspix2k.affected.build.SwiftBuildSystem
+import com.aspix2k.affected.build.cargo.CargoBuildSystem
+import com.aspix2k.affected.build.dart.DartBuildSystem
+import com.aspix2k.affected.build.dart.FlutterBuildSystem
+import com.aspix2k.affected.build.go.GoBuildSystem
 import com.aspix2k.affected.build.gradle.GradleBuildSystem
 import com.aspix2k.affected.build.maven.MavenBuildSystem
+import com.aspix2k.affected.build.node.NodeBuildSystem
+import com.aspix2k.affected.build.python.PythonBuildSystem
+import com.aspix2k.affected.build.ruby.RubyBuildSystem
 import com.aspix2k.affected.build.xcode.XcodeBuildSystem
 import java.io.File
 import kotlin.io.path.createTempDirectory
@@ -380,7 +390,7 @@ class ChangeAnalyzerTest {
         val changes = analyze(dir, extensions)
 
         assertTrue(changes.apiTouched.isEmpty())
-        assertTrue(changes.files.all { affectsConsumers("NODE", it.path, signatureTouched = false) })
+        assertTrue(changes.files.all { affectsConsumers(NodeBuildSystem(), it.path, signatureTouched = false) })
     }
 
     @Test
@@ -404,25 +414,46 @@ class ChangeAnalyzerTest {
         assertEquals(files.size, changes.files.size)
         assertTrue(changes.apiTouched.isEmpty())
         val systems = mapOf(
-            "rust" to "CARGO",
-            "go" to "GO",
-            "node" to "NODE",
-            "python" to "PYTHON",
-            "ruby" to "RUBY",
+            "rust" to CargoBuildSystem(),
+            "go" to GoBuildSystem(),
+            "node" to NodeBuildSystem(),
+            "python" to PythonBuildSystem(),
+            "ruby" to RubyBuildSystem(),
         )
         assertTrue(changes.files.none { file ->
             val system = systems.getValue(file.relativeTo(dir).invariantSeparatorsPath.substringBefore('/'))
             affectsConsumers(system, file.path, signatureTouched = false)
         })
         assertTrue(
-            affectsConsumers("GO", "/repo/test/production.go", signatureTouched = false),
+            affectsConsumers(GoBuildSystem(), "/repo/test/production.go", signatureTouched = false),
             "a conventional test directory from another ecosystem must not hide Go production code",
         )
     }
 
     @Test
+    fun `test sources of Dart, Flutter, Swift, Kotlin Toolchain and R do not affect consumers`() {
+        val cases = listOf(
+            Triple(DartBuildSystem(), "/repo/test/alpha_test.dart", "/repo/lib/alpha.dart"),
+            Triple(FlutterBuildSystem(), "/repo/test/alpha_test.dart", "/repo/lib/alpha.dart"),
+            Triple(
+                SwiftBuildSystem(),
+                "/repo/Tests/AlphaTests/AlphaTests.swift",
+                "/repo/Sources/Alpha/Alpha.swift",
+            ),
+            Triple(KotlinToolchainBuildSystem(), "/repo/test/AlphaTest.kt", "/repo/src/Alpha.kt"),
+            Triple(RBuildSystem(), "/repo/tests/testthat/test-alpha.R", "/repo/R/alpha.R"),
+        )
+        cases.forEach { (system, test, production) ->
+            assertFalse(affectsConsumers(system, test, signatureTouched = false), "${system.id} test")
+            assertTrue(affectsConsumers(system, production, signatureTouched = false), "${system.id} production")
+        }
+    }
+
+    @Test
     fun `a Gradle JSON resource does not affect consumers`() {
-        assertFalse(affectsConsumers("GRADLE", "/repo/app/src/main/assets/sample.json", signatureTouched = false))
+        assertFalse(
+            affectsConsumers(GradleBuildSystem(), "/repo/app/src/main/assets/sample.json", signatureTouched = false),
+        )
     }
 
     @Test
