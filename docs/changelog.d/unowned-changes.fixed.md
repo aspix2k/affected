@@ -1,0 +1,1 @@
+- A verification no longer passes when some changed source files belong to no known build module: the planned tests still run, but the result reports the unresolved files instead of a green check.

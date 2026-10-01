@@ -29,7 +29,15 @@ internal suspend fun verifyAndReport(
         Verification.Blocker.UNRESOLVED_CHANGES -> notifyAffected(
             project,
             AffectedBundle.message("notification.unresolved.title"),
-            AffectedBundle.message("notification.unresolved.text", prepared.changedFiles),
+            if (prepared.unresolvedFiles in 1 until prepared.changedFiles) {
+                AffectedBundle.message(
+                    "notification.unresolved.partial.text",
+                    prepared.unresolvedFiles,
+                    prepared.changedFiles,
+                )
+            } else {
+                AffectedBundle.message("notification.unresolved.text", prepared.changedFiles)
+            },
             NotificationType.WARNING,
         )
         Verification.Blocker.NOT_STARTED -> notifyAffected(

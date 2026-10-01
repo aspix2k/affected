@@ -2,6 +2,7 @@ package com.aspix2k.affected
 
 import com.aspix2k.affected.build.BuildChanges
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -39,6 +40,24 @@ class VerificationAdapterTest {
                     BuildChanges(listOf("/repo/src/Main.kt"), emptySet(), comparedToBase = true),
                 ),
             ),
+        )
+    }
+
+    @Test
+    fun `a passing run with changes outside every module is unresolved`() {
+        val plan = Plan(emptyList(), tested = 1, compiled = 0)
+
+        assertEquals(
+            Verification.Outcome(plan, passed = false, Verification.Blocker.UNRESOLVED_CHANGES),
+            completedOutcome(plan, passed = true, unresolvedFiles = 1),
+        )
+        assertEquals(
+            Verification.Outcome(plan, passed = true),
+            completedOutcome(plan, passed = true, unresolvedFiles = 0),
+        )
+        assertEquals(
+            Verification.Outcome(plan, passed = false),
+            completedOutcome(plan, passed = false, unresolvedFiles = 1),
         )
     }
 }

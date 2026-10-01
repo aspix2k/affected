@@ -259,7 +259,11 @@ internal fun verificationView(snapshot: AffectedStateSnapshot, outcome: Verifica
     val data = plan.data + ("passed" to outcome.passed)
     return when (outcome.blocker) {
         Verification.Blocker.UNRESOLVED_CHANGES -> plan.copy(
-            text = "Failed. Changes exist but no verification could be planned.",
+            text = if (outcome.plan.isEmpty) {
+                "Failed. Changes exist but no verification could be planned."
+            } else {
+                "Failed. Planned tests ran, but some changed files belong to no known build module."
+            },
             data = data + ("reason" to "unresolved-changes"),
             error = true,
         )
