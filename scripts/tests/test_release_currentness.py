@@ -279,6 +279,20 @@ class ReleaseCurrentnessTest(unittest.TestCase):
         self.assertEqual({"2.0.0"}, builds)
         self.assertEqual([url], transport.reads)
 
+    def test_python_follows_the_versions_setup_python_can_install(self) -> None:
+        """A python.org release that actions/setup-python cannot install yet is not required."""
+        url = "https://raw.githubusercontent.com/actions/python-versions/main/versions-manifest.json"
+        manifest = [
+            {"version": "3.15.0-rc.2", "stable": False},
+            {"version": "3.14.7", "stable": True},
+            {"version": "3.14.6", "stable": True},
+        ]
+        transport = RecordingReadTransport({url: json.dumps(manifest).encode()})
+
+        version, _ = currentness.remote_version({"type": "python"}, "latest", None, transport)
+
+        self.assertEqual("3.14.7", version)
+
     def test_dotnet_ignores_go_live_release_candidates(self) -> None:
         """Select the newest supported SDK while a go-live release candidate is listed first."""
         url = "https://builds.dotnet.microsoft.com/dotnet/release-metadata/releases-index.json"

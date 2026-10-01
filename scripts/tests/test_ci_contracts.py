@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from scripts import ci_contracts
+
+PYTHON_VERSION = re.search(
+    r'python-version: "([^"]+)"',
+    (ci_contracts.ROOT / ".github/workflows/conformance.yml").read_text(encoding="utf-8"),
+).group(1)
 
 
 class CiContractsTest(unittest.TestCase):
@@ -347,7 +353,7 @@ class CiContractsTest(unittest.TestCase):
                 "5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0\n"
                 "        if: runner.os == 'Windows'\n"
                 "        with:\n"
-                '          python-version: "3.14.7"\n',
+                f'          python-version: "{PYTHON_VERSION}"\n',
                 "",
             ),
         }
@@ -510,9 +516,9 @@ class CiContractsTest(unittest.TestCase):
             ),
             "action-with": (
                 "        with:\n"
-                '          python-version: "3.14.7"\n',
+                f'          python-version: "{PYTHON_VERSION}"\n',
                 "        env:\n"
-                '          python-version: "3.14.7"\n',
+                f'          python-version: "{PYTHON_VERSION}"\n',
                 "",
                 "",
             ),
