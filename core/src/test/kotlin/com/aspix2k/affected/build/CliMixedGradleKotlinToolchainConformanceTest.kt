@@ -30,6 +30,7 @@ class CliMixedGradleKotlinToolchainConformanceTest : BasePlatformTestCase() {
 
     private var registeredPoint = false
     private var previousStopAfterFirstFailure = false
+    private var consoleOutput = emptyList<String>()
 
     override fun setUp() {
         super.setUp()
@@ -97,13 +98,13 @@ class CliMixedGradleKotlinToolchainConformanceTest : BasePlatformTestCase() {
         if (!nativeEnabled()) return
         val root = mixedRepo()
         val outcome = runBlocking { runBothGroups(root) }
-        assertTrue("mixed Gradle+Kotlin verification failed", outcome.passed)
+        assertTrue("mixed Gradle+Kotlin verification failed${diagnostics()}", outcome.passed)
         assertEquals(
             setOf(GradleConstants.SYSTEM_ID.id, "KOTLIN_TOOLCHAIN"),
             outcome.plan.groups.map { it.systemId }.toSet(),
         )
-        assertTrue("Gradle marker was not written", File(root, "gradle/mixed-gradle.marker").isFile)
-        assertTrue("Kotlin marker was not written", File(root, "toolchain/mixed-kotlin.marker").isFile)
+        assertTrue("Gradle marker was not written${diagnostics()}", File(root, "gradle/mixed-gradle.marker").isFile)
+        assertTrue("Kotlin marker was not written${diagnostics()}", File(root, "toolchain/mixed-kotlin.marker").isFile)
     }
 
     fun testOneFailingGroupPreservesAggregateFailureAfterBothGroupsRan() {
@@ -115,7 +116,7 @@ class CliMixedGradleKotlinToolchainConformanceTest : BasePlatformTestCase() {
         val outcome = runBlocking { runBothGroups(root) }
         assertFalse(outcome.passed)
         assertTrue(
-            "Kotlin group did not finish after the Gradle failure",
+            "Kotlin group did not finish after the Gradle failure${diagnostics()}",
             File(root, "toolchain/mixed-kotlin.marker").isFile,
         )
     }
@@ -229,8 +230,18 @@ class CliMixedGradleKotlinToolchainConformanceTest : BasePlatformTestCase() {
                 }
             }
             val factory = EditorFactory.getInstance()
-            factory.allEditors.filterNot(existingEditors::contains).forEach(factory::releaseEditor)
+            val created = factory.allEditors.filterNot(existingEditors::contains)
+            consoleOutput = created.map { it.document.text.takeLast(OUTPUT_TAIL_CHARS) }.filter(String::isNotBlank)
+            created.forEach(factory::releaseEditor)
         }
+    }
+
+    private fun diagnostics(): String {
+        val memory = File("/proc/meminfo").takeIf(File::isFile)
+            ?.readLines()
+            ?.firstOrNull { it.startsWith("MemAvailable") }
+            .orEmpty()
+        return "\n${consoleOutput.joinToString("\n---\n")}\n$memory"
     }
 
     private companion object {
@@ -238,6 +249,7 @@ class CliMixedGradleKotlinToolchainConformanceTest : BasePlatformTestCase() {
         const val GRADLE_SOURCE = "gradle/src/main/java/app/Value.java"
         const val TOOLCHAIN_SOURCE = "toolchain/src/Alpha.kt"
         const val SESSION_TIMEOUT_MILLIS = 300_000L
+        const val OUTPUT_TAIL_CHARS = 2_000
         val COPIED_ROOTS = listOf("gradle", "toolchain")
     }
 }
