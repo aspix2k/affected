@@ -55,6 +55,7 @@ REDUNDANT_VALIDATION_MUTANTS = {
     ("CollectorMapIOKt", "rawValue", 361, 40, "RemoveConditionalMutator_EQUAL_IF"): "a blank value is rejected again by decode",
     ("CollectorMapIOKt", "rawValue", 361, 48, "RemoveConditionalMutator_EQUAL_ELSE"): "a blank value is rejected again by decode",
     ("CollectorMapIOKt", "readFile", 351, 33, "RemoveConditionalMutator_ORDER_IF"): "an empty file fails the trailing newline check",
+    ("CollectorMapIOKt", "readFile", 353, 76, "RemoveConditionalMutator_EQUAL_IF"): "a carriage return fails the exact line, value or checksum match that follows",
     ("CollectorMapIOKt", "secureDirectory", 338, 18, "RemoveConditionalMutator_EQUAL_IF"): "a symlink also fails isDirectory with NOFOLLOW_LINKS",
     ("CollectorMapIOKt", "secureDirectory", 338, 26, "RemoveConditionalMutator_EQUAL_ELSE"): "a symlink also fails isDirectory with NOFOLLOW_LINKS",
     ("CollectorMapIOKt", "secureDirectory", 340, 61, "RemoveConditionalMutator_EQUAL_IF"): "createDirectories fails on non directories and isSymbolicLink rejects links",
