@@ -367,7 +367,7 @@ class CliAdapterConformanceTest {
         version?.let {
             val manifest = root.resolve("composer.json")
             val configured = manifest.readText().replace(
-                "\"phpunit/phpunit\": \"13.3.6\"",
+                Regex("\"phpunit/phpunit\": \"[^\"]+\""),
                 "\"phpunit/phpunit\": \"$it\"",
             )
             manifest.writeText(configured)
