@@ -27,6 +27,7 @@ buildscript {
         classpath(enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.3"))
         constraints {
             classpath("org.jsoup:jsoup:1.23.2")
+            classpath("org.freemarker:freemarker:2.3.35")
         }
     }
 }

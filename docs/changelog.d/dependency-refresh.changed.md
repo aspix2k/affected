@@ -1,0 +1,1 @@
+- Tested against PHPUnit 13.4, Pest 5.3 and Android Studio 2026.2.
