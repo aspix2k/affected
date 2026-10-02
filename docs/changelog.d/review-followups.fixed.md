@@ -1,7 +1,9 @@
 - New and untracked files are now read from Git right before a run, so a file an agent has just created is part of the check even before the IDE notices it.
-- A commit that only touches files nothing could verify, such as a CI workflow or a document, no longer reports unresolved changes.
+- A commit that only touches files nothing could verify, such as a workflow file or a document, no longer reports unresolved changes.
 - A repository without commits no longer fails with a missing base branch.
 - Kotlin Multiplatform modules keep their non-JVM test tasks when the IDE reports only the JVM one as a test task.
 - A changed build script of a Gradle module that has no tasks of its own now runs the whole build instead of being reported as unchecked.
 - Adding or changing an enum constant counts as an API change for the consumer check.
 - The toolbar run says when it could not start instead of doing nothing.
+- The MCP tools that list modules, changed files, the plan and the available tasks re-read the changes before answering, so an agent that has just edited files sees the current state even while the IDE is in the background.
+- Untracked files in directories that the IDE excludes, such as a build output folder missing from `.gitignore`, are not treated as changes.
