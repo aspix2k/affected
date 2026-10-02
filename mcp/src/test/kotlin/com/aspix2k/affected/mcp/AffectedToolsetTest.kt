@@ -2,6 +2,7 @@ package com.aspix2k.affected.mcp
 
 import com.aspix2k.affected.AffectedMcpView
 import com.aspix2k.affected.AffectedStateSnapshot
+import com.aspix2k.affected.AgentSetup
 import com.aspix2k.affected.AnalysisStatus
 import com.aspix2k.affected.Plan
 import com.aspix2k.affected.RunSummary
@@ -14,6 +15,11 @@ import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.annotations.McpToolHintValue
 import com.intellij.mcpserver.annotations.McpToolHints
 import com.intellij.openapi.project.Project
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import java.io.File
 import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -66,6 +72,20 @@ class AffectedToolsetTest {
         assertEquals(McpToolHintValue.TRUE, stop.destructiveHint)
         val runTask = tools.single { it.name == "affected_run_task" }.getAnnotation(McpToolHints::class.java)
         assertEquals(McpToolHintValue.TRUE, runTask.destructiveHint)
+    }
+
+    @Test
+    fun `agent instructions reference only existing tools`() {
+        val tools = AffectedToolset::class.java.methods
+            .filter { it.isAnnotationPresent(McpTool::class.java) }
+            .map { it.name }
+        val documented = Json.parseToJsonElement(File("../config/mcp-capabilities.json").readText())
+            .jsonObject.getValue("operations").jsonArray
+            .map { it.jsonObject.getValue("mcp").jsonPrimitive.content }
+
+        assertTrue(AgentSetup.referencedTools.isNotEmpty())
+        assertTrue(tools.containsAll(AgentSetup.referencedTools), "${AgentSetup.referencedTools} vs $tools")
+        assertTrue(documented.containsAll(AgentSetup.referencedTools), "${AgentSetup.referencedTools} vs $documented")
     }
 
     @Test
