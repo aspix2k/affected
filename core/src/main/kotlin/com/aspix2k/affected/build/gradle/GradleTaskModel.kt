@@ -21,7 +21,9 @@ internal fun gradleVerificationTasks(
 }
 
 internal fun gradleUnitTestTasks(available: Set<String>, typedTests: Set<String> = emptySet()): List<String> {
-    val typed = typedTests.filter { it in available && !it.startsWith("connected", ignoreCase = true) }
+    val typed = typedTests.filter {
+        it in available && it !in GRADLE_LIFECYCLE_TASKS && !it.startsWith("connected", ignoreCase = true)
+    }
     val named = available.filter(::isGradleUnitTestTask)
     if (typed.isNotEmpty()) return (typed + named.filter { it.endsWith("Test") }).distinct()
     return if (named.any(ANDROID_UNIT_TEST::matches)) named - "test" else named
@@ -108,6 +110,7 @@ internal fun gradleProductionCompileTask(available: Set<String>): String? {
     return existingCompileTask(available, matching = "", testish = false)
 }
 
+private val GRADLE_LIFECYCLE_TASKS = setOf("check", "build", "assemble")
 private val ANDROID_UNIT_TEST = Regex("test.+UnitTest")
 
 private val UNIT_TEST_EXCLUDED_PREFIXES = listOf(

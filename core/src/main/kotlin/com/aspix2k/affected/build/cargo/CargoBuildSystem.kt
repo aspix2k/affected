@@ -418,7 +418,6 @@ private fun BuildChanges.requireCargoWorkspace(root: String): Boolean {
         name == "build.rs" ||
             !name.endsWith(".rs") ||
             relative.any { segment -> segment.toString() in GENERATED_DIRECTORIES } ||
-            raw !in exactSelectionEligible ||
             Files.isSymbolicLink(file) ||
             !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)
     }

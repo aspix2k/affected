@@ -1,0 +1,1 @@
+- Gradle: dependencies between subprojects are recognized again, so the consumer check and "Test dependent modules" find the modules that depend on a changed one. The dependency keys did not match for any subproject outside the root project.
