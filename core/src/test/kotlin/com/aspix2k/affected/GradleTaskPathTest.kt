@@ -11,6 +11,7 @@ import com.aspix2k.affected.build.gradle.gradleProductionCompileTask
 import com.aspix2k.affected.build.gradle.gradleProjectPath
 import com.aspix2k.affected.build.gradle.gradleTestCompileTask
 import com.aspix2k.affected.build.gradle.gradleTestTask
+import com.aspix2k.affected.build.gradle.gradleUnitTestTasks
 import com.aspix2k.affected.build.gradle.gradleVerificationTasks
 import com.aspix2k.affected.build.gradle.isAndroidInstrumentationSource
 import com.aspix2k.affected.build.gradle.selectAndroidTestTask
@@ -245,6 +246,56 @@ class GradleTaskPathTest {
                 setOf("testAndroidHostTest", "iosSimulatorArm64Test", "assemble"),
             ),
         )
+    }
+
+    @Test
+    fun `a plain JVM project runs test and never treats testClasses as a test task`() {
+        val java = setOf(
+            "assemble", "build", "classes", "clean", "jar", "testClasses", "compileJava", "compileTestJava",
+            "processResources", "processTestResources", "check", "test", "javadoc",
+        )
+
+        assertEquals("test" to "compileTestJava", gradleVerificationTasks(java))
+        assertEquals(emptySet(), gradleKmpAdditionalTestTasks(java, "test"))
+        assertEquals(
+            "test" to "compileTestKotlin",
+            gradleVerificationTasks(java - "compileTestJava" + setOf("compileKotlin", "compileTestKotlin")),
+        )
+    }
+
+    @Test
+    fun `a JVM project with another test suite runs both test and that suite`() {
+        val tasks = setOf(
+            "classes", "testClasses", "integrationTestClasses", "compileJava", "compileTestJava",
+            "compileIntegrationTestJava", "test", "integrationTest", "check",
+        )
+
+        assertEquals("integrationTest", gradleTestTask(tasks))
+        assertEquals(setOf("test"), gradleKmpAdditionalTestTasks(tasks, "integrationTest"))
+    }
+
+    @Test
+    fun `typed test tasks from the IDE model win over task names`() {
+        val tasks = setOf(
+            "test", "integrationTest", "testCodeCoverageReport", "testFixturesJar", "connectedDebugAndroidTest",
+            "compileJava", "compileTestJava", "compileIntegrationTestJava",
+        )
+        val typed = setOf("test", "integrationTest", "connectedDebugAndroidTest")
+
+        assertEquals(listOf("test", "integrationTest"), gradleUnitTestTasks(tasks, typed))
+        assertEquals("integrationTest", gradleTestTask(tasks, typed))
+        assertEquals(setOf("test"), gradleKmpAdditionalTestTasks(tasks, "integrationTest", typed))
+    }
+
+    @Test
+    fun `the Android test aggregator is not run next to its variant tasks`() {
+        val tasks = setOf(
+            "test", "testDebugUnitTest", "testReleaseUnitTest", "compileDebugUnitTestKotlin",
+            "compileReleaseUnitTestKotlin", "compileDebugKotlin",
+        )
+
+        assertEquals(listOf("testDebugUnitTest", "testReleaseUnitTest"), gradleUnitTestTasks(tasks))
+        assertEquals(setOf("testDebugUnitTest"), gradleKmpAdditionalTestTasks(tasks, "testReleaseUnitTest"))
     }
 
     @Test
