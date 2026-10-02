@@ -7,7 +7,7 @@ internal data class Changes(val files: List<File>, val apiTouched: Set<File>)
 
 internal fun ChangeAnalyzer.collectPaths(): List<File> {
     if (!isUsable()) return emptyList()
-    val local = gitPaths(projectDir, "diff", "--name-only", "--no-renames", "-z", "HEAD") +
+    val local = gitPaths(projectDir, "diff", "--name-only", "--no-renames", "--relative", "-z", "HEAD") +
         gitPaths(projectDir, "ls-files", "--others", "--exclude-standard", "-z")
     return (againstBase() + keepSources(local)).distinct()
 }

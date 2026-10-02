@@ -56,6 +56,23 @@ class ChangeAnalyzerTest {
     private fun analyze(dir: File, extensions: Set<String>) = ChangeAnalyzer(dir, "main", extensions).collect()
 
     @Test
+    fun `a project below the repository root sees only its own files at their real paths`() = repo { dir ->
+        val project = File(dir, "lib")
+        val inside = File(project, "src/main/kotlin/Sample.kt")
+        inside.writeText(inside.readText().replace("fun visible(): Int", "fun visible(extra: Int = 0): Int"))
+        File(dir, "other/src/main/kotlin/Other.kt").apply {
+            parentFile.mkdirs()
+            writeText("class Other")
+        }
+        run(dir, "git", "add", "-A")
+
+        val changes = analyze(project)
+
+        assertEquals(listOf(inside.canonicalFile), changes.files.map { it.canonicalFile })
+        assertEquals(setOf(inside.canonicalFile), changes.apiTouched.mapTo(HashSet()) { it.canonicalFile })
+    }
+
+    @Test
     fun `the list is empty without changes`() = repo { dir ->
         assertTrue(analyze(dir).files.isEmpty(), "a clean tree must not have changes")
     }

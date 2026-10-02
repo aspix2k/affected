@@ -34,7 +34,7 @@ class ChangeAnalyzer(
 
     fun modifiedAgainstBase(): Set<File> {
         val base = mergeBase ?: return emptySet()
-        val paths = gitFields("diff", "--name-status", "--no-renames", "-z", base)
+        val paths = gitFields("diff", "--name-status", "--no-renames", "--relative", "-z", base)
             .chunked(2)
             .mapNotNull { (status, path) -> path.takeIf { status == "M" } }
         return keepSources(paths).toSet()
@@ -42,7 +42,7 @@ class ChangeAnalyzer(
 
     fun againstBase(): List<File> {
         val base = mergeBase ?: return emptyList()
-        return keepSources(gitFields("diff", "--name-only", "--no-renames", "-z", base))
+        return keepSources(gitFields("diff", "--name-only", "--no-renames", "--relative", "-z", base))
     }
 
     fun apiTouchedAmong(files: Collection<File>): Set<File> {
@@ -220,7 +220,7 @@ class ChangeAnalyzer(
         private val API_SOURCE_EXTENSIONS = setOf("kt", "java", "scala", "groovy")
 
         private val DIFF_ARGUMENTS = listOf(
-            "diff", "-U0", "--no-renames", "--no-prefix", "--no-color", "--no-ext-diff", "--no-textconv",
+            "diff", "-U0", "--no-renames", "--relative", "--no-prefix", "--no-color", "--no-ext-diff", "--no-textconv",
         )
         private const val HEAD = "HEAD"
         private const val NUL = '\u0000'
