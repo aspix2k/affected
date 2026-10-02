@@ -89,6 +89,25 @@ transforms are never removed; deleting that cache is safe and it rebuilds.
 zero findings and no baseline. Fix the reported code or declaration rather than
 weakening the gate.
 
+## Checking the plugin in a running IDE
+
+Unit and conformance tests never load the plugin into an IDE, and the product
+verifier only checks binary compatibility. Before a release, and after a change
+to change collection, module discovery or task selection, check the plugin live:
+
+1. `./gradlew buildPlugin`, then unpack `build/distributions/affected-<version>.zip`
+   into the IDE's `plugins` directory, or start a sandbox with `./gradlew runIde --args=<project>`.
+2. Enable the IDE's MCP server (Settings | Tools | MCP Server) and open a project
+   with an uncommitted change on a branch off the base branch.
+3. Find the MCP port (`lsof -nP -iTCP -sTCP:LISTEN`, the one that answers `/sse`) and run
+
+```sh
+python3 scripts/ide_smoke.py --port <port> --project <absolute project path> --task <expected task> --run
+```
+
+The script fails when the changed files or the planned tasks differ from the
+expectation, or when the run does not pass.
+
 ## How it works
 
 `ChangeAnalyzer` asks git what changed: the diff against the merge base with the
