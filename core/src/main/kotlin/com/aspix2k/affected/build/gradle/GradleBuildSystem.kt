@@ -88,7 +88,7 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
                 rootFallbackModule(File(linked), "", null).copy(hasTests = false)
             }
         }
-        return snapshot.modules.groupBy(Described::key).values.map { descriptions ->
+        val built = snapshot.modules.groupBy(Described::key).mapValues { (_, descriptions) ->
             val first = descriptions.first()
             val roots = descriptions.flatMap(Described::roots).distinct()
             val testRoots = descriptions.flatMap(Described::testRoots).distinct()
@@ -112,8 +112,9 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
                 testRoots,
                 snapshot.tasks,
                 execution,
-            ).copy(dependencies = dependencies)
+            ) to dependencies
         }
+        return gradleModulesWithDependencies(built)
     }
 
     private data class Snapshot(
@@ -474,6 +475,11 @@ internal fun gradleRequiresWorkspace(root: String, changes: BuildChanges): Boole
         file.startsWith(rootPath) && gradleBuildWideChange(rootPath.relativize(file).toString().replace('\\', '/'))
     }
 }
+
+internal fun gradleModulesWithDependencies(built: Map<String, Pair<BuildModule, Set<String>>>): List<BuildModule> =
+    built.values.map { (module, dependencies) ->
+        module.copy(dependencies = dependencies.mapNotNullTo(HashSet()) { built[it]?.first?.key } - module.key)
+    }
 
 internal fun gradleUnverifiableScriptChanged(module: BuildModule, changes: BuildChanges): Boolean {
     if (module.hasTests || module.compileTask != null) return false

@@ -9,6 +9,7 @@ import com.aspix2k.affected.build.gradle.gradleExecutionMetadata
 import com.aspix2k.affected.build.gradle.gradleHoldsTests
 import com.aspix2k.affected.build.gradle.gradleIsSourceFile
 import com.aspix2k.affected.build.gradle.gradleKmpAdditionalTestTasks
+import com.aspix2k.affected.build.gradle.gradleModulesWithDependencies
 import com.aspix2k.affected.build.gradle.gradleProductionCompileTask
 import com.aspix2k.affected.build.gradle.gradleProjectPath
 import com.aspix2k.affected.build.gradle.gradleTestCompileTask
@@ -325,6 +326,35 @@ class GradleTaskPathTest {
             gradleVerificationTasks(available),
         )
         assertFalse("compileTestKotlin" in available)
+    }
+
+    @Test
+    fun `dependencies described by project directory resolve to module keys of the build root`() {
+        val module = { id: String ->
+            BuildModule(
+                id = id,
+                root = "/repo",
+                contentRoots = listOf("/repo/${id.removePrefix(":")}"),
+                testTask = "test",
+                compileTask = "compileJava",
+                hasTests = true,
+                systemId = "GRADLE",
+            )
+        }
+        val core = module(":core")
+        val app = module(":app")
+        val coreDescribed = "GRADLE|/repo/core|:core"
+        val appDescribed = "GRADLE|/repo/app|:app"
+
+        val modules = gradleModulesWithDependencies(
+            mapOf(
+                coreDescribed to (core to emptySet()),
+                appDescribed to (app to setOf(coreDescribed, appDescribed, "GRADLE|/elsewhere|:gone")),
+            ),
+        )
+
+        assertEquals(setOf(core.key), modules.single { it.id == ":app" }.dependencies)
+        assertTrue(modules.single { it.id == ":core" }.dependencies.isEmpty())
     }
 
     @Test
