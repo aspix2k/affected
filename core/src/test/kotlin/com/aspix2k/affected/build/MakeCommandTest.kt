@@ -136,24 +136,15 @@ class MakeCommandTest {
         val nested = File(base, "native")
         makeRoot("test:\n\t@echo ok\n").copyRecursively(nested)
 
-        assertEquals(nested.canonicalFile, makeProjectRoot(base)?.canonicalFile)
-    }
-
-    @Test
-    fun `several first-level nested Make projects stay off`() {
-        val base = createTempDirectory("make-many").toFile()
-        makeRoot("test:\n\t@echo ok\n").copyRecursively(File(base, "native"))
-        makeRoot("test:\n\t@echo ok\n").copyRecursively(File(base, "tools"))
-
-        assertNull(makeProjectRoot(base))
+        assertEquals(listOf(nested.canonicalFile), makeProjectRoots(base).map(File::getCanonicalFile))
     }
 
     @Test
     fun `a deeper nested Make project stays off`() {
         val base = createTempDirectory("make-deep").toFile()
-        makeRoot("test:\n\t@echo ok\n").copyRecursively(File(base, "src/native"))
+        makeRoot("test:\n\t@echo ok\n").copyRecursively(File(base, "a/b/c/native"))
 
-        assertNull(makeProjectRoot(base))
+        assertEquals(emptyList(), makeProjectRoots(base))
     }
 
     private fun makeRoot(manifest: String): File {

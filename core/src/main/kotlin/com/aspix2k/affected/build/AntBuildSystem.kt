@@ -13,12 +13,9 @@ class AntBuildSystem : SuspendingBuildSystem {
 
     override val sourceExtensions: Set<String> = setOf("java", "kt", "xml", "properties")
 
-    override fun isPresent(project: Project): Boolean = manifestOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
-    override fun modules(project: Project): List<BuildModule> {
-        val root = manifestOf(project)?.parentFile ?: return emptyList()
-        return listOf(antRootModule(root))
-    }
+    override fun modules(project: Project): List<BuildModule> = rootsOf(project).map(::antRootModule)
 
     override fun run(project: Project, root: String, tasks: List<String>) {
         CommandRunner.runBatch(project, root, antCommands(File(root), tasks), "Affected Ant")
@@ -27,8 +24,8 @@ class AntBuildSystem : SuspendingBuildSystem {
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         CommandRunner.runBatchAndWait(project, root, antCommands(File(root), tasks), "Affected Ant")
 
-    private fun manifestOf(project: Project): File? =
-        project.basePath?.let(::File)?.let(::antProjectRoot)?.let(::antManifest)
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let(::antProjectRoots).orEmpty()
 }
 
 internal object AntTasks {
@@ -40,8 +37,8 @@ internal object AntTasks {
     const val CODEGEN = "codegen"
 }
 
-internal fun antProjectRoot(base: File): File? =
-    nestedBuildRoot(base) { antManifest(it) != null }
+internal fun antProjectRoots(base: File): List<File> =
+    nestedBuildRoots(base, setOf("build.xml")) { antManifest(it) != null }
 
 internal fun antManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null

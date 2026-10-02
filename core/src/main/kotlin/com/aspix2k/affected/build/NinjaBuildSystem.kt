@@ -13,12 +13,9 @@ class NinjaBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem, AllFileC
 
     override val sourceFileNames: Set<String> = setOf("build.ninja")
 
-    override fun isPresent(project: Project): Boolean = manifestOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
-    override fun modules(project: Project): List<BuildModule> {
-        val root = manifestOf(project)?.parentFile ?: return emptyList()
-        return listOf(ninjaRootModule(root))
-    }
+    override fun modules(project: Project): List<BuildModule> = rootsOf(project).map(::ninjaRootModule)
 
     override fun run(project: Project, root: String, tasks: List<String>) {
         CommandRunner.runBatch(project, root, ninjaCommands(File(root), tasks), "Affected Ninja")
@@ -27,8 +24,8 @@ class NinjaBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem, AllFileC
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         CommandRunner.runBatchAndWait(project, root, ninjaCommands(File(root), tasks), "Affected Ninja")
 
-    private fun manifestOf(project: Project): File? =
-        project.basePath?.let(::File)?.let(::ninjaProjectRoot)?.let(::ninjaManifest)
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let(::ninjaProjectRoots).orEmpty()
 }
 
 internal object NinjaTasks {
@@ -37,8 +34,8 @@ internal object NinjaTasks {
     const val DEFAULT = "default"
 }
 
-internal fun ninjaProjectRoot(base: File): File? =
-    nestedBuildRoot(base) { ninjaManifest(it) != null }
+internal fun ninjaProjectRoots(base: File): List<File> =
+    nestedBuildRoots(base, setOf("build.ninja")) { ninjaManifest(it) != null }
 
 internal fun ninjaManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null

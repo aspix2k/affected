@@ -122,16 +122,7 @@ class DbtCommandTest {
         val nested = File(base, "analytics")
         dbtRoot().copyRecursively(nested)
 
-        assertEquals(nested.canonicalFile, dbtProjectRoot(base)?.canonicalFile)
-    }
-
-    @Test
-    fun `several first-level nested dbt projects stay off`() {
-        val base = createTempDirectory("dbt-many").toFile()
-        dbtRoot().copyRecursively(File(base, "analytics"))
-        dbtRoot().copyRecursively(File(base, "warehouse"))
-
-        assertNull(dbtProjectRoot(base))
+        assertEquals(listOf(nested.canonicalFile), dbtProjectRoots(base).map(File::getCanonicalFile))
     }
 
     private fun dbtRoot(

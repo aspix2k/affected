@@ -15,12 +15,9 @@ class MesonBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
 
     override val sourceFileNames: Set<String> = setOf("meson.build", "meson.options", "meson_options.txt")
 
-    override fun isPresent(project: Project): Boolean = manifestOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
-    override fun modules(project: Project): List<BuildModule> {
-        val root = manifestOf(project)?.parentFile ?: return emptyList()
-        return listOf(mesonRootModule(root))
-    }
+    override fun modules(project: Project): List<BuildModule> = rootsOf(project).map(::mesonRootModule)
 
     override fun run(project: Project, root: String, tasks: List<String>) {
         CommandRunner.runBatch(project, root, mesonCommands(File(root), tasks), "Affected Meson")
@@ -29,8 +26,8 @@ class MesonBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         CommandRunner.runBatchAndWait(project, root, mesonCommands(File(root), tasks), "Affected Meson")
 
-    private fun manifestOf(project: Project): File? =
-        project.basePath?.let(::File)?.let(::mesonProjectRoot)?.let(::mesonManifest)
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let(::mesonProjectRoots).orEmpty()
 }
 
 internal object MesonTasks {
@@ -38,8 +35,8 @@ internal object MesonTasks {
     const val COMPILE = "compile"
 }
 
-internal fun mesonProjectRoot(base: File): File? =
-    nestedBuildRoot(base) { mesonManifest(it) != null }
+internal fun mesonProjectRoots(base: File): List<File> =
+    nestedBuildRoots(base, setOf("meson.build")) { mesonManifest(it) != null }
 
 internal fun mesonManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null

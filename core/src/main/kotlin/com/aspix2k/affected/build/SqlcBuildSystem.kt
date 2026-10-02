@@ -13,12 +13,9 @@ class SqlcBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
 
     override val sourceFileNames: Set<String> = setOf("sqlc.yaml", "sqlc.yml", "sqlc.json")
 
-    override fun isPresent(project: Project): Boolean = manifestOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
-    override fun modules(project: Project): List<BuildModule> {
-        val root = manifestOf(project)?.parentFile ?: return emptyList()
-        return listOf(sqlcRootModule(root))
-    }
+    override fun modules(project: Project): List<BuildModule> = rootsOf(project).map(::sqlcRootModule)
 
     override fun run(project: Project, root: String, tasks: List<String>) {
         CommandRunner.runBatch(project, root, sqlcCommands(tasks), "Affected sqlc")
@@ -27,16 +24,16 @@ class SqlcBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         CommandRunner.runBatchAndWait(project, root, sqlcCommands(tasks), "Affected sqlc")
 
-    private fun manifestOf(project: Project): File? =
-        project.basePath?.let(::File)?.let(::sqlcProjectRoot)?.let(::sqlcManifest)
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let(::sqlcProjectRoots).orEmpty()
 }
 
 internal object SqlcTasks {
     const val COMPILE = "compile"
 }
 
-internal fun sqlcProjectRoot(base: File): File? =
-    nestedBuildRoot(base) { sqlcManifest(it) != null }
+internal fun sqlcProjectRoots(base: File): List<File> =
+    nestedBuildRoots(base, SQLC_NAMES) { sqlcManifest(it) != null }
 
 internal fun sqlcManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null
@@ -69,6 +66,7 @@ internal fun sqlcLocalCompile(text: String): Boolean =
     !REMOTE_OR_UNPROVED.containsMatchIn(text)
 
 private val MANIFESTS = listOf("sqlc.yaml", "sqlc.yml", "sqlc.json")
+private val SQLC_NAMES = MANIFESTS.toSet()
 private val REMOTE_OR_UNPROVED = Regex(
     """(?i)(?:^|[\s{,])(?:"?(?:database|uri|cloud|managed|process)"?\s*:)|[$*?]|\${'$'}\{""",
 )
