@@ -9,7 +9,15 @@ data class AffectedMcpSettings(
     val runBeforePush: Boolean = false,
     val animateWhileRunning: Boolean = true,
     val testDependents: Boolean = false,
-)
+    val resolvedBaseBranch: String? = null,
+) {
+    val baseBranchLabel: String
+        get() = if (baseBranch == ProjectBaseBranch.AUTO_BRANCH && resolvedBaseBranch != null) {
+            "$baseBranch ($resolvedBaseBranch)"
+        } else {
+            baseBranch
+        }
+}
 
 data class AffectedMcpView(
     val text: String,
@@ -121,6 +129,7 @@ object AffectedMcpViews {
                 "affectedModules" to snapshot.affectedModules,
                 "ownedRunning" to ownedRunning,
                 "baseBranch" to settings.baseBranch,
+                "resolvedBaseBranch" to settings.resolvedBaseBranch,
                 "checkConsumers" to settings.checkConsumers,
                 "testDependents" to settings.testDependents,
                 "runBeforeCommit" to settings.runBeforeCommit,

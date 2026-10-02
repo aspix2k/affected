@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit
 
 class ChangeAnalyzer(
     internal val projectDir: File,
-    private val baseBranch: String,
+    private val baseBranch: String?,
     private val sourceExtensions: Set<String> = DEFAULT_EXTENSIONS,
     private val includeAllFiles: Boolean = false,
     private val gitExecutable: String = "git",
@@ -24,13 +24,17 @@ class ChangeAnalyzer(
 
     class GitFailure(message: String, cause: Throwable? = null) : Exception(message, cause)
 
-    private val mergeBase: String? by lazy(::resolveMergeBase)
+    private val resolvedBase: Pair<String, String>? by lazy(::resolveBase)
+
+    private val mergeBase: String? get() = resolvedBase?.second
 
     fun isUsable(): Boolean = projectDir.isDirectory && try {
         run("rev-parse", "--git-dir").exitCode == 0
     } catch (error: GitFailure) {
         if (error.cause is ExecutionException || error.cause is IOException) false else throw error
     }
+
+    fun resolvedBranch(): String? = resolvedBase?.first
 
     fun modifiedAgainstBase(): Set<File> {
         val base = mergeBase ?: return emptySet()
@@ -180,14 +184,15 @@ class ChangeAnalyzer(
         return EXPLICIT_MODIFIER.containsMatchIn(line)
     }
 
-    private fun resolveMergeBase(): String? = candidateBranches()
-        .flatMap { listOf("origin/$it", it) }
-        .firstNotNullOfOrNull { ref ->
+    private fun resolveBase(): Pair<String, String>? = candidateBranches()
+        .flatMap { branch -> listOf("origin/$branch", branch).map { ref -> branch to ref } }
+        .firstNotNullOfOrNull { (branch, ref) ->
             run("merge-base", HEAD, ref).takeIf { it.exitCode == 0 }?.stdout?.trim()?.ifEmpty { null }
+                ?.let { branch to it }
         }
 
     private fun candidateBranches(): List<String> =
-        (listOf(baseBranch) + listOfNotNull(remoteDefaultBranch()) + FALLBACK_BRANCHES)
+        (listOfNotNull(baseBranch) + listOfNotNull(remoteDefaultBranch()) + FALLBACK_BRANCHES)
             .distinct()
             .filter { it.isNotBlank() }
 

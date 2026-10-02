@@ -94,6 +94,38 @@ class ChangeAnalyzerTest {
     }
 
     @Test
+    fun `the automatic base follows the remote default branch rather than develop`() = repo { dir ->
+        run(dir, "git", "branch", "develop")
+        File(dir, "lib/src/main/kotlin/Added.kt").writeText("class Added")
+        run(dir, "git", "add", "-A")
+        run(dir, "git", "commit", "-qm", "trunk work")
+        run(dir, "git", "update-ref", "refs/remotes/origin/main", "HEAD")
+        run(dir, "git", "checkout", "-qb", "feature")
+        File(dir, "lib/src/main/kotlin/Other.kt").writeText("class Other")
+        run(dir, "git", "add", "-A")
+        run(dir, "git", "commit", "-qm", "feature work")
+
+        val withoutRemoteHead = ChangeAnalyzer(dir, null)
+        assertEquals("develop", withoutRemoteHead.resolvedBranch())
+
+        run(dir, "git", "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+        val automatic = ChangeAnalyzer(dir, null)
+        assertEquals("main", automatic.resolvedBranch())
+        assertEquals(listOf("Other.kt"), automatic.againstBase().map { it.name })
+
+        val configured = ChangeAnalyzer(dir, "develop")
+        assertEquals("develop", configured.resolvedBranch())
+        assertEquals(listOf("Added.kt", "Other.kt"), configured.againstBase().map { it.name }.sorted())
+    }
+
+    @Test
+    fun `no resolved branch is reported without any base`() = repo { dir ->
+        run(dir, "git", "branch", "-m", "trunk")
+
+        assertEquals(null, ChangeAnalyzer(dir, null).resolvedBranch())
+    }
+
+    @Test
     fun `the list is empty without changes`() = repo { dir ->
         assertTrue(analyze(dir).files.isEmpty(), "a clean tree must not have changes")
     }

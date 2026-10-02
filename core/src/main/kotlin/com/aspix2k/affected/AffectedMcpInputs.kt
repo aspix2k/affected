@@ -29,8 +29,8 @@ object AffectedMcpInputs {
     }
 
     fun validateBaseBranch(branch: String): AffectedMcpView {
-        val name = branch.trim()
-        if (!branchName(name)) {
+        val name = branch.trim().ifEmpty { ProjectBaseBranch.AUTO_BRANCH }
+        if (name != ProjectBaseBranch.AUTO_BRANCH && !branchName(name)) {
             return AffectedMcpView(
                 text = "Base branch is invalid.",
                 data = mapOf("reason" to "invalid-branch"),
@@ -52,15 +52,16 @@ object AffectedMcpInputs {
         animateWhileRunning: Boolean? = null,
         testDependents: Boolean? = null,
     ): AffectedMcpView {
-        val resolvedBranch = if (baseBranch == null) {
+        val chosenBranch = if (baseBranch == null) {
             current.baseBranch
         } else {
             val validated = validateBaseBranch(baseBranch)
             if (validated.error) return validated
-            baseBranch.trim()
+            validated.data.getValue("baseBranch") as String
         }
         val next = AffectedMcpSettings(
-            baseBranch = resolvedBranch,
+            baseBranch = chosenBranch,
+            resolvedBaseBranch = current.resolvedBaseBranch.takeIf { chosenBranch == current.baseBranch },
             checkConsumers = checkConsumers ?: current.checkConsumers,
             runBeforeCommit = runBeforeCommit ?: current.runBeforeCommit,
             runBeforePush = runBeforePush ?: current.runBeforePush,
@@ -68,12 +69,13 @@ object AffectedMcpInputs {
             testDependents = testDependents ?: current.testDependents,
         )
         return AffectedMcpView(
-            text = "Base branch: ${next.baseBranch}, consumer check: ${onOff(next.checkConsumers)}, " +
+            text = "Base branch: ${next.baseBranchLabel}, consumer check: ${onOff(next.checkConsumers)}, " +
                 "dependents' tests: ${onOff(next.testDependents)}, " +
                 "commit guard: ${onOff(next.runBeforeCommit)}, push guard: ${onOff(next.runBeforePush)}, " +
                 "animation: ${onOff(next.animateWhileRunning)}.",
             data = mapOf(
                 "baseBranch" to next.baseBranch,
+                "resolvedBaseBranch" to next.resolvedBaseBranch,
                 "checkConsumers" to next.checkConsumers,
                 "testDependents" to next.testDependents,
                 "runBeforeCommit" to next.runBeforeCommit,

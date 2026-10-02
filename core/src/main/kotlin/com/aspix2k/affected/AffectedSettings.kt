@@ -32,9 +32,8 @@ class AffectedSettings : PersistentStateComponent<AffectedSettings.State> {
     @Volatile
     private var state = State()
 
-    var baseBranch: String
+    val legacyBaseBranch: String
         get() = state.baseBranch
-        set(value) { state.baseBranch = value }
 
     var checkConsumers: Boolean
         get() = state.checkConsumers

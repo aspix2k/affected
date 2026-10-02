@@ -9,6 +9,7 @@ import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.AffectedState
 import com.aspix2k.affected.AffectedStateSnapshot
+import com.aspix2k.affected.ProjectBaseBranch
 import com.aspix2k.affected.TaskPlanner
 import com.aspix2k.affected.Verification
 import com.aspix2k.affected.build.BuildSystems
@@ -57,7 +58,7 @@ class AffectedToolset : McpToolset {
     suspend fun affected_verification_plan(): McpToolCallResult {
         val project = coroutineContext.project
         if (project.basePath == null) return noBasePath()
-        return AffectedMcpViews.plan(freshSnapshot(project), settings().checkConsumers).toResult()
+        return AffectedMcpViews.plan(freshSnapshot(project), settings(project).checkConsumers).toResult()
     }
 
     @McpTool
@@ -83,7 +84,7 @@ class AffectedToolset : McpToolset {
         if (projectBusy(project)) return busy()
         val state = project.service<AffectedState>()
         state.refreshNow()
-        val preview = AffectedMcpViews.plan(state.snapshot(), settings().checkConsumers)
+        val preview = AffectedMcpViews.plan(state.snapshot(), settings(project).checkConsumers)
         if (preview.error) return preview.toResult()
         val claim = state.tryClaimReadyRun() ?: return cannotClaim()
         val prepared = claim.prepared ?: run {
@@ -177,7 +178,7 @@ class AffectedToolset : McpToolset {
         val project = coroutineContext.project
         return AffectedMcpViews.status(
             snapshot = snapshot(project),
-            settings = settings(),
+            settings = settings(project),
             ownedRunning = AffectedRunSessions.getInstance(project).activeCount(),
         ).toResult()
     }
@@ -193,10 +194,11 @@ class AffectedToolset : McpToolset {
     @McpTool
     @McpToolHints(readOnlyHint = McpToolHintValue.FALSE, destructiveHint = McpToolHintValue.FALSE)
     @McpDescription(
-        "Changes plugin settings: the base branch, consumer compilation, commit and push guards, and running animation."
+        "Changes plugin settings: this project's base branch, consumer compilation, commit and push guards, " +
+            "and running animation."
     )
     suspend fun affected_configure(
-        @McpDescription("Base branch, for example develop, main or master")
+        @McpDescription("Base branch of this project, for example develop, main or master; empty or auto detects it")
         baseBranch: String? = null,
         @McpDescription("Whether to compile modules consuming a changed public API")
         checkConsumers: Boolean? = null,
@@ -209,8 +211,9 @@ class AffectedToolset : McpToolset {
         @McpDescription("Whether to also run the tests of modules that depend on a changed module")
         testDependents: Boolean? = null,
     ): McpToolCallResult {
+        val project = coroutineContext.project
         val view = AffectedMcpInputs.applySettings(
-            current = settings(),
+            current = settings(project),
             baseBranch = baseBranch,
             checkConsumers = checkConsumers,
             runBeforeCommit = runBeforeCommit,
@@ -220,7 +223,7 @@ class AffectedToolset : McpToolset {
         )
         if (view.error) return view.toResult()
         val next = AffectedSettings.getInstance()
-        next.baseBranch = view.data["baseBranch"] as String
+        if (baseBranch != null) project.service<ProjectBaseBranch>().configure(view.data["baseBranch"] as String)
         next.checkConsumers = view.data["checkConsumers"] as Boolean
         next.testDependents = view.data["testDependents"] as Boolean
         next.runBeforeCommit = view.data["runBeforeCommit"] as Boolean
@@ -240,10 +243,11 @@ class AffectedToolset : McpToolset {
         return state.snapshot()
     }
 
-    private fun settings(): AffectedMcpSettings {
+    private fun settings(project: Project): AffectedMcpSettings {
         val current = AffectedSettings.getInstance()
         return AffectedMcpSettings(
-            baseBranch = current.baseBranch,
+            baseBranch = project.service<ProjectBaseBranch>().configured ?: ProjectBaseBranch.AUTO_BRANCH,
+            resolvedBaseBranch = snapshot(project).changes?.resolvedBranch,
             checkConsumers = current.checkConsumers,
             runBeforeCommit = current.runBeforeCommit,
             runBeforePush = current.runBeforePush,

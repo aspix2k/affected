@@ -219,6 +219,18 @@ class AffectedMcpViewsTest {
         assertFalse(status.data.containsKey("runningSessions"))
     }
 
+    @Test
+    fun `status reports the configured and the resolved base branch`() {
+        val status = AffectedMcpViews.status(
+            snapshot = snapshot(analysisStatus = AnalysisStatus.READY),
+            settings = AffectedMcpSettings("auto", checkConsumers = false, resolvedBaseBranch = "main"),
+            ownedRunning = 0,
+        )
+
+        assertEquals("auto", status.data["baseBranch"])
+        assertEquals("main", status.data["resolvedBaseBranch"])
+    }
+
     private fun snapshot(
         analysisStatus: AnalysisStatus,
         verificationStatus: VerificationStatus = VerificationStatus.IDLE,

@@ -14,23 +14,26 @@ class BaseBranchAction : AnAction(), DumbAware {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun update(e: AnActionEvent) {
-        val branch = AffectedSettings.getInstance().baseBranch
+        val project = e.project
+        val branch = project?.service<ProjectBaseBranch>()?.configured
+            ?: project?.service<AffectedState>()?.snapshot()?.changes?.resolvedBranch
+                ?.let { AffectedBundle.message("base.branch.auto.resolved", it) }
+            ?: AffectedBundle.message("base.branch.auto")
         e.presentation.text = AffectedBundle.message("action.base.branch.text", branch)
     }
 
     override fun actionPerformed(e: AnActionEvent) {
-        val settings = AffectedSettings.getInstance()
+        val project = e.project ?: return
+        val setting = project.service<ProjectBaseBranch>()
         val branch = Messages.showInputDialog(
-            e.project,
+            project,
             AffectedBundle.message("dialog.base.branch.message"),
             AffectedBundle.message("dialog.base.branch.title"),
             null,
-            settings.baseBranch,
+            setting.configured.orEmpty(),
             BranchNameValidator,
-        )?.trim() ?: return
-        if (branch == settings.baseBranch) return
-        settings.baseBranch = branch
-        invalidateOpenProjects()
+        ) ?: return
+        if (setting.configure(branch)) project.service<AffectedState>().invalidate()
     }
 }
 

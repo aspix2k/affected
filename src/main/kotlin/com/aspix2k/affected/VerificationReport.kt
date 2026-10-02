@@ -49,7 +49,7 @@ internal fun reportBlocker(project: Project, prepared: Verification.Prepared, bl
         Verification.Blocker.NO_COMPARISON_BASE -> notifyAffected(
             project,
             AffectedBundle.message("notification.no.base.title"),
-            AffectedBundle.message("notification.no.base.text", AffectedSettings.getInstance().baseBranch),
+            AffectedBundle.message("notification.no.base.text"),
             NotificationType.WARNING,
         )
         Verification.Blocker.NOT_STARTED -> notifyNotStarted(project)

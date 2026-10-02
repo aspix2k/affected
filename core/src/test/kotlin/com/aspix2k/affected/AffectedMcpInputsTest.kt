@@ -135,4 +135,28 @@ class AffectedMcpInputsTest {
         hasTests = true,
         tasks = tasks,
     )
+
+    @Test
+    fun `an empty or auto base branch clears the setting`() {
+        listOf("", "  ", "auto").forEach { input ->
+            val validated = AffectedMcpInputs.validateBaseBranch(input)
+            assertFalse(validated.error)
+            assertEquals("auto", validated.data["baseBranch"])
+            assertEquals("auto", AffectedMcpInputs.applySettings(current, baseBranch = input).data["baseBranch"])
+        }
+    }
+
+    @Test
+    fun `the resolved branch is reported until the base branch changes`() {
+        val automatic = current.copy(baseBranch = "auto", resolvedBaseBranch = "main")
+
+        val kept = AffectedMcpInputs.applySettings(automatic, checkConsumers = true)
+        val changed = AffectedMcpInputs.applySettings(automatic, baseBranch = "release")
+
+        assertEquals("main", kept.data["resolvedBaseBranch"])
+        assertTrue("Base branch: auto (main)," in kept.text)
+        assertEquals("release", changed.data["baseBranch"])
+        assertEquals(null, changed.data["resolvedBaseBranch"])
+        assertTrue("Base branch: release," in changed.text)
+    }
 }
