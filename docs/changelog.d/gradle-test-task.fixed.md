@@ -1,1 +1,0 @@
-- Gradle: stop choosing `testClasses` as the test task. Plain Java and Kotlin projects ran only test compilation, and a project with another suite such as `integrationTest` never ran `test`. Test tasks now come from the task type the IDE reports, with task names as a fallback.
