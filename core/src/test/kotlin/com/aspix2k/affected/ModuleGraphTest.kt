@@ -568,6 +568,21 @@ class ModuleGraphTest {
         assertEquals(listOf("alpha:test"), plans(test).withConsumers.plan.groups.single().tasks)
     }
 
+    @Test
+    fun `the test inventory counts modules with tests and names their test tasks`() {
+        val root = createTempDirectory("module-graph-inventory").toFile()
+        val tested = module(root, "a", "a").copy(additionalTestTasks = setOf("integrationTest"))
+        val untested = module(root, "b", "b").copy(hasTests = false)
+        val graph = ModuleGraph(listOf(tested, untested).map { ModuleGraph.Node(it, system("GRADLE")) })
+
+        val inventory = graph.testInventory()
+
+        assertEquals(1, inventory.modules)
+        val expected = setOf("a:test", "a:integrationTest")
+            .mapTo(HashSet()) { TaskKey("GRADLE", root.invariantSeparatorsPath, it) }
+        assertEquals(expected, inventory.tasks)
+    }
+
     private fun graph(vararg modules: BuildModule): ModuleGraph =
         ModuleGraph(modules.map { ModuleGraph.Node(it, system("NODE")) })
 

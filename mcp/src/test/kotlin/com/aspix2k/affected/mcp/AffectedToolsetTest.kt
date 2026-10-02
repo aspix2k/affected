@@ -4,9 +4,11 @@ import com.aspix2k.affected.AffectedMcpView
 import com.aspix2k.affected.AffectedStateSnapshot
 import com.aspix2k.affected.AnalysisStatus
 import com.aspix2k.affected.Plan
+import com.aspix2k.affected.RunSummary
 import com.aspix2k.affected.TaskGroup
 import com.aspix2k.affected.Verification
 import com.aspix2k.affected.VerificationStatus
+import com.aspix2k.affected.withSummary
 import com.intellij.mcpserver.McpToolCallResultContent
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.annotations.McpToolHintValue
@@ -91,6 +93,25 @@ class AffectedToolsetTest {
         assertEquals("unresolved-changes", partlyUnresolved.data["reason"])
         assertEquals(listOf(":alpha:test"), partlyUnresolved.data["tasks"])
         assertTrue(partlyUnresolved.text.contains("belong to no known build module"))
+    }
+
+    @Test
+    fun `a passed run reports what it covered and an unfinished estimate stays null`() {
+        val plan = Plan(listOf(TaskGroup("GRADLE", "/repo", listOf(":alpha:test"))), tested = 1, compiled = 0)
+        val summary = RunSummary(1, 41, 1, 48_000, null, 40)
+        val outcome = Verification.Outcome(plan, true, summary = summary)
+
+        val view = verificationView(snapshot(), outcome).withSummary(outcome.summary)
+        val failed = verificationView(snapshot(), Verification.Outcome(plan, false, summary = summary))
+            .withSummary(summary)
+
+        assertEquals(listOf(":alpha:test"), view.data["tasks"])
+        assertEquals(1, view.data["modulesTested"])
+        assertEquals(41, view.data["modulesWithTests"])
+        assertEquals(48_000L, view.data["durationMillis"])
+        assertEquals(null, view.data["estimatedSavedMillis"])
+        assertEquals(40, view.data["skippedWithoutEstimate"])
+        assertFalse(failed.data.containsKey("modulesTested"))
     }
 
     @Test

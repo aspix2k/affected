@@ -49,7 +49,7 @@ class RunAffectedTestsAction : AnAction() {
                     NotificationType.INFORMATION,
                 )
             } else {
-                reportBlocker(project, prepared, outcome.blocker)
+                reportOutcome(project, prepared, outcome)
             }
         }
     }

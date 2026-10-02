@@ -1,0 +1,1 @@
+- Passing runs now say how many modules were tested out of all modules with tests and how long it took, and estimate the time saved from recorded durations of skipped tasks (in the notification and in the MCP verification result).

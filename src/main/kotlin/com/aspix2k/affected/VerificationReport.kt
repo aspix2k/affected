@@ -26,8 +26,41 @@ internal suspend fun verifyAndReport(
     }
     onPrepared(prepared)
     val outcome = Verification.runAndWait(project, prepared)
-    reportBlocker(project, prepared, outcome.blocker)
+    reportOutcome(project, prepared, outcome)
     return outcome.passed
+}
+
+internal fun reportOutcome(project: Project, prepared: Verification.Prepared, outcome: Verification.Outcome) {
+    reportBlocker(project, prepared, outcome.blocker)
+    outcome.summary?.let {
+        notifyAffected(
+            project,
+            AffectedBundle.message("notification.summary.title"),
+            runSummaryText(it),
+            NotificationType.INFORMATION,
+        )
+    }
+}
+
+internal fun runSummaryText(summary: RunSummary): String {
+    val covered = AffectedBundle.message(
+        "notification.summary.text",
+        summary.modulesTested,
+        summary.modulesWithTests,
+        formatDuration(summary.durationMillis),
+    )
+    val saved = summary.estimatedSavedMillis?.let { millis ->
+        if (summary.skippedWithoutEstimate == 0) {
+            AffectedBundle.message("notification.summary.saved", formatDuration(millis))
+        } else {
+            AffectedBundle.message(
+                "notification.summary.saved.partial",
+                formatDuration(millis),
+                summary.skippedWithoutEstimate,
+            )
+        }
+    }
+    return listOfNotNull(covered, saved).joinToString(" ")
 }
 
 internal fun reportBlocker(project: Project, prepared: Verification.Prepared, blocker: Verification.Blocker?) {

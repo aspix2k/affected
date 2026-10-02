@@ -39,6 +39,18 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
         )
     }
 
+    internal fun testInventory(): TestInventory {
+        val infos = nodes.filter { it.hasTests }.map(Node::info)
+        return TestInventory(
+            modules = infos.size,
+            tasks = infos.flatMapTo(LinkedHashSet()) { info ->
+                (listOf(info.testTask) + info.additionalTestTasks.sorted()).filter(String::isNotEmpty).map {
+                    TaskKey(info.systemId, info.executionRoot, "${info.executionId}:$it")
+                }
+            },
+        )
+    }
+
     private val byContentRoot: Map<String, List<Node>> by lazy {
         val index = HashMap<String, MutableList<Node>>()
         for (node in nodes) {

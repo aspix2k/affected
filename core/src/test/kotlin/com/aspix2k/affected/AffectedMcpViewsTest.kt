@@ -268,6 +268,46 @@ class AffectedMcpViewsTest {
         )
     }
 
+    @Test
+    fun `the plan view exposes how many modules have tests`() {
+        val withInventory = Verification.Prepared(
+            plan = Plan(listOf(TaskGroup("GRADLE", "/repo", listOf(":alpha:test"))), 1, 0),
+            changes = BuildChanges(emptyList(), emptySet(), comparedToBase = true),
+            inventory = TestInventory(modules = 41),
+        )
+        val snapshot = snapshot(
+            analysisStatus = AnalysisStatus.READY,
+            modules = emptyList(),
+            changes = changes("/repo/alpha/src/Main.kt"),
+            plans = Verification.PreparedPlans(withInventory, withInventory),
+        )
+
+        assertEquals(41, AffectedMcpViews.plan(snapshot, checkConsumers = false).data["modulesWithTests"])
+        assertFalse(AffectedMcpViews.plan(snapshot, Plan(emptyList(), 0, 0)).data.containsKey("modulesWithTests"))
+    }
+
+    @Test
+    fun `a summary adds its fields and text only to a successful view`() {
+        val view = AffectedMcpView("Passed.", mapOf("passed" to true))
+        val summary = RunSummary(3, 41, 3, 48_000, 660_000, 5)
+
+        val described = view.withSummary(summary)
+        val unknown = view.withSummary(summary.copy(estimatedSavedMillis = null))
+
+        assertEquals(3, described.data["modulesTested"])
+        assertEquals(41, described.data["modulesWithTests"])
+        assertEquals(48_000L, described.data["durationMillis"])
+        assertEquals(660_000L, described.data["estimatedSavedMillis"])
+        assertEquals(5, described.data["skippedWithoutEstimate"])
+        assertTrue(described.text.contains("Ran 3 of 41 modules with tests in 48 s."))
+        assertTrue(described.text.contains("about 11 min"))
+        assertEquals(null, unknown.data["estimatedSavedMillis"])
+        assertTrue(unknown.data.containsKey("estimatedSavedMillis"))
+        assertFalse(unknown.text.contains("last time"))
+        assertEquals(view, view.withSummary(null))
+        assertEquals(view.copy(error = true), view.copy(error = true).withSummary(summary))
+    }
+
     private fun plans(tested: Int) = Verification.PreparedPlans(
         testsOnly = prepared(tested, 0, emptyList()),
         withConsumers = prepared(tested, 0, emptyList()),

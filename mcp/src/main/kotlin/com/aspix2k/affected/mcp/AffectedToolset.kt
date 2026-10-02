@@ -17,6 +17,7 @@ import com.aspix2k.affected.build.BuildSystems
 import com.aspix2k.affected.projectBusy
 import com.aspix2k.affected.runClaimedGroups
 import com.aspix2k.affected.runWithRequiredAdapter
+import com.aspix2k.affected.withSummary
 import com.intellij.mcpserver.McpToolCallResult
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
@@ -97,7 +98,8 @@ class AffectedToolset : McpToolset {
             return busy()
         }
         val outcome = Verification.runClaimedAndWait(project, prepared, claim)
-        return AffectedMcpViews.withUncovered(verificationView(claim.snapshot, outcome), prepared.uncovered).toResult()
+        val view = verificationView(claim.snapshot, outcome).withSummary(outcome.summary)
+        return AffectedMcpViews.withUncovered(view, prepared.uncovered).toResult()
     }
 
     @McpTool

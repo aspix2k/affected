@@ -12,12 +12,19 @@ import com.intellij.openapi.project.Project
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.ConcurrentLinkedQueue
+import kotlin.time.TimeSource
 
 object Verification {
 
     enum class Blocker { UNRESOLVED_CHANGES, NO_COMPARISON_BASE, NOT_STARTED }
 
-    data class Outcome(val plan: Plan, val passed: Boolean, val blocker: Blocker? = null)
+    data class Outcome(
+        val plan: Plan,
+        val passed: Boolean,
+        val blocker: Blocker? = null,
+        val summary: RunSummary? = null,
+    )
 
     class Prepared internal constructor(
         val plan: Plan,
@@ -26,6 +33,7 @@ object Verification {
         val baseUnresolved: Boolean = false,
         val uncovered: List<File> = emptyList(),
         val unresolved: List<File> = emptyList(),
+        val inventory: TestInventory = TestInventory(),
     ) {
         val changedFiles: Int get() = changes.files.size
     }
@@ -63,6 +71,7 @@ object Verification {
                 changes.baseUnresolved,
                 changes.uncovered,
                 plans.unresolved,
+                graph.testInventory(),
             )
         }
         return PreparedPlans(prepared(plans.testsOnly), prepared(plans.withConsumers))
@@ -87,6 +96,8 @@ object Verification {
             if (plan.isEmpty) return withoutWork(prepared)
             if (!claim.markRunning()) return Outcome(plan, passed = false, Blocker.NOT_STARTED)
             val stopAfterFirstFailure = AffectedSettings.getInstance().stopAfterFirstFailure
+            val started = TimeSource.Monotonic.markNow()
+            val durations = ConcurrentLinkedQueue<RecordedDuration>()
             passed = runClaimedGroups(
                 project,
                 claim,
@@ -94,6 +105,7 @@ object Verification {
                 Dispatchers.Default,
                 stopAfterFirstFailure,
             ) { group ->
+                val groupStarted = TimeSource.Monotonic.markNow()
                 group.runInPlannedExecutionRoot(project) {
                     when (val system = BuildSystems.byId(group.systemId)) {
                         null -> false
@@ -105,12 +117,36 @@ object Verification {
                             system.runAndWait(project, group.root, group.tasks)
                         }
                     }
+                }.also { groupPassed ->
+                    if (groupPassed) {
+                        durations += group.recordedDuration(
+                            groupStarted.elapsedNow().inWholeMilliseconds,
+                            System.currentTimeMillis(),
+                        )
+                    }
                 }
             }
-            return completedOutcome(plan, passed, prepared.unresolvedFiles, prepared.baseUnresolved)
+            val outcome = completedOutcome(plan, passed, prepared.unresolvedFiles, prepared.baseUnresolved)
+            return if (outcome.passed) {
+                outcome.copy(
+                    summary = summarize(project, prepared, started.elapsedNow().inWholeMilliseconds, durations),
+                )
+            } else {
+                outcome
+            }
         } finally {
             claim.close()
         }
+    }
+
+    private suspend fun summarize(
+        project: Project,
+        prepared: Prepared,
+        durationMillis: Long,
+        durations: Collection<RecordedDuration>,
+    ): RunSummary = withContext(Dispatchers.IO) {
+        val recorded = DurationStore.forProject(project).record(durations.toList())
+        summarizeRun(prepared.plan, prepared.inventory, durationMillis, recorded)
     }
 
     private fun withoutWork(prepared: Prepared): Outcome = when {
