@@ -7,7 +7,7 @@ import com.aspix2k.affected.build.ChangeAwareSuspendingBuildSystem
 import com.aspix2k.affected.build.ManifestSearch
 import com.aspix2k.affected.build.failClosedModules
 import com.aspix2k.affected.build.isRegularFileNoFollow
-import com.aspix2k.affected.build.nestedBuildRoot
+import com.aspix2k.affected.build.nestedBuildRoots
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CommandRunner
 import com.aspix2k.affected.build.retainBuildSnapshot
@@ -24,35 +24,40 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.ConcurrentHashMap
 
 class CMakeBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSystem {
 
-    private data class Snapshot(val root: String, val stamp: String, val modules: List<BuildModule>)
+    private data class Snapshot(val stamp: String, val modules: List<BuildModule>)
 
-    private val cache = AtomicReference<Snapshot?>(null)
+    private val cache = ConcurrentHashMap<String, Snapshot>()
 
     override val id: String = "CMAKE"
 
     override val sourceExtensions: Set<String> =
         CMAKE_SOURCE_EXTENSIONS + setOf("txt", "cmake", "json")
 
-    override fun isPresent(project: Project): Boolean = rootOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
     override fun modules(project: Project): List<BuildModule> {
-        val root = rootOf(project) ?: return emptyList()
+        val roots = rootsOf(project)
+        cache.keys.retainAll(roots.mapTo(HashSet()) { it.invariantSeparatorsPath })
+        return roots.flatMap(::modulesOf)
+    }
+
+    private fun modulesOf(root: File): List<BuildModule> {
         val stamp = ManifestSearch.fingerprint(
             root,
             ManifestSearch.find(root, setOf("CMakeLists.txt"), setOf("cmake")),
         )
 
         val rootPath = root.invariantSeparatorsPath
-        if (stamp != null) cache.get()?.takeIf { it.root == rootPath && it.stamp == stamp }?.let { return it.modules }
+        if (stamp != null) cache[rootPath]?.takeIf { it.stamp == stamp }?.let { return it.modules }
 
         val discovered = runCatching { CMakeTargets.parse(root) }.getOrNull()
         val discovery = failClosedModules(root, CMakeTargets.TEST, CMakeTargets.BUILD, discovered)
         if (stamp != null && discovery.complete) {
-            cache.retainBuildSnapshot(Snapshot(rootPath, stamp, discovery.modules), discovery.modules.size)
+            cache.retainBuildSnapshot(rootPath, Snapshot(stamp, discovery.modules), discovery.modules.size)
         }
         return discovery.modules
     }
@@ -101,10 +106,10 @@ class CMakeBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSy
         }
     }
 
-    private fun rootOf(project: Project): File? =
+    private fun rootsOf(project: Project): List<File> =
         project.basePath?.let(::File)?.let { base ->
-            nestedBuildRoot(base) { File(it, "CMakeLists.txt").isRegularFileNoFollow() }
-        }
+            nestedBuildRoots(base, setOf("cmakelists.txt")) { File(it, "CMakeLists.txt").isRegularFileNoFollow() }
+        }.orEmpty()
 }
 
 private class CMakeSelectiveRun private constructor(
@@ -150,7 +155,7 @@ private class CMakeSelectiveRun private constructor(
                 require(build.startsWith(realRoot))
                 require(requestCMakeCodemodel(build))
                 val cache = secureCMakeDirectory(
-                    PathManager.getSystemDir().resolve(CACHE_DIRECTORY).resolve(project.locationHash).resolve("cmake"),
+                    cmakeCacheDirectory(PathManager.getSystemDir(), project.locationHash, realRoot),
                 )
                 val store = CMakeTestBaselineStore(cache.resolve("maps"))
                 val capture = { arguments: List<String> ->
@@ -257,6 +262,13 @@ private fun cmakeBuildDirectory(root: File): String? {
     ) ?: return null
     return directory.invariantSeparatorsPath.removePrefix("${root.invariantSeparatorsPath}/").ifEmpty { "." }
 }
+
+internal fun cmakeCacheDirectory(systemDirectory: Path, locationHash: String, root: Path): Path =
+    systemDirectory
+        .resolve(CACHE_DIRECTORY)
+        .resolve(locationHash)
+        .resolve("cmake")
+        .resolve(sha256(root.toFile().invariantSeparatorsPath))
 
 private fun secureCMakeDirectory(path: Path): Path {
     val absolute = path.toAbsolutePath().normalize()

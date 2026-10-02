@@ -23,20 +23,14 @@ object DotnetProjects {
         "Microsoft.Testing.Platform",
     )
 
-    fun parse(root: File): List<BuildModule> {
+    fun parse(root: File, siblings: List<File> = emptyList()): List<BuildModule> {
         val rootPath = root.invariantSeparatorsPath
         val projects = findProjects(root)
         if (projects.isEmpty()) return emptyList()
 
         val byPath = projects.associateBy { it.invariantSeparatorsPath }
-        val nameCounts = projects.groupingBy { it.nameWithoutExtension }.eachCount()
-        val ids = projects.associateWith { project ->
-            if (nameCounts.getValue(project.nameWithoutExtension) == 1) {
-                project.nameWithoutExtension
-            } else {
-                relativeProjectPath(rootPath, project).substringBeforeLast('.')
-            }
-        }
+        val ids = projectIds(rootPath, projects)
+        val siblingKeys by lazy { siblingDependencyKeys(siblings) }
 
         return projects.map { project ->
             val text = ManifestSearch.readText(project) ?: return emptyList()
@@ -45,8 +39,9 @@ object DotnetProjects {
             val dependencies = REFERENCE.findAll(text)
                 .mapNotNull { match -> INCLUDE.find(match.groupValues[1])?.groupValues?.get(1) }
                 .mapNotNull { reference -> resolve(directory, reference) }
-                .mapNotNull { byPath[it] }
-                .mapTo(HashSet()) { moduleDependencyKey("DOTNET", rootPath, ids.getValue(it)) }
+                .mapNotNullTo(HashSet()) { path ->
+                    byPath[path]?.let { moduleDependencyKey("DOTNET", rootPath, ids.getValue(it)) } ?: siblingKeys[path]
+                }
 
             val id = ids.getValue(project)
             val hasTests = TEST_MARKERS.any { text.contains(it, ignoreCase = true) }
@@ -64,6 +59,25 @@ object DotnetProjects {
             )
         }
     }
+
+    private fun projectIds(rootPath: String, projects: List<File>): Map<File, String> {
+        val nameCounts = projects.groupingBy { it.nameWithoutExtension }.eachCount()
+        return projects.associateWith { project ->
+            if (nameCounts.getValue(project.nameWithoutExtension) == 1) {
+                project.nameWithoutExtension
+            } else {
+                relativeProjectPath(rootPath, project).substringBeforeLast('.')
+            }
+        }
+    }
+
+    private fun siblingDependencyKeys(siblings: List<File>): Map<String, String> =
+        siblings.flatMap { sibling ->
+            val siblingPath = sibling.invariantSeparatorsPath
+            projectIds(siblingPath, findProjects(sibling)).map { (project, id) ->
+                project.invariantSeparatorsPath to moduleDependencyKey("DOTNET", siblingPath, id)
+            }
+        }.toMap()
 
     internal fun isProjectFile(file: File): Boolean =
         file.isRegularFileNoFollow() && file.extension.lowercase() in PROJECT_EXTENSIONS

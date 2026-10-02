@@ -9,9 +9,11 @@ import com.aspix2k.affected.build.ManifestSearch
 import com.aspix2k.affected.build.PerformanceBudgets
 import com.aspix2k.affected.build.TransitiveTestConsumersBuildSystem
 import com.aspix2k.affected.build.cmake.sha256
+import com.aspix2k.affected.build.combineFingerprints
 import com.aspix2k.affected.build.failClosedModules
 import com.aspix2k.affected.build.isRegularFileNoFollow
 import com.aspix2k.affected.build.nestedBuildRoot
+import com.aspix2k.affected.build.nestedBuildRoots
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CliStep
 import com.aspix2k.affected.build.process.CommandRunner
@@ -31,31 +33,36 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.ConcurrentHashMap
 
 class DotnetBuildSystem :
     ChangeAwareSuspendingBuildSystem,
     AllFileChangesBuildSystem,
     TransitiveTestConsumersBuildSystem {
 
-    private data class Snapshot(val root: String, val stamp: String, val modules: List<BuildModule>)
+    private data class Snapshot(val stamp: String, val modules: List<BuildModule>)
 
-    private val cache = AtomicReference<Snapshot?>(null)
+    private val cache = ConcurrentHashMap<String, Snapshot>()
 
     override val id: String = "DOTNET"
 
     override val sourceExtensions: Set<String> =
         setOf("cs", "fs", "vb", "csproj", "fsproj", "vbproj", "props", "targets", "sln", "slnx", "razor", "json")
 
-    override fun isPresent(project: Project): Boolean = rootOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
     override fun modules(project: Project): List<BuildModule> {
-        val root = rootOf(project) ?: return emptyList()
-        val rootPath = root.invariantSeparatorsPath
-        val stamp = ManifestSearch.fingerprint(root, manifests(root))
-        if (stamp != null) cache.get()?.takeIf { it.root == rootPath && it.stamp == stamp }?.let { return it.modules }
+        val roots = rootsOf(project)
+        cache.keys.retainAll(roots.mapTo(HashSet()) { it.invariantSeparatorsPath })
+        val stamp = combineFingerprints(roots.map { ManifestSearch.fingerprint(it, manifests(it)) })
+        return roots.flatMap { modulesOf(it, roots, stamp) }
+    }
 
-        val discovered = runCatching { DotnetProjects.parse(root) }.getOrNull()
+    private fun modulesOf(root: File, roots: List<File>, stamp: String?): List<BuildModule> {
+        val rootPath = root.invariantSeparatorsPath
+        if (stamp != null) cache[rootPath]?.takeIf { it.stamp == stamp }?.let { return it.modules }
+
+        val discovered = runCatching { DotnetProjects.parse(root, roots - root) }.getOrNull()
         val discovery = failClosedModules(
             root,
             DotnetProjects.TEST,
@@ -63,7 +70,7 @@ class DotnetBuildSystem :
             discovered,
         )
         if (stamp != null && discovery.complete) {
-            cache.retainBuildSnapshot(Snapshot(rootPath, stamp, discovery.modules), discovery.modules.size)
+            cache.retainBuildSnapshot(rootPath, Snapshot(stamp, discovery.modules), discovery.modules.size)
         }
         return discovery.modules
     }
@@ -100,8 +107,21 @@ class DotnetBuildSystem :
         }
     }
 
-    private fun rootOf(project: Project): File? =
-        project.basePath?.let(::File)?.let { nestedBuildRoot(it, ::dotnetRootMarker) }
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let { base ->
+            when {
+                dotnetRootMarker(base) -> listOf(base)
+                else -> nestedBuildRoots(base, ::isSolutionName, ::hasSolution)
+                    .ifEmpty { listOfNotNull(nestedBuildRoot(base, ::dotnetRootMarker)) }
+            }
+        }.orEmpty()
+
+    private fun isSolutionName(name: String): Boolean = name.substringAfterLast('.', "") in SOLUTION_EXTENSIONS
+
+    private fun hasSolution(directory: File): Boolean =
+        directory.listFiles().orEmpty().any {
+            it.extension.lowercase() in SOLUTION_EXTENSIONS && it.isRegularFileNoFollow()
+        }
 
     private fun dotnetRootMarker(directory: File): Boolean {
         val children = directory.listFiles() ?: return false
@@ -147,7 +167,8 @@ private class DotnetSelectiveRun private constructor(
             modules: List<BuildModule>,
             changes: BuildChanges,
         ): DotnetSelectiveRun? = runCatching {
-            val byExecutionId = modules.associateBy(BuildModule::executionId)
+            val rootPath = root.toFile().invariantSeparatorsPath
+            val byExecutionId = modules.filter { it.executionRoot == rootPath }.associateBy(BuildModule::executionId)
             require(tasks.all { task -> task.substringBeforeLast(':') in byExecutionId })
             val systemDirectory = PathManager.getSystemDir()
                 .resolve(DOTNET_CACHE_DIRECTORY)
@@ -173,7 +194,7 @@ private class DotnetSelectiveRun private constructor(
                         dependencies.roots,
                         dependencies.projects,
                         changes,
-                        cache.resolve(sha256(executionId)),
+                        cache.resolve(dotnetBaselineKey(rootPath, executionId)),
                     ) { ProjectChanges.collect(project).toBuildChanges() }
                     projectRuns += run
                     commands += dotnetBuildCommand(executionId)
@@ -345,6 +366,8 @@ private fun dependencyInputs(module: BuildModule, modules: List<BuildModule>): D
     }
     return DotnetDependencyInputs(roots, projects)
 }
+
+internal fun dotnetBaselineKey(root: String, executionId: String): String = sha256("$root|$executionId")
 
 internal fun dotnetBuildCommand(project: String): CliCommand {
     val selection = if (project == ".") emptyList() else listOf(project)

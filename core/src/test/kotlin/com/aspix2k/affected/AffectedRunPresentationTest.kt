@@ -2,6 +2,7 @@ package com.aspix2k.affected
 
 import com.intellij.execution.process.ProcessHandler
 import kotlinx.coroutines.Dispatchers
+import java.util.concurrent.CopyOnWriteArrayList
 import javax.swing.JPanel
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -169,7 +170,7 @@ class AffectedRunPresentationTest {
 
     private class RecordingView : AffectedRunView {
         var publications = 0
-        val labels = mutableListOf<String>()
+        val labels = CopyOnWriteArrayList<String>()
         lateinit var handler: ProcessHandler
 
         override fun publish(handler: ProcessHandler) {

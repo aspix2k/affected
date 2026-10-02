@@ -118,7 +118,14 @@ internal fun nestedBuildRoot(base: File, hasMarker: (File) -> Boolean): File? {
     return nestedListing(base).directories.singleOrNull(hasMarker)
 }
 
-internal fun nestedBuildRoots(base: File, markerNames: Set<String>, hasMarker: (File) -> Boolean): List<File> {
+internal fun nestedBuildRoots(base: File, markerNames: Set<String>, hasMarker: (File) -> Boolean): List<File> =
+    nestedBuildRoots(base, markerNames::contains, hasMarker)
+
+internal fun nestedBuildRoots(
+    base: File,
+    isMarkerName: (String) -> Boolean,
+    hasMarker: (File) -> Boolean,
+): List<File> {
     if (hasMarker(base)) return listOf(base)
     val roots = ArrayList<File>()
     var level = listOf(base)
@@ -127,7 +134,7 @@ internal fun nestedBuildRoots(base: File, markerNames: Set<String>, hasMarker: (
         val (found, descend) = level
             .flatMap { nestedListing(it).directories }
             .also { visited += it.size }
-            .partition { nestedListing(it).names.any(markerNames::contains) && hasMarker(it) }
+            .partition { nestedListing(it).names.any(isMarkerName) && hasMarker(it) }
         roots += found
         if (visited > PerformanceBudgets.MAX_DIRECTORIES || roots.size > PerformanceBudgets.MAX_NESTED_ROOTS) {
             return emptyList()

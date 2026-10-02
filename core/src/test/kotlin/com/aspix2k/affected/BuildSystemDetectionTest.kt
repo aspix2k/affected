@@ -14,6 +14,7 @@ import com.aspix2k.affected.build.node.NodeBuildSystem
 import com.aspix2k.affected.build.php.ComposerBuildSystem
 import com.aspix2k.affected.build.python.PythonBuildSystem
 import com.aspix2k.affected.build.ruby.RubyBuildSystem
+import com.aspix2k.affected.build.xcode.XcodeBuildSystem
 import com.intellij.openapi.project.Project
 import java.io.File
 import java.lang.reflect.Proxy
@@ -93,12 +94,13 @@ class BuildSystemDetectionTest {
     private class Marker(
         val file: String,
         val multiRoot: Boolean = true,
+        val bundle: Boolean = false,
         val content: String = "",
         val extras: Map<String, String> = emptyMap(),
     ) {
         fun writeTo(directory: File) {
             directory.mkdirs()
-            File(directory, file).writeText(content)
+            File(directory, file).also { if (bundle) it.mkdirs() else it.writeText(content) }
             extras.forEach { (name, text) -> File(directory, name).writeText(text) }
         }
     }
@@ -108,9 +110,11 @@ class BuildSystemDetectionTest {
             RubyBuildSystem()::isPresent to Marker("Gemfile"),
             ComposerBuildSystem()::isPresent to Marker("composer.json"),
             PythonBuildSystem()::isPresent to Marker("pyproject.toml"),
-            CMakeBuildSystem()::isPresent to Marker("CMakeLists.txt", multiRoot = false),
+            CMakeBuildSystem()::isPresent to Marker("CMakeLists.txt"),
             NodeBuildSystem()::isPresent to Marker("package.json"),
             DotnetBuildSystem()::isPresent to Marker("app.csproj", multiRoot = false),
+            DotnetBuildSystem()::isPresent to Marker("app.sln"),
+            XcodeBuildSystem()::isPresent to Marker("App.xcodeproj", bundle = true),
             SbtBuildSystem()::isPresent to Marker("build.sbt"),
             CargoBuildSystem()::isPresent to Marker("Cargo.toml"),
             SwiftBuildSystem()::isPresent to Marker("Package.swift"),
