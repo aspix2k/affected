@@ -145,6 +145,64 @@ class AffectedStateTest {
     }
 
     @Test
+    fun `a run refreshes the analysis instead of trusting the published one`() = runBoundedBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        var current = module(":before")
+        val state = AffectedState(
+            project = project(),
+            scope = scope,
+            debounceMs = 60_000,
+            awaitSmart = {},
+            analyzeProject = {
+                AffectedAnalysis(
+                    modules = listOf(current),
+                    changes = ProjectChanges.Result(emptyList(), emptySet(), emptySet(), comparedToBase = true),
+                    plans = emptyPlans(),
+                )
+            },
+        )
+        try {
+            assertTrue(state.refreshNow())
+            assertEquals(listOf(":before"), state.modules.map { it.id })
+
+            current = module(":after")
+
+            assertTrue(state.refreshNow())
+            assertEquals(listOf(":after"), state.modules.map { it.id })
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `a refresh for a run survives a change that lands while it analyzes`() = runBoundedBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        var attempts = 0
+        lateinit var state: AffectedState
+        state = AffectedState(
+            project = project(),
+            scope = scope,
+            debounceMs = 60_000,
+            awaitSmart = {},
+            analyzeProject = {
+                attempts++
+                if (attempts == 1) state.invalidate()
+                AffectedAnalysis(
+                    modules = listOf(module(":attempt$attempts")),
+                    changes = ProjectChanges.Result(emptyList(), emptySet(), emptySet(), comparedToBase = true),
+                    plans = emptyPlans(),
+                )
+            },
+        )
+        try {
+            assertTrue(state.refreshNow())
+            assertEquals(listOf(":attempt2"), state.modules.map { it.id })
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
     fun `a completed VCS refresh recomputes a ready snapshot without a VFS event`() = runBoundedBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         var nextModule = module(":before")

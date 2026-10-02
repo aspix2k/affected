@@ -422,19 +422,14 @@ fun startClaimedAffectedRun(
     project: Project,
     state: AffectedState,
     scope: () -> CoroutineScope,
-    onEmptyChanges: () -> Unit = {},
-    onEmptyPlan: () -> Unit = {},
+    onOutcome: (Verification.Prepared, Verification.Outcome) -> Unit = { _, _ -> },
 ): Job? {
     if (projectBusy(project)) return null
     val claim = state.tryClaimReadyRun() ?: return null
     return launchClaimed(claim, scope) {
-        val changes = claim.changes ?: return@launchClaimed
         val prepared = claim.prepared ?: return@launchClaimed
-        when {
-            changes.files.isEmpty() -> onEmptyChanges()
-            prepared.plan.isEmpty -> onEmptyPlan()
-            projectBusy(project) -> Unit
-            else -> Verification.runClaimedAndWait(project, prepared, claim)
+        if (prepared.plan.isEmpty || !projectBusy(project)) {
+            onOutcome(prepared, Verification.runClaimedAndWait(project, prepared, claim))
         }
     }
 }
@@ -513,6 +508,16 @@ class AffectedState(
         invalidations.trySend(Unit)
     }
 
+    suspend fun refreshNow(): Boolean {
+        repeat(REFRESH_ATTEMPTS) {
+            state.invalidate()
+            awaitSmart()
+            refresh()
+            if (ready) return true
+        }
+        return false
+    }
+
     private fun requestActionRefresh() {
         val application = ApplicationManager.getApplication() ?: return
         if (application.isDisposed) return
@@ -564,6 +569,7 @@ class AffectedState(
     private companion object {
         val LOG = logger<AffectedState>()
         const val DEBOUNCE_MS = 1500
+        private const val REFRESH_ATTEMPTS = 3
     }
 }
 

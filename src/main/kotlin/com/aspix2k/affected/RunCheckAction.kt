@@ -9,7 +9,10 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.currentThreadCoroutineScope
 import com.intellij.openapi.project.DumbAware
+import com.intellij.openapi.project.Project
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import javax.swing.Icon
 
 abstract class RunCheckAction(
@@ -38,8 +41,15 @@ abstract class RunCheckAction(
         val state = project.service<AffectedState>()
         saveAllDocuments()
         if (projectBusy(project)) return
+        currentThreadCoroutineScope().launch {
+            state.refreshNow()
+            runOnAffectedModules(project, state, this)
+        }
+    }
+
+    private fun runOnAffectedModules(project: Project, state: AffectedState, scope: CoroutineScope) {
         val claim = state.tryClaimReadyRun() ?: return
-        launchClaimed(claim, ::currentThreadCoroutineScope) {
+        launchClaimed(claim, { scope }) {
             val modules = claim.snapshot.modules.filter { it.supports(taskName) }
             if (modules.isEmpty()) return@launchClaimed
             val groups = TaskPlanner.groups(modules.map(AffectedModule::info), taskName)

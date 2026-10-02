@@ -1,0 +1,2 @@
+- The toolbar run, the named-task actions and the MCP tools `affected_run_verification` and `affected_run_task` now re-read the changes right before they start. Before, a run started within a couple of seconds after an edit, or right after an agent wrote files on disk, used the previously published plan and could pass without the new change.
+- The toolbar run now reports the same blockers as the commit and push checks: a missing comparison base and changed files that nothing checked.

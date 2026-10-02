@@ -8,6 +8,9 @@ import com.intellij.openapi.actionSystem.Presentation
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.currentThreadCoroutineScope
+import com.intellij.openapi.project.Project
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 class RunAffectedTestsAction : AnAction() {
 
@@ -31,30 +34,25 @@ class RunAffectedTestsAction : AnAction() {
         val project = e.project ?: return
         val state = project.service<AffectedState>()
         FileDocumentManager.getInstance().saveAllDocuments()
-        startClaimedAffectedRun(
-            project,
-            state,
-            ::currentThreadCoroutineScope,
-            onEmptyChanges = {
+        currentThreadCoroutineScope().launch {
+            state.refreshNow()
+            startAffectedRun(project, state, this)
+        }
+    }
+
+    private fun startAffectedRun(project: Project, state: AffectedState, scope: CoroutineScope) {
+        startClaimedAffectedRun(project, state, { scope }) { prepared, outcome ->
+            if (outcome.blocker == null && prepared.plan.isEmpty) {
                 notifyAffected(
                     project,
                     AffectedBundle.message("notification.nothing.title"),
                     AffectedBundle.message("notification.nothing.text"),
                     NotificationType.INFORMATION,
                 )
-            },
-            onEmptyPlan = {
-                notifyAffected(
-                    project,
-                    AffectedBundle.message("notification.unresolved.title"),
-                    AffectedBundle.message(
-                        "notification.unresolved.text",
-                        state.snapshot().changes?.files?.size ?: 0,
-                    ),
-                    NotificationType.WARNING,
-                )
-            },
-        )
+            } else {
+                reportBlocker(project, prepared, outcome.blocker)
+            }
+        }
     }
 }
 
