@@ -127,16 +127,15 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
         }
     }
 
-    fun transitiveTestConsumers(targets: Set<Node>): List<Node> {
-        val eligibleTargets = targets.filterTo(LinkedHashSet()) {
-            it.system is TransitiveTestConsumersBuildSystem
-        }
+    fun transitiveTestConsumers(targets: Set<Node>, everySystem: Boolean = false): List<Node> {
+        val eligible = { node: Node -> everySystem || node.system is TransitiveTestConsumersBuildSystem }
+        val eligibleTargets = targets.filterTo(LinkedHashSet(), eligible)
         val reached = LinkedHashSet(eligibleTargets)
         var frontier = eligibleTargets
         while (frontier.isNotEmpty()) {
             val keys = frontier.mapTo(HashSet()) { it.module.key }
             frontier = nodes.filterTo(LinkedHashSet()) { node ->
-                node.system is TransitiveTestConsumersBuildSystem &&
+                eligible(node) &&
                     node !in reached &&
                     node.module.dependencies.any(keys::contains)
             }
@@ -147,7 +146,7 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
             .filter { it.module.testTask == it.module.compileTask }
             .mapTo(HashSet()) { it.system.id to it.module.root }
         val conservative = nodes.filter { node ->
-            node.system is TransitiveTestConsumersBuildSystem &&
+            eligible(node) &&
                 node.module.testTask != node.module.compileTask &&
                 node.system.id to node.module.root in productionRoots
         }

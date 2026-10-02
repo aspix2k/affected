@@ -75,8 +75,10 @@ weakening the gate.
 
 `ChangeAnalyzer` asks git what changed: the diff against the merge base with the
 base branch, the working tree, and untracked files. The base branch is the
-configured one, otherwise `develop`, `main` or `master`, each tried as a remote
-branch first.
+configured one (Affected menu → Base branch, or the `affected_configure` MCP
+tool), otherwise the remote default branch (`origin/HEAD`), then `develop`,
+`main` or `master`, each tried as a remote branch first. Without any base the
+check does not pass.
 
 Whether a change touched public API is a text heuristic, not a compiler. It
 errs toward running too much.

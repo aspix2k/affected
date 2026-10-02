@@ -206,6 +206,8 @@ class AffectedToolset : McpToolset {
         runBeforePush: Boolean? = null,
         @McpDescription("Whether to animate the toolbar icon while verification is running")
         animateWhileRunning: Boolean? = null,
+        @McpDescription("Whether to also run the tests of modules that depend on a changed module")
+        testDependents: Boolean? = null,
     ): McpToolCallResult {
         val view = AffectedMcpInputs.applySettings(
             current = settings(),
@@ -214,11 +216,13 @@ class AffectedToolset : McpToolset {
             runBeforeCommit = runBeforeCommit,
             runBeforePush = runBeforePush,
             animateWhileRunning = animateWhileRunning,
+            testDependents = testDependents,
         )
         if (view.error) return view.toResult()
         val next = AffectedSettings.getInstance()
         next.baseBranch = view.data["baseBranch"] as String
         next.checkConsumers = view.data["checkConsumers"] as Boolean
+        next.testDependents = view.data["testDependents"] as Boolean
         next.runBeforeCommit = view.data["runBeforeCommit"] as Boolean
         next.runBeforePush = view.data["runBeforePush"] as Boolean
         next.animateWhileRunning = view.data["animateWhileRunning"] as Boolean
@@ -238,6 +242,7 @@ class AffectedToolset : McpToolset {
             runBeforeCommit = current.runBeforeCommit,
             runBeforePush = current.runBeforePush,
             animateWhileRunning = current.animateWhileRunning,
+            testDependents = current.testDependents,
         )
     }
 

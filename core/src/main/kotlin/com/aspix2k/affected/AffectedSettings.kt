@@ -16,6 +16,8 @@ class AffectedSettings : PersistentStateComponent<AffectedSettings.State> {
         @Volatile
         var checkConsumers: Boolean = false,
         @Volatile
+        var testDependents: Boolean = false,
+        @Volatile
         var animateWhileRunning: Boolean = true,
         @Volatile
         var runBeforeCommit: Boolean = false,
@@ -35,6 +37,10 @@ class AffectedSettings : PersistentStateComponent<AffectedSettings.State> {
     var checkConsumers: Boolean
         get() = state.checkConsumers
         set(value) { state.checkConsumers = value }
+
+    var testDependents: Boolean
+        get() = state.testDependents
+        set(value) { state.testDependents = value }
 
     var animateWhileRunning: Boolean
         get() = state.animateWhileRunning

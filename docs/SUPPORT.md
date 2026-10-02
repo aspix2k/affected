@@ -114,7 +114,7 @@ exclusive run lease as the toolbar. Read tools never write project state.
 | stop-owned | `affected_stop` | mutating | MCP-only |
 | status | `affected_status` | read | MCP-only |
 | available-tasks | `affected_available_tasks` | read | MCP-only |
-| configure | `affected_configure` | mutating | `com.aspix2k.affected.CheckConsumers`, `com.aspix2k.affected.RunBeforeCommit`, `com.aspix2k.affected.RunBeforePush`, `com.aspix2k.affected.AnimateWhileRunning`; MCP-only fields: `baseBranch` |
+| configure | `affected_configure` | mutating | `com.aspix2k.affected.BaseBranch`, `com.aspix2k.affected.CheckConsumers`, `com.aspix2k.affected.TestDependents`, `com.aspix2k.affected.RunBeforeCommit`, `com.aspix2k.affected.RunBeforePush`, `com.aspix2k.affected.AnimateWhileRunning` |
 
 
 ## Keep the matrix current

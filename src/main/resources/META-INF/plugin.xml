@@ -113,8 +113,12 @@
             <separator/>
             <group id="com.aspix2k.affected.Settings"
                    popup="true">
+                <action id="com.aspix2k.affected.BaseBranch"
+                        class="com.aspix2k.affected.BaseBranchAction"/>
                 <action id="com.aspix2k.affected.CheckConsumers"
                         class="com.aspix2k.affected.CheckConsumersToggle"/>
+                <action id="com.aspix2k.affected.TestDependents"
+                        class="com.aspix2k.affected.TestDependentsToggle"/>
                 <separator/>
                 <action id="com.aspix2k.affected.RunFullPlan"
                         class="com.aspix2k.affected.RunFullPlanToggle"/>

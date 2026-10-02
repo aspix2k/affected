@@ -98,10 +98,13 @@ class AffectedMcpInputsTest {
             runBeforeCommit = true,
             runBeforePush = false,
             animateWhileRunning = false,
+            testDependents = true,
         )
         assertFalse(view.error)
         assertEquals("develop", view.data["baseBranch"])
         assertEquals(true, view.data["checkConsumers"])
+        assertEquals(true, view.data["testDependents"])
+        assertTrue("dependents' tests: on" in view.text)
         assertEquals(false, view.data["runBeforePush"])
         assertEquals(false, view.data["animateWhileRunning"])
         assertTrue("consumer check: on" in view.text)

@@ -66,12 +66,13 @@
       "mcp": "affected_configure",
       "kind": "mutating",
       "ui": [
+        "com.aspix2k.affected.BaseBranch",
         "com.aspix2k.affected.CheckConsumers",
+        "com.aspix2k.affected.TestDependents",
         "com.aspix2k.affected.RunBeforeCommit",
         "com.aspix2k.affected.RunBeforePush",
         "com.aspix2k.affected.AnimateWhileRunning"
-      ],
-      "mcpOnlyFields": ["baseBranch"]
+      ]
     }
   ]
 }

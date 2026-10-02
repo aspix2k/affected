@@ -10,6 +10,7 @@ import org.apache.maven.project.MavenProject;
 import org.codehaus.plexus.util.xml.Xpp3Dom;
 
 import java.io.File;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -23,6 +24,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.TreeSet;
+import java.util.stream.Stream;
 
 public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecycleParticipant {
     private static final String MAVEN_AGENT = "affected.collector.mavenAgent";
@@ -30,6 +33,13 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
     private static final String MAPS = "affected.collector.maps";
     private static final String VERSION = "affected.collector.version";
     private static final String WORKER = "affected.collector.worker";
+    private static final String ADDITIONAL_CLASSPATH_PROPERTY = "maven.test.additionalClasspath";
+    private static final String[] PATH_PARAMETERS = {
+        "suiteXmlFiles", "additionalClasspathElements", "includesFile", "excludesFile",
+        "systemPropertiesFile", "classesDirectory", "testClassesDirectory"
+    };
+    private static final int MAX_REFERENCED_FILES = 200_000;
+    private static final int BUFFER_SIZE = 64 * 1024;
     private List<AffectedMavenConfig.ProjectConfig> diagnostics = Collections.emptyList();
 
     @Override
@@ -184,7 +194,7 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
             version,
             basedir.toUri() + "|" + adapter.task,
             display(project, adapter.task),
-            runtime(project, plugin, configurations, runtimeProperties, adapter),
+            runtime(project, plugin, configurations, runtimeProperties, adapter, basedir),
             allTests(properties, adapter),
             baselineEligible,
             topology.reuseForks,
@@ -235,7 +245,8 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
         Plugin plugin,
         List<Xpp3Dom> configurations,
         Properties properties,
-        Adapter adapter
+        Adapter adapter,
+        Path basedir
     ) throws Exception {
         List<String> configurationValues = new ArrayList<String>();
         for (Xpp3Dom configuration : configurations) configurationValues.add(configuration.toString());
@@ -247,7 +258,115 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
         StringBuilder propertyValue = new StringBuilder();
         appendProperties(propertyValue, "project", project.getProperties(), false);
         appendProperties(propertyValue, "user", properties, true);
-        return sha256(configurationValue.toString() + propertyValue);
+        String referenced = referencedFiles(configurations, properties, basedir);
+        return sha256(configurationValue.toString() + propertyValue + referenced);
+    }
+
+    private static String referencedFiles(
+        List<Xpp3Dom> configurations,
+        Properties properties,
+        Path basedir
+    ) throws Exception {
+        TreeSet<String> references = new TreeSet<String>();
+        for (Xpp3Dom configuration : configurations) {
+            for (String name : PATH_PARAMETERS) {
+                Xpp3Dom child = configuration.getChild(name);
+                if (child != null) references.addAll(pathValues(child));
+            }
+        }
+        String additional = properties.getProperty(ADDITIONAL_CLASSPATH_PROPERTY);
+        if (hasText(additional)) references.addAll(split(additional));
+        StringBuilder result = new StringBuilder();
+        for (String reference : references) {
+            if (reference.contains("${")) throw new IllegalStateException(reference);
+            Path path = basedir.resolve(reference).normalize();
+            result.append("path:").append(path.toUri()).append('=').append(pathHash(path)).append('\n');
+        }
+        return result.toString();
+    }
+
+    private static List<String> pathValues(Xpp3Dom parameter) {
+        List<String> values = new ArrayList<String>();
+        if (parameter.getChildCount() == 0) return split(parameter.getValue());
+        for (Xpp3Dom item : parameter.getChildren()) values.addAll(split(item.getValue()));
+        return values;
+    }
+
+    private static List<String> split(String value) {
+        List<String> values = new ArrayList<String>();
+        if (value == null) return values;
+        for (String item : value.split(",")) {
+            if (hasText(item)) values.add(item.trim());
+        }
+        return values;
+    }
+
+    private static String pathHash(Path path) throws Exception {
+        if (Files.isSymbolicLink(path)) throw new IllegalStateException(path.toString());
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+            update(digest, "file");
+            update(digest, fileHash(path));
+        } else if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
+            update(digest, "directory");
+            hashTree(digest, path);
+        } else if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
+            update(digest, "missing");
+        } else {
+            throw new IllegalStateException(path.toString());
+        }
+        return hex(digest.digest());
+    }
+
+    private static void hashTree(MessageDigest digest, Path root) throws Exception {
+        List<Path> files = new ArrayList<Path>();
+        int count = 0;
+        try (Stream<Path> entries = Files.walk(root)) {
+            for (Path entry : (Iterable<Path>) entries::iterator) {
+                if (++count > MAX_REFERENCED_FILES || Files.isSymbolicLink(entry)) {
+                    throw new IllegalStateException(entry.toString());
+                }
+                if (Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) files.add(entry);
+            }
+        }
+        Collections.sort(files);
+        for (Path file : files) {
+            update(digest, root.relativize(file).toString().replace(File.separatorChar, '/'));
+            update(digest, fileHash(file));
+        }
+    }
+
+    private static byte[] fileHash(Path path) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (InputStream input = Files.newInputStream(path)) {
+            byte[] buffer = new byte[BUFFER_SIZE];
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                if (read > 0) digest.update(buffer, 0, read);
+            }
+        }
+        return digest.digest();
+    }
+
+    private static void update(MessageDigest digest, String value) {
+        byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+        update(digest, bytes);
+    }
+
+    private static void update(MessageDigest digest, byte[] value) {
+        digest.update(Integer.toString(value.length).getBytes(StandardCharsets.UTF_8));
+        digest.update((byte) ':');
+        digest.update(value);
+    }
+
+    private static String hex(byte[] digest) {
+        StringBuilder result = new StringBuilder(digest.length * 2);
+        for (byte item : digest) {
+            int unsigned = item & 0xff;
+            if (unsigned < 16) result.append('0');
+            result.append(Integer.toHexString(unsigned));
+        }
+        return result.toString();
     }
 
     private static void appendProperties(
@@ -415,14 +534,7 @@ public final class AffectedMavenLifecycleParticipant extends AbstractMavenLifecy
     }
 
     private static String sha256(String value) throws Exception {
-        byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-        StringBuilder result = new StringBuilder(digest.length * 2);
-        for (byte item : digest) {
-            int unsigned = item & 0xff;
-            if (unsigned < 16) result.append('0');
-            result.append(Integer.toHexString(unsigned));
-        }
-        return result.toString();
+        return hex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
     }
 
     private static Path regularFile(Properties properties, String name) throws Exception {

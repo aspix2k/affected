@@ -8,6 +8,7 @@ data class AffectedMcpSettings(
     val runBeforeCommit: Boolean = false,
     val runBeforePush: Boolean = false,
     val animateWhileRunning: Boolean = true,
+    val testDependents: Boolean = false,
 )
 
 data class AffectedMcpView(
@@ -112,6 +113,7 @@ object AffectedMcpViews {
                 "ownedRunning" to ownedRunning,
                 "baseBranch" to settings.baseBranch,
                 "checkConsumers" to settings.checkConsumers,
+                "testDependents" to settings.testDependents,
                 "runBeforeCommit" to settings.runBeforeCommit,
                 "runBeforePush" to settings.runBeforePush,
                 "animateWhileRunning" to settings.animateWhileRunning,
