@@ -4,6 +4,7 @@ import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
+import java.io.File
 
 private val LOG = logger<Verification>()
 
@@ -12,7 +13,7 @@ internal suspend fun verifyAndReport(
     onPrepared: (Verification.Prepared) -> Unit = {},
 ): Boolean {
     val prepared = try {
-        Verification.prepare(project)
+        Verification.prepare(project, guard = true)
     } catch (error: ChangeAnalyzer.GitFailure) {
         LOG.warn("Could not analyze changes", error)
         notifyAffected(
@@ -51,15 +52,33 @@ internal fun reportBlocker(project: Project, prepared: Verification.Prepared, bl
             AffectedBundle.message("notification.no.base.text", AffectedSettings.getInstance().baseBranch),
             NotificationType.WARNING,
         )
-        Verification.Blocker.NOT_STARTED -> notifyAffected(
-            project,
-            AffectedBundle.message("notification.busy.title"),
-            AffectedBundle.message("action.run.description.busy"),
-            NotificationType.WARNING,
-        )
-        null -> Unit
+        Verification.Blocker.NOT_STARTED -> notifyNotStarted(project)
+        null -> if (prepared.uncovered.isNotEmpty()) {
+            notifyAffected(
+                project,
+                AffectedBundle.message("notification.uncovered.title"),
+                AffectedBundle.message(
+                    "notification.uncovered.text",
+                    prepared.uncovered.size,
+                    uncoveredExtensions(prepared.uncovered),
+                ),
+                NotificationType.INFORMATION,
+            )
+        }
     }
 }
+
+internal fun notifyNotStarted(project: Project) = notifyAffected(
+    project,
+    AffectedBundle.message("notification.busy.title"),
+    AffectedBundle.message("action.run.description.busy"),
+    NotificationType.WARNING,
+)
+
+internal fun uncoveredExtensions(files: List<File>): String =
+    files.mapTo(sortedSetOf()) { ".${it.extension.lowercase()}" }.take(MAX_LISTED_EXTENSIONS).joinToString()
+
+private const val MAX_LISTED_EXTENSIONS = 5
 
 internal fun notifyAffected(project: Project, title: String, content: String, type: NotificationType) {
     NotificationGroupManager.getInstance()

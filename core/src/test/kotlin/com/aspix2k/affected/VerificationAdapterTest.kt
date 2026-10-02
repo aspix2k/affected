@@ -40,6 +40,19 @@ class VerificationAdapterTest {
                 Verification.Prepared(
                     Plan(emptyList(), tested = 0, compiled = 0),
                     BuildChanges(listOf("/repo/src/Main.kt"), emptySet(), comparedToBase = true),
+                    unresolvedFiles = 1,
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `an empty plan passes when the only changes are files that nothing could verify`() {
+        assertTrue(
+            verificationPassesWithoutWork(
+                Verification.Prepared(
+                    Plan(emptyList(), tested = 0, compiled = 0),
+                    BuildChanges(listOf("/repo/.github/workflows/ci.yml"), emptySet(), comparedToBase = true),
                 ),
             ),
         )

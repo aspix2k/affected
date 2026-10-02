@@ -165,14 +165,29 @@ class AffectedMcpViewsTest {
     }
 
     @Test
+    fun `code outside every detected build system is reported without failing the plan`() {
+        val view = AffectedMcpView("Nothing to verify.", mapOf("tested" to 0))
+        val uncovered = listOf(File("/repo/tools/sync.py"))
+
+        val reported = AffectedMcpViews.withUncovered(view, uncovered)
+
+        assertFalse(reported.error)
+        assertTrue("1 changed code files belong to no detected build system" in reported.text)
+        assertEquals(listOf("/repo/tools/sync.py"), reported.data["uncoveredFiles"])
+        assertEquals(view, AffectedMcpViews.withUncovered(view, emptyList()))
+        val failed = view.copy(error = true)
+        assertEquals(failed, AffectedMcpViews.withUncovered(failed, uncovered))
+    }
+
+    @Test
     fun `a ready empty plan with changed files is unresolved`() {
         val snapshot = snapshot(
             analysisStatus = AnalysisStatus.READY,
             modules = listOf(module(":alpha")),
             changes = changes("/repo/alpha/src/Main.kt"),
             plans = Verification.PreparedPlans(
-                testsOnly = prepared(0, 0, emptyList()),
-                withConsumers = prepared(0, 0, emptyList()),
+                testsOnly = prepared(0, 0, emptyList(), unresolvedFiles = 1),
+                withConsumers = prepared(0, 0, emptyList(), unresolvedFiles = 1),
             ),
         )
 
@@ -246,8 +261,14 @@ class AffectedMcpViewsTest {
         withConsumers = prepared(tested, 0, emptyList()),
     )
 
-    private fun prepared(tested: Int, compiled: Int, tasks: List<String>) = Verification.Prepared(
+    private fun prepared(
+        tested: Int,
+        compiled: Int,
+        tasks: List<String>,
+        unresolvedFiles: Int = 0,
+    ) = Verification.Prepared(
         plan = Plan(listOf(TaskGroup("GRADLE", "/repo", tasks)).filter { it.tasks.isNotEmpty() }, tested, compiled),
         changes = BuildChanges(emptyList(), emptySet(), comparedToBase = true),
+        unresolvedFiles = unresolvedFiles,
     )
 }

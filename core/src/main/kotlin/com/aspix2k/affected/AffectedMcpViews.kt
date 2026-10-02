@@ -36,13 +36,22 @@ object AffectedMcpViews {
         notReady(snapshot)?.let { return it }
         val prepared = snapshot.plans?.select(checkConsumers)
             ?: return unavailable("Prepared verification data is not available.")
-        return plan(snapshot, prepared.plan)
+        return withUncovered(plan(snapshot, prepared.plan, prepared.unresolvedFiles), prepared.uncovered)
     }
 
-    fun plan(snapshot: AffectedStateSnapshot, plan: Plan): AffectedMcpView {
+    fun withUncovered(view: AffectedMcpView, uncovered: List<File>): AffectedMcpView {
+        if (view.error || uncovered.isEmpty()) return view
+        return view.copy(
+            text = "${view.text} ${uncovered.size} changed code files belong to no detected build system " +
+                "and are not checked.",
+            data = view.data + ("uncoveredFiles" to uncovered.map { it.invariantSeparatorsPath }),
+        )
+    }
+
+    fun plan(snapshot: AffectedStateSnapshot, plan: Plan, unresolvedFiles: Int = 0): AffectedMcpView {
         notReady(snapshot)?.let { return it }
         val tasks = plan.groups.flatMap(TaskGroup::tasks)
-        if (plan.isEmpty && !snapshot.changes?.files.isNullOrEmpty()) {
+        if (plan.isEmpty && unresolvedFiles > 0) {
             return AffectedMcpView(
                 text = "Changes exist but no verification could be planned.",
                 data = mapOf(

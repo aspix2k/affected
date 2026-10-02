@@ -22,8 +22,8 @@ internal fun gradleVerificationTasks(
 
 internal fun gradleUnitTestTasks(available: Set<String>, typedTests: Set<String> = emptySet()): List<String> {
     val typed = typedTests.filter { it in available && !it.startsWith("connected", ignoreCase = true) }
-    if (typed.isNotEmpty()) return typed
     val named = available.filter(::isGradleUnitTestTask)
+    if (typed.isNotEmpty()) return (typed + named.filter { it.endsWith("Test") }).distinct()
     return if (named.any(ANDROID_UNIT_TEST::matches)) named - "test" else named
 }
 

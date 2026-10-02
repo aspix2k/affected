@@ -44,31 +44,31 @@ class AffectedToolset : McpToolset {
     @McpTool
     @McpToolHints(readOnlyHint = McpToolHintValue.TRUE)
     @McpDescription(
-        "Lists the modules affected by the current changes from the same analysis snapshot as the toolbar."
+        "Lists the modules affected by the current changes, re-reading the changes before answering."
     )
     suspend fun affected_modules(): McpToolCallResult =
-        AffectedMcpViews.modules(snapshot(coroutineContext.project)).toResult()
+        AffectedMcpViews.modules(freshSnapshot(coroutineContext.project)).toResult()
 
     @McpTool
     @McpToolHints(readOnlyHint = McpToolHintValue.TRUE)
     @McpDescription(
-        "Returns the prepared verification tasks from the current analysis snapshot without recomputing it."
+        "Returns the verification tasks for the current changes, re-reading the changes before answering."
     )
     suspend fun affected_verification_plan(): McpToolCallResult {
         val project = coroutineContext.project
         if (project.basePath == null) return noBasePath()
-        return AffectedMcpViews.plan(snapshot(project), settings().checkConsumers).toResult()
+        return AffectedMcpViews.plan(freshSnapshot(project), settings().checkConsumers).toResult()
     }
 
     @McpTool
     @McpToolHints(readOnlyHint = McpToolHintValue.TRUE)
     @McpDescription(
-        "Lists files from the current analysis snapshot, marking those that change public API."
+        "Lists the changed files, re-reading them before answering, and marks those that change public API."
     )
     suspend fun affected_changed_files(): McpToolCallResult {
         val project = coroutineContext.project
         val basePath = project.basePath ?: return noBasePath()
-        return AffectedMcpViews.changedFiles(snapshot(project), basePath).toResult()
+        return AffectedMcpViews.changedFiles(freshSnapshot(project), basePath).toResult()
     }
 
     @McpTool
@@ -95,7 +95,7 @@ class AffectedToolset : McpToolset {
             return busy()
         }
         val outcome = Verification.runClaimedAndWait(project, prepared, claim)
-        return verificationView(claim.snapshot, outcome).toResult()
+        return AffectedMcpViews.withUncovered(verificationView(claim.snapshot, outcome), prepared.uncovered).toResult()
     }
 
     @McpTool
@@ -188,7 +188,7 @@ class AffectedToolset : McpToolset {
         "Lists tasks declared by the current affected modules so they can be passed to affected_run_task."
     )
     suspend fun affected_available_tasks(): McpToolCallResult =
-        AffectedMcpViews.availableTasks(snapshot(coroutineContext.project)).toResult()
+        AffectedMcpViews.availableTasks(freshSnapshot(coroutineContext.project)).toResult()
 
     @McpTool
     @McpToolHints(readOnlyHint = McpToolHintValue.FALSE, destructiveHint = McpToolHintValue.FALSE)
@@ -233,6 +233,12 @@ class AffectedToolset : McpToolset {
     }
 
     private fun snapshot(project: Project) = project.service<AffectedState>().snapshot()
+
+    private suspend fun freshSnapshot(project: Project): AffectedStateSnapshot {
+        val state = project.service<AffectedState>()
+        if (!state.isRunning && !projectBusy(project)) state.refreshNow()
+        return state.snapshot()
+    }
 
     private fun settings(): AffectedMcpSettings {
         val current = AffectedSettings.getInstance()

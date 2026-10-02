@@ -42,8 +42,7 @@ abstract class RunCheckAction(
         saveAllDocuments()
         if (projectBusy(project)) return
         currentThreadCoroutineScope().launch {
-            state.refreshNow()
-            runOnAffectedModules(project, state, this)
+            if (state.refreshNow()) runOnAffectedModules(project, state, this) else notifyNotStarted(project)
         }
     }
 

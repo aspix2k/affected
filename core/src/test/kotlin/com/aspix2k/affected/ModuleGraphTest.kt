@@ -11,6 +11,7 @@ import com.aspix2k.affected.build.cargo.CargoNextestPlan
 import com.aspix2k.affected.build.cargo.cargoCommands
 import com.aspix2k.affected.build.cargo.cargoNextestTask
 import com.aspix2k.affected.build.gradle.GradleBuildSystem
+import com.aspix2k.affected.build.languageExtensions
 import com.aspix2k.affected.build.php.ComposerBuildSystem
 import com.aspix2k.affected.build.php.ComposerPackages
 import com.aspix2k.affected.build.python.PythonBuildSystem
@@ -326,6 +327,21 @@ class ModuleGraphTest {
         val plan = Verification.prepare(graph, changes, testDependents = true).testsOnly.plan
 
         assertEquals(listOf("core:test"), plan.groups.flatMap { it.tasks })
+    }
+
+    @Test
+    fun `uncovered code travels with both prepared plans and never blocks`() {
+        val root = createTempDirectory("module-graph-uncovered").toFile()
+        val graph = ModuleGraph(listOf(ModuleGraph.Node(module(root, "alpha", "alpha"), system("GRADLE"))))
+        val script = File(root, "tools/sync.py")
+        val changes = ProjectChanges.Result(emptyList(), emptySet(), emptySet(), comparedToBase = true)
+            .copy(uncovered = listOf(script))
+        val prepared = Verification.prepare(graph, changes)
+
+        assertEquals(listOf(script), prepared.testsOnly.uncovered)
+        assertEquals(listOf(script), prepared.withConsumers.uncovered)
+        assertTrue(verificationPassesWithoutWork(prepared.testsOnly))
+        assertEquals(setOf("kt", "py"), languageExtensions(setOf("kt", "py", "json", "yml", "toml")))
     }
 
     @Test

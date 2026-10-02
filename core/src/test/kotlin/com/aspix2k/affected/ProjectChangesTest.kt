@@ -19,4 +19,19 @@ class ProjectChangesTest : BasePlatformTestCase() {
             PsiTestUtil.removeContentEntry(module, root)
         }
     }
+
+    fun testExcludedRootsOfTheIdeModelAreRelativeToTheProjectDirectory() {
+        val base = File(requireNotNull(project.basePath)).apply { mkdirs() }
+        val content = requireNotNull(LocalFileSystem.getInstance().refreshAndFindFileByIoFile(base))
+        val target = File(base, "target").apply { mkdirs() }
+        val excluded = requireNotNull(LocalFileSystem.getInstance().refreshAndFindFileByIoFile(target))
+        PsiTestUtil.addContentRoot(module, content)
+        PsiTestUtil.addExcludedRoot(module, excluded)
+        try {
+            assertEquals(setOf("target"), ProjectChanges.excludedRoots(project, base))
+        } finally {
+            PsiTestUtil.removeExcludedRoot(module, excluded)
+            PsiTestUtil.removeContentEntry(module, content)
+        }
+    }
 }
