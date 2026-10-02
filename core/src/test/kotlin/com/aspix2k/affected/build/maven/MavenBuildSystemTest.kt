@@ -2,6 +2,8 @@ package com.aspix2k.affected.build.maven
 
 import org.jdom.Element
 import org.jetbrains.idea.maven.model.MavenPlugin
+import java.io.File
+import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -14,6 +16,16 @@ class MavenBuildSystemTest {
     fun `Scala and Groovy sources belong to Maven modules`() {
         assertContains(MavenBuildSystem().sourceExtensions, "scala")
         assertContains(MavenBuildSystem().sourceExtensions, "groovy")
+    }
+
+    @Test
+    fun `a configured test source directory counts as tests`() {
+        val module = createTempDirectory("maven-custom-tests").toFile()
+        val custom = File(module, "checks").apply { mkdirs() }
+
+        assertFalse(mavenHoldsTests(module.path, emptyList()))
+        assertFalse(mavenHoldsTests(module.path, listOf(File(module, "missing").path)))
+        assertTrue(mavenHoldsTests(module.path, listOf(custom.path)))
     }
 
     @Test

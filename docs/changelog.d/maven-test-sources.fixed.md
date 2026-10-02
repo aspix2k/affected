@@ -1,0 +1,1 @@
+- Maven modules with a configured `testSourceDirectory` are no longer treated as having no tests.
