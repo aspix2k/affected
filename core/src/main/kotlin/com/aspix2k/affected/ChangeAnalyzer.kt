@@ -34,7 +34,7 @@ class ChangeAnalyzer(
 
     fun modifiedAgainstBase(): Set<File> {
         val base = mergeBase ?: return emptySet()
-        val paths = gitFields("diff", "--name-status", "--no-renames", "-z", base)
+        val paths = gitFields("diff", "--name-status", "--no-renames", "--relative", "-z", base)
             .chunked(2)
             .mapNotNull { (status, path) -> path.takeIf { status == "M" } }
         return keepSources(paths).toSet()
@@ -42,7 +42,7 @@ class ChangeAnalyzer(
 
     fun againstBase(): List<File> {
         val base = mergeBase ?: return emptyList()
-        return keepSources(gitFields("diff", "--name-only", "--no-renames", "-z", base))
+        return keepSources(gitFields("diff", "--name-only", "--no-renames", "--relative", "-z", base))
     }
 
     fun apiTouchedAmong(files: Collection<File>): Set<File> {
@@ -158,7 +158,13 @@ class ChangeAnalyzer(
         }
 
     private fun candidateBranches(): List<String> =
-        (listOf(baseBranch) + FALLBACK_BRANCHES).distinct().filter { it.isNotBlank() }
+        (listOf(baseBranch) + listOfNotNull(remoteDefaultBranch()) + FALLBACK_BRANCHES)
+            .distinct()
+            .filter { it.isNotBlank() }
+
+    private fun remoteDefaultBranch(): String? =
+        run("symbolic-ref", "--quiet", "--short", REMOTE_HEAD).takeIf { it.exitCode == 0 }
+            ?.stdout?.trim()?.removePrefix("origin/")?.ifEmpty { null }
 
     private fun gitFields(vararg args: String): List<String> =
         git(*args).split(NUL).filter(String::isNotEmpty)
@@ -220,9 +226,10 @@ class ChangeAnalyzer(
         private val API_SOURCE_EXTENSIONS = setOf("kt", "java", "scala", "groovy")
 
         private val DIFF_ARGUMENTS = listOf(
-            "diff", "-U0", "--no-renames", "--no-prefix", "--no-color", "--no-ext-diff", "--no-textconv",
+            "diff", "-U0", "--no-renames", "--relative", "--no-prefix", "--no-color", "--no-ext-diff", "--no-textconv",
         )
         private const val HEAD = "HEAD"
+        private const val REMOTE_HEAD = "refs/remotes/origin/HEAD"
         private const val NUL = '\u0000'
         private const val PATHSPEC_CHUNK_LENGTH = 16_000
         private const val SPACE = 0x20

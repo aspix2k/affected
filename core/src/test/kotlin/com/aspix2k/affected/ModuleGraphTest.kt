@@ -291,6 +291,35 @@ class ModuleGraphTest {
     }
 
     @Test
+    fun `a changed source in a module with nothing to run is unresolved next to a planned module`() {
+        val root = createTempDirectory("module-graph-no-tasks").toFile()
+        val kotlin = object : BuildSystem by system("GRADLE") {
+            override val sourceExtensions: Set<String> = setOf("kt")
+        }
+        val graph = ModuleGraph(
+            listOf(
+                ModuleGraph.Node(module(root, "alpha", "alpha"), kotlin),
+                ModuleGraph.Node(
+                    module(root, "beta", "beta").copy(hasTests = false, compileTask = null),
+                    kotlin,
+                ),
+            ),
+        )
+        val tested = File(root, "alpha/Main.kt").apply { parentFile.mkdirs(); writeText("class Main") }
+        val untested = File(root, "beta/Other.kt").apply { parentFile.mkdirs(); writeText("class Other") }
+        val changes = ProjectChanges.Result(
+            listOf(tested, untested),
+            emptySet(),
+            setOf(tested, untested),
+            comparedToBase = true,
+        )
+        val prepared = Verification.prepare(graph, changes).select(checkConsumers = false)
+
+        assertEquals(listOf("alpha:test"), prepared.plan.groups.single().tasks)
+        assertEquals(1, prepared.unresolvedFiles)
+    }
+
+    @Test
     fun `Cargo custom build plan widens UI and execution to the same workspace`() {
         val root = createTempDirectory("module-graph-cargo-build-script").toFile()
         val task = cargoNextestTask(CargoNextestPlan(CargoNextestMode.WORKSPACE, "default", "0.9.143", true))

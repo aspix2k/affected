@@ -91,10 +91,11 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
         return snapshot.modules.groupBy(Described::key).values.map { descriptions ->
             val first = descriptions.first()
             val roots = descriptions.flatMap(Described::roots).distinct()
+            val testRoots = descriptions.flatMap(Described::testRoots).distinct()
             val dependencies = descriptions.flatMapTo(HashSet(), Described::dependencies) - first.key
             val ownerRoot = buildRootOf(File(first.projectPath), project)
             val linkedRoot = gradleCompositeRoot(ownerRoot, snapshot.linkedRoots, first.buildName)
-            val (executionRoot, executionId) = gradleExecutionCoordinates(
+            val execution = gradleExecutionCoordinates(
                 ownerRoot,
                 first.path,
                 first.directoryToRunTask,
@@ -108,15 +109,15 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
                 first.projectPath,
                 ownerRoot,
                 roots,
+                testRoots,
                 snapshot.tasks,
-                executionRoot,
-                executionId,
+                execution,
             ).copy(dependencies = dependencies)
         }
     }
 
     private data class Snapshot(
-        val tasks: Map<String, Set<String>>,
+        val tasks: GradleTaskModel,
         val modules: List<Described>,
         val linkedRoots: List<String>,
     )
@@ -233,6 +234,7 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
         val path: String,
         val projectPath: String,
         val roots: List<String>,
+        val testRoots: List<String>,
         val directoryToRunTask: String?,
         val identityPath: String?,
         val buildName: String?,
@@ -249,8 +251,13 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
 
         val path = gradleProjectPath(externalId, buildName, sourceSet)
 
-        val roots = ModuleRootManager.getInstance(module).contentRoots.map { it.path }
+        val rootManager = ModuleRootManager.getInstance(module)
+        val roots = rootManager.contentRoots.map { it.path }
         if (roots.isEmpty()) return null
+        val testRoots = rootManager.contentEntries
+            .flatMap { it.sourceFolders.asList() }
+            .filter { it.isTestSource }
+            .mapNotNull { it.file?.path }
         val (directoryToRunTask, identityPath) = gradleExecutionMetadata(
             ExternalSystemModuleDataIndex.findModuleNode(module)?.data,
         )
@@ -260,6 +267,7 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
             path = path,
             projectPath = projectPath,
             roots = roots,
+            testRoots = testRoots,
             directoryToRunTask = directoryToRunTask,
             identityPath = identityPath,
             buildName = buildName,
@@ -296,14 +304,15 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
         projectPath: String,
         root: String,
         roots: List<String>,
-        tasks: Map<String, Set<String>>,
-        executionRoot: String,
-        executionId: String,
+        testRoots: List<String>,
+        tasks: GradleTaskModel,
+        execution: Pair<String, String>,
     ): BuildModule {
         val source = roots.filterNot { it.contains("/build/") || it.contains("/.gradle/") }.minByOrNull { it.length }
-        val availableTasks = tasks[projectPath] ?: source?.let(tasks::get).orEmpty()
-        val filesystemTests = roots.any(::gradleHoldsTests)
-        val (verifiedTest, testCompile) = gradleVerificationTasks(availableTasks)
+        val availableTasks = tasks.available(projectPath, source)
+        val typedTests = tasks.typedTests(projectPath, source)
+        val filesystemTests = gradleHoldsTests(roots, testRoots)
+        val (verifiedTest, testCompile) = gradleVerificationTasks(availableTasks, typedTests)
         val hasTests = filesystemTests && !verifiedTest.isNullOrBlank()
         val testTask = verifiedTest.orEmpty()
         val compileTask = if (hasTests) {
@@ -319,10 +328,10 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
             compileTask = compileTask,
             hasTests = hasTests,
             extraTasks = availableTasks,
-            executionRoot = executionRoot,
-            executionId = executionId,
+            executionRoot = execution.first,
+            executionId = execution.second,
             additionalTestTasks = if (hasTests) {
-                gradleKmpAdditionalTestTasks(availableTasks, testTask)
+                gradleKmpAdditionalTestTasks(availableTasks, testTask, typedTests)
             } else {
                 emptySet()
             },
@@ -339,8 +348,9 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
         return project.basePath ?: moduleDir.invariantSeparatorsPath
     }
 
-    private fun tasksByDirectory(project: Project): Map<String, Set<String>> {
+    private fun tasksByDirectory(project: Project): GradleTaskModel {
         val result = HashMap<String, MutableSet<String>>()
+        val tests = HashMap<String, MutableSet<String>>()
 
         for (settings in GradleSettings.getInstance(project).linkedProjectsSettings) {
             val projectNode = ExternalSystemApiUtil.findProjectNode(
@@ -351,14 +361,14 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
 
             for (moduleNode in ExternalSystemApiUtil.findAll(projectNode, ProjectKeys.MODULE)) {
                 val data: ModuleData = moduleNode.data
-                val names = result.getOrPut(data.linkedExternalProjectPath) { mutableSetOf() }
-                for (taskNode in ExternalSystemApiUtil.findAll(moduleNode, ProjectKeys.TASK)) {
-                    val task: TaskData = taskNode.data
-                    names += task.name.substringAfterLast(':')
-                }
+                val tasks = ExternalSystemApiUtil.findAll(moduleNode, ProjectKeys.TASK).map { it.data }
+                val name = { task: TaskData -> task.name.substringAfterLast(':') }
+                result.getOrPut(data.linkedExternalProjectPath) { mutableSetOf() } += tasks.map(name)
+                tests.getOrPut(data.linkedExternalProjectPath) { mutableSetOf() } +=
+                    tasks.filter(TaskData::isTest).map(name)
             }
         }
-        return result
+        return GradleTaskModel(result, tests)
     }
 
     internal fun gradleTaskExecutionSettings(
@@ -480,6 +490,9 @@ private val GRADLE_BUILD_WIDE_DIRECTORIES = listOf("gradle", "buildSrc")
 internal fun gradleIsSourceFile(file: File): Boolean =
     file.isFile && file.extension in JVM_SOURCE_EXTENSIONS
 
+internal fun gradleHoldsTests(roots: List<String>, testRoots: List<String>): Boolean =
+    roots.any(::gradleHoldsTests) || testRoots.any { File(it).walkTopDown().any(::gradleIsSourceFile) }
+
 internal fun gradleHoldsTests(root: String): Boolean {
     val normalized = root.replace('\\', '/')
     if (GRADLE_TEST_SOURCE_SET_MARKERS.any { marker ->
@@ -562,105 +575,6 @@ internal fun gradleCompositeRoot(ownerRoot: String, linkedRoots: List<String>, b
         ?: linked.filter(owner::startsWith).maxByOrNull { it.nameCount }
     return root?.toFile()?.invariantSeparatorsPath
 }
-
-internal fun gradleVerificationTasks(availableTasks: Set<String>): Pair<String?, String?> {
-    val testTask = gradleTestTask(availableTasks)
-    val testCompile = testTask?.let { gradleTestCompileTask(it, availableTasks) }
-    return testTask to (testCompile ?: gradleProductionCompileTask(availableTasks))
-}
-
-internal fun gradleTestTask(available: Set<String>): String? {
-    if (available.isEmpty()) return null
-    val unit = available.filter(::isGradleUnitTestTask)
-    val concrete = unit.filter { it != "test" }.ifEmpty { unit }
-    if (concrete.isEmpty()) return null
-    val withCompile = concrete.mapNotNull { task ->
-        val stem = testTaskStem(task)
-        if (existingCompileTask(available, stem, testish = true) == null) return@mapNotNull null
-        task to stem.length
-    }
-    return withCompile.maxByOrNull { it.second }?.first ?: concrete.minOrNull()
-}
-
-internal fun gradleTestCompileTask(testTask: String, available: Set<String> = emptySet()): String? {
-    if (available.isEmpty()) return null
-    val stem = testTaskStem(testTask)
-    return existingCompileTask(available, matching = stem, testish = true)
-        ?: gradleProductionCompileTask(available)
-}
-
-private fun testTaskStem(testTask: String): String =
-    testTask.removePrefix("test").removeSuffix("Test")
-
-internal fun existingCompileTask(
-    available: Set<String>,
-    matching: String,
-    testish: Boolean,
-): String? {
-    val needle = matching.lowercase()
-    return available.filter { isCompileCodeTask(it) && isTestCompileName(it) == testish }
-        .filter { needle.isEmpty() || needle in it.lowercase() }
-        .minOrNull()
-}
-
-private fun isCompileCodeTask(name: String): Boolean {
-    if (!name.startsWith("compile")) return false
-    val n = name.lowercase()
-    return "resource" !in n && "lint" !in n && "javares" !in n
-}
-
-private fun isTestCompileName(name: String): Boolean = "test" in name.lowercase()
-
-internal fun isGradleUnitTestTask(name: String): Boolean {
-    val n = name.lowercase()
-    if (UNIT_TEST_EXCLUDED_PREFIXES.any { n.startsWith(it) }) return false
-    if ("resource" in n || "lint" in n) return false
-    return n == "test" || n.startsWith("test") || n.endsWith("test")
-}
-
-internal fun isAndroidInstrumentationSource(path: String): Boolean {
-    val segments = path.replace('\\', '/').split('/')
-    return segments.any { it == "androidTest" || it == "androidInstrumentedTest" }
-}
-
-internal fun gradleInstrumentationTestTask(available: Set<String>): String? =
-    available.filter {
-        val n = it.lowercase()
-        n.startsWith("connected") && "androidtest" in n
-    }.minOrNull()
-
-internal fun selectAndroidTestTask(
-    unitTestTask: String,
-    available: Set<String>,
-    instrumentationOnly: Boolean,
-): String =
-    if (instrumentationOnly) gradleInstrumentationTestTask(available) ?: unitTestTask else unitTestTask
-
-internal fun gradleKmpAdditionalTestTasks(available: Set<String>, primary: String): Set<String> {
-    val extra = available.filterTo(LinkedHashSet()) {
-        it != primary && it != "test" && isGradleUnitTestTask(it)
-    }
-    if (primary.contains("android", ignoreCase = true)) {
-        extra.removeAll { it.contains("android", ignoreCase = true) }
-    }
-    return extra
-}
-
-internal fun gradleProductionCompileTask(available: Set<String>): String? {
-    if (available.isEmpty()) return null
-    return existingCompileTask(available, matching = "", testish = false)
-}
-
-private val UNIT_TEST_EXCLUDED_PREFIXES = listOf(
-    "compile",
-    "assemble",
-    "link",
-    "clean",
-    "detekt",
-    "ktlint",
-    "connected",
-    "all",
-)
 
 private const val DIRECTORY_TO_RUN_TASK_PROPERTY = "directoryToRunTask"
 private const val GRADLE_IDENTITY_PATH_PROPERTY = "gradleIdentityPath"

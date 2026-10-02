@@ -1,0 +1,1 @@
+- A changed source file in a module that has neither a test nor a compile task no longer disappears behind the other planned tasks: the result reports it as not checked instead of passing.

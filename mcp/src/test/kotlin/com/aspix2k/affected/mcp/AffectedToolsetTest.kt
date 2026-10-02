@@ -79,6 +79,10 @@ class AffectedToolsetTest {
         assertTrue(unresolved.error)
         assertEquals("unresolved-changes", unresolved.data["reason"])
         assertEquals(false, unresolved.data["passed"])
+        val noBase =
+            verificationView(snapshot(), Verification.Outcome(plan, false, Verification.Blocker.NO_COMPARISON_BASE))
+        assertTrue(noBase.error)
+        assertEquals("no-comparison-base", noBase.data["reason"])
         val partlyUnresolved =
             verificationView(snapshot(), Verification.Outcome(plan, false, Verification.Blocker.UNRESOLVED_CHANGES))
         assertTrue(partlyUnresolved.error)

@@ -137,7 +137,7 @@ internal fun nestedBuildRoots(
             .partition { nestedListing(it).names.any(isMarkerName) && hasMarker(it) }
         roots += found
         if (visited > PerformanceBudgets.MAX_DIRECTORIES || roots.size > PerformanceBudgets.MAX_NESTED_ROOTS) {
-            return emptyList()
+            return roots.sortedBy(File::getPath).take(PerformanceBudgets.MAX_NESTED_ROOTS)
         }
         level = descend
     }

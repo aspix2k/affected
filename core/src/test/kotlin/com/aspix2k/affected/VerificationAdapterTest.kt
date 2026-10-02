@@ -1,6 +1,8 @@
 package com.aspix2k.affected
 
 import com.aspix2k.affected.build.BuildChanges
+import com.aspix2k.affected.build.multiRootProject
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -58,6 +60,31 @@ class VerificationAdapterTest {
         assertEquals(
             Verification.Outcome(plan, passed = false),
             completedOutcome(plan, passed = false, unresolvedFiles = 1),
+        )
+    }
+
+    @Test
+    fun `a git repository without a comparison base cannot pass, with or without planned work`() = runBoundedBlocking {
+        val changes = BuildChanges(emptyList(), emptySet(), comparedToBase = false)
+        val empty = Plan(emptyList(), tested = 0, compiled = 0)
+        val planned = Plan(emptyList(), tested = 1, compiled = 0)
+        val project = multiRootProject(File("."))
+
+        assertEquals(
+            Verification.Outcome(empty, passed = false, Verification.Blocker.NO_COMPARISON_BASE),
+            Verification.runAndWait(project, Verification.Prepared(empty, changes, baseUnresolved = true)),
+        )
+        assertEquals(
+            Verification.Outcome(empty, passed = true),
+            Verification.runAndWait(project, Verification.Prepared(empty, changes)),
+        )
+        assertEquals(
+            Verification.Outcome(planned, passed = false, Verification.Blocker.NO_COMPARISON_BASE),
+            completedOutcome(planned, passed = true, unresolvedFiles = 0, baseUnresolved = true),
+        )
+        assertEquals(
+            Verification.Outcome(planned, passed = false),
+            completedOutcome(planned, passed = false, unresolvedFiles = 0, baseUnresolved = true),
         )
     }
 }

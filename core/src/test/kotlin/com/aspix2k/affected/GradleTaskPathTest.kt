@@ -11,6 +11,7 @@ import com.aspix2k.affected.build.gradle.gradleProductionCompileTask
 import com.aspix2k.affected.build.gradle.gradleProjectPath
 import com.aspix2k.affected.build.gradle.gradleTestCompileTask
 import com.aspix2k.affected.build.gradle.gradleTestTask
+import com.aspix2k.affected.build.gradle.gradleUnitTestTasks
 import com.aspix2k.affected.build.gradle.gradleVerificationTasks
 import com.aspix2k.affected.build.gradle.isAndroidInstrumentationSource
 import com.aspix2k.affected.build.gradle.selectAndroidTestTask
@@ -248,6 +249,56 @@ class GradleTaskPathTest {
     }
 
     @Test
+    fun `a plain JVM project runs test and never treats testClasses as a test task`() {
+        val java = setOf(
+            "assemble", "build", "classes", "clean", "jar", "testClasses", "compileJava", "compileTestJava",
+            "processResources", "processTestResources", "check", "test", "javadoc",
+        )
+
+        assertEquals("test" to "compileTestJava", gradleVerificationTasks(java))
+        assertEquals(emptySet(), gradleKmpAdditionalTestTasks(java, "test"))
+        assertEquals(
+            "test" to "compileTestKotlin",
+            gradleVerificationTasks(java - "compileTestJava" + setOf("compileKotlin", "compileTestKotlin")),
+        )
+    }
+
+    @Test
+    fun `a JVM project with another test suite runs both test and that suite`() {
+        val tasks = setOf(
+            "classes", "testClasses", "integrationTestClasses", "compileJava", "compileTestJava",
+            "compileIntegrationTestJava", "test", "integrationTest", "check",
+        )
+
+        assertEquals("integrationTest", gradleTestTask(tasks))
+        assertEquals(setOf("test"), gradleKmpAdditionalTestTasks(tasks, "integrationTest"))
+    }
+
+    @Test
+    fun `typed test tasks from the IDE model win over task names`() {
+        val tasks = setOf(
+            "test", "integrationTest", "testCodeCoverageReport", "testFixturesJar", "connectedDebugAndroidTest",
+            "compileJava", "compileTestJava", "compileIntegrationTestJava",
+        )
+        val typed = setOf("test", "integrationTest", "connectedDebugAndroidTest")
+
+        assertEquals(listOf("test", "integrationTest"), gradleUnitTestTasks(tasks, typed))
+        assertEquals("integrationTest", gradleTestTask(tasks, typed))
+        assertEquals(setOf("test"), gradleKmpAdditionalTestTasks(tasks, "integrationTest", typed))
+    }
+
+    @Test
+    fun `the Android test aggregator is not run next to its variant tasks`() {
+        val tasks = setOf(
+            "test", "testDebugUnitTest", "testReleaseUnitTest", "compileDebugUnitTestKotlin",
+            "compileReleaseUnitTestKotlin", "compileDebugKotlin",
+        )
+
+        assertEquals(listOf("testDebugUnitTest", "testReleaseUnitTest"), gradleUnitTestTasks(tasks))
+        assertEquals(setOf("testDebugUnitTest"), gradleKmpAdditionalTestTasks(tasks, "testReleaseUnitTest"))
+    }
+
+    @Test
     fun `an unknown Gradle task list does not invent test or compile names`() {
         assertEquals(null, gradleTestTask(emptySet()))
         assertEquals(null, gradleTestCompileTask("test", emptySet()))
@@ -271,6 +322,18 @@ class GradleTaskPathTest {
             gradleVerificationTasks(available),
         )
         assertFalse("compileTestKotlin" in available)
+    }
+
+    @Test
+    fun `tests in a directory the IDE marks as a test root count, whatever it is called`() {
+        val module = createTempDirectory("affected-custom-test-root").toFile()
+        val custom = File(module, "checks/java").apply { mkdirs() }
+        File(custom, "AlphaCheck.java").writeText("class AlphaCheck {}")
+        val empty = File(module, "specs").apply { mkdirs() }
+
+        assertFalse(gradleHoldsTests(listOf(module.path), emptyList()))
+        assertFalse(gradleHoldsTests(listOf(module.path), listOf(empty.path)))
+        assertTrue(gradleHoldsTests(listOf(module.path), listOf(custom.path)))
     }
 
     @Test
