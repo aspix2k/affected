@@ -1,0 +1,727 @@
+{
+  "repositories": [
+    {
+      "id": "go-chi",
+      "url": "https://github.com/go-chi/chi.git",
+      "sha": "167e1e3bd039d060696b99c8da4e876ae04f42c1",
+      "license": "MIT",
+      "ecosystem": "GO",
+      "budgetSeconds": 300,
+      "tools": [
+        "go",
+        "git"
+      ],
+      "setup": [],
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "github.com/go-chi/chi/v5",
+        "github.com/go-chi/chi/v5/middleware"
+      ],
+      "scenarios": [
+        {
+          "name": "production file in the root package",
+          "files": [
+            "mux.go"
+          ],
+          "tasks": [
+            "github.com/go-chi/chi/v5:test"
+          ],
+          "command": [
+            "go",
+            "test",
+            "github.com/go-chi/chi/v5"
+          ],
+          "output": "ok\\s+github.com/go-chi/chi/v5\\s",
+          "pass": true
+        },
+        {
+          "name": "test file in a nested package",
+          "files": [
+            "middleware/throttle_test.go"
+          ],
+          "tasks": [
+            "github.com/go-chi/chi/v5/middleware:test"
+          ],
+          "command": [
+            "go",
+            "test",
+            "github.com/go-chi/chi/v5/middleware"
+          ],
+          "output": "ok\\s+github.com/go-chi/chi/v5/middleware\\s",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "go-zap",
+      "url": "https://github.com/uber-go/zap.git",
+      "sha": "4892335e05f14bce8a98a69a577fcf3844a42623",
+      "license": "MIT",
+      "ecosystem": "GO",
+      "budgetSeconds": 600,
+      "tools": [
+        "go",
+        "git"
+      ],
+      "setup": [],
+      "roots": [
+        ".",
+        "exp"
+      ],
+      "modules": [
+        "go.uber.org/zap",
+        "go.uber.org/zap/exp/zapslog"
+      ],
+      "scenarios": [
+        {
+          "name": "production file in the root module",
+          "files": [
+            "field.go"
+          ],
+          "tasks": [
+            "go.uber.org/zap:test"
+          ],
+          "command": [
+            "go",
+            "test",
+            "go.uber.org/zap"
+          ],
+          "output": "ok\\s+go.uber.org/zap\\s",
+          "pass": true
+        },
+        {
+          "name": "production file in a nested module",
+          "files": [
+            "exp/zapslog/handler.go"
+          ],
+          "tasks": [
+            "go.uber.org/zap/exp/zapslog:test"
+          ],
+          "command": [
+            "go",
+            "test",
+            "go.uber.org/zap/exp/zapslog"
+          ],
+          "output": "ok\\s+go.uber.org/zap/exp/zapslog\\s",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "pnpm-tinyhttp",
+      "url": "https://github.com/tinyhttp/tinyhttp.git",
+      "sha": "f8227d009da690c2ca94205136b4cb605373e1cb",
+      "license": "MIT",
+      "ecosystem": "NODE",
+      "budgetSeconds": 600,
+      "tools": [
+        "node",
+        "pnpm",
+        "git"
+      ],
+      "setup": [
+        [
+          "pnpm",
+          "install",
+          "--frozen-lockfile",
+          "--ignore-scripts"
+        ]
+      ],
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "@tinyhttp/router"
+      ],
+      "scenarios": [
+        {
+          "name": "test file in the root tests directory",
+          "files": [
+            "tests/core/app.test.ts"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "pnpm",
+            "test"
+          ],
+          "output": "Test Files\\s+\\d+ passed",
+          "pass": true
+        },
+        {
+          "name": "production file in a workspace package",
+          "files": [
+            "packages/router/src/index.ts"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "pnpm"
+          ],
+          "output": "Test Files\\s+\\d+ passed",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "python-more-itertools",
+      "url": "https://github.com/more-itertools/more-itertools.git",
+      "sha": "1ea82a711c69f590054987b5cb194157f8ce8ac4",
+      "license": "MIT",
+      "ecosystem": "PYTHON",
+      "budgetSeconds": 600,
+      "tools": [
+        "python3",
+        "uv",
+        "git"
+      ],
+      "setup": [
+        [
+          "uv",
+          "venv",
+          ".venv",
+          "--python",
+          "3.13"
+        ]
+      ],
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "more-itertools"
+      ],
+      "scenarios": [
+        {
+          "name": "production module",
+          "files": [
+            "more_itertools/recipes.py"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "python"
+          ],
+          "output": "Ran \\d+ tests?",
+          "pass": true
+        },
+        {
+          "name": "test module",
+          "files": [
+            "tests/test_recipes.py"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "python"
+          ],
+          "output": "Ran \\d+ tests?",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "python-click",
+      "url": "https://github.com/pallets/click.git",
+      "sha": "06b2a678741131fd577ce170e23e5ca0aeba0309",
+      "license": "BSD-3-Clause",
+      "ecosystem": "PYTHON",
+      "budgetSeconds": 900,
+      "tools": [
+        "python3",
+        "uv",
+        "git"
+      ],
+      "setup": [
+        [
+          "uv",
+          "sync",
+          "--locked"
+        ]
+      ],
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "click"
+      ],
+      "scenarios": [
+        {
+          "name": "production module",
+          "files": [
+            "src/click/core.py"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "uv",
+            "run"
+          ],
+          "output": "\\d+ passed",
+          "pass": true
+        },
+        {
+          "name": "test module",
+          "files": [
+            "tests/test_options.py"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "uv",
+            "run"
+          ],
+          "output": "\\d+ passed",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "swift-log",
+      "url": "https://github.com/apple/swift-log.git",
+      "sha": "c29472f01064bb4b38de12b5b57a98b1b290e7e3",
+      "license": "Apache-2.0",
+      "ecosystem": "SWIFT",
+      "budgetSeconds": 900,
+      "tools": [
+        "swift",
+        "git"
+      ],
+      "setup": [],
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "Logging"
+      ],
+      "scenarios": [
+        {
+          "name": "production file in a library target",
+          "files": [
+            "Sources/Logging/Logger.swift"
+          ],
+          "tasks": [
+            "Logging:test"
+          ],
+          "command": [
+            "swift",
+            "test"
+          ],
+          "output": "Test run with \\d+ tests in \\d+ suites passed",
+          "pass": true
+        },
+        {
+          "name": "test file in a test target",
+          "files": [
+            "Tests/LoggingTests/LockTest.swift"
+          ],
+          "tasks": [
+            "LoggingTests:test"
+          ],
+          "command": [
+            "swift",
+            "test"
+          ],
+          "output": "Test run with \\d+ tests in \\d+ suites passed",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "cmake-fmt",
+      "url": "https://github.com/fmtlib/fmt.git",
+      "sha": "9197f51593dab5f637454a8889fb9638e737711a",
+      "license": "MIT",
+      "ecosystem": "CMAKE",
+      "budgetSeconds": 1500,
+      "tools": [
+        "cmake",
+        "ctest",
+        "git"
+      ],
+      "setup": [
+        [
+          "cmake",
+          "-S",
+          ".",
+          "-B",
+          "build",
+          "-DFMT_TEST=ON",
+          "-DFMT_DOC=OFF",
+          "-DFMT_INSTALL=OFF"
+        ]
+      ],
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "fmt",
+        "format-test"
+      ],
+      "scenarios": [
+        {
+          "name": "test source",
+          "files": [
+            "test/format-test.cc"
+          ],
+          "tasks": [
+            "format-test:test"
+          ],
+          "command": [
+            "ctest"
+          ],
+          "output": "100% tests passed",
+          "pass": true
+        },
+        {
+          "name": "library source",
+          "files": [
+            "src/format.cc"
+          ],
+          "tasks": [
+            "fmt:test"
+          ],
+          "command": [
+            "ctest"
+          ],
+          "output": "100% tests passed",
+          "pass": true,
+          "testDependents": true
+        }
+      ]
+    },
+    {
+      "id": "dotnet-guardclauses",
+      "url": "https://github.com/ardalis/GuardClauses.git",
+      "sha": "f96b823e4228252b2927cce3effa550c16b558a5",
+      "license": "MIT",
+      "ecosystem": "DOTNET",
+      "budgetSeconds": 900,
+      "tools": [
+        "dotnet",
+        "git"
+      ],
+      "setup": [],
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "src/GuardClauses/GuardClauses.csproj"
+      ],
+      "scenarios": [
+        {
+          "name": "production file",
+          "files": [
+            "src/GuardClauses/Guard.cs"
+          ],
+          "tasks": [
+            "test/GuardClauses.UnitTests/GuardClauses.UnitTests.csproj:test"
+          ],
+          "command": [
+            "dotnet",
+            "test"
+          ],
+          "output": "Passed!",
+          "pass": true
+        },
+        {
+          "name": "test file",
+          "files": [
+            "test/GuardClauses.UnitTests/GuardAgainstNull.cs"
+          ],
+          "tasks": [
+            "test/GuardClauses.UnitTests/GuardClauses.UnitTests.csproj:test"
+          ],
+          "command": [
+            "dotnet",
+            "test"
+          ],
+          "output": "Passed!",
+          "pass": true
+        }
+      ],
+      "environment": {
+        "DOTNET_CLI_UI_LANGUAGE": "en",
+        "DOTNET_NOLOGO": "1"
+      }
+    },
+    {
+      "id": "cargo-lalrpop",
+      "url": "https://github.com/lalrpop/lalrpop.git",
+      "sha": "8a9659eca7d419adba98500875f919a288bf2600",
+      "license": "Apache-2.0 OR MIT",
+      "ecosystem": "CARGO",
+      "budgetSeconds": 1500,
+      "tools": [
+        "cargo",
+        "cargo-nextest",
+        "git"
+      ],
+      "setup": [],
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "lalrpop-util",
+        "lalrpop"
+      ],
+      "scenarios": [
+        {
+          "name": "production file in a workspace member",
+          "files": [
+            "lalrpop-util/src/lib.rs"
+          ],
+          "tasks": [
+            "lalrpop-util:test"
+          ],
+          "command": [
+            "cargo",
+            "test"
+          ],
+          "output": "test result: ok",
+          "pass": true
+        },
+        {
+          "name": "test file in a workspace member",
+          "files": [
+            "lalrpop/src/api/mod.rs"
+          ],
+          "tasks": [
+            "lalrpop:test"
+          ],
+          "command": [
+            "cargo",
+            "test"
+          ],
+          "output": "test result: ok",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "cargo-bitflags",
+      "url": "https://github.com/bitflags/bitflags.git",
+      "sha": "8df4d4ebb26fc35d49515972ede9dc77e5b43599",
+      "license": "MIT OR Apache-2.0",
+      "ecosystem": "CARGO",
+      "budgetSeconds": 900,
+      "tools": [
+        "cargo",
+        "cargo-nextest",
+        "git"
+      ],
+      "setup": [],
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "bitflags"
+      ],
+      "scenarios": [
+        {
+          "name": "production file",
+          "files": [
+            "src/parser.rs"
+          ],
+          "tasks": [
+            "bitflags:test"
+          ],
+          "command": [
+            "cargo",
+            "test"
+          ],
+          "output": "test result: ok",
+          "pass": true
+        },
+        {
+          "name": "integration test file",
+          "files": [
+            "tests/basic.rs"
+          ],
+          "tasks": [
+            "bitflags:test"
+          ],
+          "command": [
+            "cargo",
+            "test"
+          ],
+          "output": "test result: ok",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "cargo-nextest-dropshot-api-manager",
+      "url": "https://github.com/oxidecomputer/dropshot-api-manager.git",
+      "sha": "10e23e19fdb1768aec39174cb0e9e4ec96d6d315",
+      "license": "Apache-2.0",
+      "ecosystem": "CARGO",
+      "budgetSeconds": 1500,
+      "tools": [
+        "cargo",
+        "cargo-nextest",
+        "git"
+      ],
+      "setup": [
+        [
+          "git",
+          "fetch",
+          "--quiet",
+          "--unshallow",
+          "origin"
+        ],
+        [
+          "rm",
+          "-r",
+          ".cargo"
+        ]
+      ],
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "dropshot-api-manager"
+      ],
+      "scenarios": [
+        {
+          "name": "production file in a workspace member",
+          "files": [
+            "crates/dropshot-api-manager/src/lib.rs"
+          ],
+          "tasks": [
+            "dropshot-api-manager:nextest"
+          ],
+          "command": [
+            "nextest"
+          ],
+          "output": "Summary \\[[^\\]]*\\] \\d+ tests run",
+          "pass": false
+        }
+      ]
+    },
+    {
+      "id": "yarn-inquirer",
+      "url": "https://github.com/SBoudrias/Inquirer.js.git",
+      "sha": "eae8b3e2622b4f3c790968a2694ccddcabac2872",
+      "license": "MIT",
+      "ecosystem": "NODE",
+      "budgetSeconds": 900,
+      "tools": [
+        "node",
+        "yarn",
+        "git"
+      ],
+      "setup": [
+        [
+          "yarn",
+          "install",
+          "--immutable"
+        ]
+      ],
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "@inquirer/input"
+      ],
+      "scenarios": [
+        {
+          "name": "test file in a workspace package",
+          "files": [
+            "packages/input/input.test.ts"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "vitest"
+          ],
+          "output": "Test Files\\s+\\d+ passed",
+          "pass": true
+        },
+        {
+          "name": "production file in a workspace package",
+          "files": [
+            "packages/input/src/index.ts"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "yarn"
+          ],
+          "output": "Test Files\\s+\\d+ passed",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "npm-mdx",
+      "url": "https://github.com/mdx-js/mdx.git",
+      "sha": "52285a6758fa078ec57f3d4bd8803d9cbfb12065",
+      "license": "MIT",
+      "ecosystem": "NODE",
+      "budgetSeconds": 900,
+      "tools": [
+        "node",
+        "npm",
+        "git"
+      ],
+      "setup": [
+        [
+          "npm",
+          "ci",
+          "--ignore-scripts",
+          "--no-audit",
+          "--no-fund"
+        ]
+      ],
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "@mdx-js/mdx"
+      ],
+      "scenarios": [
+        {
+          "name": "production file in a workspace package",
+          "files": [
+            "packages/mdx/lib/compile.js"
+          ],
+          "tasks": [
+            "@mdx-js/mdx:test"
+          ],
+          "command": [
+            "npm",
+            "test",
+            "--workspace",
+            "@mdx-js/mdx"
+          ],
+          "output": "pass \\d+",
+          "pass": true
+        },
+        {
+          "name": "test file in a workspace package",
+          "files": [
+            "packages/mdx/test/compile.js"
+          ],
+          "tasks": [
+            "@mdx-js/mdx:test"
+          ],
+          "command": [
+            "npm"
+          ],
+          "output": "pass \\d+",
+          "pass": true
+        }
+      ]
+    }
+  ]
+}

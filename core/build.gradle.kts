@@ -67,6 +67,9 @@ tasks.test {
         "affected.cliConformance",
         providers.gradleProperty("affected.cliConformance").orElse("false").get(),
     )
+    val realRepositories = providers.gradleProperty("affected.realRepositories").orElse("false").get()
+    systemProperty("affected.realRepositories", realRepositories)
+    if (realRepositories == "true") outputs.upToDateWhen { false }
     System.getProperty("affected.phpunitVersion")?.let { systemProperty("affected.phpunitVersion", it) }
     doFirst {
         environment("KOTLIN_CLI_JAVA_HOME", javaLauncher.get().metadata.installationPath.asFile.absolutePath)
