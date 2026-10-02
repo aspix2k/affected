@@ -91,10 +91,11 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
         return snapshot.modules.groupBy(Described::key).values.map { descriptions ->
             val first = descriptions.first()
             val roots = descriptions.flatMap(Described::roots).distinct()
+            val testRoots = descriptions.flatMap(Described::testRoots).distinct()
             val dependencies = descriptions.flatMapTo(HashSet(), Described::dependencies) - first.key
             val ownerRoot = buildRootOf(File(first.projectPath), project)
             val linkedRoot = gradleCompositeRoot(ownerRoot, snapshot.linkedRoots, first.buildName)
-            val (executionRoot, executionId) = gradleExecutionCoordinates(
+            val execution = gradleExecutionCoordinates(
                 ownerRoot,
                 first.path,
                 first.directoryToRunTask,
@@ -108,9 +109,9 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
                 first.projectPath,
                 ownerRoot,
                 roots,
+                testRoots,
                 snapshot.tasks,
-                executionRoot,
-                executionId,
+                execution,
             ).copy(dependencies = dependencies)
         }
     }
@@ -233,6 +234,7 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
         val path: String,
         val projectPath: String,
         val roots: List<String>,
+        val testRoots: List<String>,
         val directoryToRunTask: String?,
         val identityPath: String?,
         val buildName: String?,
@@ -249,8 +251,13 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
 
         val path = gradleProjectPath(externalId, buildName, sourceSet)
 
-        val roots = ModuleRootManager.getInstance(module).contentRoots.map { it.path }
+        val rootManager = ModuleRootManager.getInstance(module)
+        val roots = rootManager.contentRoots.map { it.path }
         if (roots.isEmpty()) return null
+        val testRoots = rootManager.contentEntries
+            .flatMap { it.sourceFolders.asList() }
+            .filter { it.isTestSource }
+            .mapNotNull { it.file?.path }
         val (directoryToRunTask, identityPath) = gradleExecutionMetadata(
             ExternalSystemModuleDataIndex.findModuleNode(module)?.data,
         )
@@ -260,6 +267,7 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
             path = path,
             projectPath = projectPath,
             roots = roots,
+            testRoots = testRoots,
             directoryToRunTask = directoryToRunTask,
             identityPath = identityPath,
             buildName = buildName,
@@ -296,14 +304,14 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
         projectPath: String,
         root: String,
         roots: List<String>,
+        testRoots: List<String>,
         tasks: GradleTaskModel,
-        executionRoot: String,
-        executionId: String,
+        execution: Pair<String, String>,
     ): BuildModule {
         val source = roots.filterNot { it.contains("/build/") || it.contains("/.gradle/") }.minByOrNull { it.length }
         val availableTasks = tasks.available(projectPath, source)
         val typedTests = tasks.typedTests(projectPath, source)
-        val filesystemTests = roots.any(::gradleHoldsTests)
+        val filesystemTests = gradleHoldsTests(roots, testRoots)
         val (verifiedTest, testCompile) = gradleVerificationTasks(availableTasks, typedTests)
         val hasTests = filesystemTests && !verifiedTest.isNullOrBlank()
         val testTask = verifiedTest.orEmpty()
@@ -320,8 +328,8 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
             compileTask = compileTask,
             hasTests = hasTests,
             extraTasks = availableTasks,
-            executionRoot = executionRoot,
-            executionId = executionId,
+            executionRoot = execution.first,
+            executionId = execution.second,
             additionalTestTasks = if (hasTests) {
                 gradleKmpAdditionalTestTasks(availableTasks, testTask, typedTests)
             } else {
@@ -481,6 +489,9 @@ private val GRADLE_BUILD_WIDE_DIRECTORIES = listOf("gradle", "buildSrc")
 
 internal fun gradleIsSourceFile(file: File): Boolean =
     file.isFile && file.extension in JVM_SOURCE_EXTENSIONS
+
+internal fun gradleHoldsTests(roots: List<String>, testRoots: List<String>): Boolean =
+    roots.any(::gradleHoldsTests) || testRoots.any { File(it).walkTopDown().any(::gradleIsSourceFile) }
 
 internal fun gradleHoldsTests(root: String): Boolean {
     val normalized = root.replace('\\', '/')

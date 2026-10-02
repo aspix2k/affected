@@ -325,6 +325,18 @@ class GradleTaskPathTest {
     }
 
     @Test
+    fun `tests in a directory the IDE marks as a test root count, whatever it is called`() {
+        val module = createTempDirectory("affected-custom-test-root").toFile()
+        val custom = File(module, "checks/java").apply { mkdirs() }
+        File(custom, "AlphaCheck.java").writeText("class AlphaCheck {}")
+        val empty = File(module, "specs").apply { mkdirs() }
+
+        assertFalse(gradleHoldsTests(listOf(module.path), emptyList()))
+        assertFalse(gradleHoldsTests(listOf(module.path), listOf(empty.path)))
+        assertTrue(gradleHoldsTests(listOf(module.path), listOf(custom.path)))
+    }
+
+    @Test
     fun `Scala and Groovy files count as Gradle sources and tests`() {
         val module = createTempDirectory("affected-scala-groovy").toFile()
         val scala = File(module, "src/test/scala/AlphaSpec.scala").apply {
