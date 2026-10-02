@@ -25,6 +25,7 @@ object Verification {
         val unresolvedFiles: Int = 0,
         val baseUnresolved: Boolean = false,
         val uncovered: List<File> = emptyList(),
+        val unresolved: List<File> = emptyList(),
     ) {
         val changedFiles: Int get() = changes.files.size
     }
@@ -55,7 +56,14 @@ object Verification {
         val buildChanges = changes.toBuildChanges()
         val plans = verificationPlans(graph, changes, owners, testDependents)
         val prepared = { plan: Plan ->
-            Prepared(plan, buildChanges, plans.unresolvedFiles, changes.baseUnresolved, changes.uncovered)
+            Prepared(
+                plan,
+                buildChanges,
+                plans.unresolved.size,
+                changes.baseUnresolved,
+                changes.uncovered,
+                plans.unresolved,
+            )
         }
         return PreparedPlans(prepared(plans.testsOnly), prepared(plans.withConsumers))
     }
@@ -136,7 +144,7 @@ fun <T> runWithRequiredAdapter(
 private data class VerificationPlans(
     val testsOnly: Plan,
     val withConsumers: Plan,
-    val unresolvedFiles: Int = 0,
+    val unresolved: List<File> = emptyList(),
 )
 
 private fun verificationPlans(
@@ -184,7 +192,7 @@ private fun verificationPlans(
         } else {
             TaskPlanner.plan(tested, consumers.map { it.info() })
         },
-        unresolvedFiles = changes.files.count { file ->
+        unresolved = changes.files.filter { file ->
             file.extension.lowercase() in graph.sourceExtensions &&
                 effectiveOwners[file].orEmpty().none { it.isVerifiable() || it in verifiedByConsumers }
         },

@@ -126,7 +126,8 @@ internal fun nestedBuildRoots(
     isMarkerName: (String) -> Boolean,
     hasMarker: (File) -> Boolean,
 ): List<File> {
-    if (hasMarker(base)) return listOf(base)
+    val capKey = "${base.invariantSeparatorsPath}|${hasMarker.javaClass.name}"
+    if (hasMarker(base)) return listOf(base).also { NestedRootCaps.clear(capKey) }
     val roots = ArrayList<File>()
     var level = listOf(base)
     var visited = 0
@@ -137,11 +138,30 @@ internal fun nestedBuildRoots(
             .partition { nestedListing(it).names.any(isMarkerName) && hasMarker(it) }
         roots += found
         if (visited > PerformanceBudgets.MAX_DIRECTORIES || roots.size > PerformanceBudgets.MAX_NESTED_ROOTS) {
+            NestedRootCaps.hit(capKey)
             return roots.sortedBy(File::getPath).take(PerformanceBudgets.MAX_NESTED_ROOTS)
         }
         level = descend
     }
+    NestedRootCaps.clear(capKey)
     return roots.sortedBy(File::getPath)
+}
+
+object NestedRootCaps {
+    private val hits = ConcurrentHashMap.newKeySet<String>()
+
+    internal fun hit(key: String) {
+        hits.add(key)
+    }
+
+    internal fun clear(key: String) {
+        hits.remove(key)
+    }
+
+    fun reachedUnder(basePath: String): Boolean {
+        val prefix = basePath.replace('\\', '/').trimEnd('/')
+        return hits.any { it.substringBefore('|').let { path -> path == prefix || path.startsWith("$prefix/") } }
+    }
 }
 
 private fun nestedListing(directory: File): NestedListing {

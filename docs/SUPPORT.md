@@ -113,6 +113,7 @@ exclusive run lease as the toolbar. Read tools never write project state.
 | run-named-task | `affected_run_task` | mutating | `com.aspix2k.affected.Detekt`, `com.aspix2k.affected.Lint`, `com.aspix2k.affected.Coverage` |
 | stop-owned | `affected_stop` | mutating | MCP-only |
 | status | `affected_status` | read | MCP-only |
+| doctor | `affected_doctor` | read | `com.aspix2k.affected.Diagnose` |
 | available-tasks | `affected_available_tasks` | read | MCP-only |
 | configure | `affected_configure` | mutating | `com.aspix2k.affected.BaseBranch`, `com.aspix2k.affected.CheckConsumers`, `com.aspix2k.affected.TestDependents`, `com.aspix2k.affected.RunBeforeCommit`, `com.aspix2k.affected.RunBeforePush`, `com.aspix2k.affected.AnimateWhileRunning` |
 

@@ -51,6 +51,11 @@ class AffectedStateTest {
         assertEquals(false, state.complete(revision, modules))
         assertEquals(AnalysisStatus.UNAVAILABLE, state.snapshot().analysisStatus)
         assertEquals(emptyList(), state.snapshot().modules)
+        assertTrue(state.snapshot().overBudget)
+
+        state.invalidate()
+
+        assertFalse(state.snapshot().overBudget)
     }
 
     @Test

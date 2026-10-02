@@ -34,6 +34,7 @@ class AffectedToolsetTest {
                 "affected_run_task",
                 "affected_stop",
                 "affected_status",
+                "affected_doctor",
                 "affected_available_tasks",
                 "affected_configure",
             ),
@@ -45,6 +46,7 @@ class AffectedToolsetTest {
             "affected_verification_plan",
             "affected_changed_files",
             "affected_status",
+            "affected_doctor",
             "affected_available_tasks",
         )
         for (method in tools) {

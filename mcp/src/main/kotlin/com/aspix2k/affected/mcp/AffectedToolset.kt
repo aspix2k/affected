@@ -1,5 +1,6 @@
 package com.aspix2k.affected.mcp
 
+import com.aspix2k.affected.AffectedDoctor
 import com.aspix2k.affected.AffectedMcpInputs
 import com.aspix2k.affected.AffectedMcpSettings
 import com.aspix2k.affected.AffectedMcpView
@@ -182,6 +183,15 @@ class AffectedToolset : McpToolset {
             ownedRunning = AffectedRunSessions.getInstance(project).activeCount(),
         ).toResult()
     }
+
+    @McpTool
+    @McpToolHints(readOnlyHint = McpToolHintValue.TRUE)
+    @McpDescription(
+        "Explains why Affected finds nothing or cannot run: git, comparison base, build systems, " +
+            "tools on PATH, discovery limits, changed files and analysis state, each with a remedy."
+    )
+    suspend fun affected_doctor(): McpToolCallResult =
+        AffectedDoctor.view(AffectedDoctor.diagnose(AffectedDoctor.inspect(coroutineContext.project))).toResult()
 
     @McpTool
     @McpToolHints(readOnlyHint = McpToolHintValue.TRUE)

@@ -155,6 +155,10 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
 
     fun all(): List<Node> = nodes
 
+    internal fun systemSummaries(): List<BuildSystemSummary> = nodes.groupBy { it.system.id }.map { (id, group) ->
+        BuildSystemSummary(id, modules = group.size, roots = group.distinctBy { it.module.root }.size)
+    }
+
     private fun directBuildOwners(file: File): List<Node>? {
         val parent = file.parentFile?.toPath()?.toAbsolutePath()?.normalize() ?: return null
         val owners = nodes.filter { node ->

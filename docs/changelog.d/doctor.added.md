@@ -1,0 +1,1 @@
+- New "Diagnose…" action and `affected_doctor` MCP tool explain why nothing is detected or run: git, comparison base, build systems, tools on PATH, discovery limits, changed files and analysis state, each with what to do.

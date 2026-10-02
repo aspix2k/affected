@@ -53,6 +53,15 @@ internal class ChangeAnalyzerTest : GitRepositoryTest() {
         val analyzer = ChangeAnalyzer(dir, "develop")
         assertTrue(analyzer.hasComparisonBase())
         assertEquals(listOf("Added.kt"), analyzer.againstBase().map { it.name })
+        assertEquals("trunk", analyzer.resolvedBranch())
+    }
+
+    @Test
+    fun `no base ref is reported when no candidate branch exists`() = repo { dir ->
+        run(dir, "git", "branch", "-m", "trunk")
+
+        assertEquals(null, ChangeAnalyzer(dir, "develop").resolvedBranch())
+        assertEquals("trunk", ChangeAnalyzer(dir, "trunk").resolvedBranch())
     }
 
     @Test

@@ -24,12 +24,20 @@ object ProjectChanges {
         val baseUnresolved: Boolean = false,
         val uncovered: List<File> = emptyList(),
         val resolvedBranch: String? = null,
+        val gitUsable: Boolean = true,
     )
 
     fun collect(project: Project): Result {
         val (files, uncovered, analyzer) = changedFiles(project)
         return if (analyzer == null) {
-            Result(files, files.toSet(), emptySet(), comparedToBase = false, uncovered = uncovered)
+            Result(
+                files,
+                files.toSet(),
+                emptySet(),
+                comparedToBase = false,
+                uncovered = uncovered,
+                gitUsable = false,
+            )
         } else {
             Result(
                 files,
