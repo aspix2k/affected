@@ -305,6 +305,19 @@ class ChangeAnalyzerTest {
     }
 
     @Test
+    fun `untracked files in excluded directories and IDE settings are not changes`() = repo { dir ->
+        File(dir, "target/debug").mkdirs()
+        File(dir, "target/debug/out.json").writeText("{}\n")
+        File(dir, ".idea").mkdirs()
+        File(dir, ".idea/.gitignore").writeText("/workspace.xml\n")
+        File(dir, "lib/src/main/kotlin/Fresh.kt").writeText("class Fresh\n")
+
+        val files = ChangeAnalyzer(dir, "main", includeAllFiles = true, excludedRoots = setOf("target")).againstBase()
+
+        assertEquals(listOf("Fresh.kt"), files.map { it.name })
+    }
+
+    @Test
     fun `a repository without commits compares everything and has no missing base`() {
         val dir = createTempDirectory("affected-empty-repo").toFile()
         run(dir, "git", "init", "-q", "-b", "main")

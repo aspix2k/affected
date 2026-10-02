@@ -19,6 +19,7 @@ class ChangeAnalyzer(
     private val gitExecutable: String = "git",
     private val sourceFileNames: Set<String> = emptySet(),
     private val sourceRoots: Set<String> = emptySet(),
+    private val excludedRoots: Set<String> = emptySet(),
 ) {
 
     class GitFailure(message: String, cause: Throwable? = null) : Exception(message, cause)
@@ -46,7 +47,9 @@ class ChangeAnalyzer(
             hasHead -> gitFields("diff", "--name-only", "--no-renames", "--relative", "-z", HEAD)
             else -> gitFields("ls-files", "-z")
         }
-        (committed.orEmpty() + local + gitFields("ls-files", "--others", "--exclude-standard", "-z")).distinct()
+        val untracked = gitFields("ls-files", "--others", "--exclude-standard", "-z")
+            .filterNot { it.startsWith(IDE_DIRECTORY) || isUnderAny(it, excludedRoots) }
+        (committed.orEmpty() + local + untracked).distinct()
     }
 
     private val hasHead: Boolean by lazy { run("rev-parse", "--verify", "-q", HEAD).exitCode == 0 }
@@ -263,6 +266,7 @@ class ChangeAnalyzer(
         private const val DEV_NULL = "/dev/null"
         private const val HEADER_PREFIX_LENGTH = 4
         private val GIT_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(90).toInt()
+        private const val IDE_DIRECTORY = ".idea/"
         private val FALLBACK_BRANCHES = listOf("develop", "main", "master")
 
         private const val MEMBER_INDENT = 4
@@ -333,14 +337,14 @@ internal fun isCollectedSource(
     return includeAllFiles ||
         path.substringAfterLast('.', "").lowercase() in extensions ||
         fileName in names ||
-        isUnderSourceRoot(path, sourceRoots)
+        isUnderAny(path, sourceRoots)
 }
 
-private fun isUnderSourceRoot(path: String, sourceRoots: Set<String>): Boolean {
-    if (sourceRoots.isEmpty()) return false
+private fun isUnderAny(path: String, roots: Set<String>): Boolean {
+    if (roots.isEmpty()) return false
     return generateSequence(path.replace('\\', '/').substringBeforeLast('/', "")) { it.substringBeforeLast('/', "") }
         .takeWhile(String::isNotEmpty)
-        .any(sourceRoots::contains)
+        .any(roots::contains)
 }
 
 private val PROJECT_DOCUMENTATION_NAMES = setOf(
