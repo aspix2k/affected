@@ -36,8 +36,8 @@ Built for multi-module projects and monorepos across 28 supported build ecosyste
 - **One Run session per affected plan.** Build-system roots keep their own structured sections inside it.
 - **Smaller test runs.** Narrow to the smallest unit whose relationship can be
   proven by the native build system or test runner.
-- **Consumer checks.** Optionally verify direct dependents after a public API
-  change.
+- **Consumer checks.** Optionally compile direct dependents after a public API
+  change, or run the tests of every module that depends on a changed one.
 - **Local by design.** No account, server, telemetry or project-specific config file.
 - **Optional MCP tools.** The same analysis snapshot and run actions when the
   JetBrains MCP Server plugin is installed.

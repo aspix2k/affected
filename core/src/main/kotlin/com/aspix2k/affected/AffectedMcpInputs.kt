@@ -50,6 +50,7 @@ object AffectedMcpInputs {
         runBeforeCommit: Boolean? = null,
         runBeforePush: Boolean? = null,
         animateWhileRunning: Boolean? = null,
+        testDependents: Boolean? = null,
     ): AffectedMcpView {
         val resolvedBranch = if (baseBranch == null) {
             current.baseBranch
@@ -64,14 +65,17 @@ object AffectedMcpInputs {
             runBeforeCommit = runBeforeCommit ?: current.runBeforeCommit,
             runBeforePush = runBeforePush ?: current.runBeforePush,
             animateWhileRunning = animateWhileRunning ?: current.animateWhileRunning,
+            testDependents = testDependents ?: current.testDependents,
         )
         return AffectedMcpView(
             text = "Base branch: ${next.baseBranch}, consumer check: ${onOff(next.checkConsumers)}, " +
+                "dependents' tests: ${onOff(next.testDependents)}, " +
                 "commit guard: ${onOff(next.runBeforeCommit)}, push guard: ${onOff(next.runBeforePush)}, " +
                 "animation: ${onOff(next.animateWhileRunning)}.",
             data = mapOf(
                 "baseBranch" to next.baseBranch,
                 "checkConsumers" to next.checkConsumers,
+                "testDependents" to next.testDependents,
                 "runBeforeCommit" to next.runBeforeCommit,
                 "runBeforePush" to next.runBeforePush,
                 "animateWhileRunning" to next.animateWhileRunning,

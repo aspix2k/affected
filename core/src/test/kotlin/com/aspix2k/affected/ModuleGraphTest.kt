@@ -291,6 +291,44 @@ class ModuleGraphTest {
     }
 
     @Test
+    fun `dependents are tested transitively only when the option is on`() {
+        val root = createTempDirectory("module-graph-dependents").toFile()
+        val core = module(root, "core", "core")
+        val api = module(root, "api", "api").copy(dependencies = setOf(core.key))
+        val app = module(root, "app", "app").copy(dependencies = setOf(api.key))
+        val unrelated = module(root, "tools", "tools")
+        val graph = gradleGraph(core, api, app, unrelated)
+        val production = File(root, "core/src/main/kotlin/Core.kt").apply {
+            parentFile.mkdirs()
+            writeText("class Core")
+        }
+        val changes = ProjectChanges.Result(listOf(production), emptySet(), setOf(production), comparedToBase = true)
+        val tasks = { testDependents: Boolean ->
+            Verification.prepare(graph, changes, testDependents = testDependents).testsOnly.plan
+                .groups.flatMap { it.tasks }.toSet()
+        }
+
+        assertEquals(setOf("core:test"), tasks(false))
+        assertEquals(setOf("core:test", "api:test", "app:test"), tasks(true))
+    }
+
+    @Test
+    fun `a changed test source does not pull dependents in`() {
+        val root = createTempDirectory("module-graph-dependents-test-source").toFile()
+        val core = module(root, "core", "core")
+        val app = module(root, "app", "app").copy(dependencies = setOf(core.key))
+        val graph = gradleGraph(core, app)
+        val test = File(root, "core/src/test/kotlin/CoreTest.kt").apply {
+            parentFile.mkdirs()
+            writeText("class CoreTest")
+        }
+        val changes = ProjectChanges.Result(listOf(test), emptySet(), setOf(test), comparedToBase = true)
+        val plan = Verification.prepare(graph, changes, testDependents = true).testsOnly.plan
+
+        assertEquals(listOf("core:test"), plan.groups.flatMap { it.tasks })
+    }
+
+    @Test
     fun `a changed resource of a JVM module plans that module's tests`() {
         val root = createTempDirectory("module-graph-resource").toFile()
         val graph = ModuleGraph(listOf(ModuleGraph.Node(module(root, "alpha", "alpha"), system("GRADLE"))))

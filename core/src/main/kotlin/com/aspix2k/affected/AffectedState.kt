@@ -562,7 +562,12 @@ class AffectedState(
         AffectedAnalysis(
             modules = affectedModules(owners.values.flatten()),
             changes = changes,
-            plans = Verification.prepare(graph, changes, directOwners),
+            plans = Verification.prepare(
+                graph,
+                changes,
+                directOwners,
+                AffectedSettings.getInstance().testDependents,
+            ),
         )
     }
 

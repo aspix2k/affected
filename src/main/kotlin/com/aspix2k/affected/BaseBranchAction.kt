@@ -30,10 +30,14 @@ class BaseBranchAction : AnAction(), DumbAware {
         )?.trim() ?: return
         if (branch == settings.baseBranch) return
         settings.baseBranch = branch
-        ProjectManager.getInstance().openProjects
-            .filterNot { it.isDisposed }
-            .forEach { it.service<AffectedState>().invalidate() }
+        invalidateOpenProjects()
     }
+}
+
+internal fun invalidateOpenProjects() {
+    ProjectManager.getInstance().openProjects
+        .filterNot { it.isDisposed }
+        .forEach { it.service<AffectedState>().invalidate() }
 }
 
 private object BranchNameValidator : InputValidator {

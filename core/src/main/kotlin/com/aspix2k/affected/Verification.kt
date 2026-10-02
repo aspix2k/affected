@@ -42,17 +42,19 @@ object Verification {
 
     suspend fun prepare(project: Project, changes: ProjectChanges.Result): Prepared =
         withContext(Dispatchers.Default) {
-            prepare(ModuleGraph.create(project), changes)
-                .select(AffectedSettings.getInstance().checkConsumers)
+            val settings = AffectedSettings.getInstance()
+            prepare(ModuleGraph.create(project), changes, testDependents = settings.testDependents)
+                .select(settings.checkConsumers)
         }
 
     internal fun prepare(
         graph: ModuleGraph,
         changes: ProjectChanges.Result,
         owners: Map<File, List<ModuleGraph.Node>> = changes.files.associateWith(graph::nodesFor),
+        testDependents: Boolean = false,
     ): PreparedPlans {
         val buildChanges = changes.toBuildChanges()
-        val plans = verificationPlans(graph, changes, owners)
+        val plans = verificationPlans(graph, changes, owners, testDependents)
         return PreparedPlans(
             testsOnly = Prepared(plans.testsOnly, buildChanges, plans.unresolvedFiles, changes.baseUnresolved),
             withConsumers = Prepared(
@@ -146,7 +148,8 @@ private data class VerificationPlans(
 private fun verificationPlans(
     graph: ModuleGraph,
     changes: ProjectChanges.Result,
-    owners: Map<File, List<ModuleGraph.Node>> = changes.files.associateWith(graph::nodesFor),
+    owners: Map<File, List<ModuleGraph.Node>>,
+    testDependents: Boolean,
 ): VerificationPlans {
     if (changes.files.isEmpty()) {
         val empty = Plan(emptyList(), 0, 0)
@@ -154,7 +157,14 @@ private fun verificationPlans(
     }
     val effectiveOwners = graph.ownersForChanges(changes.toBuildChanges(), owners)
     val changed = effectiveOwners.values.flatten().distinct()
-    val testConsumers = graph.transitiveTestConsumers(changed.toSet())
+    val testConsumers = graph.transitiveTestConsumers(changed.toSet()) + if (testDependents) {
+        val production = effectiveOwners.flatMapTo(HashSet()) { (file, nodes) ->
+            nodes.filterNot { it.system.isTestSource(it.pathInBuildRoot(file)) }
+        }
+        graph.transitiveTestConsumers(production, everySystem = true)
+    } else {
+        emptyList()
+    }
     val apiNodes = effectiveOwners.flatMapTo(HashSet()) { (file, nodes) ->
         nodes.filter { node ->
             affectsConsumers(
@@ -165,13 +175,13 @@ private fun verificationPlans(
         }
     }
     val changedNodes = changed.toSet()
-    val tested = (changed + testConsumers).map { node ->
+    val tested = (changed + testConsumers).distinct().map { node ->
         androidTestInfo(node, if (node in changedNodes) pathsOwnedBy(node, effectiveOwners) else emptyList())
     }
     val testsOnly = TaskPlanner.plan(tested, emptyList())
     val consumers = if (apiNodes.isEmpty()) emptyList() else graph.directDependents(apiNodes)
     val verifiedByConsumers = changed.filterTo(HashSet()) { node ->
-        !node.isVerifiable() && graph.transitiveTestConsumers(setOf(node)).any { it.isVerifiable() }
+        !node.isVerifiable() && graph.transitiveTestConsumers(setOf(node), testDependents).any { it.isVerifiable() }
     }
     return VerificationPlans(
         testsOnly = testsOnly,

@@ -20,6 +20,11 @@ class AffectedSettingsTest {
     }
 
     @Test
+    fun `dependents are not tested by default`() {
+        assertFalse(AffectedSettings.State().testDependents)
+    }
+
+    @Test
     fun `animation is enabled by default`() {
         assertTrue(AffectedSettings.State().animateWhileRunning)
     }
