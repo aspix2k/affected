@@ -1,7 +1,9 @@
 package com.aspix2k.affected.build.dotnet
 
 import com.aspix2k.affected.ModuleGraph
+import com.aspix2k.affected.ProjectChanges
 import com.aspix2k.affected.TaskPlanner
+import com.aspix2k.affected.Verification
 import com.aspix2k.affected.build.multiRootProject
 import java.io.File
 import kotlin.io.path.createTempDirectory
@@ -72,6 +74,34 @@ class DotnetMultiRootTest {
         assertEquals(1, modules.count { it.id == "Shared" })
         assertEquals(2, modules.count { it.id == "App" })
         modules.filter { it.id == "App" }.forEach { assertEquals(setOf("DOTNET|$core|Shared"), it.dependencies) }
+    }
+
+    @Test
+    fun `a change in a project outside every solution root is unresolved, not ignored`() {
+        val base = createTempDirectory("dotnet-multi-outside").toFile()
+        csproj(base, "shared/Shared/Shared.csproj", "")
+        File(base, "api").mkdirs()
+        File(base, "api/api.sln").writeText("")
+        csproj(
+            base,
+            "api/App/App.csproj",
+            """<ItemGroup><ProjectReference Include="..\..\shared\Shared\Shared.csproj" /></ItemGroup>""",
+        )
+        val system = DotnetBuildSystem()
+        val graph = ModuleGraph(system.modules(multiRootProject(base)).map { ModuleGraph.Node(it, system) })
+        val owned = File(base, "api/App/Program.cs").apply { writeText("class Program {}") }
+        val outside = File(base, "shared/Shared/Shared.cs").apply { writeText("class Shared {}") }
+        val changes = ProjectChanges.Result(
+            listOf(owned, outside),
+            emptySet(),
+            setOf(owned, outside),
+            comparedToBase = true,
+        )
+
+        val prepared = Verification.prepare(graph, changes).select(checkConsumers = false)
+
+        assertEquals(listOf(base.resolve("api").invariantSeparatorsPath), graph.nodesFor(owned).map { it.buildRoot })
+        assertEquals(1, prepared.unresolvedFiles)
     }
 
     @Test
