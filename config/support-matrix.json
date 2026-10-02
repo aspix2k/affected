@@ -452,7 +452,7 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "PHP 8.2–8.5; PHPUnit 11.5+, 12.5+ and 13.2+; Pest 5 with the PHPUnit release it pins, tested at Pest 5.2.1 on PHP 8.4–8.5",
+      "versions": "PHP 8.2–8.5; PHPUnit 11.5+, 12.5+ and 13.2+; Pest 5 with the PHPUnit release it pins, tested at Pest 5.3.0 on PHP 8.4–8.5",
       "support": "supported",
       "fixtures": ["conformance/cli-fixtures/composer", "conformance/cli-fixtures/pest"],
       "gates": [".github/workflows/conformance.yml"]

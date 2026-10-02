@@ -20,7 +20,7 @@ repositories {
 }
 
 dependencies {
-    implementation("org.tomlj:tomlj:2.1.1")
+    implementation("org.tomlj:tomlj:2.2.0")
 
     intellijPlatform {
         intellijIdea(providers.gradleProperty("affected.idea.version").get())
