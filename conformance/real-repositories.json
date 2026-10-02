@@ -364,17 +364,16 @@
         "."
       ],
       "modules": [
-        "fmt",
-        "format-test"
+        "fmt"
       ],
       "scenarios": [
         {
-          "name": "test source",
+          "name": "test source declared through a project function",
           "files": [
             "test/format-test.cc"
           ],
           "tasks": [
-            "format-test:test"
+            "test-main:test"
           ],
           "command": [
             "ctest"
