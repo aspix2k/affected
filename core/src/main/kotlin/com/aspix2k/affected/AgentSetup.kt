@@ -17,7 +17,7 @@ object AgentSetup {
         - Before finishing a task, call `$RUN_VERIFICATION` and wait for the result.
         - Treat `passed: false` as a failed task: read the `reason` and the failing output, fix it and call the tool again.
         - Call `$VERIFICATION_PLAN` to see what will run and `$CHANGED_FILES` to see what counts as changed.
-        - If several projects are open in the IDE, check that the result is for this project.
+        - Pass the absolute project directory as `projectPath`; the server asks for it when it cannot tell the project.
         - Do not run the whole test suite while these tools are available.
     """.trimIndent()
 
