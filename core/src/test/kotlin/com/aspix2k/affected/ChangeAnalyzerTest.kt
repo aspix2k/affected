@@ -271,6 +271,20 @@ class ChangeAnalyzerTest {
     }
 
     @Test
+    fun `a file under an IDE source root is collected whatever its extension`() = repo { dir ->
+        File(dir, "lib/src/main/resources/db").mkdirs()
+        File(dir, "lib/src/main/resources/application.yml").writeText("server: {}\n")
+        File(dir, "lib/src/main/resources/db/V1__init.sql").writeText("select 1;\n")
+        File(dir, "lib/notes.txt").writeText("notes\n")
+        File(dir, "ci.yml").writeText("on: push\n")
+
+        val changes = ChangeAnalyzer(dir, "main", sourceRoots = setOf("lib/src/main/resources")).collect()
+
+        assertEquals(setOf("application.yml", "V1__init.sql"), changes.files.mapTo(HashSet()) { it.name })
+        assertTrue(changes.apiTouched.isEmpty(), "a resource is not a signature change")
+    }
+
+    @Test
     fun `all-file collection still ignores project documentation`() = repo { dir ->
         File(dir, "README.md").writeText("# doc")
         File(dir, "LICENSE").writeText("license")

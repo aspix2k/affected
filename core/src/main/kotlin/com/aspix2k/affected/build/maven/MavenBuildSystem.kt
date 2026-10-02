@@ -39,6 +39,9 @@ import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
+internal fun mavenHoldsTests(directory: String, testSources: List<String>): Boolean =
+    File(directory, "src/test").isDirectory || testSources.any { File(it).isDirectory }
+
 private data class MavenRunResult(val passed: Boolean, val cleanupSafe: Boolean)
 private data class MavenCompletion(val accepted: Boolean, val cleaned: Boolean)
 
@@ -120,7 +123,7 @@ class MavenBuildSystem internal constructor(
                 contentRoots = listOf(data.directory),
                 testTask = data.testTask,
                 compileTask = COMPILE_GOAL,
-                hasTests = File(data.directory, "src/test").isDirectory,
+                hasTests = mavenHoldsTests(data.directory, data.testSources),
                 systemId = id,
             )
         }
@@ -138,6 +141,7 @@ class MavenBuildSystem internal constructor(
         val directory: String,
         val dependencies: Set<String>,
         val testTask: String,
+        val testSources: List<String>,
     )
 
     private fun describe(project: Project): List<Described> {
@@ -159,6 +163,7 @@ class MavenBuildSystem internal constructor(
                 directory = directory,
                 dependencies = mavenProject.dependencies.mapTo(HashSet()) { it.mavenId.key },
                 testTask = mavenTestGoal(root in failsafeRoots),
+                testSources = mavenProject.testSources,
             )
         }
     }

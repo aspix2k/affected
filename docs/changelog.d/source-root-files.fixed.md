@@ -1,0 +1,1 @@
+- A changed file under a source or resource root that the IDE knows now counts as a change whatever its extension: editing `application.yml`, an SQL migration, a `.proto` or an `.aidl` file in a Gradle or Maven module runs that module's tests instead of being ignored.

@@ -18,6 +18,7 @@ class ChangeAnalyzer(
     private val includeAllFiles: Boolean = false,
     private val gitExecutable: String = "git",
     private val sourceFileNames: Set<String> = emptySet(),
+    private val sourceRoots: Set<String> = emptySet(),
 ) {
 
     class GitFailure(message: String, cause: Throwable? = null) : Exception(message, cause)
@@ -55,7 +56,7 @@ class ChangeAnalyzer(
     internal fun keepSources(paths: Collection<String>): List<File> {
         return paths
             .filter { path ->
-                isCollectedSource(path, includeAllFiles, sourceExtensions, sourceFileNames)
+                isCollectedSource(path, includeAllFiles, sourceExtensions, sourceFileNames, sourceRoots)
             }
             .map { File(projectDir, it) }
             .distinct()
@@ -310,12 +311,21 @@ internal fun isCollectedSource(
     includeAllFiles: Boolean,
     extensions: Set<String>,
     names: Set<String>,
+    sourceRoots: Set<String> = emptySet(),
 ): Boolean {
     if (isProjectDocumentation(path)) return false
     val fileName = path.substringAfterLast('/').substringAfterLast('\\')
     return includeAllFiles ||
         path.substringAfterLast('.', "").lowercase() in extensions ||
-        fileName in names
+        fileName in names ||
+        isUnderSourceRoot(path, sourceRoots)
+}
+
+private fun isUnderSourceRoot(path: String, sourceRoots: Set<String>): Boolean {
+    if (sourceRoots.isEmpty()) return false
+    return generateSequence(path.replace('\\', '/').substringBeforeLast('/', "")) { it.substringBeforeLast('/', "") }
+        .takeWhile(String::isNotEmpty)
+        .any(sourceRoots::contains)
 }
 
 private val PROJECT_DOCUMENTATION_NAMES = setOf(
