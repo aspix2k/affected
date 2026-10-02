@@ -123,6 +123,41 @@ internal fun nestedBuildRoots(base: File, markerNames: Set<String>, hasMarker: (
 
 internal fun nestedBuildRoots(
     base: File,
+    markerNames: Set<String>,
+    isMember: (root: File, nested: File) -> Boolean,
+    hasMarker: (File) -> Boolean,
+): List<File> {
+    val roots = nestedBuildRoots(base, markerNames::contains, hasMarker)
+    val found = LinkedHashSet(roots)
+    val queue = ArrayDeque<NestedCandidate>()
+    roots.forEach { queue += NestedCandidate(it, it, 0) }
+    var visited = 0
+    while (queue.isNotEmpty() && visited < PerformanceBudgets.MAX_DIRECTORIES) {
+        val (owner, directory, depth) = queue.removeFirst()
+        if (depth >= PerformanceBudgets.MAX_DEPTH) continue
+        for (child in nestedListing(directory).directories.filterNot(::isSkippedIndependentRoot)) {
+            visited++
+            val independent = nestedListing(child).names.any(markerNames::contains) &&
+                hasMarker(child) && !isMember(owner, child)
+            if (independent) found += child
+            queue += NestedCandidate(if (independent) child else owner, child, depth + 1)
+        }
+    }
+    return found.sortedBy(File::getPath).take(PerformanceBudgets.MAX_NESTED_ROOTS)
+}
+
+internal val isNeverMember: (root: File, nested: File) -> Boolean = { _, _ -> false }
+
+private data class NestedCandidate(val owner: File, val directory: File, val depth: Int)
+
+private fun isSkippedIndependentRoot(directory: File): Boolean =
+    directory.name.startsWith('.') || directory.name.startsWith('_') ||
+        directory.name.lowercase() in INDEPENDENT_ROOT_SKIP
+
+private val INDEPENDENT_ROOT_SKIP = setOf("vendor", "testdata", "fixtures", "pods")
+
+internal fun nestedBuildRoots(
+    base: File,
     isMarkerName: (String) -> Boolean,
     hasMarker: (File) -> Boolean,
 ): List<File> {

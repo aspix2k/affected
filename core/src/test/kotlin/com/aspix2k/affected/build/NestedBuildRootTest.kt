@@ -165,6 +165,102 @@ class NestedBuildRootTest {
         assertEquals(listOf(File(base, "apps/web")), nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists))
     }
 
+    @Test
+    fun `an independent marker below a found root is a root of its own`() {
+        val base = createTempDirectory("independent-below").toFile()
+        markers(base, ".", "tools/standalone")
+
+        assertEquals(listOf(base, File(base, "tools/standalone")), independentRoots(base, never))
+    }
+
+    @Test
+    fun `a member marker below a found root is not duplicated`() {
+        val base = createTempDirectory("independent-member").toFile()
+        markers(base, ".", "packages/ui", "tools/standalone")
+
+        assertEquals(
+            listOf(base, File(base, "tools/standalone")),
+            independentRoots(base) { _, nested -> nested.name == "ui" },
+        )
+    }
+
+    @Test
+    fun `membership is asked of the nearest root and the walk continues below members`() {
+        val base = createTempDirectory("independent-nearest").toFile()
+        markers(base, ".", "a", "a/b", "a/b/c", "x", "x/y")
+        val asked = ArrayList<Pair<String, String>>()
+
+        val roots = independentRoots(base) { root, nested ->
+            asked += root.name to nested.name
+            root == base && nested.name == "a" || root.name == "x"
+        }
+
+        assertEquals(listOf(base, File(base, "a/b"), File(base, "a/b/c"), File(base, "x")), roots)
+        assertEquals(
+            setOf(base.name to "a", base.name to "x", base.name to "b", "b" to "c", "x" to "y"),
+            asked.toSet(),
+        )
+    }
+
+    @Test
+    fun `independent roots are found below roots discovered under a base without a marker`() {
+        val base = createTempDirectory("independent-deeper").toFile()
+        markers(base, "apps/web", "apps/web/tests/e2e/fixture-app")
+
+        assertEquals(
+            listOf(File(base, "apps/web"), File(base, "apps/web/tests/e2e/fixture-app")),
+            independentRoots(base, never),
+        )
+    }
+
+    @Test
+    fun `independent roots stop at the depth and the root caps`() {
+        val base = createTempDirectory("independent-limits").toFile()
+        val deepest = (1..PerformanceBudgets.MAX_DEPTH).joinToString("/") { "d$it" }
+        markers(base, ".", deepest, "$deepest/too-deep")
+        assertEquals(listOf(base, File(base, deepest)), independentRoots(base, never))
+
+        markers(base, *(1..PerformanceBudgets.MAX_NESTED_ROOTS + 5).map { "tools/p$it" }.toTypedArray())
+        assertEquals(PerformanceBudgets.MAX_NESTED_ROOTS, independentRoots(base, never).size)
+    }
+
+    @Test
+    fun `independent roots stay bounded by the directory budget`() {
+        val base = createTempDirectory("independent-budget").toFile()
+        markers(base, ".")
+        repeat(PerformanceBudgets.MAX_DIRECTORIES + 10) { File(base, "a/d$it").mkdirs() }
+        markers(base, "zz/late")
+
+        assertEquals(listOf(base), independentRoots(base, never))
+    }
+
+    @Test
+    fun `independent roots skip build output vendor test data fixture and hidden directories`() {
+        val base = createTempDirectory("independent-skip").toFile()
+        markers(
+            base, ".", "tools/ok", "node_modules/pkg", "vendor/dep", "testdata/x", "Fixtures/x", "tools/Vendor/dep",
+            ".hidden/x", "_private/x", "build/out", "target/x", "Pods/x",
+        )
+
+        assertEquals(listOf(base, File(base, "tools/ok")), independentRoots(base, never))
+    }
+
+    @Test
+    fun `a symlinked directory below a found root is not searched for independent roots`() {
+        val base = createTempDirectory("independent-link").toFile()
+        val external = createTempDirectory("independent-external").toFile()
+        markers(external, "web")
+        markers(base, ".")
+        assumeTrue(runCatching { Files.createSymbolicLink(File(base, "linked").toPath(), external.toPath()) }.isSuccess)
+
+        assertEquals(listOf(base), independentRoots(base, never))
+    }
+
+    private fun independentRoots(base: File, isMember: (File, File) -> Boolean): List<File> =
+        nestedBuildRoots(base, CMAKE_LISTS, isMember, ::hasCMakeLists)
+
+    private val never: (File, File) -> Boolean = isNeverMember
+
     private fun markers(base: File, vararg paths: String) = paths.forEach { path ->
         File(base, path).apply { mkdirs() }.let { File(it, "CMakeLists.txt").writeText("") }
     }

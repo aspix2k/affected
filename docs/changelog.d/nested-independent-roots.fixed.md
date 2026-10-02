@@ -1,0 +1,1 @@
+- Independent projects nested below another project (Cargo crates and Node packages outside the workspace, Dart, Flutter, Deno, Swift, sbt, Ruby, sqlc and Atlas) are now analysed and tested on their own instead of being skipped.

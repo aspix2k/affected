@@ -265,11 +265,14 @@ class DartCommandTest {
     }
 
     @Test
-    fun `a Dart marker on the project base wins`() {
+    fun `a Dart marker on the project base and an independent nested package are both roots`() {
         val base = dartRoot()
         dartRoot().copyRecursively(File(base, "pkg"))
 
-        assertEquals(base.canonicalFile, dartProjectRoots(base).singleOrNull()?.canonicalFile)
+        assertEquals(
+            listOf(base, File(base, "pkg")).map(File::getCanonicalFile),
+            dartProjectRoots(base).map(File::getCanonicalFile),
+        )
     }
 
     @Test

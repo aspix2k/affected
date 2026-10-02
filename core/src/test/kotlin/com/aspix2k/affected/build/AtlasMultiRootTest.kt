@@ -52,15 +52,15 @@ class AtlasMultiRootTest {
     }
 
     @Test
-    fun `a base manifest and a single nested root keep one root`() {
+    fun `a base manifest and a nested root are both roots`() {
         val withBase = createTempDirectory("atlas-base").toFile()
         val baseRoot = root(withBase, ".", "one")
-        root(withBase, "native", "two")
+        val independent = root(withBase, "native", "two")
         val nestedOnly = createTempDirectory("atlas-nested").toFile()
         val nested = root(nestedOnly, "native", "one")
 
         assertEquals(
-            listOf(baseRoot.invariantSeparatorsPath),
+            listOf(baseRoot, independent).map { it.invariantSeparatorsPath },
             AtlasBuildSystem().modules(multiRootProject(withBase)).map { it.root },
         )
         assertEquals(

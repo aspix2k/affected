@@ -45,6 +45,41 @@ class CargoMultiRootTest {
         )
     }
 
+    @Test
+    fun `a crate outside the workspace is its own root and members are not duplicated`() {
+        val base = createTempDirectory("cargo-independent").toFile()
+        File(base, "Cargo.toml").writeText(
+            "[workspace]\nmembers = [\"crates/*\"]\nexclude = [\"crates/legacy\"]\n\n" +
+                "[dependencies]\nshared = { path = \"libs/shared\" }\n",
+        )
+        crate(base, "crates/core", "core")
+        crate(base, "crates/legacy", "legacy")
+        crate(base, "libs/shared", "shared")
+        crate(base, "tools/standalone", "standalone")
+        crate(base, "tools/standalone/fuzz", "fuzz").also {
+            File(it, "Cargo.toml").appendText("\n[package.metadata]\ncargo-fuzz = true\n")
+        }
+        crate(base, "tools/own-workspace", "own").also {
+            File(it, "Cargo.toml").appendText("\n[workspace]\n")
+        }
+
+        assertEquals(
+            listOf("", "crates/legacy", "tools/own-workspace", "tools/standalone").map { File(base, it).canonicalFile },
+            cargoProjectRoots(base).map(File::getCanonicalFile),
+        )
+    }
+
+    @Test
+    fun `a nested crate below a root without a workspace is its own root`() {
+        val base = crate(createTempDirectory("cargo-no-workspace").toFile(), ".", "app")
+        crate(base, "examples/demo", "demo")
+
+        assertEquals(
+            listOf(base, File(base, "examples/demo")).map(File::getCanonicalFile),
+            cargoProjectRoots(base).map(File::getCanonicalFile),
+        )
+    }
+
     private fun crate(base: File, path: String, name: String): File = File(base, path).also {
         it.mkdirs()
         File(it, "Cargo.toml").writeText("[package]\nname = \"$name\"\nversion = \"0.1.0\"\nedition = \"2021\"\n")

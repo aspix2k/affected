@@ -33,7 +33,7 @@ internal object AtlasTasks {
 }
 
 internal fun atlasProjectRoots(base: File): List<File> =
-    nestedBuildRoots(base, setOf("atlas.hcl")) { atlasManifest(it) != null }
+    nestedBuildRoots(base, setOf("atlas.hcl"), isNeverMember) { atlasManifest(it) != null }
 
 internal fun atlasManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null

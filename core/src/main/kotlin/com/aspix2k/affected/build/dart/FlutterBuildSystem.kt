@@ -2,6 +2,7 @@ package com.aspix2k.affected.build.dart
 
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.SuspendingBuildSystem
+import com.aspix2k.affected.build.isNeverMember
 import com.aspix2k.affected.build.isRegularFileNoFollow
 import com.aspix2k.affected.build.nestedBuildRoots
 import com.aspix2k.affected.build.pathSegments
@@ -39,7 +40,7 @@ internal object FlutterTasks {
 }
 
 internal fun flutterProjectRoots(base: File): List<File> =
-    nestedBuildRoots(base, setOf("pubspec.yaml")) { flutterManifest(it) != null }
+    nestedBuildRoots(base, setOf("pubspec.yaml"), isNeverMember) { flutterManifest(it) != null }
 
 internal fun flutterManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null

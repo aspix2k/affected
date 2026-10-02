@@ -42,7 +42,24 @@ internal object DenoTasks {
 internal class DenoConfig(val json: JsonObject?)
 
 internal fun denoProjectRoots(base: File): List<File> =
-    nestedBuildRoots(base, CONFIG_NAMES.toSet()) { denoConfig(it) != null && !nodeOwnsTests(it) }
+    nestedBuildRoots(base, CONFIG_NAMES.toSet(), ::isDenoWorkspaceMember) {
+        denoConfig(it) != null && !nodeOwnsTests(it)
+    }
+
+private fun isDenoWorkspaceMember(root: File, nested: File): Boolean {
+    val relative = root.toPath().relativize(nested.toPath()).joinToString("/")
+    val listed = denoWorkspaceMembers(root).any { member ->
+        member == relative || member.endsWith("/*") && relative.substringBeforeLast('/', "") == member.dropLast(2)
+    }
+    return listed || !denoHasTests(nested)
+}
+
+private fun denoWorkspaceMembers(root: File): List<String> {
+    val workspace = denoConfig(root)?.json?.get("workspace")
+    val members = if (workspace?.isJsonObject == true) workspace.asJsonObject.get("members") else workspace
+    return members?.takeIf { it.isJsonArray }?.asJsonArray?.toList().orEmpty()
+        .mapNotNull { entry -> entry.takeIf { it.isJsonPrimitive }?.asString?.removePrefix("./")?.trimEnd('/') }
+}
 
 internal fun denoConfig(root: File): DenoConfig? {
     val configs = CONFIG_NAMES.map { File(root, it) }.filter { it.exists() }

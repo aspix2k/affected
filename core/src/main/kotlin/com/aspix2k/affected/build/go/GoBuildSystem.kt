@@ -2,9 +2,9 @@ package com.aspix2k.affected.build.go
 
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.ManifestSearch
-import com.aspix2k.affected.build.PerformanceBudgets
 import com.aspix2k.affected.build.SuspendingBuildSystem
 import com.aspix2k.affected.build.failClosedModules
+import com.aspix2k.affected.build.isNeverMember
 import com.aspix2k.affected.build.isRegularFileNoFollow
 import com.aspix2k.affected.build.nestedBuildRoots
 import com.aspix2k.affected.build.pathSegments
@@ -13,7 +13,6 @@ import com.aspix2k.affected.build.process.CommandRunner
 import com.aspix2k.affected.build.retainBuildSnapshot
 import com.intellij.openapi.project.Project
 import java.io.File
-import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 
 class GoBuildSystem : SuspendingBuildSystem {
@@ -32,7 +31,7 @@ class GoBuildSystem : SuspendingBuildSystem {
     override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
     override fun modules(project: Project): List<BuildModule> {
-        val roots = rootsOf(project).flatMap(::goModuleRoots)
+        val roots = rootsOf(project)
         cache.keys.retainAll(roots.mapTo(HashSet()) { it.invariantSeparatorsPath })
         return roots.flatMap { modulesOf(it, roots) }
     }
@@ -85,23 +84,8 @@ class GoBuildSystem : SuspendingBuildSystem {
 private fun BuildModule.isWithin(roots: List<String>): Boolean =
     contentRoots.any { directory -> roots.any { directory == it || directory.startsWith("$it/") } }
 
-internal fun goModuleRoots(root: File): List<File> {
-    val start = root.toPath().toAbsolutePath().normalize()
-    val nested = ManifestSearch.find(start.toFile(), setOf("go.mod"))
-        .mapNotNull { it.toPath().toAbsolutePath().normalize().parent }
-        .filter { directory ->
-            directory != start && start.relativize(directory).none { isIgnoredByGo(it.toString()) }
-        }
-        .sorted()
-        .take(PerformanceBudgets.MAX_NESTED_ROOTS)
-    return (listOf(start) + nested).map(Path::toFile)
-}
-
-private fun isIgnoredByGo(name: String): Boolean =
-    name == "vendor" || name == "testdata" || name.startsWith("_") || name.startsWith(".")
-
 internal fun goProjectRoots(base: File): List<File> =
-    nestedBuildRoots(base, setOf("go.mod")) { goManifest(it) != null }
+    nestedBuildRoots(base, setOf("go.mod"), isNeverMember) { goManifest(it) != null }
 
 internal fun goManifest(root: File): File? =
     File(root, "go.mod").takeIf(File::isRegularFileNoFollow)

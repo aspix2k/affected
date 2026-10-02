@@ -79,9 +79,17 @@ class RubyBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
 
     private fun rootsOf(project: Project): List<File> =
         project.basePath?.let(::File)
-            ?.let { nestedBuildRoots(it, setOf("gemfile")) { File(it, "Gemfile").isRegularFileNoFollow() } }
+            ?.let(::rubyProjectRoots)
             .orEmpty()
 }
+
+internal fun rubyProjectRoots(base: File): List<File> =
+    nestedBuildRoots(base, setOf("gemfile"), { _, nested -> hasGemspec(nested) }) {
+        File(it, "Gemfile").isRegularFileNoFollow()
+    }
+
+private fun hasGemspec(directory: File): Boolean =
+    directory.listFiles { file -> file.extension == "gemspec" }.orEmpty().isNotEmpty()
 
 private val RUBY_TEST_DIRECTORIES = setOf("test", "spec")
 

@@ -145,7 +145,7 @@ class GoCommandTest {
 
         assertEquals(
             listOf("", "exp", "zapgrpc/internal/test").map { File(base, it).canonicalFile },
-            goModuleRoots(base).map(File::getCanonicalFile),
+            goProjectRoots(base).map(File::getCanonicalFile),
         )
     }
 
@@ -154,7 +154,7 @@ class GoCommandTest {
         val base = goMod().canonicalFile
         File(base, "pkg").mkdirs()
 
-        assertEquals(listOf(base), goModuleRoots(base).map(File::getCanonicalFile))
+        assertEquals(listOf(base), goProjectRoots(base).map(File::getCanonicalFile))
     }
 
     @Test

@@ -45,6 +45,20 @@ class SwiftMultiRootTest {
         assertEquals(setOf(roots.first().invariantSeparatorsPath), cachedRoots(system))
     }
 
+    @Test
+    fun `a package nested below a package is its own root and checkouts and fixtures are not`() {
+        val base = createTempDirectory("swift-independent").toFile()
+        swiftPackage(base, ".")
+        swiftPackage(base, "Examples/Demo")
+        swiftPackage(base, ".build/checkouts/dep")
+        swiftPackage(base, "Tests/Fixtures/sample")
+
+        assertEquals(
+            listOf(base, File(base, "Examples/Demo")).map(File::getCanonicalFile),
+            SwiftBuildSystem().modules(multiRootProject(base)).map { File(it.root).canonicalFile }.distinct(),
+        )
+    }
+
     private fun cachedRoots(system: SwiftBuildSystem): Set<Any?> {
         val field = system.javaClass.getDeclaredField("cache")
         field.isAccessible = true

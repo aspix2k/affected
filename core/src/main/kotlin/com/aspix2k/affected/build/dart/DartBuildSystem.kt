@@ -48,7 +48,15 @@ internal object DartTasks {
 }
 
 internal fun dartProjectRoots(base: File): List<File> =
-    nestedBuildRoots(base, setOf("pubspec.yaml")) { dartManifest(it) != null }
+    nestedBuildRoots(
+        base,
+        setOf("pubspec.yaml"),
+        { _, nested -> isPubWorkspaceMember(nested) },
+    ) { dartManifest(it) != null }
+
+private fun isPubWorkspaceMember(nested: File): Boolean =
+    runCatching { File(nested, "pubspec.yaml").readText() }.getOrNull()
+        ?.let(PUB_WORKSPACE_RESOLUTION::containsMatchIn) == true
 
 internal fun dartManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null
@@ -193,6 +201,7 @@ private fun packagePath(relative: String, verb: String): String =
 private fun dartTestFile(file: File): Boolean =
     file.isFile && file.name.endsWith("_test.dart")
 
+private val PUB_WORKSPACE_RESOLUTION = Regex("""(?m)^resolution:[ \t]*workspace[ \t]*$""")
 private val FLUTTER_SDK = Regex("""(?m)^[ \t]*sdk:[ \t]*flutter[ \t]*$""")
 private val WORKSPACE_SECTION = Regex("""(?m)^workspace:\s*\n((?:[ \t]+.*\n?)*)""")
 private val WORKSPACE_PATH = Regex("""(?m)^[ \t]*-[ \t]+(?:\./)?([A-Za-z0-9][A-Za-z0-9_./-]*)[ \t]*$""")

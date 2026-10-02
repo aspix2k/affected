@@ -52,6 +52,35 @@ class NodeMultiRootTest {
         assertEquals(2, modules.map { it.root }.toSet().size)
     }
 
+    @Test
+    fun `a package outside the workspace globs with scripts or a lockfile is its own root`() {
+        val base = createTempDirectory("node-independent").toFile()
+        File(base, "package.json").writeText("{\"name\":\"root\",\"workspaces\":[\"packages/*\"]}")
+        app(base, "packages/ui", "ui")
+        app(base, "examples/site", "site")
+        File(base, "tools/lock").also { it.mkdirs() }
+        File(base, "tools/lock/package.json").writeText("{\"name\":\"lock\"}")
+        File(base, "tools/lock/package-lock.json").writeText("{}")
+        File(base, "src/esm").also { it.mkdirs() }
+        File(base, "src/esm/package.json").writeText("{\"type\":\"module\"}")
+
+        assertEquals(
+            listOf("", "examples/site", "tools/lock").map { File(base, it).canonicalFile },
+            nodeProjectRoots(base).map(File::getCanonicalFile),
+        )
+    }
+
+    @Test
+    fun `a package below a root without workspaces is its own root`() {
+        val base = app(createTempDirectory("node-no-workspace").toFile(), ".", "root")
+        app(base, "demo", "demo")
+
+        assertEquals(
+            listOf(base, File(base, "demo")).map(File::getCanonicalFile),
+            nodeProjectRoots(base).map(File::getCanonicalFile),
+        )
+    }
+
     private fun app(base: File, path: String, name: String): File = File(base, path).also {
         File(it, "tests").mkdirs()
         File(it, "package.json").writeText("{\"name\":\"$name\",\"scripts\":{\"test\":\"jest\"}}")

@@ -36,6 +36,33 @@ class SbtMultiRootTest {
         assertEquals(listOf("sbt", "--batch", "test"), commands.getValue(single.invariantSeparatorsPath))
     }
 
+    @Test
+    fun `a build outside the declared subprojects is its own root and subprojects are not duplicated`() {
+        val base = createTempDirectory("sbt-independent").toFile()
+        sbt(
+            base,
+            ".",
+            "lazy val core = (project in file(\"core\"))\nlazy val api = project.in(file(\"modules/api\"))\n",
+        )
+        sbt(base, "core", "name := \"core\"\n")
+        sbt(base, "modules/api", "name := \"api\"\n")
+        sbt(base, "tools/other", "name := \"other\"\n")
+
+        assertEquals(
+            listOf(base, File(base, "tools/other")).map(File::getCanonicalFile),
+            sbtProjectRoots(base).map(File::getCanonicalFile),
+        )
+    }
+
+    @Test
+    fun `nested builds stay members when the parent declares projects in a way that is not understood`() {
+        val base = createTempDirectory("sbt-unproved").toFile()
+        sbt(base, ".", "lazy val core = Project(\"core\", file(\"core\"))\n")
+        sbt(base, "core", "name := \"core\"\n")
+
+        assertEquals(listOf(base.canonicalFile), sbtProjectRoots(base).map(File::getCanonicalFile))
+    }
+
     private fun sbt(base: File, path: String, build: String): File = File(base, path).also {
         it.mkdirs()
         File(it, "build.sbt").writeText(build)
