@@ -1,1 +1,0 @@
-- The Affected settings menu has a Base branch item, so the branch that changes are compared with can be set without the MCP tool.

@@ -1,1 +1,0 @@
-- A project with more than 64 nested build roots keeps the first 64 instead of switching the build system off: changes in the remaining roots are reported as not checked rather than silently skipped.

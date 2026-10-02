@@ -6,6 +6,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.20.0] - 2026-10-02
+
+### Fixed
+
+- The check of dependent modules now notices more API changes: constructors whose parameters are private properties, `protected` members, members of nested classes, parameters that follow a default value, and changed `const` or type-inferred values.
+- Gradle tests now rerun in full when a file or directory declared as an input of the test task, such as test data, changes, instead of being skipped as unaffected.
+- A check no longer passes when the base branch cannot be found: before, a repository whose trunk was not named `develop`, `main` or `master` compared against nothing and reported success. The remote default branch (`origin/HEAD`) is now tried as the base, and without any base the result says so instead of passing.
+- Projects opened below the repository root now see their own changed files at the right paths; files outside the project directory are no longer attributed to it.
+- The toolbar run, the named-task actions and the MCP tools `affected_run_verification` and `affected_run_task` now re-read the changes right before they start. Before, a run started within a couple of seconds after an edit, or right after an agent wrote files on disk, used the previously published plan and could pass without the new change.
+- The toolbar run now reports the same blockers as the commit and push checks: a missing comparison base and changed files that nothing checked.
+- Gradle modules whose tests live in a directory with a non-standard name are no longer treated as having no tests: any directory the IDE marks as a test source root counts.
+- Gradle: stop choosing `testClasses` as the test task. Plain Java and Kotlin projects ran only test compilation, and a project with another suite such as `integrationTest` never ran `test`. Test tasks now come from the task type the IDE reports, with task names as a fallback.
+- Maven tests now rerun in full when a file referenced by the Surefire or Failsafe configuration, such as a TestNG suite XML or an additional classpath entry, changes, instead of being skipped as unaffected.
+- Maven modules with a configured `testSourceDirectory` are no longer treated as having no tests.
+- A project with more than 64 nested build roots keeps the first 64 instead of switching the build system off: changes in the remaining roots are reported as not checked rather than silently skipped.
+- Cargo projects that use cargo-nextest no longer fail when only Rust source files changed: the run passed a `file(...)` filter that cargo-nextest does not support. The affected packages now run in full.
+- A changed file under a source or resource root that the IDE knows now counts as a change whatever its extension: editing `application.yml`, an SQL migration, a `.proto` or an `.aidl` file in a Gradle or Maven module runs that module's tests instead of being ignored.
+- Unittest exact selection now falls back to full package discovery when another test module imports a changed test module or loads modules by name, instead of skipping the inheriting tests.
+- A changed source file in a module that has neither a test nor a compile task no longer disappears behind the other planned tasks: the result reports it as not checked instead of passing.
+
+### Added
+
+- The Affected settings menu has a Base branch item, so the branch that changes are compared with can be set without the MCP tool.
+- Discover several CMake, Xcode and .NET solution roots up to three levels below the project base when the base has no marker; .NET treats only directories with a .sln or .slnx file as roots, links ProjectReference edges across solution roots, and keeps its single-root behavior when no solution is found, and the CMake and .NET test baselines are now kept per root, so the first run after the update is a full run.
+- A new setting, Test dependent modules, also runs the tests of every module that depends on a changed one (transitively, when production code changed). It is off by default; without it only Swift, Composer and .NET projects test their dependents.
+
+### Changed
+
+- Tested against PHPUnit 13.4, Pest 5.3 and Android Studio 2026.2.
+- Module discovery walks a Python, Composer, .NET, Go, Ruby, SwiftPM or CMake root once instead of once per manifest name, so background analysis is several times cheaper in large repositories.
+
 ## [3.19.0] - 2026-10-01
 
 ### Changed
@@ -752,7 +783,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.19.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.20.0...HEAD
+[3.20.0]: https://github.com/aspix2k/affected/compare/v3.19.0...v3.20.0
 [3.19.0]: https://github.com/aspix2k/affected/compare/v3.18.0...v3.19.0
 [3.18.0]: https://github.com/aspix2k/affected/compare/v3.17.0...v3.18.0
 [3.17.0]: https://github.com/aspix2k/affected/compare/v3.16.0...v3.17.0

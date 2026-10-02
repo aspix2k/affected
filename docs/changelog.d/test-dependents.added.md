@@ -1,1 +1,0 @@
-- A new setting, Test dependent modules, also runs the tests of every module that depends on a changed one (transitively, when production code changed). It is off by default; without it only Swift, Composer and .NET projects test their dependents.

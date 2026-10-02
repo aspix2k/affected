@@ -1,1 +1,0 @@
-- The check of dependent modules now notices more API changes: constructors whose parameters are private properties, `protected` members, members of nested classes, parameters that follow a default value, and changed `const` or type-inferred values.

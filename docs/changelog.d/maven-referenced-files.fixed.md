@@ -1,1 +1,0 @@
-- Maven tests now rerun in full when a file referenced by the Surefire or Failsafe configuration, such as a TestNG suite XML or an additional classpath entry, changes, instead of being skipped as unaffected.

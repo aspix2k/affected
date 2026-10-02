@@ -1,2 +1,0 @@
-- A check no longer passes when the base branch cannot be found: before, a repository whose trunk was not named `develop`, `main` or `master` compared against nothing and reported success. The remote default branch (`origin/HEAD`) is now tried as the base, and without any base the result says so instead of passing.
-- Projects opened below the repository root now see their own changed files at the right paths; files outside the project directory are no longer attributed to it.

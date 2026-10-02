@@ -1,1 +1,0 @@
-- Gradle modules whose tests live in a directory with a non-standard name are no longer treated as having no tests: any directory the IDE marks as a test source root counts.

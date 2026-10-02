@@ -1,1 +1,0 @@
-- Module discovery walks a Python, Composer, .NET, Go, Ruby, SwiftPM or CMake root once instead of once per manifest name, so background analysis is several times cheaper in large repositories.
