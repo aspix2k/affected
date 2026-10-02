@@ -1,0 +1,1 @@
+- Go modules nested below another Go module are now analysed and tested on their own instead of being skipped.

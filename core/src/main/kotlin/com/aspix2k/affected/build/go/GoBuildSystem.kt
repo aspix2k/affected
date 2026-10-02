@@ -2,6 +2,7 @@ package com.aspix2k.affected.build.go
 
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.ManifestSearch
+import com.aspix2k.affected.build.PerformanceBudgets
 import com.aspix2k.affected.build.SuspendingBuildSystem
 import com.aspix2k.affected.build.failClosedModules
 import com.aspix2k.affected.build.isRegularFileNoFollow
@@ -12,6 +13,7 @@ import com.aspix2k.affected.build.process.CommandRunner
 import com.aspix2k.affected.build.retainBuildSnapshot
 import com.intellij.openapi.project.Project
 import java.io.File
+import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 
 class GoBuildSystem : SuspendingBuildSystem {
@@ -30,13 +32,14 @@ class GoBuildSystem : SuspendingBuildSystem {
     override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
     override fun modules(project: Project): List<BuildModule> {
-        val roots = rootsOf(project)
+        val roots = rootsOf(project).flatMap(::goModuleRoots)
         cache.keys.retainAll(roots.mapTo(HashSet()) { it.invariantSeparatorsPath })
-        return roots.flatMap(::modulesOf)
+        return roots.flatMap { modulesOf(it, roots) }
     }
 
-    private fun modulesOf(directory: File): List<BuildModule> {
+    private fun modulesOf(directory: File, roots: List<File>): List<BuildModule> {
         val root = directory.invariantSeparatorsPath
+        val nested = roots.map { it.invariantSeparatorsPath }.filter { it != root && it.startsWith("$root/") }
         val sources = ManifestSearch.findByExtension(directory, "go")
         val inputs = ManifestSearch.find(directory, setOf("go.mod", "go.sum", "go.work", "go.work.sum")) + sources
         val stamp = sources.takeIf { it.isNotEmpty() }?.let {
@@ -50,7 +53,7 @@ class GoBuildSystem : SuspendingBuildSystem {
             directory,
             GoPackages.TEST,
             GoPackages.COMPILE,
-            output?.let { GoPackages.parse(it, root) },
+            output?.let { GoPackages.parse(it, root).filterNot { module -> module.isWithin(nested) } },
         )
         val fingerprintedPackages = sources.mapTo(HashSet()) {
             it.parentFile.absoluteFile.normalize().invariantSeparatorsPath
@@ -78,6 +81,24 @@ class GoBuildSystem : SuspendingBuildSystem {
         val LIST = listOf("go", "list", "-json", "./...")
     }
 }
+
+private fun BuildModule.isWithin(roots: List<String>): Boolean =
+    contentRoots.any { directory -> roots.any { directory == it || directory.startsWith("$it/") } }
+
+internal fun goModuleRoots(root: File): List<File> {
+    val start = root.toPath().toAbsolutePath().normalize()
+    val nested = ManifestSearch.find(start.toFile(), setOf("go.mod"))
+        .mapNotNull { it.toPath().toAbsolutePath().normalize().parent }
+        .filter { directory ->
+            directory != start && start.relativize(directory).none { isIgnoredByGo(it.toString()) }
+        }
+        .sorted()
+        .take(PerformanceBudgets.MAX_NESTED_ROOTS)
+    return (listOf(start) + nested).map(Path::toFile)
+}
+
+private fun isIgnoredByGo(name: String): Boolean =
+    name == "vendor" || name == "testdata" || name.startsWith("_") || name.startsWith(".")
 
 internal fun goProjectRoots(base: File): List<File> =
     nestedBuildRoots(base, setOf("go.mod")) { goManifest(it) != null }
