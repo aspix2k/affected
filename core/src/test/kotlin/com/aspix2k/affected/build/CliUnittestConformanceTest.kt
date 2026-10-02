@@ -215,9 +215,11 @@ class CliUnittestConformanceTest {
             def load_tests(loader, tests, pattern):
                 with Path(__file__).with_name("load_tests.marker").open("a", encoding="utf-8") as marker:
                     marker.write("called\n")
-                return loader.loadTestsFromNames([
-                    "packages.alpha.test_consumer.ConsumerTest",
-                    "packages.alpha.test_other.OtherTest",
+                from .test_consumer import ConsumerTest
+                from .test_other import OtherTest
+                return loader.suiteClass([
+                    loader.loadTestsFromTestCase(ConsumerTest),
+                    loader.loadTestsFromTestCase(OtherTest),
                 ])
             """.trimIndent() + "\n",
         )
@@ -508,6 +510,73 @@ class CliUnittestConformanceTest {
         )
         assertTrue(File(root, "packages/alpha/consumer.marker").exists())
         assertTrue(File(root, "packages/alpha/other.marker").exists())
+    }
+
+    @Test
+    fun `unittest module imported absolutely by another test widens`() = fixture("unittest") { root ->
+        writeDependentTest(root, "from packages.alpha.test_alpha import AlphaTest", "AlphaTest")
+
+        val execution = execute(root, unittestCommand(root, File(root, "packages/alpha/test_alpha.py")).arguments)
+
+        assertTrue(execution.passed, execution.output)
+        assertTrue(
+            execution.output.contains("Affected unittest: full fallback (imported-by-other-tests)"),
+            execution.output,
+        )
+        assertTrue(File(root, "packages/alpha/dependent.marker").exists(), execution.output)
+    }
+
+    @Test
+    fun `unittest module imported relatively by another test widens`() = fixture("unittest") { root ->
+        writeDependentTest(root, "from .test_alpha import AlphaTest", "AlphaTest")
+
+        val execution = execute(root, unittestCommand(root, File(root, "packages/alpha/test_alpha.py")).arguments)
+
+        assertTrue(execution.passed, execution.output)
+        assertTrue(
+            execution.output.contains("Affected unittest: full fallback (imported-by-other-tests)"),
+            execution.output,
+        )
+        assertTrue(File(root, "packages/alpha/dependent.marker").exists(), execution.output)
+    }
+
+    @Test
+    fun `unittest module imported by nobody stays exact beside another dependent`() = fixture("unittest") { root ->
+        writeDependentTest(root, "from .test_helpers import VALUE", "unittest.TestCase")
+
+        val execution = execute(root, unittestCommand(root, File(root, "packages/alpha/test_alpha.py")).arguments)
+
+        assertTrue(execution.passed, execution.output)
+        assertTrue(execution.output.contains("Affected unittest: exact (1 test file, 1 tests)"), execution.output)
+        assertFalse(File(root, "packages/alpha/dependent.marker").exists())
+        assertFalse(File(root, "packages/alpha/consumer.marker").exists())
+    }
+
+    @Test
+    fun `unittest dynamic import in an unselected file widens`() = fixture("unittest") { root ->
+        writeDependentTest(
+            root,
+            "import importlib\nAlphaTest = importlib.import_module('packages.alpha.test_alpha').AlphaTest",
+            "AlphaTest",
+        )
+
+        val execution = execute(root, unittestCommand(root, File(root, "packages/alpha/test_alpha.py")).arguments)
+
+        assertTrue(execution.passed, execution.output)
+        assertTrue(
+            execution.output.contains("Affected unittest: full fallback (dynamic-dependency)"),
+            execution.output,
+        )
+        assertTrue(File(root, "packages/alpha/dependent.marker").exists(), execution.output)
+    }
+
+    private fun writeDependentTest(root: File, importLines: String, base: String) {
+        File(root, "packages/alpha/test_dependent.py").writeText(
+            "import unittest\nfrom pathlib import Path\n" + importLines + "\n\n" +
+                "class DependentTest($base):\n" +
+                "    def test_dependent(self) -> None:\n" +
+                "        Path(__file__).with_name(\"dependent.marker\").write_text(\"ran\", encoding=\"utf-8\")\n",
+        )
     }
 
     private fun fixture(name: String, block: OwnedSandbox.(File) -> Unit) {

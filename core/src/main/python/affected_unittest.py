@@ -1,3 +1,4 @@
+import ast
 import base64
 import importlib
 import inspect
@@ -14,6 +15,35 @@ MAX_CONTEXT_BYTES = 12_288
 MAX_PATHS = 256
 MAX_DISCOVERY_ENTRIES = 16_384
 MAX_DISCOVERY_DEPTH = 32
+MAX_SCAN_DEPTH = 7
+MAX_SCAN_DIRECTORIES = 4096
+MAX_SCAN_FILES = 4096
+MAX_SCAN_FILE_BYTES = 8 * 1024 * 1024
+MAX_SCAN_TOTAL_BYTES = 64 * 1024 * 1024
+IGNORED_DIRECTORIES = {
+    ".git",
+    ".idea",
+    ".mypy_cache",
+    ".nox",
+    ".pytest_cache",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pycache__",
+    "venv",
+}
+DYNAMIC_MODULES = {"imp", "importlib", "pkgutil", "runpy", "zipimport"}
+DYNAMIC_CALLS = {"__import__", "compile", "eval", "exec"}
+DYNAMIC_ATTRIBUTES = {
+    "discover",
+    "exec_module",
+    "import_module",
+    "load_module",
+    "loadTestsFromName",
+    "loadTestsFromNames",
+    "module_from_spec",
+    "spec_from_file_location",
+}
 
 
 class Unsupported(Exception):
@@ -196,6 +226,7 @@ def exact_suite(root, context, packages):
     selected = validated_paths(context.get("selected"), root, require_directory=False)
     if any(path.suffix != ".py" or not owned_by(path, packages) for path in selected):
         raise Unsupported("ownership")
+    reject_selected_importers(root, packages, selected)
     before = {path: file_identity(path) for path in selected}
     loader = unittest.TestLoader()
     suites = []
@@ -234,6 +265,105 @@ def exact_suite(root, context, packages):
     if any(before[path] != file_identity(path) for path in selected):
         raise Unsupported("drift")
     return unittest.TestSuite(suites)
+
+
+def reject_selected_importers(root, packages, selected):
+    """Widen when any unselected package file may import a selected module."""
+    names = {module_name_for(root, path) for path in selected}
+    for path in scan_python_files(packages):
+        if path in selected:
+            continue
+        try:
+            tree = ast.parse(path.read_bytes(), filename=path.name)
+        except (SyntaxError, ValueError, OSError) as error:
+            raise Unsupported("syntax") from error
+        reject_dynamic_syntax(tree)
+        relative = path.relative_to(root)
+        if any(not part.isidentifier() for part in relative.with_suffix("").parts):
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                imported = from_import_names(node, relative.parent.parts, names)
+            else:
+                continue
+            if any(
+                name == target or name.startswith(target + ".")
+                for name in imported
+                for target in names
+            ):
+                raise Unsupported("imported-by-other-tests")
+
+
+def from_import_names(node, package_parts, selected_names):
+    """Return every module name a from-import may bind, rejecting star imports of siblings."""
+    remove = max(node.level - 1, 0)
+    if remove > len(package_parts):
+        raise Unsupported("relative-import")
+    base = list(package_parts[: len(package_parts) - remove]) if node.level else []
+    if node.module:
+        base.extend(node.module.split("."))
+    prefix = ".".join(base)
+    result = [prefix] if prefix else []
+    for alias in node.names:
+        if alias.name != "*":
+            result.append(".".join([*base, alias.name]))
+        elif any(name.rpartition(".")[0] == prefix for name in selected_names):
+            raise Unsupported("star-import")
+    return result
+
+
+def reject_dynamic_syntax(tree):
+    """Reject code that can import project modules by name at runtime."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            roots = {alias.name.split(".", 1)[0] for alias in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            roots = {node.module.split(".", 1)[0]}
+        else:
+            roots = set()
+        if roots & DYNAMIC_MODULES:
+            raise Unsupported("dynamic-dependency")
+        if isinstance(node, ast.Name) and node.id in DYNAMIC_CALLS:
+            raise Unsupported("dynamic-dependency")
+        if isinstance(node, ast.Attribute) and node.attr in DYNAMIC_ATTRIBUTES:
+            raise Unsupported("dynamic-dependency")
+
+
+def scan_python_files(packages):
+    """List Python sources below planned packages within bounded symlink-free limits."""
+    queue = [(package, 0) for package in packages]
+    files = []
+    directories = 0
+    total_bytes = 0
+    while queue:
+        current, depth = queue.pop(0)
+        directories += 1
+        if directories > MAX_SCAN_DIRECTORIES or depth > MAX_SCAN_DEPTH:
+            raise Unsupported("scan-limit")
+        try:
+            children = list(current.iterdir())
+            for child in children:
+                if is_link_like(child):
+                    if child.name not in IGNORED_DIRECTORIES:
+                        raise Unsupported("symlink")
+                elif child.is_dir():
+                    if child.name not in IGNORED_DIRECTORIES:
+                        queue.append((child, depth + 1))
+                elif child.suffix == ".py":
+                    size = child.stat().st_size
+                    total_bytes += size
+                    if (
+                        size > MAX_SCAN_FILE_BYTES
+                        or total_bytes > MAX_SCAN_TOTAL_BYTES
+                        or len(files) >= MAX_SCAN_FILES
+                    ):
+                        raise Unsupported("scan-limit")
+                    files.append(child)
+        except OSError as error:
+            raise Unsupported("unreadable") from error
+    return files
 
 
 def reject_ancestor_hooks(module_name):
