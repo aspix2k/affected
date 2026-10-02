@@ -35,6 +35,26 @@ class CargoFileFilterTest {
     }
 
     @Test
+    fun `a new rust source runs its package, not the whole workspace`() {
+        val root = createTempDirectory("cargo-added-file").toFile()
+        val added = File(root, "crates/core/src/fresh.rs").apply {
+            parentFile.mkdirs()
+            writeText("pub fn fresh() {}\n")
+        }
+        val task = cargoNextestTask(CargoNextestPlan(CargoNextestMode.PACKAGES, "default", "0.9.143", false))
+
+        val command = cargoCommands(
+            root.path,
+            listOf("core:$task"),
+            BuildChanges(files = listOf(added.path), exactSelectionEligible = emptySet(), comparedToBase = true),
+            unsafeCargoExecution = false,
+        ).first()
+
+        assertFalse(command.arguments.contains("--workspace"))
+        assertEquals(listOf("-p", "core"), command.arguments.takeLast(2))
+    }
+
+    @Test
     fun `a workspace-widening cargo change does not add a file filter`() {
         val root = createTempDirectory("cargo-file-workspace").toFile()
         val script = File(root, "build.rs").apply { writeText("fn main() {}") }
