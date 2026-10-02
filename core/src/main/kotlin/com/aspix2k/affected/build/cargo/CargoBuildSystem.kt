@@ -48,7 +48,7 @@ class CargoBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSy
 
     private fun modulesOf(directory: File): List<BuildModule> {
         val root = directory.invariantSeparatorsPath
-        val manifests = ManifestSearch.find(directory, "Cargo.toml")
+        val manifests = ManifestSearch.find(directory, setOf("Cargo.toml"))
         val environment = System.getenv()
         val requestedProfile = cargoNextestProfile(environment)
         val cargoConfigurationPresent = cargoConfigurationExists(directory, environment)

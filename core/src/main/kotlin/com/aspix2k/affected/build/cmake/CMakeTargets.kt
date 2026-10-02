@@ -67,5 +67,5 @@ object CMakeTargets {
         }
     }
 
-    private fun findLists(root: File): List<File> = ManifestSearch.find(root, "CMakeLists.txt")
+    private fun findLists(root: File): List<File> = ManifestSearch.find(root, setOf("CMakeLists.txt"))
 }

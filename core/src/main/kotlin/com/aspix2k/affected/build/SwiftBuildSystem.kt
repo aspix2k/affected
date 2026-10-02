@@ -55,7 +55,7 @@ class SwiftBuildSystem(
             .orEmpty()
 
     private fun manifests(root: File): List<File> =
-        ManifestSearch.find(root, "Package.swift") + ManifestSearch.find(root, "Package.resolved") +
+        ManifestSearch.find(root, setOf("Package.swift", "Package.resolved")) +
             root.listFiles { file -> VERSIONED_MANIFEST.matches(file.name) }.orEmpty()
 
     private companion object {

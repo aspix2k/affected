@@ -47,7 +47,7 @@ class ManifestSearchTest {
             noise = listOf("vendor", "node_modules", "build", "fixtures"),
         )
 
-        val found = ManifestSearch.find(root, "composer.json")
+        val found = ManifestSearch.find(root, setOf("composer.json"))
 
         val fromExcluded = found.filter { file ->
             generateSequence(file.parentFile) { it.parentFile }
@@ -65,7 +65,7 @@ class ManifestSearchTest {
             File(current, "composer.json").writeText("{}")
         }
 
-        val found = ManifestSearch.find(root, "composer.json")
+        val found = ManifestSearch.find(root, setOf("composer.json"))
 
         assertTrue(found.isNotEmpty(), "upper levels must be found")
         assertTrue(found.size < 15, "a deep chain is truncated, found ${found.size}")
@@ -79,7 +79,7 @@ class ManifestSearchTest {
         File(root, "app").mkdirs()
         File(root, "app/composer.json").writeText("{}")
 
-        val found = ManifestSearch.find(root, "composer.json")
+        val found = ManifestSearch.find(root, setOf("composer.json"))
 
         assertEquals(listOf("app"), found.map { it.parentFile.name })
     }
@@ -99,8 +99,8 @@ class ManifestSearchTest {
         val root = createTempDirectory("budget").toFile()
         File(root, "composer.json").writeText("{}")
 
-        assertEquals(emptyList(), ManifestSearch.find(root, "composer.json", budgetNanos = 0))
-        assertEquals(listOf("composer.json"), ManifestSearch.find(root, "composer.json").map { it.name })
+        assertEquals(emptyList(), ManifestSearch.find(root, setOf("composer.json"), budgetNanos = 0))
+        assertEquals(listOf("composer.json"), ManifestSearch.find(root, setOf("composer.json")).map { it.name })
     }
 
     @Test
@@ -125,7 +125,7 @@ class ManifestSearchTest {
         val link = root.toPath().resolve("package.json")
         assumeTrue(runCatching { Files.createSymbolicLink(link, outside) }.isSuccess)
 
-        assertEquals(emptyList(), ManifestSearch.find(root, "package.json"))
+        assertEquals(emptyList(), ManifestSearch.find(root, setOf("package.json")))
         assertNull(ManifestSearch.fingerprint(root, listOf(link.toFile())))
     }
 
@@ -137,7 +137,7 @@ class ManifestSearchTest {
         val link = File(root, "linked-package").toPath()
         assumeTrue(runCatching { Files.createSymbolicLink(link, outside.toPath()) }.isSuccess)
 
-        assertEquals(emptyList(), ManifestSearch.find(root, "pyproject.toml"))
+        assertEquals(emptyList(), ManifestSearch.find(root, setOf("pyproject.toml")))
         assertNull(ManifestSearch.anyFile(root) { it.name.startsWith("test_") })
     }
 

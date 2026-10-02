@@ -10,7 +10,7 @@ internal fun pestDeclared(root: Path): Boolean = pestDeclared(root.toFile())
 
 internal fun pestDeclared(root: File): Boolean {
     if (lockDeclaresPest(File(root, "composer.lock"))) return true
-    return ManifestSearch.find(root, "composer.json").any(::manifestDeclaresPest)
+    return ManifestSearch.find(root, setOf("composer.json")).any(::manifestDeclaresPest)
 }
 
 private fun manifestDeclaresPest(manifest: File): Boolean = runCatching {

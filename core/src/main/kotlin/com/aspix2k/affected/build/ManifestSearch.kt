@@ -15,11 +15,12 @@ internal object ManifestSearch {
 
     fun find(
         root: File,
-        name: String,
+        names: Set<String>,
+        extensions: Set<String> = emptySet(),
         limit: Int = PerformanceBudgets.MAX_MATCHES,
         budgetNanos: Long = PerformanceBudgets.SCAN_TIME_NS,
     ): List<File> =
-        find(root, limit, budgetNanos) { it.name == name }
+        find(root, limit, budgetNanos) { it.name in names || it.extension.lowercase() in extensions }
 
     fun findByExtension(
         root: File,

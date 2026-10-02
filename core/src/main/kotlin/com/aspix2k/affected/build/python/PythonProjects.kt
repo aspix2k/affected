@@ -113,7 +113,7 @@ object PythonProjects {
         }
     }
 
-    private fun findManifests(root: File): List<File> = ManifestSearch.find(root, "pyproject.toml")
+    private fun findManifests(root: File): List<File> = ManifestSearch.find(root, setOf("pyproject.toml"))
 
     private val DEPENDENCY_KEYS = listOf("dependencies =", "dependencies=", "install_requires =")
     private val TEST_DIRS = listOf("tests", "test")

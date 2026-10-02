@@ -43,7 +43,7 @@ class CMakeBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSy
         val root = rootOf(project) ?: return emptyList()
         val stamp = ManifestSearch.fingerprint(
             root,
-            ManifestSearch.find(root, "CMakeLists.txt") + ManifestSearch.findByExtension(root, "cmake"),
+            ManifestSearch.find(root, setOf("CMakeLists.txt"), setOf("cmake")),
         )
 
         val rootPath = root.invariantSeparatorsPath

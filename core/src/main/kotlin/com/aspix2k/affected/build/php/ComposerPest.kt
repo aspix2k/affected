@@ -35,7 +35,7 @@ internal object ComposerPest {
             null -> return null
             true -> Unit
         }
-        val manifests = ManifestSearch.find(root, "composer.json")
+        val manifests = ManifestSearch.find(root, setOf("composer.json"))
         if (manifests.isEmpty()) return null
         return inspectSuites(root, manifests.mapNotNull(File::getParentFile))?.fingerprint
     }
