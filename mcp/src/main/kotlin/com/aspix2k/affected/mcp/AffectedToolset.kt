@@ -267,6 +267,11 @@ internal fun verificationView(snapshot: AffectedStateSnapshot, outcome: Verifica
             data = data + ("reason" to "unresolved-changes"),
             error = true,
         )
+        Verification.Blocker.NO_COMPARISON_BASE -> plan.copy(
+            text = "Failed. No comparison base: the base branch was not found, so committed changes are unknown.",
+            data = data + ("reason" to "no-comparison-base"),
+            error = true,
+        )
         Verification.Blocker.NOT_STARTED -> plan.copy(
             text = "Failed. Verification did not start because Affected is busy.",
             data = data + ("reason" to "not-started"),

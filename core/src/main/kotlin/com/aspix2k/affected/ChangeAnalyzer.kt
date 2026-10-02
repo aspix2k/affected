@@ -158,7 +158,13 @@ class ChangeAnalyzer(
         }
 
     private fun candidateBranches(): List<String> =
-        (listOf(baseBranch) + FALLBACK_BRANCHES).distinct().filter { it.isNotBlank() }
+        (listOf(baseBranch) + listOfNotNull(remoteDefaultBranch()) + FALLBACK_BRANCHES)
+            .distinct()
+            .filter { it.isNotBlank() }
+
+    private fun remoteDefaultBranch(): String? =
+        run("symbolic-ref", "--quiet", "--short", REMOTE_HEAD).takeIf { it.exitCode == 0 }
+            ?.stdout?.trim()?.removePrefix("origin/")?.ifEmpty { null }
 
     private fun gitFields(vararg args: String): List<String> =
         git(*args).split(NUL).filter(String::isNotEmpty)
@@ -223,6 +229,7 @@ class ChangeAnalyzer(
             "diff", "-U0", "--no-renames", "--relative", "--no-prefix", "--no-color", "--no-ext-diff", "--no-textconv",
         )
         private const val HEAD = "HEAD"
+        private const val REMOTE_HEAD = "refs/remotes/origin/HEAD"
         private const val NUL = '\u0000'
         private const val PATHSPEC_CHUNK_LENGTH = 16_000
         private const val SPACE = 0x20

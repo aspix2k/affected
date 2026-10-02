@@ -73,6 +73,22 @@ class ChangeAnalyzerTest {
     }
 
     @Test
+    fun `the remote default branch is the comparison base when the configured one is missing`() = repo { dir ->
+        run(dir, "git", "branch", "-m", "trunk")
+        assertFalse(ChangeAnalyzer(dir, "develop").hasComparisonBase())
+
+        run(dir, "git", "update-ref", "refs/remotes/origin/trunk", "HEAD")
+        run(dir, "git", "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk")
+        File(dir, "lib/src/main/kotlin/Added.kt").writeText("class Added")
+        run(dir, "git", "add", "-A")
+        run(dir, "git", "commit", "-qm", "feature")
+
+        val analyzer = ChangeAnalyzer(dir, "develop")
+        assertTrue(analyzer.hasComparisonBase())
+        assertEquals(listOf("Added.kt"), analyzer.againstBase().map { it.name })
+    }
+
+    @Test
     fun `the list is empty without changes`() = repo { dir ->
         assertTrue(analyze(dir).files.isEmpty(), "a clean tree must not have changes")
     }

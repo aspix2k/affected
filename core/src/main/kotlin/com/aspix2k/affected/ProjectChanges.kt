@@ -14,6 +14,7 @@ object ProjectChanges {
         val apiTouched: Set<File>,
         val exactSelectionEligible: Set<File>,
         val comparedToBase: Boolean,
+        val baseUnresolved: Boolean = false,
     )
 
     fun collect(project: Project): Result {
@@ -26,6 +27,7 @@ object ProjectChanges {
                 analyzer.apiTouchedAmong(files),
                 analyzer.modifiedAgainstBase(),
                 comparedToBase = analyzer.hasComparisonBase(),
+                baseUnresolved = !analyzer.hasComparisonBase(),
             )
         }
     }

@@ -40,6 +40,12 @@ internal suspend fun verifyAndReport(
             },
             NotificationType.WARNING,
         )
+        Verification.Blocker.NO_COMPARISON_BASE -> notifyAffected(
+            project,
+            AffectedBundle.message("notification.no.base.title"),
+            AffectedBundle.message("notification.no.base.text", AffectedSettings.getInstance().baseBranch),
+            NotificationType.WARNING,
+        )
         Verification.Blocker.NOT_STARTED -> notifyAffected(
             project,
             AffectedBundle.message("notification.busy.title"),

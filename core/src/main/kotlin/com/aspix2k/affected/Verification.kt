@@ -15,7 +15,7 @@ import java.io.File
 
 object Verification {
 
-    enum class Blocker { UNRESOLVED_CHANGES, NOT_STARTED }
+    enum class Blocker { UNRESOLVED_CHANGES, NO_COMPARISON_BASE, NOT_STARTED }
 
     data class Outcome(val plan: Plan, val passed: Boolean, val blocker: Blocker? = null)
 
@@ -23,6 +23,7 @@ object Verification {
         val plan: Plan,
         internal val changes: BuildChanges,
         val unresolvedFiles: Int = 0,
+        val baseUnresolved: Boolean = false,
     ) {
         val changedFiles: Int get() = changes.files.size
     }
@@ -53,8 +54,13 @@ object Verification {
         val buildChanges = changes.toBuildChanges()
         val plans = verificationPlans(graph, changes, owners)
         return PreparedPlans(
-            testsOnly = Prepared(plans.testsOnly, buildChanges, plans.unresolvedFiles),
-            withConsumers = Prepared(plans.withConsumers, buildChanges, plans.unresolvedFiles),
+            testsOnly = Prepared(plans.testsOnly, buildChanges, plans.unresolvedFiles, changes.baseUnresolved),
+            withConsumers = Prepared(
+                plans.withConsumers,
+                buildChanges,
+                plans.unresolvedFiles,
+                changes.baseUnresolved,
+            ),
         )
     }
 
@@ -97,24 +103,29 @@ object Verification {
                     }
                 }
             }
-            return completedOutcome(plan, passed, prepared.unresolvedFiles)
+            return completedOutcome(plan, passed, prepared.unresolvedFiles, prepared.baseUnresolved)
         } finally {
             claim.close()
         }
     }
 
-    private fun withoutWork(prepared: Prepared): Outcome {
-        val passed = verificationPassesWithoutWork(prepared)
-        return Outcome(prepared.plan, passed, Blocker.UNRESOLVED_CHANGES.takeUnless { passed })
+    private fun withoutWork(prepared: Prepared): Outcome = when {
+        prepared.baseUnresolved -> Outcome(prepared.plan, passed = false, Blocker.NO_COMPARISON_BASE)
+        verificationPassesWithoutWork(prepared) -> Outcome(prepared.plan, passed = true)
+        else -> Outcome(prepared.plan, passed = false, Blocker.UNRESOLVED_CHANGES)
     }
 }
 
-internal fun completedOutcome(plan: Plan, passed: Boolean, unresolvedFiles: Int): Verification.Outcome =
-    if (passed && unresolvedFiles > 0) {
-        Verification.Outcome(plan, passed = false, Verification.Blocker.UNRESOLVED_CHANGES)
-    } else {
-        Verification.Outcome(plan, passed)
-    }
+internal fun completedOutcome(
+    plan: Plan,
+    passed: Boolean,
+    unresolvedFiles: Int,
+    baseUnresolved: Boolean = false,
+): Verification.Outcome = when {
+    passed && unresolvedFiles > 0 -> Verification.Outcome(plan, passed = false, Verification.Blocker.UNRESOLVED_CHANGES)
+    passed && baseUnresolved -> Verification.Outcome(plan, passed = false, Verification.Blocker.NO_COMPARISON_BASE)
+    else -> Verification.Outcome(plan, passed)
+}
 
 internal fun verificationPassesWithoutWork(prepared: Verification.Prepared): Boolean =
     prepared.plan.isEmpty && prepared.changes.files.isEmpty()
