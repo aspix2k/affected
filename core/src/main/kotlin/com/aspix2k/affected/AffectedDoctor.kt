@@ -105,7 +105,7 @@ object AffectedDoctor {
         DoctorInput(
             snapshot = project.service<AffectedState>().snapshot(),
             projectDir = projectDir,
-            baseBranch = AffectedSettings.getInstance().baseBranch,
+            baseBranch = project.service<ProjectBaseBranch>().configured ?: ProjectBaseBranch.AUTO_BRANCH,
             present = present.map { system ->
                 val tool = CLI_EXECUTABLES[system.id]
                 DoctorSystem(system.id, tool, tool != null && resolveExecutable(tool) != tool)
