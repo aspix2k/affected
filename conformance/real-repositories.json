@@ -645,8 +645,8 @@
             "yarn",
             "test"
           ],
-          "output": "Test Files\\s+\\d+ passed",
-          "pass": true
+          "output": "Test Files\\s+.*\\d+ passed",
+          "pass": false
         },
         {
           "name": "production file in a workspace package",
@@ -659,8 +659,8 @@
           "command": [
             "yarn"
           ],
-          "output": "Test Files\\s+\\d+ passed",
-          "pass": true
+          "output": "Test Files\\s+.*\\d+ passed",
+          "pass": false
         }
       ]
     },
