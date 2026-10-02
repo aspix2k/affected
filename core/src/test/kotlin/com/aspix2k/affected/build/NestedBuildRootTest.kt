@@ -6,6 +6,7 @@ import java.nio.file.Files
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
 class NestedBuildRootTest {
@@ -123,23 +124,25 @@ class NestedBuildRootTest {
     }
 
     @Test
-    fun `the root cap is inclusive and one more root returns no roots`() {
+    fun `roots beyond the cap are dropped and the adapter stays present for the rest`() {
         val base = createTempDirectory("nested-many-roots").toFile()
         markers(base, *(1..PerformanceBudgets.MAX_NESTED_ROOTS).map { "apps/p$it" }.toTypedArray())
         assertEquals(PerformanceBudgets.MAX_NESTED_ROOTS, nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists).size)
 
-        markers(base, "apps/extra")
+        markers(base, "apps/zz-extra")
 
-        assertEquals(emptyList(), nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists))
+        val capped = nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists)
+        assertEquals(PerformanceBudgets.MAX_NESTED_ROOTS, capped.size)
+        assertFalse(File(base, "apps/zz-extra") in capped)
     }
 
     @Test
-    fun `too many visited directories return no roots`() {
+    fun `too many visited directories keep the roots found before the limit`() {
         val base = createTempDirectory("nested-many-dirs").toFile()
         markers(base, "apps/web")
         repeat(PerformanceBudgets.MAX_DIRECTORIES) { File(base, "empty/d$it").mkdirs() }
 
-        assertEquals(emptyList(), nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists))
+        assertEquals(listOf(File(base, "apps/web")), nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists))
     }
 
     private fun markers(base: File, vararg paths: String) = paths.forEach { path ->
