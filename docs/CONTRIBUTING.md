@@ -64,6 +64,24 @@ version only. Pull requests check pins offline; the live check runs weekly, on
 pull requests that change `version`, and before a release. Update the direct manifest and regenerate its lock; do not inventory
 transitive versions.
 
+The live check reports every stale or unverifiable pin in one run, one
+`release-currentness: ERROR:` line each, and exits non-zero. Refresh them with
+`python3 scripts/release_currentness.py --write`: it rewrites the pins its
+`local` descriptor fully describes (Gradle, Maven, properties, workflow tools,
+action SHAs with their version comment, release assets with their digest,
+matrix values, fixture manifests) and regenerates their lock files by running
+the real tool (`npm`, `composer`, `bundle`, `dotnet`) from `PATH`; `--docker`
+lets Composer fall back to the `composer:2` image. A pin whose tool is missing
+stays untouched and is listed with the exact command. `latest` pins move to the
+newest stable release, `series` pins stay inside their series, `branch` pins take
+the branch head, and `compatibility` pins never move. A major version change, a
+moved tag and the Gradle wrapper are listed for a decision or a manual step
+instead. Review the summary, in particular the flags for runners named in
+`config/support-matrix.json`, and the diff before committing; `--json PATH` and
+`--report PATH` also save the summary. The weekly workflow puts the same list in
+its failure issue. It does not open pull requests, because pull requests created
+with `GITHUB_TOKEN` do not start CI.
+
 Every IDE the build or verifier unpacks lives under `~/.gradle/caches`. Old
 transforms are never removed; deleting that cache is safe and it rebuilds.
 
@@ -177,6 +195,10 @@ pending fragments into `docs/CHANGELOG.md`:
 python3 scripts/changelog_fragments.py render
 ./gradlew patchChangelog
 ```
+
+Before bumping `version`, run `python3 scripts/release_currentness.py --write`,
+review the result and open it as its own pull request; the release workflow
+fails on a stale pin.
 
 No other pull request edits `docs/CHANGELOG.md`. CI fails when the version has
 no section; that section becomes the GitHub release notes and Marketplace
