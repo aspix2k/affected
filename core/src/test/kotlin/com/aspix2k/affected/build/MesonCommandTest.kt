@@ -123,16 +123,7 @@ class MesonCommandTest {
         val nested = File(base, "native")
         mesonRoot().copyRecursively(nested)
 
-        assertEquals(nested.canonicalFile, mesonProjectRoot(base)?.canonicalFile)
-    }
-
-    @Test
-    fun `several first-level nested Meson projects stay off`() {
-        val base = createTempDirectory("meson-many").toFile()
-        mesonRoot().copyRecursively(File(base, "native"))
-        mesonRoot().copyRecursively(File(base, "tools"))
-
-        assertNull(mesonProjectRoot(base))
+        assertEquals(listOf(nested.canonicalFile), mesonProjectRoots(base).map(File::getCanonicalFile))
     }
 
     @Test

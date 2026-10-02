@@ -13,12 +13,9 @@ class MakeBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
 
     override val sourceFileNames: Set<String> = MAKEFILES.toSet()
 
-    override fun isPresent(project: Project): Boolean = manifestOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
-    override fun modules(project: Project): List<BuildModule> {
-        val root = manifestOf(project)?.parentFile ?: return emptyList()
-        return listOf(makeRootModule(root))
-    }
+    override fun modules(project: Project): List<BuildModule> = rootsOf(project).map(::makeRootModule)
 
     override fun run(project: Project, root: String, tasks: List<String>) {
         CommandRunner.runBatch(project, root, makeCommands(File(root), tasks), "Affected Make")
@@ -27,8 +24,8 @@ class MakeBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         CommandRunner.runBatchAndWait(project, root, makeCommands(File(root), tasks), "Affected Make")
 
-    private fun manifestOf(project: Project): File? =
-        project.basePath?.let(::File)?.let(::makeProjectRoot)?.let(::makeManifest)
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let(::makeProjectRoots).orEmpty()
 }
 
 internal object MakeTasks {
@@ -37,8 +34,8 @@ internal object MakeTasks {
     const val ALL = "all"
 }
 
-internal fun makeProjectRoot(base: File): File? =
-    nestedBuildRoot(base) { makeManifest(it) != null }
+internal fun makeProjectRoots(base: File): List<File> =
+    nestedBuildRoots(base, MAKEFILE_NAMES) { makeManifest(it) != null }
 
 internal fun makeManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null
@@ -130,6 +127,7 @@ private fun enqueueMakeIncludes(file: File, includeLine: String, pending: Mutabl
 internal fun makeTargets(root: File): Set<String> = makeDiscovery(root).targets
 
 private val MAKEFILES = listOf("GNUmakefile", "makefile", "Makefile")
+private val MAKEFILE_NAMES = MAKEFILES.mapTo(HashSet(), String::lowercase)
 private val MAKE_TARGET = Regex("""(?m)^([A-Za-z0-9][A-Za-z0-9._-]*)\s*:""")
 private val MAKE_INCLUDE = Regex("""(?m)^[ \t]*(?:-?include|sinclude)[ \t]+(.+?)\s*$""")
 private val MAKE_INCLUDE_PATH = Regex("""[A-Za-z0-9._][A-Za-z0-9._/\-]*""")

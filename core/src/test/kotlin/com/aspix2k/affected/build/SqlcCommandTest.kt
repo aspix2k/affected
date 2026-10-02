@@ -169,16 +169,7 @@ class SqlcCommandTest {
         val nested = File(base, "queries")
         sqlcRoot().copyRecursively(nested)
 
-        assertEquals(nested.canonicalFile, sqlcProjectRoot(base)?.canonicalFile)
-    }
-
-    @Test
-    fun `several first-level nested sqlc projects stay off`() {
-        val base = createTempDirectory("sqlc-many").toFile()
-        sqlcRoot().copyRecursively(File(base, "queries"))
-        sqlcRoot().copyRecursively(File(base, "analytics"))
-
-        assertNull(sqlcProjectRoot(base))
+        assertEquals(listOf(nested.canonicalFile), sqlcProjectRoots(base).map(File::getCanonicalFile))
     }
 
     private fun sqlcRoot(config: String = LOCAL_CONFIG): File {

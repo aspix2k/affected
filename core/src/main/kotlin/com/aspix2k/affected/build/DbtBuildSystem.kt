@@ -13,12 +13,9 @@ class DbtBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
 
     override val sourceFileNames: Set<String> = setOf("dbt_project.yml", "profiles.yml")
 
-    override fun isPresent(project: Project): Boolean = manifestOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
-    override fun modules(project: Project): List<BuildModule> {
-        val root = manifestOf(project)?.parentFile ?: return emptyList()
-        return listOf(dbtRootModule(root))
-    }
+    override fun modules(project: Project): List<BuildModule> = rootsOf(project).map(::dbtRootModule)
 
     override fun run(project: Project, root: String, tasks: List<String>) {
         CommandRunner.runBatch(project, root, dbtCommands(tasks), "Affected dbt")
@@ -27,8 +24,8 @@ class DbtBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         CommandRunner.runBatchAndWait(project, root, dbtCommands(tasks), "Affected dbt")
 
-    private fun manifestOf(project: Project): File? =
-        project.basePath?.let(::File)?.let(::dbtProjectRoot)?.let(::dbtManifest)
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let(::dbtProjectRoots).orEmpty()
 }
 
 internal object DbtTasks {
@@ -36,8 +33,8 @@ internal object DbtTasks {
     const val COMPILE = "compile"
 }
 
-internal fun dbtProjectRoot(base: File): File? =
-    nestedBuildRoot(base) { dbtManifest(it) != null }
+internal fun dbtProjectRoots(base: File): List<File> =
+    nestedBuildRoots(base, setOf("dbt_project.yml")) { dbtManifest(it) != null }
 
 internal fun dbtManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null

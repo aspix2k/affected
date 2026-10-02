@@ -13,12 +13,9 @@ class AtlasBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
 
     override val sourceFileNames: Set<String> = setOf("atlas.hcl")
 
-    override fun isPresent(project: Project): Boolean = manifestOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
-    override fun modules(project: Project): List<BuildModule> {
-        val root = manifestOf(project)?.parentFile ?: return emptyList()
-        return listOf(atlasRootModule(root))
-    }
+    override fun modules(project: Project): List<BuildModule> = rootsOf(project).map(::atlasRootModule)
 
     override fun run(project: Project, root: String, tasks: List<String>) {
         CommandRunner.runBatch(project, root, atlasCommands(tasks), "Affected Atlas")
@@ -27,16 +24,16 @@ class AtlasBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
     override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean =
         CommandRunner.runBatchAndWait(project, root, atlasCommands(tasks), "Affected Atlas")
 
-    private fun manifestOf(project: Project): File? =
-        project.basePath?.let(::File)?.let(::atlasProjectRoot)?.let(::atlasManifest)
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let(::atlasProjectRoots).orEmpty()
 }
 
 internal object AtlasTasks {
     const val VALIDATE = "validate"
 }
 
-internal fun atlasProjectRoot(base: File): File? =
-    nestedBuildRoot(base) { atlasManifest(it) != null }
+internal fun atlasProjectRoots(base: File): List<File> =
+    nestedBuildRoots(base, setOf("atlas.hcl")) { atlasManifest(it) != null }
 
 internal fun atlasManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null
