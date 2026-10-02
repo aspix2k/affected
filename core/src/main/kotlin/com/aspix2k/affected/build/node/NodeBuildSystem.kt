@@ -62,7 +62,7 @@ class NodeBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSys
         val rootPath = root.invariantSeparatorsPath
         if (stamp != null) cache[rootPath]?.takeIf { it.stamp == stamp }?.let { return it.modules }
 
-        val discovered = runCatching { NodeWorkspaces.parse(root) }.getOrNull()
+        val discovered = runCatching { NodeWorkspaces.parse(root, delegateTests = true) }.getOrNull()
         val discovery = failClosedModules(root, NodeWorkspaces.TEST, null, discovered)
         if (stamp != null && discovery.complete) {
             cache.retainBuildSnapshot(rootPath, Snapshot(stamp, discovery.modules), discovery.modules.size)

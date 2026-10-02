@@ -641,7 +641,8 @@
             ".:test"
           ],
           "command": [
-            "vitest"
+            "yarn",
+            "test"
           ],
           "output": "Test Files\\s+\\d+ passed",
           "pass": true
