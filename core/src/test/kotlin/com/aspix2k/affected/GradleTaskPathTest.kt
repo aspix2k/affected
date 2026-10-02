@@ -328,6 +328,15 @@ class GradleTaskPathTest {
     }
 
     @Test
+    fun `a lifecycle task the IDE marks as a test is not a test task`() {
+        val available = setOf("test", "check", "build", "compileTestJava", "classes")
+
+        assertEquals(listOf("test"), gradleUnitTestTasks(available, setOf("test", "check")))
+        assertEquals("test", gradleTestTask(available, setOf("test", "check")))
+        assertTrue(gradleKmpAdditionalTestTasks(available, "test", setOf("test", "check")).isEmpty())
+    }
+
+    @Test
     fun `multiplatform test tasks the IDE does not type as tests are kept`() {
         val available = setOf("jvmTest", "jsTest", "iosSimulatorArm64Test", "allTests", "jvmTestClasses", "check")
 

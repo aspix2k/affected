@@ -365,7 +365,7 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
                 val name = { task: TaskData -> task.name.substringAfterLast(':') }
                 result.getOrPut(data.linkedExternalProjectPath) { mutableSetOf() } += tasks.map(name)
                 tests.getOrPut(data.linkedExternalProjectPath) { mutableSetOf() } +=
-                    tasks.filter(TaskData::isTest).map(name)
+                    tasks.filter(TaskData::isJvmTest).map(name)
             }
         }
         return GradleTaskModel(result, tests)
