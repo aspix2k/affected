@@ -48,6 +48,11 @@ class AffectedCollectorSelectionSpec implements Spec<Task>, Serializable {
                 .collectMany { [it, it.toRealPath(LinkOption.NOFOLLOW_LINKS)] }
                 .toSet()
             List<Path> classpath = task.classpath.files.collect { it.toPath().toAbsolutePath().normalize() }
+            Set<Path> covered = (classpath + testClasses).toSet()
+            List<Path> declaredInputs = task.inputs.files.files.collect { it.toPath().toAbsolutePath().normalize() }
+                .findAll { path -> !covered.any { path.startsWith(it) } }
+                .unique()
+                .sort { first, second -> first.toString() <=> second.toString() }
             List<Path> codeSources = classpath
                 .findAll { path ->
                     Files.isDirectory(path) && !excludedClasses.contains(path) && !excludedClasses.contains(path.toRealPath())
@@ -69,7 +74,7 @@ class AffectedCollectorSelectionSpec implements Spec<Task>, Serializable {
             }
 
             Map<String, Object> runtime = runtimeFingerprint(task)
-            String input = inputFingerprint(testClasses, classpath)
+            String input = inputFingerprint(testClasses, classpath, declaredInputs)
             List<AffectedDependencySelector.Artifact> catalog = classCatalog(codeSources)
             AffectedDependencySelector.Decision decision = runtime.allTests as boolean
                 ? AffectedDependencySelector.select(
@@ -257,7 +262,7 @@ class AffectedCollectorSelectionSpec implements Spec<Task>, Serializable {
         values.collect { String.valueOf(it) }.sort().each { update(digest, it) }
     }
 
-    private static String inputFingerprint(List<Path> testClasses, List<Path> classpath) {
+    private static String inputFingerprint(List<Path> testClasses, List<Path> classpath, List<Path> declaredInputs) {
         MessageDigest digest = MessageDigest.getInstance("SHA-256")
         testClasses.toList().sort { first, second -> first.toString() <=> second.toString() }.each { root ->
             update(digest, "testClasses")
@@ -288,38 +293,47 @@ class AffectedCollectorSelectionSpec implements Spec<Task>, Serializable {
         classpath.eachWithIndex { path, index ->
             update(digest, "classpath")
             update(digest, String.valueOf(index))
-            if (Files.isSymbolicLink(path)) throw new IllegalStateException(path.toString())
-            if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
-                update(digest, "file")
-                update(digest, path.toRealPath(LinkOption.NOFOLLOW_LINKS).toUri().toString())
-                update(digest, path.fileName.toString())
-                update(digest, fileHash(path))
-            } else if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
-                Path root = path.toRealPath(LinkOption.NOFOLLOW_LINKS)
-                update(digest, "directory")
-                update(digest, root.toUri().toString())
-                java.util.concurrent.atomic.AtomicInteger entries = new java.util.concurrent.atomic.AtomicInteger()
-                Files.walk(root).withCloseable { paths ->
-                    paths.peek { candidate ->
-                        if (entries.incrementAndGet() > MAX_FILES || Files.isSymbolicLink(candidate)) {
-                            throw new IllegalStateException(candidate.toString())
-                        }
-                    }.filter { candidate ->
-                        Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS) &&
-                            !candidate.fileName.toString().endsWith(".class")
-                    }.sorted().forEach { candidate ->
-                        update(digest, root.relativize(candidate).toString().replace(File.separatorChar, '/' as char))
-                        update(digest, fileHash(candidate))
-                    }
-                }
-            } else if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
-                update(digest, "missing")
-                update(digest, path.toString())
-            } else {
-                throw new IllegalStateException(path.toString())
-            }
+            fingerprintInput(digest, path, false)
+        }
+        declaredInputs.eachWithIndex { path, index ->
+            update(digest, "declaredInput")
+            update(digest, String.valueOf(index))
+            fingerprintInput(digest, path, true)
         }
         return hex(digest.digest())
+    }
+
+    private static void fingerprintInput(MessageDigest digest, Path path, boolean includeClasses) {
+        if (Files.isSymbolicLink(path)) throw new IllegalStateException(path.toString())
+        if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+            update(digest, "file")
+            update(digest, path.toRealPath(LinkOption.NOFOLLOW_LINKS).toUri().toString())
+            update(digest, path.fileName.toString())
+            update(digest, fileHash(path))
+        } else if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
+            Path root = path.toRealPath(LinkOption.NOFOLLOW_LINKS)
+            update(digest, "directory")
+            update(digest, root.toUri().toString())
+            java.util.concurrent.atomic.AtomicInteger entries = new java.util.concurrent.atomic.AtomicInteger()
+            Files.walk(root).withCloseable { paths ->
+                paths.peek { candidate ->
+                    if (entries.incrementAndGet() > MAX_FILES || Files.isSymbolicLink(candidate)) {
+                        throw new IllegalStateException(candidate.toString())
+                    }
+                }.filter { candidate ->
+                    Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS) &&
+                        (includeClasses || !candidate.fileName.toString().endsWith(".class"))
+                }.sorted().forEach { candidate ->
+                    update(digest, root.relativize(candidate).toString().replace(File.separatorChar, '/' as char))
+                    update(digest, fileHash(candidate))
+                }
+            }
+        } else if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
+            update(digest, "missing")
+            update(digest, path.toString())
+        } else {
+            throw new IllegalStateException(path.toString())
+        }
     }
 
     private static List<AffectedDependencySelector.Artifact> classCatalog(List<Path> codeSources) {

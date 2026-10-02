@@ -1,0 +1,1 @@
+- Gradle tests now rerun in full when a file or directory declared as an input of the test task, such as test data, changes, instead of being skipped as unaffected.
