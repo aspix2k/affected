@@ -5,7 +5,7 @@ import com.aspix2k.affected.build.NamedSourceBuildSystem
 import com.aspix2k.affected.build.PerformanceBudgets
 import com.aspix2k.affected.build.SuspendingBuildSystem
 import com.aspix2k.affected.build.isRegularFileNoFollow
-import com.aspix2k.affected.build.nestedBuildRoot
+import com.aspix2k.affected.build.nestedBuildRoots
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CliStep
 import com.aspix2k.affected.build.process.CommandRunner
@@ -23,12 +23,9 @@ class XcodeBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
 
     override val sourceFileNames: Set<String> = setOf("project.pbxproj")
 
-    override fun isPresent(project: Project): Boolean = manifestOf(project) != null
+    override fun isPresent(project: Project): Boolean = rootsOf(project).isNotEmpty()
 
-    override fun modules(project: Project): List<BuildModule> {
-        val root = manifestOf(project)?.parentFile ?: return emptyList()
-        return listOf(xcodeRootModule(root))
-    }
+    override fun modules(project: Project): List<BuildModule> = rootsOf(project).map(::xcodeRootModule)
 
     override fun run(project: Project, root: String, tasks: List<String>) {
         CommandRunner.runBatch(
@@ -49,9 +46,10 @@ class XcodeBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
             XCODE_METADATA_DRIFT_MESSAGE,
         )
 
-    private fun manifestOf(project: Project): File? =
-        project.basePath?.let(::File)?.let { nestedBuildRoot(it) { xcodeManifest(it) != null } }
-            ?.let(::xcodeManifest)
+    private fun rootsOf(project: Project): List<File> =
+        project.basePath?.let(::File)?.let { base ->
+            nestedBuildRoots(base, XCODE_BUNDLE::containsMatchIn) { xcodeManifest(it) != null }
+        }.orEmpty()
 }
 
 internal object XcodeTasks {
@@ -61,6 +59,7 @@ internal object XcodeTasks {
 }
 
 internal fun xcodeManifest(root: File): File? {
+    if (XCODE_BUNDLE.containsMatchIn(root.name)) return null
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null
     if (File(root, "Package.swift").isRegularFileNoFollow()) return null
     return xcodeProject(root)
