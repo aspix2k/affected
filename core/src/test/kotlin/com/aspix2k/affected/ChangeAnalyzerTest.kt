@@ -47,6 +47,11 @@ class ChangeAnalyzerTest {
         block(dir)
     }
 
+    private fun commit(dir: File) {
+        run(dir, "git", "add", "-A")
+        run(dir, "git", "commit", "-qm", "next")
+    }
+
     private fun run(dir: File, vararg args: String) {
         ProcessBuilder(*args).directory(dir).redirectErrorStream(true).start().waitFor()
     }
@@ -125,6 +130,77 @@ class ChangeAnalyzerTest {
         file.writeText(file.readText().replace("fun visible(): Int", "fun visible(flag: Boolean): Int"))
 
         assertEquals(1, analyze(dir).apiTouched.size, "a signature change breaks consumers")
+    }
+
+    @Test
+    fun `a constructor with private properties is still public API`() = repo { dir ->
+        val file = File(dir, "lib/src/main/kotlin/Service.kt")
+        file.writeText("package probe\n\nclass Service(private val name: String)\n")
+        commit(dir)
+        file.writeText("package probe\n\nclass Service(private val name: String, private val retries: Int)\n")
+
+        assertEquals(1, analyze(dir).apiTouched.size, "callers of the constructor break")
+    }
+
+    @Test
+    fun `a private constructor property on its own line changes the API`() = repo { dir ->
+        val file = File(dir, "lib/src/main/kotlin/Service.kt")
+        file.writeText("package probe\n\nclass Service(\n    private val name: String,\n)\n")
+        commit(dir)
+        file.writeText(
+            "package probe\n\nclass Service(\n    private val name: String,\n    private val retries: Int,\n)\n",
+        )
+
+        assertEquals(1, analyze(dir).apiTouched.size, "callers of the constructor break")
+    }
+
+    @Test
+    fun `a name that merely contains private is not a private declaration`() = repo { dir ->
+        val file = File(dir, "lib/src/main/kotlin/Sample.kt")
+        file.appendText("\nfun sign(privateKey: String): String = privateKey\n")
+
+        assertEquals(1, analyze(dir).apiTouched.size)
+    }
+
+    @Test
+    fun `a protected member changes the API`() = repo { dir ->
+        val file = File(dir, "lib/src/main/kotlin/Sample.kt")
+        val hook = "    protected fun hook(): Int = 1\n\n"
+        file.writeText(file.readText().replace("    fun visible", "$hook    fun visible"))
+
+        assertEquals(1, analyze(dir).apiTouched.size, "subclasses in other modules see protected members")
+    }
+
+    @Test
+    fun `a parameter after a default value changes the API`() = repo { dir ->
+        val file = File(dir, "lib/src/main/kotlin/Extra.kt")
+        file.writeText("package probe\n\nfun extra(count: Int = 1, name: String): Int = count\n")
+        commit(dir)
+        file.writeText("package probe\n\nfun extra(count: Int = 1, name: Long): Int = count\n")
+
+        assertEquals(1, analyze(dir).apiTouched.size)
+    }
+
+    @Test
+    fun `a constant value changes the API`() = repo { dir ->
+        val file = File(dir, "lib/src/main/kotlin/Extra.kt")
+        file.writeText("package probe\n\nconst val LIMIT = 1\n")
+        commit(dir)
+        file.writeText("package probe\n\nconst val LIMIT = 2\n")
+
+        assertEquals(1, analyze(dir).apiTouched.size, "consumers inline the old value")
+    }
+
+    @Test
+    fun `a member of a nested class changes the API`() = repo { dir ->
+        val file = File(dir, "lib/src/main/kotlin/Extra.kt")
+        file.writeText("package probe\n\nclass Outer {\n    class Inner {\n        fun first(): Int = 1\n    }\n}\n")
+        commit(dir)
+        file.writeText(
+            "package probe\n\nclass Outer {\n    class Inner {\n        fun first(flag: Boolean): Int = 1\n    }\n}\n",
+        )
+
+        assertEquals(1, analyze(dir).apiTouched.size)
     }
 
     @Test

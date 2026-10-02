@@ -25,7 +25,12 @@ internal suspend fun verifyAndReport(
     }
     onPrepared(prepared)
     val outcome = Verification.runAndWait(project, prepared)
-    when (outcome.blocker) {
+    reportBlocker(project, prepared, outcome.blocker)
+    return outcome.passed
+}
+
+internal fun reportBlocker(project: Project, prepared: Verification.Prepared, blocker: Verification.Blocker?) {
+    when (blocker) {
         Verification.Blocker.UNRESOLVED_CHANGES -> notifyAffected(
             project,
             AffectedBundle.message("notification.unresolved.title"),
@@ -54,7 +59,6 @@ internal suspend fun verifyAndReport(
         )
         null -> Unit
     }
-    return outcome.passed
 }
 
 internal fun notifyAffected(project: Project, title: String, content: String, type: NotificationType) {

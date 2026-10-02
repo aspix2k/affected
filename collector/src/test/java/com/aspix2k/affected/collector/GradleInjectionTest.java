@@ -750,6 +750,39 @@ public class GradleInjectionTest {
         assertFallback(fallbackOutput);
     }
 
+    @Test(timeout = 120_000L)
+    public void changedDeclaredTaskInputForcesTheFullTaskAndUnrelatedFilesDoNot() throws Exception {
+        Path project = temporary.newFolder("declared-input-project").toPath();
+        Path baselineOutput = temporary.newFolder("declared-input-baseline-output").toPath();
+        Path unrelatedOutput = temporary.newFolder("declared-input-unrelated-output").toPath();
+        Path changedOutput = temporary.newFolder("declared-input-changed-output").toPath();
+        writeFixture(project);
+        write(project.resolve("testData/data.txt"), "one\n");
+        write(project.resolve("unrelated/notes.txt"), "one\n");
+
+        BuildResult baseline = run(project, baselineOutput, "testDebugUnitTest", true, "-PdeclaredInput=true");
+        assertComplete(baselineOutput, 6, baseline.getOutput());
+        promote(baselineOutput, project.resolve(".affected/maps"));
+
+        write(project.resolve("unrelated/notes.txt"), "two\n");
+        clearExecuted(project);
+        BuildResult unrelated = run(project, unrelatedOutput, "testDebugUnitTest", true, "-PdeclaredInput=true");
+        assertDecision(unrelated, ":testDebugUnitTest", "proven-empty");
+        assertEquals(TaskOutcome.SKIPPED, unrelated.task(":testDebugUnitTest").getOutcome());
+        assertEquals(Collections.emptySet(), executedTests(project));
+
+        write(project.resolve("testData/data.txt"), "two\n");
+        BuildResult changed = run(project, changedOutput, "testDebugUnitTest", true, "-PdeclaredInput=true");
+        assertDecision(changed, ":testDebugUnitTest", "full fallback (input changed)");
+        assertEquals(TaskOutcome.SUCCESS, changed.task(":testDebugUnitTest").getOutcome());
+        assertComplete(changedOutput, 6, changed.getOutput());
+        assertEquals(
+            setOf("AlphaTest", "BetaTest", "GammaTest", "DeltaTest", "VintageAlphaTest"),
+            executedTests(project)
+        );
+        assertNotEquals(manifestValue(baselineOutput, "input="), manifestValue(changedOutput, "input="));
+    }
+
     private static void assertDecision(BuildResult result, String task, String decision) {
         String expected = "[Affected] " + task + " - " + decision;
         assertTrue(result.getOutput(), result.getOutput().contains(expected));
@@ -1068,6 +1101,7 @@ public class GradleInjectionTest {
                 "    classpath = sourceSets.test.runtimeClasspath\n" +
                 "    useJUnitPlatform { if (!project.hasProperty('includeSlow')) excludeTags 'slow' }\n" +
                 "    if (project.hasProperty('symlinkTests')) testClassesDirs = files(file('test-classes-link'))\n" +
+                "    if (project.hasProperty('declaredInput')) inputs.dir('testData')\n" +
                 "    exclude '**/LegacyTest.class'\n" +
                 "    systemProperty 'fixture.executed', file('executed').absolutePath\n" +
                 "    maxParallelForks = 2\n" +

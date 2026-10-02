@@ -82,6 +82,7 @@ class AffectedToolset : McpToolset {
         saveDocuments()
         if (projectBusy(project)) return busy()
         val state = project.service<AffectedState>()
+        state.refreshNow()
         val preview = AffectedMcpViews.plan(state.snapshot(), settings().checkConsumers)
         if (preview.error) return preview.toResult()
         val claim = state.tryClaimReadyRun() ?: return cannotClaim()
@@ -110,10 +111,11 @@ class AffectedToolset : McpToolset {
         val project = coroutineContext.project
         if (project.basePath == null) return noBasePath()
         val state = project.service<AffectedState>()
-        val validation = AffectedMcpInputs.validateNamedTask(state.snapshot(), task)
-        if (validation.error) return validation.toResult()
         saveDocuments()
         if (projectBusy(project)) return busy()
+        state.refreshNow()
+        val validation = AffectedMcpInputs.validateNamedTask(state.snapshot(), task)
+        if (validation.error) return validation.toResult()
         val claim = state.tryClaimReadyRun() ?: return cannotClaim()
         val name = validation.data["task"] as String
         val modules = claim.snapshot.modules.filter { it.supports(name) }
