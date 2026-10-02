@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build.cargo
 
+import com.aspix2k.affected.build.BuildChanges
 import com.aspix2k.affected.build.CliConformanceRepository
 import com.aspix2k.affected.build.NativeProcessRunner
 import com.aspix2k.affected.build.OwnedSandbox
@@ -55,6 +56,22 @@ class CargoNextestCliAdapterConformanceTest {
         )
         assertEquals(listOf("-p", "affected-alpha"), commands.last().arguments.takeLast(2))
         assertTrue(result.passed, result.output)
+    }
+
+    @Test
+    fun `cargo-nextest runs the package of a modified source file`() = fixture { root ->
+        val source = File(root, "alpha/src/lib.rs")
+        val result = executeBatch(
+            root,
+            cargoCommands(
+                root.path,
+                listOf("affected-alpha:${cargoNextestTask(nativePlan(root))}"),
+                BuildChanges(listOf(source.path), setOf(source.path), comparedToBase = true),
+                unsafeCargoExecution = false,
+            ),
+        )
+
+        assertSelectedRun(result)
     }
 
     @Test

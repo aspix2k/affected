@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 class CargoFileFilterTest {
 
     @Test
-    fun `nextest receives a file filter for a changed rust source`() {
+    fun `a changed rust source runs its whole package without a filterset`() {
         val root = createTempDirectory("cargo-file-filter").toFile()
         val source = File(root, "crates/core/src/lib.rs").apply {
             parentFile.mkdirs()
@@ -30,9 +30,8 @@ class CargoFileFilterTest {
             unsafeCargoExecution = false,
         ).first()
 
-        assertEquals("-E", command.arguments[command.arguments.indexOf("-E")])
-        assertEquals("file(crates/core/src/lib.rs)", command.arguments[command.arguments.indexOf("-E") + 1])
-        assertTrue(command.arguments.contains("-p"))
+        assertFalse(command.arguments.contains("-E"))
+        assertEquals(listOf("-p", "core"), command.arguments.takeLast(2))
     }
 
     @Test

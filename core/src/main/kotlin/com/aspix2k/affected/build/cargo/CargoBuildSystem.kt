@@ -235,7 +235,6 @@ internal fun cargoCommands(
     unsafeCargoExecution: Boolean = false,
     nextestExecutable: String = "cargo-nextest",
     cargoExecutable: String = "cargo",
-    fileFilter: String? = null,
     stopAfterFirstFailure: Boolean? = null,
 ): List<CliCommand> =
     tasks.groupBy { canonicalCargoTask(it.substringAfterLast(':')) }
@@ -253,7 +252,7 @@ internal fun cargoCommands(
                         executionTask,
                         nextestExecutable,
                         cargoExecutable,
-                        (fileFilter.takeUnless { workspace }?.let { listOf("-E", it) } ?: emptyList()) + selection,
+                        selection,
                         requestedTasks.filter(::cargoNextestHasDoctests).map { it.substringBeforeLast(':') },
                         stopAfterFirstFailure,
                     )
@@ -302,25 +301,6 @@ private fun verifiedCargoNextestExecutables(
     return VerifiedCargoNextestExecutables(executable, cargo)
         .takeUnless { identity == null || plannedIdentities.size != 1 || identity !in plannedIdentities }
 }
-
-internal fun cargoNextestFileFilter(root: String, changes: BuildChanges): String? = runCatching {
-    require(changes.comparedToBase)
-    require(changes.files.isNotEmpty() && changes.files.size <= MAX_CARGO_FILE_FILTERS)
-    require(changes.files.toSet() == changes.exactSelectionEligible)
-    val rootPath = File(root).toPath().toAbsolutePath().normalize()
-    require(Files.isDirectory(rootPath, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(rootPath))
-    val files = changes.files.map { raw ->
-        val requested = Path.of(raw).toAbsolutePath().normalize()
-        require(Files.isRegularFile(requested, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(requested))
-        val real = requested.toRealPath(LinkOption.NOFOLLOW_LINKS)
-        require(real.startsWith(rootPath))
-        val relative = rootPath.relativize(real).toString().replace('\\', '/')
-        require(relative.endsWith(".rs") && CARGO_FILTER_PATH.matches(relative))
-        relative
-    }.distinct().sorted()
-    require(files.isNotEmpty())
-    files.joinToString(" + ") { file -> "file($file)" }
-}.getOrNull()
 
 private fun cargoNextestCommands(
     root: String,
@@ -423,7 +403,6 @@ internal fun cargoCommands(
         unsafeCargoExecution,
         nextestExecutable,
         cargoExecutable,
-        fileFilter = if (workspace) null else cargoNextestFileFilter(root, changes),
         stopAfterFirstFailure = stopAfterFirstFailure,
     )
 }
@@ -446,5 +425,3 @@ private fun BuildChanges.requireCargoWorkspace(root: String): Boolean {
 }
 
 private val GENERATED_DIRECTORIES = setOf("generated", "gen", "out", "target")
-private val CARGO_FILTER_PATH = Regex("""[A-Za-z0-9._+\-]+(?:/[A-Za-z0-9._+\-]+)*\.rs""")
-private const val MAX_CARGO_FILE_FILTERS = 256

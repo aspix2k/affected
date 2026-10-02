@@ -1,0 +1,1 @@
+- Cargo projects that use cargo-nextest no longer fail when only Rust source files changed: the run passed a `file(...)` filter that cargo-nextest does not support. The affected packages now run in full.
