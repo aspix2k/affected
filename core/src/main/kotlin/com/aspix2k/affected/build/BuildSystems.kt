@@ -14,6 +14,8 @@ object BuildSystems {
 
     fun sourceExtensions(): Set<String> = point.extensionList.flatMapTo(HashSet()) { it.sourceExtensions }
 
+    fun languageExtensions(): Set<String> = languageExtensions(sourceExtensions())
+
     fun sourceExtensions(project: Project): Set<String> =
         of(project).flatMapTo(HashSet()) { it.sourceExtensions }.ifEmpty { ChangeAnalyzer.DEFAULT_EXTENSIONS }
 
@@ -34,3 +36,10 @@ object BuildSystems {
     private fun presentAllFileSystems(project: Project, systems: List<BuildSystem>): List<BuildSystem> =
         systems.filter { it is AllFileChangesBuildSystem && it.isPresent(project) }
 }
+
+internal fun languageExtensions(extensions: Set<String>): Set<String> = extensions - DATA_FORMATS
+
+private val DATA_FORMATS = setOf(
+    "json", "jsonc", "xml", "yml", "yaml", "toml", "properties", "lock", "txt", "cfg", "ini",
+    "mod", "sum", "work", "plist", "pro", "hcl", "sql", "xcscheme", "xctestplan",
+)

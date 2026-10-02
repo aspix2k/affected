@@ -35,14 +35,13 @@ class RunAffectedTestsAction : AnAction() {
         val state = project.service<AffectedState>()
         FileDocumentManager.getInstance().saveAllDocuments()
         currentThreadCoroutineScope().launch {
-            state.refreshNow()
-            startAffectedRun(project, state, this)
+            if (state.refreshNow()) startAffectedRun(project, state, this) else notifyNotStarted(project)
         }
     }
 
     private fun startAffectedRun(project: Project, state: AffectedState, scope: CoroutineScope) {
         startClaimedAffectedRun(project, state, { scope }) { prepared, outcome ->
-            if (outcome.blocker == null && prepared.plan.isEmpty) {
+            if (outcome.blocker == null && prepared.plan.isEmpty && prepared.uncovered.isEmpty()) {
                 notifyAffected(
                     project,
                     AffectedBundle.message("notification.nothing.title"),

@@ -18,6 +18,8 @@ class AffectedSettings : PersistentStateComponent<AffectedSettings.State> {
         @Volatile
         var testDependents: Boolean = false,
         @Volatile
+        var guardsTestDependents: Boolean = true,
+        @Volatile
         var animateWhileRunning: Boolean = true,
         @Volatile
         var runBeforeCommit: Boolean = false,
@@ -41,6 +43,10 @@ class AffectedSettings : PersistentStateComponent<AffectedSettings.State> {
     var testDependents: Boolean
         get() = state.testDependents
         set(value) { state.testDependents = value }
+
+    var guardsTestDependents: Boolean
+        get() = state.guardsTestDependents
+        set(value) { state.guardsTestDependents = value }
 
     var animateWhileRunning: Boolean
         get() = state.animateWhileRunning

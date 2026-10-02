@@ -71,7 +71,7 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
         GradleSettings.getInstance(project).linkedProjectsSettings.isNotEmpty()
 
     override fun requiresWorkspace(module: BuildModule, changes: BuildChanges): Boolean =
-        gradleRequiresWorkspace(module.root, changes)
+        gradleRequiresWorkspace(module.root, changes) || gradleUnverifiableScriptChanged(module, changes)
 
     override fun consumerRoots(root: String, candidateRoots: Set<String>): Set<String> =
         gradleConsumerRoots(root, candidateRoots)
@@ -474,6 +474,16 @@ internal fun gradleRequiresWorkspace(root: String, changes: BuildChanges): Boole
         file.startsWith(rootPath) && gradleBuildWideChange(rootPath.relativize(file).toString().replace('\\', '/'))
     }
 }
+
+internal fun gradleUnverifiableScriptChanged(module: BuildModule, changes: BuildChanges): Boolean {
+    if (module.hasTests || module.compileTask != null) return false
+    val scripts = module.contentRoots.flatMapTo(HashSet()) { root ->
+        GRADLE_BUILD_SCRIPTS.map { File(root, it).invariantSeparatorsPath }
+    }
+    return changes.files.any { File(it).invariantSeparatorsPath in scripts }
+}
+
+private val GRADLE_BUILD_SCRIPTS = listOf("build.gradle", "build.gradle.kts")
 
 internal fun gradleBuildWideChange(relative: String): Boolean =
     relative in GRADLE_BUILD_WIDE_FILES || GRADLE_BUILD_WIDE_DIRECTORIES.any { relative.startsWith("$it/") }

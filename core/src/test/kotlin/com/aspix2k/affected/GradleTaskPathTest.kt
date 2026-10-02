@@ -1,5 +1,7 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.BuildChanges
+import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.gradle.GradleBuildSystem
 import com.aspix2k.affected.build.gradle.gradleCompositeRoot
 import com.aspix2k.affected.build.gradle.gradleExecutionCoordinates
@@ -12,6 +14,7 @@ import com.aspix2k.affected.build.gradle.gradleProjectPath
 import com.aspix2k.affected.build.gradle.gradleTestCompileTask
 import com.aspix2k.affected.build.gradle.gradleTestTask
 import com.aspix2k.affected.build.gradle.gradleUnitTestTasks
+import com.aspix2k.affected.build.gradle.gradleUnverifiableScriptChanged
 import com.aspix2k.affected.build.gradle.gradleVerificationTasks
 import com.aspix2k.affected.build.gradle.isAndroidInstrumentationSource
 import com.aspix2k.affected.build.gradle.selectAndroidTestTask
@@ -322,6 +325,36 @@ class GradleTaskPathTest {
             gradleVerificationTasks(available),
         )
         assertFalse("compileTestKotlin" in available)
+    }
+
+    @Test
+    fun `multiplatform test tasks the IDE does not type as tests are kept`() {
+        val available = setOf("jvmTest", "jsTest", "iosSimulatorArm64Test", "allTests", "jvmTestClasses", "check")
+
+        assertEquals(
+            setOf("jvmTest", "jsTest", "iosSimulatorArm64Test"),
+            gradleUnitTestTasks(available, setOf("jvmTest")).toSet(),
+        )
+    }
+
+    @Test
+    fun `a changed build script of a module without tasks widens to the whole build`() {
+        val root = createTempDirectory("affected-platform-module").toFile()
+        val platform = File(root, "platform").apply { mkdirs() }
+        val module = BuildModule(
+            id = ":platform",
+            root = root.invariantSeparatorsPath,
+            contentRoots = listOf(platform.invariantSeparatorsPath),
+            testTask = "",
+            compileTask = null,
+            hasTests = false,
+        )
+        val script = BuildChanges(listOf(File(platform, "build.gradle.kts").path), emptySet(), comparedToBase = true)
+        val other = BuildChanges(listOf(File(platform, "notes.kt").path), emptySet(), comparedToBase = true)
+
+        assertTrue(gradleUnverifiableScriptChanged(module, script))
+        assertFalse(gradleUnverifiableScriptChanged(module, other))
+        assertFalse(gradleUnverifiableScriptChanged(module.copy(compileTask = "classes"), script))
     }
 
     @Test

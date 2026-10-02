@@ -35,3 +35,19 @@ class RunBeforePushToggle : ToggleAction() {
         e.presentation.text = AffectedBundle.message("action.before.push.text")
     }
 }
+
+class GuardsTestDependentsToggle : ToggleAction() {
+
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
+
+    override fun isSelected(e: AnActionEvent): Boolean = AffectedSettings.getInstance().guardsTestDependents
+
+    override fun setSelected(e: AnActionEvent, state: Boolean) {
+        AffectedSettings.getInstance().guardsTestDependents = state
+    }
+
+    override fun update(e: AnActionEvent) {
+        super.update(e)
+        e.presentation.text = AffectedBundle.message("action.guards.dependents.text")
+    }
+}

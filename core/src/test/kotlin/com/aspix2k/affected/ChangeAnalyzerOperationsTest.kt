@@ -38,7 +38,7 @@ class ChangeAnalyzerOperationsTest {
     }
 
     @Test
-    fun `comparison with the base sees only branch commits`() {
+    fun `comparison with the base sees branch commits and untracked files`() {
         val directory = repository()
         run(directory, "git", "checkout", "-q", "-b", "feature")
         File(directory, "Committed.kt").writeText("fun committed() {}\n")
@@ -48,7 +48,7 @@ class ChangeAnalyzerOperationsTest {
 
         val againstBase = analyzer(directory).againstBase().map { it.name }
 
-        assertEquals(listOf("Committed.kt"), againstBase, "uncommitted work is unrelated to the base comparison")
+        assertEquals(listOf("Committed.kt", "OnlyLocal.kt"), againstBase)
     }
 
     @Test

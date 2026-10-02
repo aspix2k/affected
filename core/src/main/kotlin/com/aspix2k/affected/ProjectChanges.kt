@@ -18,12 +18,13 @@ object ProjectChanges {
         val exactSelectionEligible: Set<File>,
         val comparedToBase: Boolean,
         val baseUnresolved: Boolean = false,
+        val uncovered: List<File> = emptyList(),
     )
 
     fun collect(project: Project): Result {
-        val (files, analyzer) = changedFiles(project)
+        val (files, uncovered, analyzer) = changedFiles(project)
         return if (analyzer == null) {
-            Result(files, files.toSet(), emptySet(), comparedToBase = false)
+            Result(files, files.toSet(), emptySet(), comparedToBase = false, uncovered = uncovered)
         } else {
             Result(
                 files,
@@ -31,6 +32,7 @@ object ProjectChanges {
                 analyzer.modifiedAgainstBase(),
                 comparedToBase = analyzer.hasComparisonBase(),
                 baseUnresolved = !analyzer.hasComparisonBase(),
+                uncovered = uncovered,
             )
         }
     }
@@ -38,14 +40,19 @@ object ProjectChanges {
     suspend fun collectSuspending(project: Project): Result =
         runInterruptible(Dispatchers.IO) { collect(project) }
 
-    private fun changedFiles(project: Project): Pair<List<File>, ChangeAnalyzer?> {
-        val projectDir = project.basePath?.let(::File) ?: return emptyList<File>() to null
+    private fun changedFiles(project: Project): Triple<List<File>, List<File>, ChangeAnalyzer?> {
+        val projectDir = project.basePath?.let(::File) ?: return Triple(emptyList(), emptyList(), null)
         val extensions = BuildSystems.sourceExtensions(project)
         val names = BuildSystems.sourceFileNames(project)
         val includeAllFiles = BuildSystems.includesAllFileChanges(project)
         val sourceRoots = if (includeAllFiles) emptySet() else sourceRoots(project, projectDir)
         val accepts = { path: String -> isCollectedSource(path, includeAllFiles, extensions, names, sourceRoots) }
+        val foreign = if (includeAllFiles) emptySet() else BuildSystems.languageExtensions() - extensions
+        val uncovers = { path: String ->
+            path.substringAfterLast('.', "").lowercase() in foreign && !accepts(path)
+        }
         val local = localChanges(project, accepts)
+        val localUncovered = localChanges(project, uncovers)
         val analyzer = ChangeAnalyzer(
             projectDir,
             AffectedSettings.getInstance().baseBranch,
@@ -55,9 +62,13 @@ object ProjectChanges {
             sourceRoots = sourceRoots,
         )
 
-        if (!analyzer.isUsable()) return local to null
+        if (!analyzer.isUsable()) return Triple(local, localUncovered, null)
 
-        return (local + analyzer.againstBase()).distinct() to analyzer
+        return Triple(
+            (local + analyzer.againstBase()).distinct(),
+            (localUncovered + analyzer.againstBase(uncovers)).distinct(),
+            analyzer,
+        )
     }
 
     internal fun sourceRoots(project: Project, projectDir: File): Set<String> {

@@ -1,0 +1,1 @@
+- When changed files in a known programming language belong to no build system that Affected detected in the project, the result now says so (a notification and the `uncoveredFiles` field of the MCP plan) instead of staying silent. It does not block the check.

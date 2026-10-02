@@ -129,6 +129,8 @@
                         class="com.aspix2k.affected.RunBeforeCommitToggle"/>
                 <action id="com.aspix2k.affected.RunBeforePush"
                         class="com.aspix2k.affected.RunBeforePushToggle"/>
+                <action id="com.aspix2k.affected.GuardsTestDependents"
+                        class="com.aspix2k.affected.GuardsTestDependentsToggle"/>
                 <separator/>
                 <action id="com.aspix2k.affected.AnimateWhileRunning"
                         class="com.aspix2k.affected.AnimateWhileRunningToggle"/>

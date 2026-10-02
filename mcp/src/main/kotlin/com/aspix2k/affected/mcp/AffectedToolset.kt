@@ -95,7 +95,7 @@ class AffectedToolset : McpToolset {
             return busy()
         }
         val outcome = Verification.runClaimedAndWait(project, prepared, claim)
-        return verificationView(claim.snapshot, outcome).toResult()
+        return AffectedMcpViews.withUncovered(verificationView(claim.snapshot, outcome), prepared.uncovered).toResult()
     }
 
     @McpTool

@@ -1,0 +1,1 @@
+- Commit and push checks now also run the tests of modules that depend on a changed one. Turn it off with "Test dependent modules before commit and push" in the Affected menu.

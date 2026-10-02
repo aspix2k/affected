@@ -31,8 +31,6 @@ class ChangeAnalyzer(
         if (error.cause is ExecutionException || error.cause is IOException) false else throw error
     }
 
-    fun hasComparisonBase(): Boolean = mergeBase != null
-
     fun modifiedAgainstBase(): Set<File> {
         val base = mergeBase ?: return emptySet()
         val paths = gitFields("diff", "--name-status", "--no-renames", "--relative", "-z", base)
@@ -41,10 +39,24 @@ class ChangeAnalyzer(
         return keepSources(paths).toSet()
     }
 
-    fun againstBase(): List<File> {
-        val base = mergeBase ?: return emptyList()
-        return keepSources(gitFields("diff", "--name-only", "--no-renames", "--relative", "-z", base))
+    private val changedPaths: List<String> by lazy {
+        val committed = mergeBase?.let { gitFields("diff", "--name-only", "--no-renames", "--relative", "-z", it) }
+        val local = when {
+            committed != null -> emptyList()
+            hasHead -> gitFields("diff", "--name-only", "--no-renames", "--relative", "-z", HEAD)
+            else -> gitFields("ls-files", "-z")
+        }
+        (committed.orEmpty() + local + gitFields("ls-files", "--others", "--exclude-standard", "-z")).distinct()
     }
+
+    private val hasHead: Boolean by lazy { run("rev-parse", "--verify", "-q", HEAD).exitCode == 0 }
+
+    fun hasComparisonBase(): Boolean = mergeBase != null || !hasHead
+
+    fun againstBase(): List<File> = keepSources(changedPaths)
+
+    fun againstBase(accepts: (String) -> Boolean): List<File> =
+        changedPaths.filter(accepts).map { File(projectDir, it) }
 
     fun apiTouchedAmong(files: Collection<File>): Set<File> {
         val relatives = files.associateWith(::relativePath)
@@ -64,7 +76,7 @@ class ChangeAnalyzer(
 
     private fun diffByFile(paths: List<String>): Map<String, List<String>> {
         if (paths.isEmpty()) return emptyMap()
-        val ref = mergeBase ?: HEAD.takeIf { run("rev-parse", "--verify", "-q", it).exitCode == 0 } ?: return emptyMap()
+        val ref = mergeBase ?: HEAD.takeIf { hasHead } ?: return emptyMap()
         return pathChunks(paths.distinct()).fold(HashMap()) { diffs, chunk ->
             diffs.apply {
                 putAll(
@@ -154,6 +166,7 @@ class ChangeAnalyzer(
 
         if (PARAMETER.matches(line) || CONSTRUCTOR_PROPERTY.matches(line)) return indent <= PARAMETER_INDENT
         if (PRIVATE.containsMatchIn(line)) return false
+        if (ENUM_CONSTANT.matches(line)) return indent <= MEMBER_INDENT
 
         val declaration = DECLARATION.containsMatchIn(line) || TYPED_MEMBER.containsMatchIn(line)
         if (!declaration) return false
@@ -277,6 +290,8 @@ class ChangeAnalyzer(
         private val NESTED_MEMBER = Regex(
             ANNOTATIONS + MODIFIERS + """(?:fun|def|class|interface|object|trait|constructor|record)\b"""
         )
+
+        private val ENUM_CONSTANT = Regex("""^\s*[A-Z][A-Z0-9_]*(?:\(.*\))?\s*[,;]?\s*$""")
 
         private val CONST = Regex("""\bconst\b""")
 

@@ -24,6 +24,7 @@ object Verification {
         internal val changes: BuildChanges,
         val unresolvedFiles: Int = 0,
         val baseUnresolved: Boolean = false,
+        val uncovered: List<File> = emptyList(),
     ) {
         val changedFiles: Int get() = changes.files.size
     }
@@ -35,17 +36,15 @@ object Verification {
         fun select(checkConsumers: Boolean): Prepared = if (checkConsumers) withConsumers else testsOnly
     }
 
-    suspend fun prepare(project: Project): Prepared {
+    suspend fun prepare(project: Project, guard: Boolean = false): Prepared {
         val changes = ProjectChanges.collectSuspending(project)
-        return prepare(project, changes)
-    }
-
-    suspend fun prepare(project: Project, changes: ProjectChanges.Result): Prepared =
-        withContext(Dispatchers.Default) {
+        return withContext(Dispatchers.Default) {
             val settings = AffectedSettings.getInstance()
-            prepare(ModuleGraph.create(project), changes, testDependents = settings.testDependents)
+            val testDependents = settings.testDependents || guard && settings.guardsTestDependents
+            prepare(ModuleGraph.create(project), changes, testDependents = testDependents)
                 .select(settings.checkConsumers)
         }
+    }
 
     internal fun prepare(
         graph: ModuleGraph,
@@ -55,15 +54,10 @@ object Verification {
     ): PreparedPlans {
         val buildChanges = changes.toBuildChanges()
         val plans = verificationPlans(graph, changes, owners, testDependents)
-        return PreparedPlans(
-            testsOnly = Prepared(plans.testsOnly, buildChanges, plans.unresolvedFiles, changes.baseUnresolved),
-            withConsumers = Prepared(
-                plans.withConsumers,
-                buildChanges,
-                plans.unresolvedFiles,
-                changes.baseUnresolved,
-            ),
-        )
+        val prepared = { plan: Plan ->
+            Prepared(plan, buildChanges, plans.unresolvedFiles, changes.baseUnresolved, changes.uncovered)
+        }
+        return PreparedPlans(prepared(plans.testsOnly), prepared(plans.withConsumers))
     }
 
     suspend fun runAndWait(project: Project, prepared: Prepared): Outcome {
@@ -130,7 +124,7 @@ internal fun completedOutcome(
 }
 
 internal fun verificationPassesWithoutWork(prepared: Verification.Prepared): Boolean =
-    prepared.plan.isEmpty && prepared.changes.files.isEmpty()
+    prepared.plan.isEmpty && prepared.unresolvedFiles == 0
 
 fun <T> runWithRequiredAdapter(
     adapter: T?,

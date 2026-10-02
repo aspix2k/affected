@@ -285,6 +285,49 @@ class ChangeAnalyzerTest {
     }
 
     @Test
+    fun `changes against the base can be listed outside the collected extensions`() = repo { dir ->
+        File(dir, "tools").mkdirs()
+        File(dir, "tools/sync.py").writeText("print(1)\n")
+        File(dir, "lib/src/main/kotlin/Extra.kt").writeText("class Extra\n")
+        run(dir, "git", "checkout", "-q", "-b", "feature")
+        commit(dir)
+        val analyzer = ChangeAnalyzer(dir, "main")
+
+        assertEquals(listOf("Extra.kt"), analyzer.againstBase().map { it.name })
+        assertEquals(listOf("sync.py"), analyzer.againstBase { it.endsWith(".py") }.map { it.name })
+    }
+
+    @Test
+    fun `a file created on disk is seen through git before the IDE knows it`() = repo { dir ->
+        File(dir, "lib/src/main/kotlin/Fresh.kt").writeText("class Fresh\n")
+
+        assertEquals(listOf("Fresh.kt"), ChangeAnalyzer(dir, "main").againstBase().map { it.name })
+    }
+
+    @Test
+    fun `a repository without commits compares everything and has no missing base`() {
+        val dir = createTempDirectory("affected-empty-repo").toFile()
+        run(dir, "git", "init", "-q", "-b", "main")
+        File(dir, "Staged.kt").writeText("class Staged\n")
+        run(dir, "git", "add", "Staged.kt")
+        File(dir, "Loose.kt").writeText("class Loose\n")
+        val analyzer = ChangeAnalyzer(dir, "main")
+
+        assertTrue(analyzer.hasComparisonBase())
+        assertEquals(setOf("Staged.kt", "Loose.kt"), analyzer.againstBase().mapTo(HashSet()) { it.name })
+    }
+
+    @Test
+    fun `an enum constant changes the API`() = repo { dir ->
+        val file = File(dir, "lib/src/main/kotlin/Mode.kt")
+        file.writeText("package probe\n\nenum class Mode {\n    FAST,\n}\n")
+        commit(dir)
+        file.writeText("package probe\n\nenum class Mode {\n    FAST,\n    SLOW,\n}\n")
+
+        assertEquals(1, analyze(dir).apiTouched.size, "an exhaustive when in a consumer stops compiling")
+    }
+
+    @Test
     fun `all-file collection still ignores project documentation`() = repo { dir ->
         File(dir, "README.md").writeText("# doc")
         File(dir, "LICENSE").writeText("license")

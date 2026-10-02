@@ -275,7 +275,7 @@ def reject_selected_importers(root, packages, selected):
             continue
         try:
             tree = ast.parse(path.read_bytes(), filename=path.name)
-        except (SyntaxError, ValueError, OSError) as error:
+        except (SyntaxError, ValueError, OSError, RecursionError, MemoryError) as error:
             raise Unsupported("syntax") from error
         reject_dynamic_syntax(tree)
         relative = path.relative_to(root)

@@ -1,0 +1,7 @@
+- New and untracked files are now read from Git right before a run, so a file an agent has just created is part of the check even before the IDE notices it.
+- A commit that only touches files nothing could verify, such as a CI workflow or a document, no longer reports unresolved changes.
+- A repository without commits no longer fails with a missing base branch.
+- Kotlin Multiplatform modules keep their non-JVM test tasks when the IDE reports only the JVM one as a test task.
+- A changed build script of a Gradle module that has no tasks of its own now runs the whole build instead of being reported as unchecked.
+- Adding or changing an enum constant counts as an API change for the consumer check.
+- The toolbar run says when it could not start instead of doing nothing.
