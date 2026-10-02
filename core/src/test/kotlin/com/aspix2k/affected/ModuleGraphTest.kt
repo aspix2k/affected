@@ -291,6 +291,22 @@ class ModuleGraphTest {
     }
 
     @Test
+    fun `a changed resource of a JVM module plans that module's tests`() {
+        val root = createTempDirectory("module-graph-resource").toFile()
+        val graph = ModuleGraph(listOf(ModuleGraph.Node(module(root, "alpha", "alpha"), system("GRADLE"))))
+        val resource = File(root, "alpha/src/main/resources/application.yml").apply {
+            parentFile.mkdirs()
+            writeText("server: {}")
+        }
+        val changes = ProjectChanges.Result(listOf(resource), emptySet(), setOf(resource), comparedToBase = true)
+        val prepared = Verification.prepare(graph, changes)
+
+        assertEquals(listOf("alpha:test"), prepared.testsOnly.plan.groups.single().tasks)
+        assertEquals(prepared.testsOnly.plan, prepared.withConsumers.plan)
+        assertEquals(0, prepared.testsOnly.unresolvedFiles)
+    }
+
+    @Test
     fun `a changed source in a module with nothing to run is unresolved next to a planned module`() {
         val root = createTempDirectory("module-graph-no-tasks").toFile()
         val kotlin = object : BuildSystem by system("GRADLE") {

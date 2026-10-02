@@ -1,7 +1,10 @@
 package com.aspix2k.affected
 
 import com.aspix2k.affected.build.BuildSystems
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.ProjectRootManager
+import com.intellij.openapi.util.Computable
 import com.intellij.openapi.vcs.changes.ChangeListManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
@@ -40,13 +43,16 @@ object ProjectChanges {
         val extensions = BuildSystems.sourceExtensions(project)
         val names = BuildSystems.sourceFileNames(project)
         val includeAllFiles = BuildSystems.includesAllFileChanges(project)
-        val local = localChanges(project, extensions, names, includeAllFiles)
+        val sourceRoots = if (includeAllFiles) emptySet() else sourceRoots(project, projectDir)
+        val accepts = { path: String -> isCollectedSource(path, includeAllFiles, extensions, names, sourceRoots) }
+        val local = localChanges(project, accepts)
         val analyzer = ChangeAnalyzer(
             projectDir,
             AffectedSettings.getInstance().baseBranch,
             extensions,
             includeAllFiles,
             sourceFileNames = names,
+            sourceRoots = sourceRoots,
         )
 
         if (!analyzer.isUsable()) return local to null
@@ -54,12 +60,18 @@ object ProjectChanges {
         return (local + analyzer.againstBase()).distinct() to analyzer
     }
 
-    private fun localChanges(
-        project: Project,
-        extensions: Set<String>,
-        names: Set<String>,
-        includeAllFiles: Boolean,
-    ): List<File> {
+    internal fun sourceRoots(project: Project, projectDir: File): Set<String> {
+        val base = projectDir.invariantSeparatorsPath.trimEnd('/')
+        return ApplicationManager.getApplication().runReadAction(
+            Computable {
+                ProjectRootManager.getInstance(project).contentSourceRoots.mapNotNullTo(HashSet()) { root ->
+                    root.path.takeIf { it.startsWith("$base/") }?.removePrefix("$base/")
+                }
+            },
+        )
+    }
+
+    private fun localChanges(project: Project, accepts: (String) -> Boolean): List<File> {
         val projectDir = project.basePath?.let(::File) ?: return emptyList()
         val manager = ChangeListManager.getInstance(project)
 
@@ -70,7 +82,7 @@ object ProjectChanges {
             .filter { file ->
                 val relative = runCatching { file.relativeTo(projectDir).invariantSeparatorsPath }
                     .getOrDefault(file.invariantSeparatorsPath)
-                isCollectedSource(relative, includeAllFiles, extensions, names)
+                accepts(relative)
             }
             .distinct()
     }
