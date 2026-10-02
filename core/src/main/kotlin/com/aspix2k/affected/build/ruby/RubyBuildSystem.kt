@@ -46,8 +46,7 @@ class RubyBuildSystem : SuspendingBuildSystem, NamedSourceBuildSystem {
         val stamp = combineFingerprints(
             ManifestSearch.fingerprint(
                 root,
-                listOf("Gemfile", "Gemfile.lock").flatMap { ManifestSearch.find(root, it) } +
-                    ManifestSearch.findByExtension(root, "gemspec"),
+                ManifestSearch.find(root, setOf("Gemfile", "Gemfile.lock"), setOf("gemspec")),
             ),
             ManifestSearch.layoutFingerprint(root) { it.name in RUBY_TEST_DIRECTORIES },
         )

@@ -113,9 +113,11 @@ class DotnetBuildSystem :
     }
 
     private fun manifests(root: File): List<File> =
-        listOf("csproj", "fsproj", "vbproj", "props", "targets", "sln", "slnx")
-            .flatMap { ManifestSearch.findByExtension(root, it) } +
-            listOf("global.json", "NuGet.Config").flatMap { ManifestSearch.find(root, it) }
+        ManifestSearch.find(
+            root,
+            setOf("global.json", "NuGet.Config"),
+            setOf("csproj", "fsproj", "vbproj", "props", "targets", "sln", "slnx"),
+        )
 }
 
 private class DotnetSelectiveRun private constructor(

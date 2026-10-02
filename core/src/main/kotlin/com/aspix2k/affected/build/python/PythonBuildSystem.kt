@@ -64,8 +64,7 @@ class PythonBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildS
         val stamp = combineFingerprints(
             ManifestSearch.fingerprint(
                 root,
-                listOf("pyproject.toml", "mypy.ini", "setup.cfg", "uv.lock", "poetry.lock")
-                    .flatMap { ManifestSearch.find(root, it) },
+                ManifestSearch.find(root, setOf("pyproject.toml", "mypy.ini", "setup.cfg", "uv.lock", "poetry.lock")),
             ),
             ManifestSearch.layoutFingerprint(root) {
                 it.name in PYTHON_TEST_DIRECTORIES || it.name.startsWith("test_") && it.extension == "py"

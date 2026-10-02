@@ -153,7 +153,7 @@ object ComposerPackages {
         return values
     }
 
-    private fun findManifests(root: File): List<File> = ManifestSearch.find(root, "composer.json")
+    private fun findManifests(root: File): List<File> = ManifestSearch.find(root, setOf("composer.json"))
 
     private val TEST_DIRS = listOf("tests", "test", "Tests")
     private val CONFIGS = listOf("phpunit.xml", "phpunit.xml.dist", "phpunit.dist.xml")

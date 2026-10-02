@@ -56,10 +56,13 @@ class ComposerBuildSystem :
         val stamp = combineFingerprints(
             ManifestSearch.fingerprint(
                 root,
-                listOf(
-                    "composer.json", "composer.lock", "phpunit.xml", "phpunit.xml.dist", "phpunit.dist.xml",
-                    "phpstan.neon", "phpstan.neon.dist", "phpstan.dist.neon", "psalm.xml", "psalm.xml.dist",
-                ).flatMap { ManifestSearch.find(root, it) },
+                ManifestSearch.find(
+                    root,
+                    setOf(
+                        "composer.json", "composer.lock", "phpunit.xml", "phpunit.xml.dist", "phpunit.dist.xml",
+                        "phpstan.neon", "phpstan.neon.dist", "phpstan.dist.neon", "psalm.xml", "psalm.xml.dist",
+                    ),
+                ),
             ),
             ManifestSearch.layoutFingerprint(root) { it.name in COMPOSER_TEST_DIRECTORIES },
             ComposerPest.layoutFingerprint(root),

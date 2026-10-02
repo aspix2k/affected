@@ -38,10 +38,7 @@ class GoBuildSystem : SuspendingBuildSystem {
     private fun modulesOf(directory: File): List<BuildModule> {
         val root = directory.invariantSeparatorsPath
         val sources = ManifestSearch.findByExtension(directory, "go")
-        val inputs =
-            listOf("go.mod", "go.sum", "go.work", "go.work.sum")
-                .flatMap { ManifestSearch.find(directory, it) } +
-                sources
+        val inputs = ManifestSearch.find(directory, setOf("go.mod", "go.sum", "go.work", "go.work.sum")) + sources
         val stamp = sources.takeIf { it.isNotEmpty() }?.let {
             ManifestSearch.fingerprint(directory, inputs)
         }

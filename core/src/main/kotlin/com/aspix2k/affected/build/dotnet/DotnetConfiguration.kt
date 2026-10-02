@@ -17,18 +17,18 @@ import javax.xml.parsers.DocumentBuilderFactory
 
 internal fun dotnetManifestFingerprint(root: File): String? = ManifestSearch.fingerprint(
     root,
-    listOf("csproj", "fsproj", "vbproj", "props", "targets", "sln", "slnx", "runsettings")
-        .flatMap { ManifestSearch.findByExtension(root, it) } +
-        listOf("global.json", "NuGet.Config", "Directory.Packages.props")
-            .flatMap { ManifestSearch.find(root, it) },
+    ManifestSearch.find(
+        root,
+        setOf("global.json", "NuGet.Config", "Directory.Packages.props"),
+        setOf("csproj", "fsproj", "vbproj", "props", "targets", "sln", "slnx", "runsettings"),
+    ),
 )
 
 internal fun unsupportedDotnetConfiguration(root: File): Boolean {
-    val named = DOTNET_UNSUPPORTED_CONFIG_NAMES.flatMap { ManifestSearch.find(root, it) }
-    val byExtension = DOTNET_UNSUPPORTED_CONFIG_EXTENSIONS.flatMap { ManifestSearch.findByExtension(root, it) }
-    if (named.isNotEmpty() || byExtension.isNotEmpty()) return true
-    val manifests = listOf("csproj", "fsproj", "vbproj", "props", "targets")
-        .flatMap { ManifestSearch.findByExtension(root, it) }
+    val unsupported =
+        ManifestSearch.find(root, DOTNET_UNSUPPORTED_CONFIG_NAMES, DOTNET_UNSUPPORTED_CONFIG_EXTENSIONS)
+    if (unsupported.isNotEmpty()) return true
+    val manifests = ManifestSearch.find(root, emptySet(), DOTNET_IMPORTED_EXTENSIONS)
     return manifests.any { manifest ->
         val text = ManifestSearch.readText(manifest) ?: return true
         !supportedDotnetManifest(manifest, text) ||

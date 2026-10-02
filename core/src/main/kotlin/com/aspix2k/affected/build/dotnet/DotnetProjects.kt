@@ -74,7 +74,8 @@ object DotnetProjects {
     }
 
     private fun findProjects(root: File): List<File> =
-        PROJECT_EXTENSIONS.flatMap { ManifestSearch.findByExtension(root, it) }
+        ManifestSearch.find(root, emptySet(), PROJECT_EXTENSIONS)
+            .sortedBy { PROJECT_EXTENSIONS.indexOf(it.extension.lowercase()) }
 
     private fun relativeProjectPath(root: String, project: File): String =
         project.invariantSeparatorsPath.removePrefix("$root/")
