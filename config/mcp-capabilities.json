@@ -68,6 +68,12 @@
       "mcpOnly": true
     },
     {
+      "id": "tests-for-file",
+      "mcp": "affected_tests_for_file",
+      "kind": "read",
+      "mcpOnly": true
+    },
+    {
       "id": "configure",
       "mcp": "affected_configure",
       "kind": "mutating",

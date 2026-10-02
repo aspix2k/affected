@@ -25,7 +25,7 @@ class AffectedDoctorTest {
         val unresolved = diagnose(snapshot(changes = changes(baseUnresolved = true)), baseBranch = "develop")
         val fresh = diagnose(snapshot(changes = changes()))
 
-        assertEquals(listOf("origin/main"), resolved.single { it.id == "base-resolved" }.args)
+        assertEquals(listOf("main"), resolved.single { it.id == "base-resolved" }.args)
         assertTrue(resolved.none { it.id == "base-unresolved" })
         assertEquals(DoctorSeverity.PROBLEM, unresolved.single { it.id == "base-unresolved" }.severity)
         assertEquals(listOf("develop"), unresolved.single { it.id == "base-unresolved" }.args)

@@ -1,5 +1,8 @@
 package com.aspix2k.affected
 
+import java.nio.file.Files
+import java.nio.file.Path
+import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -158,5 +161,50 @@ class AffectedMcpInputsTest {
         assertEquals("release", changed.data["baseBranch"])
         assertEquals(null, changed.data["resolvedBaseBranch"])
         assertTrue("Base branch: release," in changed.text)
+    }
+
+    @Test
+    fun `a source file inside the project is accepted and reported relative to the base`() = withProject { base ->
+        val file = Files.createDirectories(base.resolve("src")).resolve("Repo.kt")
+        Files.writeString(file, "class Repo")
+
+        val view = AffectedMcpInputs.validateSourceFile(base.toString(), " src/Repo.kt ")
+
+        assertFalse(view.error)
+        assertEquals("src/Repo.kt", view.data["file"])
+        assertEquals(file.toRealPath().toString(), view.data["path"])
+    }
+
+    @Test
+    fun `paths that are empty missing outside the project or not JVM sources are rejected with a reason`() =
+        withProject { base ->
+            Files.writeString(base.resolve("Notes.md"), "x")
+            val outside = createTempDirectory("affected-outside-").resolve("Other.kt")
+            Files.writeString(outside, "class Other")
+            val link = base.resolve("Link.kt")
+            Files.createSymbolicLink(link, outside)
+
+            fun reason(path: String) = AffectedMcpInputs.validateSourceFile(base.toString(), path).data["reason"]
+
+            assertEquals("invalid-path", reason("   "))
+            assertEquals("invalid-path", reason("a".repeat(5000)))
+            assertEquals("invalid-path", reason("bad\u0000.kt"))
+            assertEquals("file-not-found", reason("Missing.kt"))
+            assertEquals("outside-project", reason(outside.toString()))
+            assertEquals("outside-project", reason(base.relativize(outside).toString()))
+            assertEquals("outside-project", reason("Link.kt"))
+            assertEquals("unsupported-file", reason("Notes.md"))
+            val gone = AffectedMcpInputs.validateSourceFile(base.resolve("gone").toString(), "A.kt")
+            assertEquals("no-base-path", gone.data["reason"])
+            outside.parent.toFile().deleteRecursively()
+        }
+
+    private fun withProject(block: (Path) -> Unit) {
+        val base = createTempDirectory("affected-project-").toRealPath()
+        try {
+            block(base)
+        } finally {
+            base.toFile().deleteRecursively()
+        }
     }
 }

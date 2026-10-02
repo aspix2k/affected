@@ -1,6 +1,8 @@
 package com.aspix2k.affected
 
 import com.aspix2k.affected.build.ruby.supports
+import java.nio.file.Files
+import java.nio.file.Path
 
 object AffectedMcpInputs {
 
@@ -25,6 +27,28 @@ object AffectedMcpInputs {
         return AffectedMcpView(
             text = "Task '$name' is available on ${supported.size} module(s).",
             data = mapOf("task" to name, "modules" to supported.map(AffectedModule::id)),
+        )
+    }
+
+    fun validateSourceFile(basePath: String, path: String): AffectedMcpView {
+        val requested = path.trim()
+        val base = runCatching { Path.of(basePath).toRealPath() }.getOrNull()
+            ?: return sourceFileError("no-base-path", "Project base path is unavailable.")
+        val resolved = runCatching { base.resolve(requested).normalize() }.getOrNull()
+        if (requested.isEmpty() || requested.length > MAX_PATH_LENGTH || resolved == null) {
+            return sourceFileError("invalid-path", "File path is invalid.")
+        }
+        val real = runCatching { resolved.toRealPath() }.getOrNull()
+            ?.takeIf { Files.isRegularFile(it) }
+            ?: return sourceFileError("file-not-found", "File does not exist.")
+        if (!real.startsWith(base)) return sourceFileError("outside-project", "File is outside the project.")
+        if (real.fileName.toString().substringAfterLast('.', "") !in SOURCE_EXTENSIONS) {
+            return sourceFileError("unsupported-file", "Only .kt and .java files can be looked up.")
+        }
+        val relative = base.relativize(real).joinToString("/")
+        return AffectedMcpView(
+            text = "File: $relative",
+            data = mapOf("file" to relative, "path" to real.toString()),
         )
     }
 
@@ -85,6 +109,12 @@ object AffectedMcpInputs {
         )
     }
 
+    private fun sourceFileError(reason: String, text: String) = AffectedMcpView(
+        text = text,
+        data = mapOf("reason" to reason),
+        error = true,
+    )
+
     private fun taskName(name: String): Boolean = TASK_NAME.matches(name)
 
     private fun branchName(name: String): Boolean =
@@ -92,6 +122,8 @@ object AffectedMcpInputs {
 
     private fun onOff(value: Boolean): String = if (value) "on" else "off"
 
+    private val SOURCE_EXTENSIONS = setOf("kt", "java")
+    private const val MAX_PATH_LENGTH = 4096
     private val TASK_NAME = Regex("[A-Za-z][A-Za-z0-9._-]{0,127}")
     private val BRANCH_NAME = Regex("[A-Za-z0-9][A-Za-z0-9._/-]{0,254}")
 }

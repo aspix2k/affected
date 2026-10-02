@@ -1,6 +1,7 @@
 package com.aspix2k.affected.mcp
 
 import com.aspix2k.affected.AffectedDoctor
+import com.aspix2k.affected.AffectedMcpCoveringViews
 import com.aspix2k.affected.AffectedMcpInputs
 import com.aspix2k.affected.AffectedMcpSettings
 import com.aspix2k.affected.AffectedMcpView
@@ -10,6 +11,7 @@ import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.AffectedState
 import com.aspix2k.affected.AffectedStateSnapshot
+import com.aspix2k.affected.CoveringTestsLookup
 import com.aspix2k.affected.ProjectBaseBranch
 import com.aspix2k.affected.TaskPlanner
 import com.aspix2k.affected.Verification
@@ -38,6 +40,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import java.nio.file.Path
 import kotlin.coroutines.coroutineContext
 
 class AffectedToolset : McpToolset {
@@ -202,6 +205,26 @@ class AffectedToolset : McpToolset {
     )
     suspend fun affected_available_tasks(): McpToolCallResult =
         AffectedMcpViews.availableTasks(freshSnapshot(coroutineContext.project)).toResult()
+
+    @McpTool
+    @McpToolHints(readOnlyHint = McpToolHintValue.TRUE)
+    @McpDescription(
+        "Lists the test classes recorded as covering a .kt or .java file for Gradle and Maven JVM modules, " +
+            "read from the dependency maps on disk without starting any process. Reports map freshness " +
+            "and the reason when nothing is known."
+    )
+    suspend fun affected_tests_for_file(
+        @McpDescription("Path of a .kt or .java file inside the project, absolute or relative to the project base")
+        path: String,
+    ): McpToolCallResult {
+        val project = coroutineContext.project
+        val basePath = project.basePath ?: return noBasePath()
+        val validation = AffectedMcpInputs.validateSourceFile(basePath, path)
+        if (validation.error) return validation.toResult()
+        val file = Path.of(validation.data["path"] as String)
+        val result = withContext(Dispatchers.IO) { CoveringTestsLookup.find(project, file) }
+        return AffectedMcpCoveringViews.tests(validation.data["file"] as String, result).toResult()
+    }
 
     @McpTool
     @McpToolHints(readOnlyHint = McpToolHintValue.FALSE, destructiveHint = McpToolHintValue.FALSE)

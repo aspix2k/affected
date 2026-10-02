@@ -65,14 +65,8 @@ internal class CollectorRun private constructor(
             val runs = secureDirectory(root.resolve(RUNS_DIRECTORY))
             val runId = UUID.randomUUID().toString()
             val output = Files.createDirectory(runs.resolve(runId)).toRealPath(LinkOption.NOFOLLOW_LINKS)
-            CollectorRun(root, artifacts, output, artifacts.version(), runId)
+            CollectorRun(root, artifacts, output, collectorVersion(artifacts), runId)
         }.getOrNull()
-
-        private fun List<Path>.version(): String {
-            val digest = MessageDigest.getInstance("SHA-256")
-            forEach(digest::update)
-            return digest.digest().toHex()
-        }
 
         private fun Path.secureFile(): Path {
             val absolute = toAbsolutePath().normalize()
@@ -93,6 +87,12 @@ internal class CollectorRun private constructor(
             }.forEach(::deleteTree)
         }
     }
+}
+
+internal fun collectorVersion(artifacts: List<Path>): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    artifacts.forEach(digest::update)
+    return digest.digest().toHex()
 }
 
 private fun MessageDigest.update(path: Path) {

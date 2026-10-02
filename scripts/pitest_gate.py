@@ -11,7 +11,7 @@ MAX_REPORT_BYTES = 16 * 1024 * 1024
 KOTLIN_INTRINSICS_NULL_CHECK = "kotlin/jvm/internal/Intrinsics::checkNotNull"
 IMPACT_PACKAGE = "com.aspix2k.affected.impact."
 KOTLIN_CLOSE_FINALLY = "kotlin/jdk7/AutoCloseableKt::closeFinally"
-LIST_CLOSE_MUTANT = ("CollectorMapIOKt", "list", 344, 68, "VoidMethodCallMutator")
+LIST_CLOSE_MUTANT = ("CollectorMapIOKt", "list", 361, 68, "VoidMethodCallMutator")
 INLINE_COLLECTION_GUARD_MUTANTS = frozenset(
     {
         ("CollectorMapReader", "read", 404, 128, "RemoveConditionalMutator_EQUAL_ELSE"),
@@ -50,15 +50,15 @@ INLINE_COLLECTION_GUARD_MUTANTS = frozenset(
     }
 )
 REDUNDANT_VALIDATION_MUTANTS = {
-    ("CollectorMapIOKt", "count", 364, 19, "RemoveConditionalMutator_ORDER_IF"): "a negative count never equals a collection size",
-    ("CollectorMapIOKt", "count", 364, 27, "RemoveConditionalMutator_EQUAL_ELSE"): "a negative count never equals a collection size",
-    ("CollectorMapIOKt", "rawValue", 361, 40, "RemoveConditionalMutator_EQUAL_IF"): "a blank value is rejected again by decode",
-    ("CollectorMapIOKt", "rawValue", 361, 48, "RemoveConditionalMutator_EQUAL_ELSE"): "a blank value is rejected again by decode",
-    ("CollectorMapIOKt", "readFile", 351, 33, "RemoveConditionalMutator_ORDER_IF"): "an empty file fails the trailing newline check",
-    ("CollectorMapIOKt", "readFile", 353, 76, "RemoveConditionalMutator_EQUAL_IF"): "a carriage return fails the exact line, value or checksum match that follows",
-    ("CollectorMapIOKt", "secureDirectory", 338, 18, "RemoveConditionalMutator_EQUAL_IF"): "a symlink also fails isDirectory with NOFOLLOW_LINKS",
-    ("CollectorMapIOKt", "secureDirectory", 338, 26, "RemoveConditionalMutator_EQUAL_ELSE"): "a symlink also fails isDirectory with NOFOLLOW_LINKS",
-    ("CollectorMapIOKt", "secureDirectory", 340, 61, "RemoveConditionalMutator_EQUAL_IF"): "createDirectories fails on non directories and isSymbolicLink rejects links",
+    ("CollectorMapIOKt", "count", 381, 19, "RemoveConditionalMutator_ORDER_IF"): "a negative count never equals a collection size",
+    ("CollectorMapIOKt", "count", 381, 27, "RemoveConditionalMutator_EQUAL_ELSE"): "a negative count never equals a collection size",
+    ("CollectorMapIOKt", "rawValue", 378, 40, "RemoveConditionalMutator_EQUAL_IF"): "a blank value is rejected again by decode",
+    ("CollectorMapIOKt", "rawValue", 378, 48, "RemoveConditionalMutator_EQUAL_ELSE"): "a blank value is rejected again by decode",
+    ("CollectorMapIOKt", "readFile", 368, 33, "RemoveConditionalMutator_ORDER_IF"): "an empty file fails the trailing newline check",
+    ("CollectorMapIOKt", "readFile", 370, 76, "RemoveConditionalMutator_EQUAL_IF"): "a carriage return fails the exact line, value or checksum match that follows",
+    ("CollectorMapIOKt", "secureDirectory", 355, 18, "RemoveConditionalMutator_EQUAL_IF"): "a symlink also fails isDirectory with NOFOLLOW_LINKS",
+    ("CollectorMapIOKt", "secureDirectory", 355, 26, "RemoveConditionalMutator_EQUAL_ELSE"): "a symlink also fails isDirectory with NOFOLLOW_LINKS",
+    ("CollectorMapIOKt", "secureDirectory", 357, 61, "RemoveConditionalMutator_EQUAL_IF"): "createDirectories fails on non directories and isSymbolicLink rejects links",
     ("CollectorMapReader", "parseCompleteWorker", 136, 16, "RemoveConditionalMutator_ORDER_IF"): "a short manifest throws on the next indexed read",
     ("CollectorMapReader", "parseCompleteWorker", 136, 24, "RemoveConditionalMutator_EQUAL_ELSE"): "a short manifest throws on the next indexed read",
     ("CollectorMapReader", "parseExpected", 93, 6, "RemoveConditionalMutator_ORDER_IF"): "a short manifest throws on the next indexed read",
@@ -81,7 +81,7 @@ REDUNDANT_VALIDATION_MUTANTS = {
     ("DependencyMapStore", "parseRecord", 297, 23, "RemoveConditionalMutator_EQUAL_ELSE"): "a missing or leading separator fails substring or the blank test decode",
     ("DependencyMapStore", "read", 207, 87, "ConditionalsBoundaryMutator"): "a header only file has no records and fails validation",
     ("DependencyMapStore", "read", 202, 35, "RemoveConditionalMutator_EQUAL_ELSE"): "a blank key has no stored file and fails the identity constructor",
-    ("CollectorMapIOKt", "readFile", 351, 33, "ConditionalsBoundaryMutator"): "a one byte file cannot hold a manifest and fails the parsers",
+    ("CollectorMapIOKt", "readFile", 368, 33, "ConditionalsBoundaryMutator"): "a one byte file cannot hold a manifest and fails the parsers",
 }
 
 

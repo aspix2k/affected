@@ -200,9 +200,26 @@ internal class DependencyMapStore(private val root: Path) {
 
     fun read(taskKey: String): CompleteDependencyMap? = runCatching {
         require(taskKey.isNotBlank())
-        val directory = secureDirectory(root)
-        val path = directory.resolve(fileName(taskKey))
+        val path = secureDirectory(root).resolve(fileName(taskKey))
         if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return null
+        parse(path).also { require(it.identity.taskKey == taskKey) }
+    }.getOrNull()
+
+    fun readAll(): StoredMaps {
+        val directory = root.toAbsolutePath().normalize()
+        if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) return StoredMaps(emptyList(), 0)
+        val files = runCatching {
+            list(directory).filter { it.fileName.toString().matches(MAP_FILE_PATTERN) }
+        }.getOrElse { return StoredMaps(emptyList(), 1) }
+        val parsed = files.map { file ->
+            runCatching {
+                PromotedMap(parse(file), Files.getLastModifiedTime(file, LinkOption.NOFOLLOW_LINKS).toInstant())
+            }.getOrNull()
+        }
+        return StoredMaps(parsed.filterNotNull(), parsed.count { it == null })
+    }
+
+    private fun parse(path: Path): CompleteDependencyMap {
         val lines = readFile(path)
         require(lines.size >= STORE_HEADER_LINE_COUNT)
         require(lines[0] == FORMAT)
@@ -214,7 +231,7 @@ internal class DependencyMapStore(private val root: Path) {
             value(lines[4], "runtime="),
             value(lines[5], "input="),
         )
-        require(identity.taskKey == taskKey)
+        require(path.fileName.toString() == fileName(identity.taskKey))
         val completedRunId = value(lines[6], "run=")
         val artifactCount = count(lines[7], "artifacts=")
         val recordCount = count(lines[8], "records=")
@@ -235,8 +252,8 @@ internal class DependencyMapStore(private val root: Path) {
         require(artifacts.size == artifactCount && records.size == recordCount)
         val result = CompleteDependencyMap(identity, artifacts, records, completedRunId)
         require(validated(result) == result)
-        result
-    }.getOrNull()
+        return result
+    }
 
     fun write(map: CompleteDependencyMap) {
         require(validated(map) == map)
@@ -379,6 +396,7 @@ private fun encode(value: String): String = Base64.getUrlEncoder().withoutPaddin
 
 private val DEPENDENCY_ORDER = compareBy<ClassDependency>({ it.id.className }, { it.id.codeSource }, { it.sha256 })
 private val SHA256_PATTERN = Regex("[0-9a-f]{64}")
+private val MAP_FILE_PATTERN = Regex("map-[0-9a-f]{64}\\.map")
 private val WORKER_DIRECTORY_PATTERN = Regex("worker-[0-9a-f]{64}")
 private const val FORMAT = "format=1"
 private const val UNKNOWN_MAP_LINE = "unknown=true"
