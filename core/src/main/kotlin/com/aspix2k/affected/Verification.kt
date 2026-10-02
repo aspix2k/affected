@@ -170,6 +170,9 @@ private fun verificationPlans(
     }
     val testsOnly = TaskPlanner.plan(tested, emptyList())
     val consumers = if (apiNodes.isEmpty()) emptyList() else graph.directDependents(apiNodes)
+    val verifiedByConsumers = changed.filterTo(HashSet()) { node ->
+        !node.isVerifiable() && graph.transitiveTestConsumers(setOf(node)).any { it.isVerifiable() }
+    }
     return VerificationPlans(
         testsOnly = testsOnly,
         withConsumers = if (consumers.isEmpty()) {
@@ -178,10 +181,13 @@ private fun verificationPlans(
             TaskPlanner.plan(tested, consumers.map { it.info() })
         },
         unresolvedFiles = changes.files.count { file ->
-            effectiveOwners[file].isNullOrEmpty() && file.extension.lowercase() in graph.sourceExtensions
+            file.extension.lowercase() in graph.sourceExtensions &&
+                effectiveOwners[file].orEmpty().none { it.isVerifiable() || it in verifiedByConsumers }
         },
     )
 }
+
+private fun ModuleGraph.Node.isVerifiable(): Boolean = module.hasTests || module.compileTask != null
 
 internal fun ProjectChanges.Result.toBuildChanges(): BuildChanges = BuildChanges(
     files = files.map { it.absoluteFile.normalize().invariantSeparatorsPath },
