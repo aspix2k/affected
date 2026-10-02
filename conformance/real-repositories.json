@@ -308,7 +308,9 @@
             "Sources/Logging/Logger.swift"
           ],
           "tasks": [
-            "Logging:test"
+            "Logging:build",
+            "LoggingTests:test",
+            "InMemoryLoggingTests:test"
           ],
           "command": [
             "swift",

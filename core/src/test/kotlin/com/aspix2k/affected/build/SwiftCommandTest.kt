@@ -129,9 +129,43 @@ class SwiftCommandTest {
 
         assertNull(SwiftTargets.parse("not json", root))
         assertNull(SwiftTargets.parse("""{"targets": []}""", root))
-        assertNull(SwiftTargets.parse(DESCRIBE.replace("library", "plugin"), root))
+        assertNull(SwiftTargets.parse(DESCRIBE.replace("library", "plugin").replace("test", "snippet"), root))
         assertNull(SwiftTargets.parse(DESCRIBE.replace("\"c99name\":\"Alpha\"", "\"c99name\":\"_Alpha\""), root))
         assertNull(SwiftTargets.parse(DESCRIBE.replace("\"name\":\"AlphaTests\"", "\"name\":\"Alpha\""), root))
+    }
+
+    @Test
+    fun `snippet, plugin, macro, system, binary and unknown targets do not discard the package`() {
+        val description = """
+            {"targets":[
+              {"c99name":"Alpha","name":"Alpha","path":"Sources/Alpha","type":"library"},
+              {"c99name":"AlphaTests","name":"AlphaTests","path":"Tests/AlphaTests","type":"test",
+               "target_dependencies":["Alpha"]},
+              {"c99name":"basic_usage","name":"basic-usage","path":"Snippets","type":"snippet",
+               "target_dependencies":["Alpha"]},
+              {"c99name":"Gen","name":"Gen","path":"Plugins/Gen","type":"plugin"},
+              {"c99name":"Sys","name":"Sys","path":"Sources/Sys","type":"system"},
+              {"c99name":"Bin","name":"Bin","path":"Bin.xcframework","type":"binary"},
+              {"c99name":"Future","name":"Future","path":"Sources/Future","type":"quantum"},
+              {"c99name":"Macros","name":"Macros","path":"Sources/Macros","type":"macro",
+               "target_dependencies":["Gen"]}
+            ]}
+        """.trimIndent()
+
+        val modules = checkNotNull(SwiftTargets.parse(description, File("/work/pkg")))
+
+        assertEquals(listOf("Alpha", "AlphaTests", "Macros"), modules.map { it.id })
+        assertEquals(setOf("/work/pkg|Alpha"), modules[1].dependencies)
+        assertEquals(emptySet(), modules[2].dependencies)
+    }
+
+    @Test
+    fun `a package without code targets keeps the project command`() {
+        val description = """{"targets":[{"c99name":"s","name":"s","path":"Snippets","type":"snippet"}]}"""
+        val system = SwiftBuildSystem { description }
+
+        assertNull(SwiftTargets.parse(description, File("/work/pkg")))
+        assertEquals(".", system.modules(swiftRoot()).single().executionId)
     }
 
     @Test
