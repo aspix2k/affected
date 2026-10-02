@@ -11,6 +11,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -21,6 +22,7 @@ import java.util.Properties;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class MavenExtensionTest {
     @Rule
@@ -393,6 +395,82 @@ public class MavenExtensionTest {
         assertTrue(AffectedMavenLifecycleParticipant.failsafeBaselineEligible(
             Collections.singletonList("deploy")
         ));
+    }
+
+    @Test
+    public void referencedSuiteFileContentChangesRuntimeIdentity() throws Exception {
+        Path root = temporary.newFolder("suite-file-runtime").toPath();
+        Path suite = Files.write(root.resolve("testng.xml"), "<suite name=\"a\"/>".getBytes(StandardCharsets.UTF_8));
+        Path unrelated = Files.write(root.resolve("notes.txt"), new byte[] {1});
+        MavenProject project = project(root);
+        Xpp3Dom suiteFiles = new Xpp3Dom("suiteXmlFiles");
+        child(suiteFiles, "suiteXmlFile", "testng.xml");
+        ((Xpp3Dom) project.getPlugin("org.apache.maven.plugins:maven-surefire-plugin").getConfiguration())
+            .addChild(suiteFiles);
+        String first = runtime(root, project);
+
+        Files.write(unrelated, new byte[] {2});
+        assertEquals(first, runtime(root, project));
+
+        Files.write(suite, "<suite name=\"b\"/>".getBytes(StandardCharsets.UTF_8));
+        assertTrue(!first.equals(runtime(root, project)));
+    }
+
+    @Test
+    public void referencedDirectoryAndMissingPathsAreFingerprinted() throws Exception {
+        Path root = temporary.newFolder("referenced-directory-runtime").toPath();
+        Path extra = Files.createDirectory(root.resolve("extra"));
+        Path resource = Files.write(extra.resolve("a.properties"), new byte[] {1});
+        MavenProject project = project(root);
+        Xpp3Dom elements = new Xpp3Dom("additionalClasspathElements");
+        child(elements, "additionalClasspathElement", "extra");
+        child(elements, "additionalClasspathElement", "absent");
+        ((Xpp3Dom) project.getPlugin("org.apache.maven.plugins:maven-surefire-plugin").getConfiguration())
+            .addChild(elements);
+        String first = runtime(root, project);
+
+        Files.write(resource, new byte[] {2});
+        String changed = runtime(root, project);
+        Files.write(root.resolve("absent"), new byte[] {1});
+
+        assertTrue(!first.equals(changed));
+        assertTrue(!changed.equals(runtime(root, project)));
+    }
+
+    @Test
+    public void unresolvedOrSymlinkedReferencesFailClosed() throws Exception {
+        Path root = temporary.newFolder("unsafe-reference-runtime").toPath();
+        Path target = Files.write(root.resolve("real.xml"), new byte[] {1});
+        Files.createSymbolicLink(root.resolve("link.xml"), target);
+        for (String reference : Arrays.asList("link.xml", "${unresolved}/suite.xml")) {
+            MavenProject project = project(root);
+            child(
+                (Xpp3Dom) project.getPlugin("org.apache.maven.plugins:maven-surefire-plugin").getConfiguration(),
+                "suiteXmlFiles",
+                reference
+            );
+            try {
+                runtime(root, project);
+                fail(reference);
+            } catch (IllegalStateException expected) {
+                assertTrue(expected.getMessage().endsWith(".xml"));
+            }
+        }
+    }
+
+    private static String runtime(Path root, MavenProject project) throws Exception {
+        Path agent = root.resolve("agent.jar");
+        Path output = root.resolve("output");
+        Path maps = root.resolve("maps");
+        if (!Files.exists(agent)) Files.write(agent, new byte[] {1});
+        if (!Files.exists(output)) Files.createDirectory(output);
+        if (!Files.exists(maps)) Files.createDirectory(maps);
+        AffectedMavenLifecycleParticipant.Preparation preparation =
+            AffectedMavenLifecycleParticipant.prepare(
+                Collections.singletonList(project),
+                properties(agent, output, maps)
+            );
+        return AffectedMavenConfig.read(preparation.getManifest(), root).getRuntime();
     }
 
     private static MavenProject project(Path root) {
