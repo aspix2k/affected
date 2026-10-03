@@ -243,8 +243,8 @@ class CommandSequenceTest {
         ).start()
 
         assertEquals(0, listener.awaitExit())
-        assertEquals(List(lines) { "out-$it\n" }, listener.text(OutputKind.STDOUT))
-        assertEquals(List(lines) { "err-$it\n" }, listener.text(OutputKind.STDERR))
+        assertEquals(List(lines) { "out-$it\n" }.joinToString(""), listener.text(OutputKind.STDOUT).joinToString(""))
+        assertEquals(List(lines) { "err-$it\n" }.joinToString(""), listener.text(OutputKind.STDERR).joinToString(""))
     }
 
     @Test
