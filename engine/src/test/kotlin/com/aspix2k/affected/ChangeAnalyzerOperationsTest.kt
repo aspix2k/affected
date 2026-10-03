@@ -1,7 +1,5 @@
 package com.aspix2k.affected
 
-import com.intellij.execution.process.ProcessOutput
-import com.intellij.openapi.progress.ProcessCanceledException
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -245,15 +243,6 @@ class ChangeAnalyzerOperationsTest {
         val analyzer = ChangeAnalyzer(repository(), "main", setOf("kt"), false, "no-such-git-binary")
 
         assertFailsWith<ChangeAnalyzer.GitFailure> { analyzer.modifiedAgainstBase() }
-    }
-
-    @Test
-    fun `a cancelled capture propagates as cancellation and a timeout is a failure`() {
-        val cancelled = ProcessOutput().apply { setCancelled() }
-        val timedOut = ProcessOutput().apply { setTimeout() }
-
-        assertFailsWith<ProcessCanceledException> { ChangeAnalyzer.ensureFinished(cancelled, "diff") }
-        assertFailsWith<ChangeAnalyzer.GitFailure> { ChangeAnalyzer.ensureFinished(timedOut, "diff") }
     }
 
     private fun run(directory: File, vararg args: String) {

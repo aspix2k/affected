@@ -1,17 +1,18 @@
 package com.aspix2k.affected
 
 import com.aspix2k.affected.build.isJvmTestSourceSet
-import com.intellij.execution.ExecutionException
-import com.intellij.execution.configurations.GeneralCommandLine
-import com.intellij.execution.process.CapturingProcessHandler
-import com.intellij.execution.process.ProcessOutput
-import com.intellij.openapi.progress.ProcessCanceledException
+import com.aspix2k.affected.build.resolveExecutable
 import kotlinx.coroutines.CancellationException
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
-class ChangeAnalyzer(
+class ChangeAnalyzer
+@Suppress("LongParameterList")
+constructor(
     internal val projectDir: File,
     private val baseBranch: String?,
     private val sourceExtensions: Set<String> = DEFAULT_EXTENSIONS,
@@ -20,6 +21,8 @@ class ChangeAnalyzer(
     private val sourceFileNames: Set<String> = emptySet(),
     private val sourceRoots: Set<String> = emptySet(),
     private val excludedRoots: Set<String> = emptySet(),
+    private val environment: Map<String, String> = System.getenv(),
+    private val checkCanceled: () -> Unit = {},
 ) {
 
     class GitFailure(message: String, cause: Throwable? = null) : Exception(message, cause)
@@ -31,7 +34,7 @@ class ChangeAnalyzer(
     fun isUsable(): Boolean = projectDir.isDirectory && try {
         run("rev-parse", "--git-dir").exitCode == 0
     } catch (error: GitFailure) {
-        if (error.cause is ExecutionException || error.cause is IOException) false else throw error
+        if (error.cause is IOException) false else throw error
     }
 
     fun resolvedBranch(): String? = resolvedBase?.first
@@ -168,31 +171,80 @@ class ChangeAnalyzer(
         return output.stdout
     }
 
-    private fun run(vararg args: String): ProcessOutput = run(args.asList())
+    private fun run(vararg args: String): GitOutput = run(args.asList())
 
-    private fun run(args: List<String>): ProcessOutput = try {
+    private fun run(args: List<String>): GitOutput = try {
         if (!projectDir.isDirectory) throw GitFailure("$projectDir is not a directory")
-        val commandLine = GeneralCommandLine(listOf(gitExecutable, "-c", "core.quotePath=false") + args)
-            .withWorkDirectory(projectDir)
-            .withCharset(Charsets.UTF_8)
-            .withEnvironment("GIT_LITERAL_PATHSPECS", "1")
-        val output = CapturingProcessHandler(commandLine).runProcess(GIT_TIMEOUT_MILLIS)
-        ensureFinished(output, args.first())
+        val executable = resolveExecutable(
+            gitExecutable,
+            environment["PATH"] ?: environment["Path"],
+            environment["PATHEXT"],
+        )
+        capture(
+            listOf(executable, "-c", "core.quotePath=false") + args,
+            projectDir,
+            environment + (LITERAL_PATHSPECS to "1"),
+            GIT_TIMEOUT_MILLIS,
+            checkCanceled,
+        )
     } catch (error: CancellationException) {
-        throw error
-    } catch (error: ProcessCanceledException) {
         throw error
     } catch (error: GitFailure) {
         throw error
-    } catch (error: Exception) {
+    } catch (error: TimeoutException) {
+        throw GitFailure("git ${args.first()} did not finish")
+    } catch (error: IOException) {
         throw GitFailure("git ${args.first()} could not run: ${error.message}", error)
     }
 
     companion object {
-        internal fun ensureFinished(output: ProcessOutput, command: String): ProcessOutput {
-            if (output.isCancelled) throw ProcessCanceledException()
-            if (output.isTimeout) throw GitFailure("git $command did not finish")
-            return output
+        internal fun capture(
+            command: List<String>,
+            directory: File,
+            environment: Map<String, String>,
+            timeoutMillis: Long,
+            checkCanceled: () -> Unit,
+        ): GitOutput {
+            checkCanceled()
+            val builder = ProcessBuilder(command)
+                .directory(directory)
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
+            builder.environment().apply {
+                clear()
+                putAll(environment)
+            }
+            val process = builder.start()
+            val output = FutureTask { process.inputStream.readAllBytes() }
+            Thread(output, "affected-git-output").apply { isDaemon = true }.start()
+            val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis)
+            try {
+                awaitExit(process, deadline, checkCanceled)
+                val remaining = (deadline - System.nanoTime()).coerceAtLeast(0)
+                val bytes = output.get(remaining, TimeUnit.NANOSECONDS)
+                return GitOutput(process.exitValue(), String(bytes, Charsets.UTF_8))
+            } catch (error: InterruptedException) {
+                throw CancellationException("git was interrupted").apply { initCause(error) }
+            } catch (error: ExecutionException) {
+                throw IOException(error.cause?.message, error.cause)
+            } finally {
+                if (process.isAlive) terminate(process)
+            }
+        }
+
+        private fun awaitExit(process: Process, deadline: Long, checkCanceled: () -> Unit) {
+            while (!process.waitFor(POLL_MILLIS, TimeUnit.MILLISECONDS)) {
+                checkCanceled()
+                if (System.nanoTime() - deadline >= 0) throw TimeoutException()
+            }
+        }
+
+        private fun terminate(process: Process) {
+            val children = process.descendants().toList()
+            process.destroy()
+            children.forEach(ProcessHandle::destroy)
+            if (process.waitFor(TERMINATION_GRACE_MILLIS, TimeUnit.MILLISECONDS)) return
+            children.forEach(ProcessHandle::destroyForcibly)
+            process.destroyForcibly()
         }
 
         private fun pathChunks(paths: List<String>): List<List<String>> {
@@ -227,11 +279,16 @@ class ChangeAnalyzer(
         private const val DELETE = 0x7f
         private const val DEV_NULL = "/dev/null"
         private const val HEADER_PREFIX_LENGTH = 4
-        private val GIT_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(90).toInt()
+        private val GIT_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(90)
+        private const val POLL_MILLIS = 100L
+        private const val TERMINATION_GRACE_MILLIS = 5_000L
+        private const val LITERAL_PATHSPECS = "GIT_LITERAL_PATHSPECS"
         private const val IDE_DIRECTORY = ".idea/"
         private val FALLBACK_BRANCHES = listOf("develop", "main", "master")
     }
 }
+
+internal class GitOutput(val exitCode: Int, val stdout: String)
 
 fun isProjectDocumentation(path: String): Boolean {
     val normalized = path.replace('\\', '/').trimStart('/')
