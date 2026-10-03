@@ -1,9 +1,15 @@
 package com.aspix2k.affected.mcp
 
+import com.aspix2k.affected.AffectedMcpBaseViews
 import com.aspix2k.affected.AffectedMcpView
 import com.aspix2k.affected.AffectedStateSnapshot
 import com.aspix2k.affected.AgentSetup
 import com.aspix2k.affected.AnalysisStatus
+import com.aspix2k.affected.BaseCheckBlocker
+import com.aspix2k.affected.BaseCheckReport
+import com.aspix2k.affected.BaseGroupVerdict
+import com.aspix2k.affected.BaseNotRun
+import com.aspix2k.affected.BaseRun
 import com.aspix2k.affected.Plan
 import com.aspix2k.affected.RunSummary
 import com.aspix2k.affected.TaskGroup
@@ -40,6 +46,7 @@ class AffectedToolsetTest {
                 "affected_changed_files",
                 "affected_run_verification",
                 "affected_run_task",
+                "affected_check_on_base",
                 "affected_stop",
                 "affected_status",
                 "affected_doctor",
@@ -70,6 +77,8 @@ class AffectedToolsetTest {
         }
         val stop = tools.single { it.name == "affected_stop" }.getAnnotation(McpToolHints::class.java)
         assertEquals(McpToolHintValue.TRUE, stop.destructiveHint)
+        val base = tools.single { it.name == "affected_check_on_base" }.getAnnotation(McpToolHints::class.java)
+        assertEquals(McpToolHintValue.FALSE, base.destructiveHint)
         val runTask = tools.single { it.name == "affected_run_task" }.getAnnotation(McpToolHints::class.java)
         assertEquals(McpToolHintValue.TRUE, runTask.destructiveHint)
     }
@@ -153,6 +162,31 @@ class AffectedToolsetTest {
         assertTrue(failed.text.startsWith("Failed."))
         assertFalse(empty.error)
         assertEquals(true, empty.data["passed"])
+    }
+
+    @Test
+    fun `the base check returns a verdict per group as structured content`() {
+        val report = BaseCheckReport(
+            verdicts = listOf(
+                BaseGroupVerdict("GRADLE", "app", listOf(":app:test"), BaseRun.Finished(passed = true)),
+                BaseGroupVerdict("GRADLE", "lib", listOf(":lib:test"), BaseRun.Skipped(BaseNotRun.TIMED_OUT)),
+            ),
+            baseCommit = "e".repeat(40),
+            baseBranch = "main",
+        )
+
+        val result = AffectedMcpBaseViews.check(report).toResult()
+
+        assertFalse(result.isError)
+        val structured = requireNotNull(result.structuredContent)
+        assertEquals("1", structured.getValue("regressions").toString())
+        assertEquals("1", structured.getValue("unknown").toString())
+        val groups = structured.getValue("groups").jsonArray.map { it.jsonObject }
+        assertEquals(listOf("regression", "unknown"), groups.map { it.getValue("verdict").jsonPrimitive.content })
+        assertEquals("timed-out", groups.last().getValue("reason").jsonPrimitive.content)
+        assertEquals("null", groups.first().getValue("reason").toString())
+        val busy = AffectedMcpBaseViews.check(BaseCheckReport(blocker = BaseCheckBlocker.NOT_STARTED))
+        assertTrue(busy.toResult().isError)
     }
 
     @Test

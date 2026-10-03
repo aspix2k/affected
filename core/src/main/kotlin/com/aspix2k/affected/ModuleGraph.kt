@@ -61,6 +61,9 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
         index
     }
 
+    internal fun executionNodes(systemId: String, executionRoot: String): List<Node> =
+        nodes.filter { it.system.id == systemId && it.module.executionRoot == executionRoot }
+
     fun nodesFor(file: File): List<Node> {
         directBuildOwners(file)?.let { return it }
 

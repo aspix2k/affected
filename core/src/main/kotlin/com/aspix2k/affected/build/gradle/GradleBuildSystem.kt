@@ -16,6 +16,7 @@ import com.aspix2k.affected.build.requiredGradleFailureStrategyScript
 import com.aspix2k.affected.build.rootFallbackModule
 import com.aspix2k.affected.currentAffectedRunPresentation
 import com.aspix2k.affected.monitorGradleCancellation
+import com.aspix2k.affected.recordsDependencies
 import com.aspix2k.affected.runPreparedOwnedExternalTask
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.openapi.application.PathManager
@@ -165,6 +166,7 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
         }
         val presentation = currentAffectedRunPresentation()
         if (presentation != null && !AffectedExternalRunBinding.isSupported()) return false
+        val recordsDependencies = recordsDependencies()
         var binding: AffectedExternalRunBinding? = null
         val sessions = AffectedRunSessions.getInstance(project)
         val collector = AtomicReference<GradleCollectorRun?>()
@@ -181,7 +183,9 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
                 sessions = sessions,
                 execution = execution,
                 prepare = {
-                    val preparedCollector = publishGradleCollector(collector) { collectorRun(project) }
+                    val preparedCollector = publishGradleCollector(collector) {
+                        if (recordsDependencies) collectorRun(project) else null
+                    }
                     if (execution.isCancellationRequested()) preparedCollector?.cancel()
                     val selection = withContext(Dispatchers.IO) { gradleTaskSelection(tasks, changes) }
                     binding = presentation?.let {

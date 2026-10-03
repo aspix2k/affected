@@ -44,6 +44,12 @@
       ]
     },
     {
+      "id": "check-on-base",
+      "mcp": "affected_check_on_base",
+      "kind": "mutating",
+      "mcpOnly": true
+    },
+    {
       "id": "stop-owned",
       "mcp": "affected_stop",
       "kind": "mutating",
