@@ -1,1 +1,0 @@
-- A new Rust source file now runs the tests of its package instead of the whole Cargo workspace.

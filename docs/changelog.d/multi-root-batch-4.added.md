@@ -1,1 +1,0 @@
-- Discover several Make, Ant, Meson, Ninja, dbt, sqlc and Atlas roots up to three levels below the project base when the base has no marker, running each root with its own command; a project with a base marker or a single nested root behaves as before, while several nested roots that used to be ignored are now all planned.

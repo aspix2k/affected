@@ -1,1 +1,0 @@
-- Show which tests cover a Kotlin or Java file for Gradle and Maven JVM projects: the new affected_tests_for_file MCP tool reads the recorded dependency maps, lists the covering test classes per module with the command to run them, lists tests recorded as depending on everything separately, and reports a stale or missing map instead of trusting it.

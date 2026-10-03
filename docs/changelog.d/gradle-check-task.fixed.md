@@ -1,1 +1,0 @@
-- Gradle: the `check` task is no longer run next to `test`. The IDE marks `check` as a test task, so since 3.20.0 a plain JVM module ran its tests and then the whole `check` lifecycle.

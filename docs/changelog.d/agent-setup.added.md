@@ -1,1 +1,0 @@
-- Add "Set up for coding agents" to the Affected menu: it opens the MCP Server settings to connect an agent and copies or adds to AGENTS.md ready-made instructions that make the agent verify its own edits.
