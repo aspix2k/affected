@@ -143,7 +143,7 @@ jobs:
     needs: [scope]
     if: needs.scope.outputs.native == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 95
     env:
       CARGO_NEXTEST_VERSION: "0.9.146"
       CARGO_NEXTEST_SHA256: "682c21b777c333e96fd532e114d3a5a894e0729ab88d94c0a9f20f8419695428"
@@ -325,6 +325,15 @@ jobs:
           --tests '*Cli*ConformanceTest'
           -Paffected.cliConformance=true
           --rerun-tasks --no-daemon --no-parallel --max-workers=1
+
+      - name: Run real repository smoke lane
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        timeout-minutes: 45
+        run: >-
+          scripts/run_gradle.sh :core:test
+          --tests '*RealRepositorySmokeTest'
+          -Paffected.realRepositories=true
+          --no-daemon --no-parallel --max-workers=1
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
