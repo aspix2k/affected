@@ -229,7 +229,7 @@ class NestedBuildRootTest {
         val base = createTempDirectory("independent-budget").toFile()
         markers(base, ".")
         repeat(PerformanceBudgets.MAX_DIRECTORIES + 10) { File(base, "a/d$it").mkdirs() }
-        markers(base, "zz/late")
+        markers(base, "zz/x/y/late")
 
         assertEquals(listOf(base), independentRoots(base, never))
     }

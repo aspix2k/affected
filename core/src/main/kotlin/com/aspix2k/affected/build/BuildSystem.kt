@@ -136,7 +136,7 @@ internal fun nestedBuildRoots(
         val (owner, directory, depth) = queue.removeFirst()
         if (depth >= PerformanceBudgets.MAX_DEPTH) continue
         for (child in nestedListing(directory).directories.filterNot(::isSkippedIndependentRoot)) {
-            visited++
+            if (++visited > PerformanceBudgets.MAX_DIRECTORIES) break
             val independent = nestedListing(child).names.any(markerNames::contains) &&
                 hasMarker(child) && !isMember(owner, child)
             if (independent) found += child
