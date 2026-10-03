@@ -1,0 +1,1 @@
+- CMake: a change to a source of a test target declared through a project function or a name built from variables now plans a run of the project tests instead of no tests.

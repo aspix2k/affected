@@ -1,5 +1,6 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.cmake.CMakeBuildSystem
 import com.aspix2k.affected.build.cmake.CMakeTargets
 import java.io.File
 import kotlin.io.path.createTempDirectory
@@ -121,5 +122,66 @@ class CMakeTargetsTest {
         val b = CMakeTargets.parse(root).single { it.id == "b" }
 
         assertEquals(setOf("CMAKE|${root.invariantSeparatorsPath}|a"), b.dependencies)
+    }
+
+    private fun owners(root: File, source: String): List<Pair<String, String>> {
+        val system = CMakeBuildSystem()
+        val graph = ModuleGraph(CMakeTargets.parse(root).map { ModuleGraph.Node(it, system) })
+        return graph.nodesFor(File(root, source)).map { it.id to it.module.testTask }
+    }
+
+    @Test
+    fun `a function declared target is no junk module and its source falls back to a module running tests`() {
+        val root = project()
+        lists(root, ".", "add_library(fmt STATIC src/format.cc)\nadd_subdirectory(test)")
+        lists(
+            root,
+            "test",
+            """
+            function(add_fmt_test name)
+              add_executable(${'$'}{name} ${'$'}{name}.cc)
+              add_executable(test-${'$'}{name} ${'$'}{name}.cc)
+              add_test(NAME ${'$'}{name} COMMAND ${'$'}{name})
+            endfunction()
+            add_fmt_test(format-test)
+            """,
+        )
+
+        assertEquals(listOf("fmt"), CMakeTargets.parse(root).map { it.id })
+        assertEquals(listOf("fmt" to "test"), owners(root, "test/format-test.cc"))
+    }
+
+    @Test
+    fun `an interpolated or separator terminated name is dropped while literal names stay`() {
+        val root = project()
+        lists(
+            root,
+            ".",
+            """
+            add_executable(test-${'$'}{name} a.cc)
+            add_library(lib_${'$'}{suffix} STATIC b.cc)
+            add_executable(${'$'}<TARGET_NAME:x> c.cc)
+            add_executable(literal d.cc)
+            add_test(NAME literal COMMAND literal)
+            """,
+        )
+
+        assertEquals(listOf("literal"), CMakeTargets.parse(root).map { it.id })
+    }
+
+    @Test
+    fun `a plain executable with a test owns its own source`() {
+        val root = project()
+        lists(root, ".", "add_library(core STATIC core.cc)")
+        lists(
+            root,
+            "tests",
+            """
+            add_executable(core_tests test.cc)
+            add_test(NAME core_tests COMMAND core_tests)
+            """,
+        )
+
+        assertEquals(listOf("core_tests" to "test"), owners(root, "tests/test.cc"))
     }
 }

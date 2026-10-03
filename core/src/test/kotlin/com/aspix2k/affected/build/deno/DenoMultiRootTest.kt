@@ -45,6 +45,22 @@ class DenoMultiRootTest {
         assertEquals(listOf(plain.canonicalFile), denoProjectRoots(base).map(File::getCanonicalFile))
     }
 
+    @Test
+    fun `a config outside the workspace with tests is its own root and members are not duplicated`() {
+        val base = createTempDirectory("deno-independent").toFile()
+        deno(base, ".", "{\"workspace\":[\"./packages/a\",\"./libs/*\"]}")
+        deno(base, "packages/a", "{}")
+        deno(base, "libs/b", "{}")
+        deno(base, "tools/standalone", "{}")
+        File(base, "tools/no-tests").also { it.mkdirs() }
+        File(base, "tools/no-tests/deno.json").writeText("{}")
+
+        assertEquals(
+            listOf(base, File(base, "tools/standalone")).map(File::getCanonicalFile),
+            denoProjectRoots(base).map(File::getCanonicalFile),
+        )
+    }
+
     private fun deno(base: File, path: String, config: String): File = File(base, path).also {
         it.mkdirs()
         File(it, "deno.json").writeText(config)

@@ -7,8 +7,6 @@ import com.aspix2k.affected.build.ChangeAwareSuspendingBuildSystem
 import com.aspix2k.affected.build.ManifestSearch
 import com.aspix2k.affected.build.combineFingerprints
 import com.aspix2k.affected.build.failClosedModules
-import com.aspix2k.affected.build.isRegularFileNoFollow
-import com.aspix2k.affected.build.nestedBuildRoots
 import com.aspix2k.affected.build.pathSegments
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CommandRunner
@@ -62,7 +60,7 @@ class NodeBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSys
         val rootPath = root.invariantSeparatorsPath
         if (stamp != null) cache[rootPath]?.takeIf { it.stamp == stamp }?.let { return it.modules }
 
-        val discovered = runCatching { NodeWorkspaces.parse(root) }.getOrNull()
+        val discovered = runCatching { NodeWorkspaces.parse(root, delegateTests = true) }.getOrNull()
         val discovery = failClosedModules(root, NodeWorkspaces.TEST, null, discovered)
         if (stamp != null && discovery.complete) {
             cache.retainBuildSnapshot(rootPath, Snapshot(stamp, discovery.modules), discovery.modules.size)
@@ -102,9 +100,7 @@ class NodeBuildSystem : ChangeAwareSuspendingBuildSystem, AllFileChangesBuildSys
             .filter(File::isFile)
 
     private fun rootsOf(project: Project): List<File> =
-        project.basePath?.let(::File)
-            ?.let { nestedBuildRoots(it, setOf("package.json")) { File(it, "package.json").isRegularFileNoFollow() } }
-            .orEmpty()
+        project.basePath?.let(::File)?.let(::nodeProjectRoots).orEmpty()
 }
 
 private val NODE_TEST_DIRECTORIES = setOf("test", "tests", "spec", "specs", "__tests__")

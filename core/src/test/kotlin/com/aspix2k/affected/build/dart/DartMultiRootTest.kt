@@ -49,6 +49,19 @@ class DartMultiRootTest {
         assertEquals(listOf(plain.canonicalFile), dartProjectRoots(base).map(File::getCanonicalFile))
     }
 
+    @Test
+    fun `a package without workspace resolution is its own root and members are not duplicated`() {
+        val base = createTempDirectory("dart-independent").toFile()
+        dart(base, ".", "workspace:\n  - packages/a\n")
+        dart(base, "packages/a", "resolution: workspace\n")
+        dart(base, "tools/standalone", "")
+
+        assertEquals(
+            listOf(base, File(base, "tools/standalone")).map(File::getCanonicalFile),
+            dartProjectRoots(base).map(File::getCanonicalFile),
+        )
+    }
+
     private fun dart(base: File, path: String, extra: String): File = File(base, path).also {
         File(it, "test").mkdirs()
         File(it, "test/a_test.dart").writeText("")

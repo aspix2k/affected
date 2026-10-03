@@ -520,7 +520,8 @@ def check_conformance(conformance: str) -> None:
         raise CiContractError("Native CLI fixture tools must bound apt-get update")
     if cli_native.count(native_packages) != 1 or not has_line(cli_native, native_packages):
         raise CiContractError("Native CLI fixture tools must skip recommended packages")
-    if not has_line(cli_native, "timeout-minutes: 45"):
+    job_timeout = re.search(r"(?m)^    timeout-minutes: (\d+)$", cli_native)
+    if job_timeout is None or int(job_timeout.group(1)) < 45:
         raise CiContractError("CLI native must keep a 45-minute lane when apt is slow")
     adapter_directory = "core/src/main/python"
     for command in (

@@ -1,0 +1,1 @@
+- Keep a Swift package usable when it declares snippet, plugin or other non-code targets, so changes to its sources run the Swift tests instead of being missed.

@@ -25,7 +25,7 @@ dependencies {
     }
     add("intellijPlatformDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.3"))
     add("intellijPlatformTestDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.3"))
-    implementation(project(":core"))
+    api(project(":core"))
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
 }

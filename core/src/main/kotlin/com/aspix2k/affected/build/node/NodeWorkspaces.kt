@@ -14,7 +14,7 @@ object NodeWorkspaces {
 
     const val TEST = "test"
 
-    fun parse(root: File): List<BuildModule> {
+    fun parse(root: File, delegateTests: Boolean = false): List<BuildModule> {
         val patterns = patternsOf(root) ?: return emptyList()
         val rootPath = root.invariantSeparatorsPath
         val rootManifest = File(root, "package.json").takeIf { it.isFile }
@@ -39,6 +39,7 @@ object NodeWorkspaces {
             }
         }
         val idsByName = described.groupBy({ it.name }, { ids.getValue(it) })
+        val delegated = if (delegateTests) delegatedDirectories(described) else emptyMap()
 
         return described.map { entry ->
             val dependencies = entry.dependencies
@@ -51,7 +52,7 @@ object NodeWorkspaces {
             BuildModule(
                 id = id,
                 root = rootPath,
-                contentRoots = listOf(entry.directory),
+                contentRoots = listOf(entry.directory) + delegated[entry].orEmpty(),
                 testTask = if (entry.hasTests) TEST else "typecheck",
                 compileTask = "typecheck".takeIf { entry.typed },
                 hasTests = runnable,
@@ -79,10 +80,22 @@ object NodeWorkspaces {
         return (workspaceManifests + listOfNotNull(rootManifest)).distinct()
     }
 
+    private fun delegatedDirectories(described: List<Described>): Map<Described, List<String>> =
+        described
+            .filterNot { it.testScript }
+            .mapNotNull { entry ->
+                described
+                    .filter { it.testScript && entry.directory.startsWith("${it.directory}/") }
+                    .maxByOrNull { it.directory.length }
+                    ?.let { it to entry.directory }
+            }
+            .groupBy({ it.first }, { it.second })
+
     private data class Described(
         val name: String,
         val directory: String,
         val dependencies: Set<String>,
+        val testScript: Boolean,
         val hasTests: Boolean,
         val typed: Boolean,
         val executionId: String,
@@ -103,6 +116,7 @@ object NodeWorkspaces {
             name = name,
             directory = directory.invariantSeparatorsPath,
             dependencies = dependencies,
+            testScript = "test" in scripts,
             hasTests = "test" in scripts || hasTestSources(directory),
             typed = File(directory, "tsconfig.json").isFile,
             executionId = if (directory == root) "." else name,

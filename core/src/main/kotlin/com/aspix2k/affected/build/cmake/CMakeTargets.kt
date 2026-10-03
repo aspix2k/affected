@@ -11,7 +11,7 @@ object CMakeTargets {
     const val BUILD = "build"
 
     private val TARGET = Regex(
-        """add_(?:executable|library)\s*\(\s*([A-Za-z0-9_\-.]+)""",
+        """add_(?:executable|library)\s*\(\s*([A-Za-z0-9_\-.]+)(?=[\s)])""",
         RegexOption.IGNORE_CASE,
     )
     private val LINKS = Regex(

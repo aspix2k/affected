@@ -33,7 +33,7 @@ internal object SqlcTasks {
 }
 
 internal fun sqlcProjectRoots(base: File): List<File> =
-    nestedBuildRoots(base, SQLC_NAMES) { sqlcManifest(it) != null }
+    nestedBuildRoots(base, SQLC_NAMES, isNeverMember) { sqlcManifest(it) != null }
 
 internal fun sqlcManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null

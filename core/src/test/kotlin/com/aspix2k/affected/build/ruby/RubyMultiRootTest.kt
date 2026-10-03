@@ -32,6 +32,20 @@ class RubyMultiRootTest {
         }
     }
 
+    @Test
+    fun `a Gemfile project without a gemspec is its own root and gemspec directories stay members`() {
+        val base = createTempDirectory("ruby-independent").toFile()
+        gem(base, ".", "root")
+        gem(base, "gems/shared", "shared")
+        File(base, "apps/admin/spec").mkdirs()
+        File(base, "apps/admin/Gemfile").writeText("source 'https://rubygems.org'\n")
+
+        assertEquals(
+            listOf(base, File(base, "apps/admin")).map(File::getCanonicalFile),
+            rubyProjectRoots(base).map(File::getCanonicalFile),
+        )
+    }
+
     private fun gem(base: File, path: String, name: String): File = File(base, path).also {
         File(it, "spec").mkdirs()
         File(it, "spec/${name}_spec.rb").writeText("")

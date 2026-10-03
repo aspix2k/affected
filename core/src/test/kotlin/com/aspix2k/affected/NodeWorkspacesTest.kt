@@ -1,5 +1,6 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.node.NodeBuildSystem
 import com.aspix2k.affected.build.node.NodeWorkspaces
 import org.junit.Assume.assumeTrue
 import java.io.File
@@ -193,5 +194,55 @@ class NodeWorkspacesTest {
 
         assertTrue(modules.size >= 10, "Babel has dozens of packages, parsed ${modules.size}")
         assertTrue(modules.any { it.dependencies.isNotEmpty() }, "Babel packages have dependencies")
+    }
+
+    private fun planned(root: File, changed: String): List<String> {
+        val system = NodeBuildSystem()
+        val graph = ModuleGraph(NodeWorkspaces.parse(root, delegateTests = true).map { ModuleGraph.Node(it, system) })
+        val owners = graph.nodesFor(File(root, changed)).map { it.info() }
+        return TaskPlanner.plan(owners, emptyList()).groups.flatMap { it.tasks }.sorted()
+    }
+
+    @Test
+    fun `a package without a test script runs the root tests besides its typecheck`() {
+        val root = workspace("""{ "name": "root", "scripts": { "test": "vitest" }, "workspaces": ["packages/*"] }""")
+        addPackage(root, "packages/router", "@app/router", typed = true)
+
+        assertEquals(listOf(".:test", "@app/router:typecheck"), planned(root, "packages/router/src/index.ts"))
+    }
+
+    @Test
+    fun `a changed test file in a package without a test script runs the root tests`() {
+        val root = workspace("""{ "name": "root", "scripts": { "test": "vitest" }, "workspaces": ["packages/*"] }""")
+        addPackage(root, "packages/input", "@app/input", typed = true)
+
+        assertTrue(".:test" in planned(root, "packages/input/input.test.ts"))
+    }
+
+    @Test
+    fun `a package with its own test script keeps its own task only`() {
+        val root = workspace("""{ "name": "root", "scripts": { "test": "vitest" }, "workspaces": ["packages/*"] }""")
+        addPackage(root, "packages/core", "@app/core", scripts = """{ "test": "vitest" }""", typed = true)
+
+        assertEquals(listOf("@app/core:test"), planned(root, "packages/core/src/index.ts"))
+    }
+
+    @Test
+    fun `a typed package stays typecheck only when the root has no test script`() {
+        val root = workspace("""{ "name": "root", "workspaces": ["packages/*"] }""")
+        addPackage(root, "packages/core", "@app/core", typed = true)
+
+        assertEquals(listOf("@app/core:typecheck"), planned(root, "packages/core/src/index.ts"))
+    }
+
+    @Test
+    fun `a nested package without a test script is owned by the nearest ancestor with one`() {
+        val root = workspace(
+            """{ "name": "root", "scripts": { "test": "vitest" }, "workspaces": ["packages/*", "packages/*/sub"] }""",
+        )
+        addPackage(root, "packages/core", "@app/core", scripts = """{ "test": "jest" }""")
+        addPackage(root, "packages/core/sub", "@app/sub")
+
+        assertEquals(listOf("@app/core:test"), planned(root, "packages/core/sub/index.ts"))
     }
 }

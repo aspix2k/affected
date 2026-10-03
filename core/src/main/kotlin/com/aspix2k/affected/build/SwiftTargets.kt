@@ -15,11 +15,14 @@ internal object SwiftTargets {
         val names = targets.map { it.string("name") ?: return null }
         if (names.isEmpty() || names.toSet().size != names.size) return null
         val rootPath = root.invariantSeparatorsPath
-        return targets.map { target ->
+        val code = targets.filter { (it.string("type") ?: return null) in SUPPORTED_TYPES }
+        val codeNames = code.mapTo(HashSet()) { it.string("name").orEmpty() }
+        if (codeNames.isEmpty()) return null
+        return code.map { target ->
             val name = target.string("name") ?: return null
             val type = target.string("type") ?: return null
             val path = target.string("path") ?: return null
-            if (type !in SUPPORTED_TYPES || target.string("c99name") != name || !SAFE_NAME.matches(name)) return null
+            if (target.string("c99name") != name || !SAFE_NAME.matches(name)) return null
             val dependencies = target.strings("target_dependencies") ?: return null
             BuildModule(
                 id = name,
@@ -28,7 +31,9 @@ internal object SwiftTargets {
                 testTask = SwiftTasks.TEST,
                 compileTask = SwiftTasks.BUILD,
                 hasTests = type == TEST_TYPE,
-                dependencies = dependencies.filter { it in names && it != name }.mapTo(HashSet()) { "$rootPath|$it" },
+                dependencies = dependencies.filter { it in codeNames && it != name }.mapTo(HashSet()) { dependency ->
+                    "$rootPath|$dependency"
+                },
             )
         }
     }

@@ -6,6 +6,7 @@ import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.BuildSystem
 import com.aspix2k.affected.build.ChangeAwareSuspendingBuildSystem
 import com.intellij.openapi.project.Project
+import org.junit.Assume.assumeTrue
 import java.io.File
 import java.lang.reflect.Proxy
 import kotlin.io.path.createTempDirectory
@@ -133,6 +134,58 @@ class GoCommandTest {
         assertEquals(roots.map { it.invariantSeparatorsPath }.toSet(), modules.map { it.root }.toSet())
         assertEquals(roots.map { it.invariantSeparatorsPath }.toSet(), plan.groups.map { it.root }.toSet())
         plan.groups.forEach { assertEquals(listOf("go", "test", "./..."), goCommands(it.tasks).single().arguments) }
+    }
+
+    @Test
+    fun `Go modules nested below a module are separate roots and directories Go ignores are not`() {
+        val base = createTempDirectory("go-below").toFile().canonicalFile
+        goMod().copyRecursively(base, overwrite = true)
+        listOf("exp", "zapgrpc/internal/test", "vendor/dep", "testdata/sample", "_ignored", ".hidden", "exp/vendor/dep")
+            .forEach { goMod().copyRecursively(File(base, it)) }
+
+        assertEquals(
+            listOf("", "exp", "zapgrpc/internal/test").map { File(base, it).canonicalFile },
+            goProjectRoots(base).map(File::getCanonicalFile),
+        )
+    }
+
+    @Test
+    fun `a single Go module has no nested roots`() {
+        val base = goMod().canonicalFile
+        File(base, "pkg").mkdirs()
+
+        assertEquals(listOf(base), goProjectRoots(base).map(File::getCanonicalFile))
+    }
+
+    @Test
+    fun `a file in a nested Go module is owned by it and runs with its own command`() {
+        assumeTrue(runCatching { ProcessBuilder("go", "version").start().waitFor() == 0 }.getOrDefault(false))
+        val base = createTempDirectory("go-owner").toFile().canonicalFile
+        File(base, "go.mod").writeText("module example.com/root\n\ngo 1.21\n")
+        File(base, "root.go").writeText("package root\n")
+        File(base, "exp/go.mod").apply { parentFile.mkdirs() }.writeText("module example.com/root/exp\n\ngo 1.21\n")
+        File(base, "exp/sub/exp.go").apply { parentFile.mkdirs() }.writeText("package sub\n")
+        File(base, "vendor/dep/go.mod").apply { parentFile.mkdirs() }.writeText("module example.com/dep\n\ngo 1.21\n")
+        File(base, "testdata/sample/go.mod").apply { parentFile.mkdirs() }.writeText("module example.com/sample\n")
+        val system = GoBuildSystem()
+        val modules = system.modules(project(base))
+        val graph = ModuleGraph(modules.map { ModuleGraph.Node(it, system) })
+
+        assertEquals(
+            setOf(base.invariantSeparatorsPath, File(base, "exp").invariantSeparatorsPath),
+            modules.map { it.root }.toSet(),
+        )
+        assertEquals(setOf("example.com/root", "example.com/root/exp/sub"), modules.map { it.id }.toSet())
+        val owners = graph.nodesFor(File(base, "exp/sub/exp.go"))
+        assertEquals(listOf("example.com/root/exp/sub"), owners.map(ModuleGraph.Node::id))
+        val plan = TaskPlanner.plan(owners.map(ModuleGraph.Node::info), emptyList())
+        val group = plan.groups.single()
+        assertEquals(File(base, "exp").invariantSeparatorsPath, group.root)
+        assertEquals(listOf("go", "test", "example.com/root/exp/sub"), goCommands(group.tasks).single().arguments)
+        assertEquals(
+            listOf("example.com/root"),
+            graph.nodesFor(File(base, "root.go")).map(ModuleGraph.Node::id),
+        )
     }
 
     private fun project(root: File): Project = Proxy.newProxyInstance(

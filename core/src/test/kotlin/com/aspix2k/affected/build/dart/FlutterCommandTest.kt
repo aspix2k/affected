@@ -131,11 +131,14 @@ class FlutterCommandTest {
     }
 
     @Test
-    fun `a Flutter marker on the project base wins`() {
+    fun `a Flutter marker on the project base and a nested Flutter app are both roots`() {
         val base = flutterRoot()
         flutterRoot().copyRecursively(File(base, "app"))
 
-        assertEquals(base.canonicalFile, flutterProjectRoots(base).singleOrNull()?.canonicalFile)
+        assertEquals(
+            listOf(base, File(base, "app")).map(File::getCanonicalFile),
+            flutterProjectRoots(base).map(File::getCanonicalFile),
+        )
     }
 
     @Test

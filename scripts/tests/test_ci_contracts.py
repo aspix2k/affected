@@ -308,7 +308,7 @@ class CiContractsTest(unittest.TestCase):
             path = root / ".github/workflows/conformance.yml"
             path.write_text(
                 path.read_text(encoding="utf-8").replace(
-                    "    runs-on: ubuntu-latest\n    timeout-minutes: 45\n    env:\n"
+                    "    runs-on: ubuntu-latest\n    timeout-minutes: 95\n    env:\n"
                     "      CARGO_NEXTEST_VERSION:",
                     "    runs-on: ubuntu-latest\n    timeout-minutes: 30\n    env:\n"
                     "      CARGO_NEXTEST_VERSION:",

@@ -51,7 +51,7 @@ class SwiftBuildSystem(
 
     private fun rootsOf(project: Project): List<File> =
         project.basePath?.let(::File)
-            ?.let { nestedBuildRoots(it, setOf("package.swift")) { swiftManifest(it) != null } }
+            ?.let { nestedBuildRoots(it, setOf("package.swift"), isNeverMember) { swiftManifest(it) != null } }
             .orEmpty()
 
     private fun manifests(root: File): List<File> =

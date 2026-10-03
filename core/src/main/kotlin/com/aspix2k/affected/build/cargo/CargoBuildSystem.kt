@@ -206,7 +206,7 @@ private fun cargoManifestFingerprint(root: File, manifests: List<File>): String?
 }
 
 internal fun cargoProjectRoots(base: File): List<File> =
-    nestedBuildRoots(base, setOf("cargo.toml")) { cargoManifest(it) != null }
+    nestedBuildRoots(base, setOf("cargo.toml"), ::isCargoWorkspaceMember) { cargoManifest(it) != null }
 
 internal fun cargoManifest(root: File): File? =
     File(root, "Cargo.toml").takeIf(File::isRegularFileNoFollow)
