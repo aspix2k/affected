@@ -6,6 +6,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.21.0] - 2026-10-03
+
+### Added
+
+- Add "Set up for coding agents" to the Affected menu: it opens the MCP Server settings to connect an agent and copies or adds to AGENTS.md ready-made instructions that make the agent verify its own edits.
+- Show which tests cover a Kotlin or Java file for Gradle and Maven JVM projects: the new affected_tests_for_file MCP tool reads the recorded dependency maps, lists the covering test classes per module with the command to run them, lists tests recorded as depending on everything separately, and reports a stale or missing map instead of trusting it.
+- New "Diagnose…" action and `affected_doctor` MCP tool explain why nothing is detected or run: git, comparison base, build systems, tools on PATH, discovery limits, changed files and analysis state, each with what to do.
+- Discover several Make, Ant, Meson, Ninja, dbt, sqlc and Atlas roots up to three levels below the project base when the base has no marker, running each root with its own command; a project with a base marker or a single nested root behaves as before, while several nested roots that used to be ignored are now all planned.
+- Passing runs now say how many modules were tested out of all modules with tests and how long it took, and estimate the time saved from recorded durations of skipped tasks (in the notification and in the MCP verification result).
+- When changed files in a known programming language belong to no build system that Affected detected in the project, the result now says so (a notification and the `uncoveredFiles` field of the MCP plan) instead of staying silent. It does not block the check.
+
+### Changed
+
+- The base branch is now detected automatically (the remote default branch, then develop, main or master) unless you set one, and a branch you set is stored per project in the workspace file instead of one value for every project; an empty value or `auto` in the Base branch menu item or `affected_configure` returns to automatic.
+- Commit and push checks now also run the tests of modules that depend on a changed one. Turn it off with "Test dependent modules before commit and push" in the Affected menu.
+
+### Fixed
+
+- A new Rust source file now runs the tests of its package instead of the whole Cargo workspace.
+- CMake: a change to a source of a test target declared through a project function or a name built from variables now plans a run of the project tests instead of no tests.
+- Go modules nested below another Go module are now analysed and tested on their own instead of being skipped.
+- Gradle: the `check` task is no longer run next to `test`. The IDE marks `check` as a test task, so since 3.20.0 a plain JVM module ran its tests and then the whole `check` lifecycle.
+- Gradle: dependencies between subprojects are recognized again, so the consumer check and "Test dependent modules" find the modules that depend on a changed one. The dependency keys did not match for any subproject outside the root project.
+- Independent projects nested below another project (Cargo crates and Node packages outside the workspace, Dart, Flutter, Deno, Swift, sbt, Ruby, sqlc and Atlas) are now analysed and tested on their own instead of being skipped.
+- A change in a Node workspace package without its own test script now runs the workspace root tests instead of only a type check.
+- New and untracked files are now read from Git right before a run, so a file an agent has just created is part of the check even before the IDE notices it.
+- A commit that only touches files nothing could verify, such as a workflow file or a document, no longer reports unresolved changes.
+- A repository without commits no longer fails with a missing base branch.
+- Kotlin Multiplatform modules keep their non-JVM test tasks when the IDE reports only the JVM one as a test task.
+- A changed build script of a Gradle module that has no tasks of its own now runs the whole build instead of being reported as unchecked.
+- Adding or changing an enum constant counts as an API change for the consumer check.
+- The toolbar run says when it could not start instead of doing nothing.
+- The MCP tools that list modules, changed files, the plan and the available tasks re-read the changes before answering, so an agent that has just edited files sees the current state even while the IDE is in the background.
+- Untracked files in directories that the IDE excludes, such as a build output folder missing from `.gitignore`, are not treated as changes.
+- Keep a Swift package usable when it declares snippet, plugin or other non-code targets, so changes to its sources run the Swift tests instead of being missed.
+
 ## [3.20.0] - 2026-10-02
 
 ### Fixed
@@ -783,7 +819,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.20.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.21.0...HEAD
+[3.21.0]: https://github.com/aspix2k/affected/compare/v3.20.0...v3.21.0
 [3.20.0]: https://github.com/aspix2k/affected/compare/v3.19.0...v3.20.0
 [3.19.0]: https://github.com/aspix2k/affected/compare/v3.18.0...v3.19.0
 [3.18.0]: https://github.com/aspix2k/affected/compare/v3.17.0...v3.18.0

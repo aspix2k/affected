@@ -1,1 +1,0 @@
-- The base branch is now detected automatically (the remote default branch, then develop, main or master) unless you set one, and a branch you set is stored per project in the workspace file instead of one value for every project; an empty value or `auto` in the Base branch menu item or `affected_configure` returns to automatic.

@@ -1,1 +1,0 @@
-- A change in a Node workspace package without its own test script now runs the workspace root tests instead of only a type check.
