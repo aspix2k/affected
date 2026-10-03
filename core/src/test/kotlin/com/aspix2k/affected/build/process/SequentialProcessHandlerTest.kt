@@ -3,10 +3,10 @@ package com.aspix2k.affected.build.process
 import com.aspix2k.affected.awaitBounded
 import com.aspix2k.affected.build.PlannedExecutionRoot
 import com.aspix2k.affected.build.executionRootGuard
-import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
 import com.intellij.openapi.util.Key
+import com.intellij.util.concurrency.AppExecutorUtil
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.nio.file.Files
@@ -151,10 +151,12 @@ class SequentialProcessHandlerTest {
             root.toFile(),
             listOf(CliCommand("helper launch swap", markerCommand(marker))),
             executionRootGuard = PlannedExecutionRoot.capture(root).bind(project),
-            beforeHelperLaunch = {
-                Files.delete(root)
-                Files.createSymbolicLink(root, outside)
-            },
+            hooks = SequenceHooks(
+                beforeHelperLaunch = {
+                    Files.delete(root)
+                    Files.createSymbolicLink(root, outside)
+                },
+            ),
         )
 
         handler.startNotify()
@@ -184,12 +186,14 @@ class SequentialProcessHandlerTest {
                 ),
             ),
             executionRootGuard = guard,
-            ownedTemporaryDirectoryCleanup = { directory ->
-                cleanupStarted.countDown()
-                releaseCleanup.awaitBounded()
-                Files.delete(directory)
-                true
-            },
+            hooks = SequenceHooks(
+                ownedTemporaryDirectoryCleanup = { directory ->
+                    cleanupStarted.countDown()
+                    releaseCleanup.awaitBounded()
+                    Files.delete(directory)
+                    true
+                },
+            ),
         )
 
         handler.startNotify()
@@ -478,19 +482,22 @@ class SequentialProcessHandlerTest {
                     )
                 },
             ),
-            processFactory = { commandLine, afterInitialPass ->
-                starting.countDown()
-                release.awaitBounded()
-                val processHandler = OSProcessHandler(commandLine)
-                RunningCommand(
-                    processHandler,
-                    ProcessTreeTermination(
-                        processHandler.process.toHandle(),
-                        afterInitialPass = afterInitialPass,
-                    ),
-                    {},
-                )
-            },
+            hooks = SequenceHooks(
+                processFactory = { target, afterInitialPass ->
+                    starting.countDown()
+                    release.awaitBounded()
+                    val process = target.start()
+                    RunningCommand(
+                        process,
+                        ProcessTreeTermination(
+                            process.toHandle(),
+                            afterInitialPass = afterInitialPass,
+                            executor = AppExecutorUtil.getAppScheduledExecutorService(),
+                        ),
+                        {},
+                    )
+                },
+            ),
         )
 
         handler.startNotify()

@@ -1,11 +1,11 @@
 package com.aspix2k.affected.build.process
 
 import com.aspix2k.affected.awaitBounded
-import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
 import com.intellij.openapi.util.Key
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.intellij.util.concurrency.AppExecutorUtil
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -29,14 +29,17 @@ class SequentialProcessCancellationTest : BasePlatformTestCase() {
         val handler = SequentialProcessHandler(
             directory.toFile(),
             listOf(CliCommand("detached tracker", listOf(java(), "-version"))),
-            processFactory = { _, afterInitialPass ->
-                val handler = sleeper().also { process = it }.let { OSProcessHandler(it, "detached tracker") }
-                val tracker = ProcessTreeTermination(
-                    handler.process.toHandle(),
-                    afterInitialPass = afterInitialPass,
-                ).also { termination = it }
-                RunningCommand(handler, tracker, {})
-            },
+            hooks = SequenceHooks(
+                processFactory = { _, afterInitialPass ->
+                    val sleeping = sleeper().also { process = it }
+                    val tracker = ProcessTreeTermination(
+                        sleeping.toHandle(),
+                        afterInitialPass = afterInitialPass,
+                        executor = AppExecutorUtil.getAppScheduledExecutorService(),
+                    ).also { termination = it }
+                    RunningCommand(sleeping, tracker, {})
+                },
+            ),
         )
         handler.addProcessListener(listener(output))
 
@@ -82,13 +85,15 @@ class SequentialProcessCancellationTest : BasePlatformTestCase() {
                     ownedTemporaryDirectories = listOf(laterTemporary),
                 ),
             ),
-            ownedTemporaryDirectoryCleanup = {
-                if (it == firstTemporary) {
-                    cleanupStarted.countDown()
-                    releaseCleanup.await()
-                }
-                it.toFile().deleteRecursively()
-            },
+            hooks = SequenceHooks(
+                ownedTemporaryDirectoryCleanup = {
+                    if (it == firstTemporary) {
+                        cleanupStarted.countDown()
+                        releaseCleanup.await()
+                    }
+                    it.toFile().deleteRecursively()
+                },
+            ),
         )
 
         try {
@@ -126,11 +131,13 @@ class SequentialProcessCancellationTest : BasePlatformTestCase() {
                     ownedTemporaryDirectories = listOf(temporary),
                 ),
             ),
-            ownedTemporaryDirectoryCleanup = {
-                cleanupStarted.countDown()
-                releaseCleanup.awaitBounded()
-                it.toFile().deleteRecursively()
-            },
+            hooks = SequenceHooks(
+                ownedTemporaryDirectoryCleanup = {
+                    cleanupStarted.countDown()
+                    releaseCleanup.awaitBounded()
+                    it.toFile().deleteRecursively()
+                },
+            ),
         )
 
         try {
@@ -174,10 +181,12 @@ class SequentialProcessCancellationTest : BasePlatformTestCase() {
                     ownedTemporaryDirectories = listOf(temporary),
                 ),
             ),
-            afterInitialProcessTermination = {
-                initialTermination.countDown()
-                releaseTermination.awaitBounded()
-            },
+            hooks = SequenceHooks(
+                afterInitialProcessTermination = {
+                    initialTermination.countDown()
+                    releaseTermination.awaitBounded()
+                },
+            ),
         )
 
         var destroying: Thread? = null
@@ -232,31 +241,32 @@ class SequentialProcessCancellationTest : BasePlatformTestCase() {
                     ownedTemporaryDirectories = listOf(temporary),
                 ),
             ),
-            processFactory = { commandLine, _ ->
-                val contained = ContainedProcess.prepare(commandLine, afterTargetExit = {
-                    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-                    while (child == null && System.nanoTime() < deadline) {
-                        child = runCatching {
-                            ProcessHandle.of(Files.readString(pid).trim().toLong()).orElse(null)
-                        }.getOrNull()
-                        if (child == null) Thread.sleep(10)
-                    }
-                    checkNotNull(child)
-                    check(child?.isAlive == true)
-                    targetExited.countDown()
-                    releaseTargetExit.awaitBounded()
-                })
-                val processHandler = OSProcessHandler(
-                    contained.process,
-                    commandLine.commandLineString,
-                    commandLine.charset,
-                ).apply { setShouldDestroyProcessRecursively(false) }
-                RunningCommand(processHandler, contained, contained::start)
-            },
-            ownedTemporaryDirectoryCleanup = {
-                cleanupSawLivingChild.set(child?.isAlive == true)
-                it.toFile().deleteRecursively()
-            },
+            hooks = SequenceHooks(
+                processFactory = { target, _ ->
+                    val contained = ContainedProcess.prepare(
+                        target,
+                        ideProcessHost.supervisorRuntime(),
+                        afterTargetExit = {
+                            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                            while (child == null && System.nanoTime() < deadline) {
+                                child = runCatching {
+                                    ProcessHandle.of(Files.readString(pid).trim().toLong()).orElse(null)
+                                }.getOrNull()
+                                if (child == null) Thread.sleep(10)
+                            }
+                            checkNotNull(child)
+                            check(child?.isAlive == true)
+                            targetExited.countDown()
+                            releaseTargetExit.awaitBounded()
+                        },
+                    )
+                    RunningCommand(contained.process, contained, contained::start)
+                },
+                ownedTemporaryDirectoryCleanup = {
+                    cleanupSawLivingChild.set(child?.isAlive == true)
+                    it.toFile().deleteRecursively()
+                },
+            ),
         )
         val output = StringBuilder()
         handler.addProcessListener(listener(output))
@@ -359,11 +369,13 @@ class SequentialProcessCancellationTest : BasePlatformTestCase() {
                 ),
                 CliCommand("later", markerCommand(later)),
             ),
-            ownedTemporaryDirectoryCleanup = {
-                cleanupStarted.countDown()
-                releaseCleanup.awaitBounded()
-                false
-            },
+            hooks = SequenceHooks(
+                ownedTemporaryDirectoryCleanup = {
+                    cleanupStarted.countDown()
+                    releaseCleanup.awaitBounded()
+                    false
+                },
+            ),
         )
         handler.addProcessListener(listener(output))
 

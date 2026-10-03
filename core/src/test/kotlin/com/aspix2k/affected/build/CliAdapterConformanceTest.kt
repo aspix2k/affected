@@ -29,6 +29,7 @@ import com.aspix2k.affected.build.php.readPhpunitRuntime
 import com.aspix2k.affected.build.php.selectPhpunitTests
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.SequentialProcessHandler
+import com.aspix2k.affected.build.process.ideCommandCapture
 import com.aspix2k.affected.build.python.PythonProjects
 import com.aspix2k.affected.build.python.pythonCommands
 import com.aspix2k.affected.build.ruby.RubyGems
@@ -271,7 +272,7 @@ class CliAdapterConformanceTest {
         assertTrue(fullPackages.contains("OK (3 tests") || fullPackages.contains("Tests: 3"), fullPackages)
         val adapter = Path.of(requireNotNull(System.getProperty("affected.test.phpunitAdapter")))
         val alpha = modules.single { it.executionId == "affected/fixture-alpha" }
-        val runtime = assertNotNull(readPhpunitRuntime(root.toPath()))
+        val runtime = assertNotNull(readPhpunitRuntime(root.toPath(), ideCommandCapture))
         val before = phpunitState(root, alpha, adapter, runtime)
         val store = PhpunitTestBaselineStore(directory("phpunit-store").toPath())
         val fullOutput = file("phpunit-full-run.json").toPath()

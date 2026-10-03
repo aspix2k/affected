@@ -1,6 +1,5 @@
 package com.aspix2k.affected.build.process
 
-import com.intellij.util.concurrency.AppExecutorUtil
 import java.util.ArrayDeque
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ScheduledExecutorService
@@ -27,7 +26,7 @@ internal class ProcessTreeTermination(
     private val afterTrackingScan: (Set<ProcessHandle>) -> Unit = {},
     private val timeoutNanos: Long = TERMINATION_TIMEOUT_NANOS,
     private val maxProcesses: Int = MAX_TRACKED_PROCESSES,
-    private val executor: ScheduledExecutorService = AppExecutorUtil.getAppScheduledExecutorService(),
+    private val executor: ScheduledExecutorService,
 ) : ProcessTermination {
 
     private val requested = AtomicBoolean()

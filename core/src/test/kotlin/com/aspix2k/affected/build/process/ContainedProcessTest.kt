@@ -1,7 +1,6 @@
 package com.aspix2k.affected.build.process
 
 import com.aspix2k.affected.awaitBounded
-import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.openapi.util.SystemInfoRt
 import com.sun.jna.Library
 import com.sun.jna.Native
@@ -41,6 +40,7 @@ class ContainedProcessTest {
         val marker = Path.of("marker.txt")
         val contained = ContainedProcess.prepare(
             commandLine(root, RelativeMarkerWriter::class.java.name, marker.toString()),
+            runtime(),
         )
 
         try {
@@ -94,7 +94,8 @@ class ContainedProcessTest {
         try {
             System.clearProperty(property)
             contained = ContainedProcess.prepare(
-                GeneralCommandLine(listOf(java(), "-version")).withWorkDirectory(directory.toFile()),
+                ProcessBuilder(listOf(java(), "-version")).directory(directory.toFile()),
+                runtime(),
             )
             contained.start()
 
@@ -157,6 +158,7 @@ class ContainedProcessTest {
                 pid.toString(),
                 testJavaClassPathArgument(directory),
             ),
+            runtime(),
             releaseDecisionTimeoutMillis = 100,
         )
         var child: ProcessHandle? = null
@@ -196,6 +198,7 @@ class ContainedProcessTest {
                 pid.toString(),
                 testJavaClassPathArgument(directory),
             ),
+            runtime(),
         )
         val output = CompletableFuture.supplyAsync {
             contained.process.inputStream.bufferedReader().readText()
@@ -228,6 +231,7 @@ class ContainedProcessTest {
                 DifferentGroupChildSpawner::class.java.name,
                 pid.toString(),
             ),
+            runtime(),
         )
         var child: ProcessHandle? = null
 
@@ -288,17 +292,19 @@ class ContainedProcessTest {
         assertFalse(relay.finish(50), "Forced output truncation was reported as success")
     }
 
-    private fun commandLine(root: Path, mainClass: String, vararg arguments: String): GeneralCommandLine =
-        GeneralCommandLine(
+    private fun runtime(): SupervisorRuntime = ideProcessHost.supervisorRuntime()
+
+    private fun commandLine(root: Path, mainClass: String, vararg arguments: String): ProcessBuilder =
+        ProcessBuilder(
             listOf(
                 java(),
                 testJavaClassPathArgument(root),
                 mainClass,
             ) + arguments,
-        ).withWorkDirectory(root.toFile())
+        ).directory(root.toFile())
 
-    private fun jnaCommandLine(root: Path, mainClass: String, vararg arguments: String): GeneralCommandLine =
-        GeneralCommandLine(
+    private fun jnaCommandLine(root: Path, mainClass: String, vararg arguments: String): ProcessBuilder =
+        ProcessBuilder(
             listOf(
                 java(),
                 "--enable-native-access=ALL-UNNAMED",
@@ -308,7 +314,7 @@ class ContainedProcessTest {
                 testJavaClassPathArgument(root),
                 mainClass,
             ) + arguments,
-        ).withWorkDirectory(root.toFile())
+        ).directory(root.toFile())
 
     private fun java(): String = Path.of(
         System.getProperty("java.home"),
@@ -334,7 +340,8 @@ private object Ipv6ContainedProcessProbe {
             if (SystemInfoRt.isWindows) "java.exe" else "java",
         ).toString()
         val contained = ContainedProcess.prepare(
-            GeneralCommandLine(listOf(java, "-version")).withWorkDirectory(root.toFile()),
+            ProcessBuilder(listOf(java, "-version")).directory(root.toFile()),
+            ideProcessHost.supervisorRuntime(),
         )
         try {
             contained.start()

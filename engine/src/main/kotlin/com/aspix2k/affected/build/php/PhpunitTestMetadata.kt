@@ -2,7 +2,7 @@ package com.aspix2k.affected.build.php
 
 import com.aspix2k.affected.build.cmake.portablePath
 import com.aspix2k.affected.build.cmake.sha256
-import com.aspix2k.affected.build.process.CommandRunner
+import com.aspix2k.affected.build.process.CommandCapture
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -77,15 +77,15 @@ internal fun readPhpunitProjectState(
     PhpunitProjectState(fingerprint, artifacts)
 }.getOrNull()
 
-internal fun readPhpunitRuntime(root: Path): PhpunitTestMetadata? = runCatching {
-    val php = CommandRunner.capture(root.toString(), listOf("php", "-r", "echo PHP_VERSION;"), PHPUNIT_COMMAND_TIMEOUT)
+internal fun readPhpunitRuntime(root: Path, commands: CommandCapture): PhpunitTestMetadata? = runCatching {
+    val php = commands.capture(root.toString(), listOf("php", "-r", "echo PHP_VERSION;"), PHPUNIT_COMMAND_TIMEOUT)
         ?: return null
-    val phpunit = CommandRunner.capture(
+    val phpunit = commands.capture(
         root.toString(),
         listOf("php", "vendor/bin/phpunit", "--version"),
         PHPUNIT_COMMAND_TIMEOUT,
     ) ?: return null
-    val environment = CommandRunner.capture(
+    val environment = commands.capture(
         root.toString(),
         listOf(
             "php",

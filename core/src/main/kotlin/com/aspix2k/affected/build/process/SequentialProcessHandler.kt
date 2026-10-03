@@ -3,454 +3,66 @@ package com.aspix2k.affected.build.process
 import com.aspix2k.affected.AffectedOwnedSession
 import com.aspix2k.affected.build.ExecutionRootGuard
 import com.aspix2k.affected.build.executionRootGuard
-import com.aspix2k.affected.build.resolveExecutable
-import com.intellij.execution.configurations.GeneralCommandLine
-import com.intellij.execution.process.OSProcessHandler
-import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessHandler
-import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.process.ProcessOutputTypes
-import com.intellij.openapi.util.Key
-import com.intellij.util.concurrency.AppExecutorUtil
 import java.io.File
-import java.io.IOException
 import java.io.OutputStream
-import java.nio.file.FileVisitResult
-import java.nio.file.Files
-import java.nio.file.LinkOption
-import java.nio.file.Path
-import java.nio.file.SimpleFileVisitor
-import java.nio.file.attribute.BasicFileAttributes
 import java.util.concurrent.atomic.AtomicBoolean
 
-internal const val DEFAULT_UNRESOLVED_MESSAGE =
-    "Affected could not resolve the planned modules. Refresh the project model and run again."
-
 internal class SequentialProcessHandler(
-    private val workingDirectory: File,
-    private val commands: List<CliStep>,
-    private val unresolvedMessage: String = DEFAULT_UNRESOLVED_MESSAGE,
-    private val continueAfterFailure: Boolean = false,
-    private val executionRootGuard: ExecutionRootGuard = executionRootGuard(workingDirectory.toPath()),
-    private val processFactory: ((GeneralCommandLine, () -> Unit) -> RunningCommand)? = null,
-    private val ownedTemporaryDirectoryCleanup: (Path) -> Boolean = ::deleteOwnedTemporaryDirectory,
-    private val afterInitialProcessTermination: () -> Unit = {},
-    private val beforeHelperLaunch: () -> Unit = {},
+    workingDirectory: File,
+    commands: List<CliStep>,
+    unresolvedMessage: String = DEFAULT_UNRESOLVED_MESSAGE,
+    continueAfterFailure: Boolean = false,
+    executionRootGuard: ExecutionRootGuard = executionRootGuard(workingDirectory.toPath()),
+    hooks: SequenceHooks = SequenceHooks(),
 ) : ProcessHandler(), AffectedOwnedSession {
 
-    private val finished = AtomicBoolean(false)
     private val notified = AtomicBoolean(false)
-    private val stopped = AtomicBoolean(false)
-    private val lock = Any()
-    private var next = 0
-    private var recordedExitCode = 0
-    private var activeCommand: CliCommand? = null
-    private var lifecycleActive = false
-    private var processTermination: ProcessTermination? = null
-    private var terminalDecision = false
-    private var pendingStop = false
 
-    @Volatile
-    private var current: OSProcessHandler? = null
+    private val sequence = CommandSequence(
+        workingDirectory,
+        commands,
+        object : CommandSequenceListener {
+            override fun onText(text: String, kind: OutputKind) {
+                notifyTextAvailable(
+                    text,
+                    when (kind) {
+                        OutputKind.STDOUT -> ProcessOutputTypes.STDOUT
+                        OutputKind.STDERR -> ProcessOutputTypes.STDERR
+                        OutputKind.SYSTEM -> ProcessOutputTypes.SYSTEM
+                    },
+                )
+            }
 
-    @Volatile
-    private var resolverThread: Thread? = null
+            override fun onTerminated(exitCode: Int) = notifyProcessTerminated(exitCode)
+        },
+        ideProcessHost,
+        unresolvedMessage,
+        continueAfterFailure,
+        executionRootGuard,
+        hooks,
+    )
 
     override fun startNotify() {
         if (!notified.compareAndSet(false, true)) return
         super.startNotify()
-        AppExecutorUtil.getAppExecutorService().execute(::startNext)
+        sequence.start()
     }
 
     override fun destroyProcessImpl() {
-        requestStop()
-    }
-
-    override fun isActive(): Boolean = !finished.get()
-
-    override fun stopIfActive(): Boolean = requestStop()
-
-    private fun requestStop(): Boolean {
-        var handler: OSProcessHandler? = null
-        var hasActiveLifecycle = false
-        var termination: ProcessTermination? = null
-        var initiate = false
-        var pending = emptyList<CliCommand>()
-        synchronized(lock) {
-            if (deferStop()) return true
-            if (!finished.get() && !terminalDecision && !stopped.get()) {
-                handler = current
-                if (handler != null) termination = checkNotNull(processTermination)
-                stopped.set(true)
-                initiate = true
-            }
-            resolverThread?.interrupt()
-            hasActiveLifecycle = resolverThread != null || activeCommand != null || lifecycleActive
-            if (initiate && handler == null && !hasActiveLifecycle) {
-                lifecycleActive = true
-                pending = commands.drop(next).filterIsInstance<CliCommand>()
-                next = commands.size
-            }
-        }
-        if (!initiate) return false
-        val activeTermination = termination
-        when {
-            activeTermination != null -> activeTermination.request()
-            !hasActiveLifecycle -> {
-                pending.forEach(::cleanup)
-                endLifecycle()
-                finish(1)
-            }
-        }
-        return true
-    }
-
-    private fun deferStop(): Boolean {
-        if (pendingStop || !terminalDecision || next >= commands.size) return false
-        pendingStop = !finished.get() && !stopped.get()
-        return pendingStop
+        sequence.requestStop()
     }
 
     override fun detachProcessImpl() {
-        requestStop()
+        sequence.requestStop()
     }
 
     override fun detachIsDefault(): Boolean = false
 
-    override fun getProcessInput(): OutputStream = current?.processInput ?: OutputStream.nullOutputStream()
+    override fun isActive(): Boolean = sequence.isActive
 
-    private fun startNext() {
-        if (!beginLifecycle()) return
-        executionRootGuard.validationFailure()?.let { return failExecutionRoot(it) }
-        val step = nextStep() ?: return finishWithoutStep()
-        resolve(step)
-    }
+    override fun stopIfActive(): Boolean = sequence.requestStop()
 
-    private fun resolve(step: CliStep) {
-        val mayResolve = synchronized(lock) {
-            if (stopped.get()) {
-                false
-            } else {
-                resolverThread = Thread.currentThread()
-                true
-            }
-        }
-        if (!mayResolve) {
-            endLifecycle()
-            return finish(1)
-        }
-        val resolved = executionRootGuard.withResolverContext { runCatching(step::resolve) }
-        val command = resolved.getOrNull()
-        synchronized(lock) {
-            if (resolverThread === Thread.currentThread()) {
-                if (resolved.isSuccess && command != null) activeCommand = command
-                resolverThread = null
-                if (command != null) lifecycleActive = false
-            }
-        }
-        resolved.exceptionOrNull()?.let { error ->
-            endLifecycle()
-            notifyTextAvailable(
-                "Affected could not resolve the next command: ${error.message.orEmpty()}\n",
-                ProcessOutputTypes.STDERR,
-            )
-            return finish(1)
-        }
-        if (command == null) {
-            endLifecycle()
-            if (stopped.get()) return finish(1)
-            AppExecutorUtil.getAppExecutorService().execute(::startNext)
-            return
-        }
-        start(command)
-    }
-
-    private fun beginLifecycle(): Boolean = synchronized(lock) {
-        if (stopped.get()) false else true.also { lifecycleActive = it }
-    }
-
-    private fun nextStep(): CliStep? = synchronized(lock) {
-        commands.getOrNull(next)?.also { next += 1 }
-    }
-
-    private fun finishWithoutStep() {
-        endLifecycle()
-        if (next == 0) {
-            notifyTextAvailable("$unresolvedMessage\n", ProcessOutputTypes.STDERR)
-            finish(1)
-        } else {
-            finish(synchronized(lock) { recordedExitCode })
-        }
-    }
-
-    private fun start(command: CliCommand) {
-        if (stopped.get()) {
-            cleanup(command)
-            release(command)
-            finish(1)
-            return
-        }
-        executionRootGuard.validationFailure()?.let { failure ->
-            failExecutionRoot(failure, command)
-            return
-        }
-
-        notifyTextAvailable("\n> ${command.title}\n", ProcessOutputTypes.SYSTEM)
-        val commandLine = runCatching {
-            val arguments = command.arguments.toMutableList()
-            arguments[0] = resolveExecutable(arguments[0])
-            GeneralCommandLine(arguments)
-                .withWorkDirectory(workingDirectory)
-                .withCharset(Charsets.UTF_8)
-                .withEnvironment(command.environment)
-        }.getOrElse { error ->
-            notifyTextAvailable(
-                "Affected could not start ${command.title}: ${error.message.orEmpty()}\n",
-                ProcessOutputTypes.STDERR,
-            )
-            cleanup(command)
-            release(command)
-            finish(1)
-            return
-        }
-        executionRootGuard.validationFailure()?.let { failure ->
-            failExecutionRoot(failure, command)
-            return
-        }
-        val launched = runCatching { launch(commandLine) }.getOrElse { error ->
-            notifyTextAvailable(
-                "Affected could not start ${command.title}: ${error.message.orEmpty()}\n",
-                ProcessOutputTypes.STDERR,
-            )
-            cleanup(command)
-            release(command)
-            finish(1)
-            return
-        }
-        val handler = launched.handler
-        val termination = launched.termination
-
-        val shouldStart = synchronized(lock) {
-            processTermination = termination
-            terminalDecision = false
-            if (stopped.get()) {
-                false
-            } else {
-                current = handler
-                true
-            }
-        }
-        if (!shouldStart) {
-            termination.request()
-            if (awaitTerminatingProcesses()) cleanup(command)
-            release(command)
-            finish(1)
-            return
-        }
-        handler.addProcessListener(object : ProcessListener {
-            override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
-                notifyTextAvailable(event.text, outputType)
-            }
-
-            override fun processTerminated(event: ProcessEvent) {
-                val cancellationObserved = synchronized(lock) {
-                    val cancelled = stopped.get() || termination.isRequested
-                    terminalDecision = true
-                    if (current === handler) current = null
-                    if (!cancelled && processTermination === termination) processTermination = null
-                    cancelled
-                }
-                val terminated = if (cancellationObserved) awaitTerminatingProcesses() else termination.close()
-                if (!terminated) {
-                    notifyTextAvailable(
-                        "Affected could not terminate every child process before cleanup.\n",
-                        ProcessOutputTypes.STDERR,
-                    )
-                }
-                val cleaned = terminated && cleanup(command)
-                release(command)
-                val exitCode = if (cleaned && !termination.isRequested) {
-                    event.exitCode
-                } else {
-                    event.exitCode.takeIf { it != 0 } ?: 1
-                }
-                when {
-                    exitCode == 0 && !stopped.get() -> continueSequence(exitCode)
-                    shouldContinueAfterFailure(command, exitCode) -> {
-                        synchronized(lock) {
-                            if (recordedExitCode == 0) recordedExitCode = exitCode
-                        }
-                        continueSequence(exitCode)
-                    }
-                    else -> finish(exitCode.takeIf { it != 0 } ?: 1)
-                }
-            }
-        })
-        handler.startNotify()
-        runCatching(launched.start).onFailure { error ->
-            notifyTextAvailable(
-                "Affected could not start ${command.title}: ${error.message.orEmpty()}\n",
-                ProcessOutputTypes.STDERR,
-            )
-            termination.request()
-        }
-    }
-
-    private fun launch(commandLine: GeneralCommandLine): RunningCommand {
-        processFactory?.let { return it(commandLine, afterInitialProcessTermination) }
-        val contained = ContainedProcess.prepare(
-            commandLine,
-            afterTerminationProof = afterInitialProcessTermination,
-            validateBeforeHelperLaunch = {
-                beforeHelperLaunch()
-                executionRootGuard.validationFailure()
-            },
-        )
-        return runCatching {
-            val handler = OSProcessHandler(
-                contained.process,
-                commandLine.commandLineString,
-                commandLine.charset,
-            ).apply { setShouldDestroyProcessRecursively(false) }
-            RunningCommand(handler, contained, contained::start)
-        }.getOrElse { error ->
-            contained.request()
-            contained.await()
-            throw error
-        }
-    }
-
-    private fun shouldContinueAfterFailure(command: CliCommand, exitCode: Int): Boolean =
-        exitCode != 0 && !stopped.get() && (command.continueOnFailure || continueAfterFailure)
-
-    private fun failExecutionRoot(failure: String, currentCommand: CliCommand? = null) {
-        val pending = synchronized(lock) {
-            lifecycleActive = true
-            commands.drop(next).filterIsInstance<CliCommand>().also { next = commands.size }
-        }
-        currentCommand?.let(::cleanup)
-        pending.forEach(::cleanup)
-        synchronized(lock) {
-            if (activeCommand === currentCommand) activeCommand = null
-            lifecycleActive = false
-        }
-        notifyTextAvailable(
-            "Affected refused to start commands because the planned working directory $failure. " +
-                "Refresh the project model and run again.\n",
-            ProcessOutputTypes.STDERR,
-        )
-        finish(1)
-    }
-
-    private fun release(command: CliCommand) {
-        synchronized(lock) {
-            if (activeCommand === command) activeCommand = null
-        }
-    }
-
-    private fun endLifecycle() {
-        synchronized(lock) { lifecycleActive = false }
-    }
-
-    private fun continueSequence(exitCode: Int) {
-        var skipped = emptyList<CliCommand>()
-        val stopPending = synchronized(lock) {
-            terminalDecision = false
-            pendingStop.also { pending ->
-                if (pending) {
-                    stopped.set(true)
-                    skipped = commands.drop(next).filterIsInstance<CliCommand>()
-                    next = commands.size
-                }
-            }
-        }
-        skipped.forEach(::cleanup)
-        if (stopPending) {
-            finish(exitCode.takeIf { it != 0 } ?: 1)
-        } else {
-            AppExecutorUtil.getAppExecutorService().execute(::startNext)
-        }
-    }
-
-    private fun cleanup(command: CliCommand): Boolean {
-        val interrupted = Thread.interrupted()
-        return try {
-            val failed = command.ownedTemporaryDirectories.filterNot(ownedTemporaryDirectoryCleanup)
-            if (failed.isEmpty()) {
-                true
-            } else {
-                notifyTextAvailable(
-                    "Affected could not remove its temporary output: ${failed.joinToString()}\n",
-                    ProcessOutputTypes.STDERR,
-                )
-                false
-            }
-        } finally {
-            if (interrupted) Thread.currentThread().interrupt()
-        }
-    }
-
-    private fun awaitTerminatingProcesses(): Boolean {
-        val termination = synchronized(lock) { processTermination } ?: return true
-        val terminated = termination.await()
-        if (!terminated) return false
-        synchronized(lock) {
-            if (processTermination === termination) processTermination = null
-        }
-        return true
-    }
-
-    private fun finish(exitCode: Int) {
-        if (finished.compareAndSet(false, true)) notifyProcessTerminated(exitCode)
-    }
+    override fun getProcessInput(): OutputStream = sequence.processInput
 }
-
-internal data class RunningCommand(
-    val handler: OSProcessHandler,
-    val termination: ProcessTermination,
-    val start: () -> Unit,
-)
-
-private fun deleteOwnedTemporaryDirectory(path: Path): Boolean {
-    repeat(CLEANUP_ATTEMPTS) { attempt ->
-        if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return true
-        if (Files.isSymbolicLink(path) || !isOwnedTemporaryDirectory(path)) return false
-        var entries = 0
-        runCatching {
-            Files.walkFileTree(path, object : SimpleFileVisitor<Path>() {
-                override fun preVisitDirectory(directory: Path, attributes: BasicFileAttributes): FileVisitResult {
-                    check(++entries <= MAX_CLEANUP_ENTRIES)
-                    check(!Thread.currentThread().isInterrupted)
-                    return FileVisitResult.CONTINUE
-                }
-
-                override fun visitFile(file: Path, attributes: BasicFileAttributes): FileVisitResult {
-                    check(++entries <= MAX_CLEANUP_ENTRIES)
-                    check(!Thread.currentThread().isInterrupted)
-                    Files.delete(file)
-                    return FileVisitResult.CONTINUE
-                }
-
-                override fun postVisitDirectory(directory: Path, error: IOException?): FileVisitResult {
-                    if (error != null) throw error
-                    Files.delete(directory)
-                    return FileVisitResult.CONTINUE
-                }
-            })
-        }
-        if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return true
-        if (attempt + 1 < CLEANUP_ATTEMPTS) {
-            try {
-                Thread.sleep(CLEANUP_BACKOFF_MILLIS shl attempt)
-            } catch (_: InterruptedException) {
-                Thread.currentThread().interrupt()
-                return false
-            }
-        }
-    }
-    return false
-}
-
-private const val CLEANUP_ATTEMPTS = 3
-private const val CLEANUP_BACKOFF_MILLIS = 50L
-private const val MAX_CLEANUP_ENTRIES = 100_000

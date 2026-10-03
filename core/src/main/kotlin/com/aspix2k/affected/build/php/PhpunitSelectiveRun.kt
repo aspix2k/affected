@@ -7,6 +7,7 @@ import com.aspix2k.affected.build.cmake.sha256
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CliStep
 import com.aspix2k.affected.build.process.DeferredCliCommand
+import com.aspix2k.affected.build.process.ideCommandCapture
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.intellij.openapi.application.PathManager
@@ -96,7 +97,7 @@ private class PhpunitPackageRun(
     @Synchronized
     fun resolve(): List<String>? {
         check(state == PhpunitRunState.Unresolved)
-        val runtime = readPhpunitRuntime(root)
+        val runtime = readPhpunitRuntime(root, ideCommandCapture)
         val before = runtime?.let(::projectState)
         if (runtime == null || before == null) {
             state = PhpunitRunState.Unsupported

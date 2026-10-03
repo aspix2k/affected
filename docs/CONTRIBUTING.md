@@ -35,6 +35,15 @@ compile tasks pass `-Xfriend-paths` so `internal` declarations stay visible
 across the boundary. Gson, kotlinx-coroutines and JNA are `compileOnly` there,
 so the plugin keeps the copies the platform bundles.
 
+The process layer lives in `engine` as well. `CommandSequence` runs a list of
+`CliStep`s on JDK processes and reports text, command start and finish and the
+final exit code to a `CommandSequenceListener`. `ContainedProcess` owns each
+command's process tree through `ProcessSupervisorMain` in a separate JVM and
+takes its classpath and a directory with the JNA native library from a
+`SupervisorRuntime`. A host supplies both through `ProcessHost`; `core` passes
+the IDE's through `ideProcessHost`, and `SequentialProcessHandler` only
+forwards the sequence events to the platform `ProcessHandler`.
+
 After clone, run `python3 scripts/local_gate.py install` so `core.hooksPath` is
 `.githooks`. `pre-commit` runs detekt, script tests, CI contracts and the
 analyzer policy. `pre-push` adds ShellCheck. This is the cheap half of CI, not
