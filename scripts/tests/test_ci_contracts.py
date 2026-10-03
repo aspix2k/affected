@@ -503,9 +503,9 @@ class CiContractsTest(unittest.TestCase):
             "run-after": (
                 "          -Paffected.cliConformance=true\n",
                 "",
-                "          --tests com.aspix2k.affected.build.xcode.XcodeNativeTest\n"
+                "          --tests com.aspix2k.affected.build.process.ProcessTreeTerminationTest\n"
                 "          --rerun-tasks --no-daemon --no-parallel --max-workers=1\n",
-                "          --tests com.aspix2k.affected.build.xcode.XcodeNativeTest\n"
+                "          --tests com.aspix2k.affected.build.process.ProcessTreeTerminationTest\n"
                 "          --rerun-tasks --no-daemon --no-parallel --max-workers=1\n"
                 '        env:\n          CONTRACT_DECOY: "-Paffected.cliConformance=true"\n',
             ),
@@ -603,10 +603,10 @@ class CiContractsTest(unittest.TestCase):
                 "          echo scripts/run_gradle.sh :core:test\n",
             ),
             "exit": (
-                "          --tests com.aspix2k.affected.build.xcode.XcodeNativeTest\n"
+                "          --tests com.aspix2k.affected.build.process.ProcessTreeTerminationTest\n"
                 "          -Paffected.cliConformance=true\n"
                 "          --rerun-tasks --no-daemon --no-parallel --max-workers=1\n",
-                "          --tests com.aspix2k.affected.build.xcode.XcodeNativeTest\n"
+                "          --tests com.aspix2k.affected.build.process.ProcessTreeTerminationTest\n"
                 "          -Paffected.cliConformance=true\n"
                 "          --rerun-tasks --no-daemon --no-parallel --max-workers=1 || true\n",
             ),

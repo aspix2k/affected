@@ -23,6 +23,7 @@ import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
+import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.util.execution.ParametersListUtil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -290,7 +291,10 @@ class MavenBuildSystem internal constructor(
                 val handler = descriptor.processHandler
                     ?: return finish(MavenRunResult(passed = false, cleanupSafe = true))
                 val termination = (handler as? OSProcessHandler)?.let { owned ->
-                    ProcessTreeTermination(owned.process.toHandle()).also(lifecycle.processTree::set)
+                    ProcessTreeTermination(
+                        owned.process.toHandle(),
+                        executor = AppExecutorUtil.getAppScheduledExecutorService(),
+                    ).also(lifecycle.processTree::set)
                 }
                 lifecycle.execution.bind(handler)
                 handler.addProcessListener(object : ProcessListener {

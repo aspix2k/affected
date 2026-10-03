@@ -26,8 +26,8 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    testImplementation("net.java.dev.jna:jna:5.17.0")
     testRuntimeOnly("com.google.code.gson:gson:2.13.2")
-    testRuntimeOnly("net.java.dev.jna:jna:5.17.0")
     testRuntimeOnly("net.java.dev.jna:jna-platform:5.17.0")
 }
 

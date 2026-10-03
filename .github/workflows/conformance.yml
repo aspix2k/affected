@@ -126,6 +126,9 @@ jobs:
           --tests com.aspix2k.affected.build.process.SequentialProcessCancellationTest
           --tests com.aspix2k.affected.build.SwiftPmNativeTest
           --tests com.aspix2k.affected.build.xcode.XcodeNativeTest
+          :engine:test
+          --tests com.aspix2k.affected.build.process.CommandSequenceTest
+          --tests com.aspix2k.affected.build.process.ProcessTreeTerminationTest
           -Paffected.cliConformance=true
           --rerun-tasks --no-daemon --no-parallel --max-workers=1
 
@@ -135,6 +138,7 @@ jobs:
           name: cross-platform-paths-${{ matrix.os }}
           path: |
             core/build/test-results/test
+            engine/build/test-results/test
             core/build/reports/tests/test
           if-no-files-found: warn
 

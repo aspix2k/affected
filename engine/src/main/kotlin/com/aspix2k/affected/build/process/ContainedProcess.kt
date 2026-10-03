@@ -1,11 +1,5 @@
 package com.aspix2k.affected.build.process
 
-import com.intellij.execution.configurations.GeneralCommandLine
-import com.intellij.openapi.application.PathManager
-import com.intellij.openapi.util.SystemInfoRt
-import com.sun.jna.Native
-import com.sun.jna.platform.win32.BaseTSD
-import com.sun.jna.platform.win32.WinNT
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
@@ -208,7 +202,7 @@ internal class ContainedProcess internal constructor(
 
     private fun terminateContainment() {
         var proven = runCatching {
-            if (SystemInfoRt.isWindows) {
+            if (isWindows) {
                 checkNotNull(windowsJob).terminateAndAwait(TERMINATION_TIMEOUT_MILLIS)
             } else {
                 terminatePosixContainment(helper, helperPid)
@@ -241,14 +235,16 @@ internal class ContainedProcess internal constructor(
 
     companion object {
         fun prepare(
-            commandLine: GeneralCommandLine,
+            target: ProcessBuilder,
+            runtime: SupervisorRuntime,
             afterTargetExit: () -> Unit = {},
             afterTerminationProof: () -> Unit = {},
             validateBeforeHelperLaunch: () -> String? = { null },
             startTimeoutMillis: Long = CONTROL_TIMEOUT_MILLIS,
             releaseDecisionTimeoutMillis: Long = HOST_RELEASE_DECISION_TIMEOUT_MILLIS,
         ): ContainedProcess = prepareContainedProcess(
-            commandLine,
+            target,
+            runtime,
             afterTargetExit,
             afterTerminationProof,
             validateBeforeHelperLaunch,
@@ -297,14 +293,15 @@ internal class ContainedProcess internal constructor(
 }
 
 private fun prepareContainedProcess(
-    commandLine: GeneralCommandLine,
+    target: ProcessBuilder,
+    runtime: SupervisorRuntime,
     afterTargetExit: () -> Unit,
     afterTerminationProof: () -> Unit,
     validateBeforeHelperLaunch: () -> String?,
     startTimeoutMillis: Long,
     releaseDecisionTimeoutMillis: Long,
 ): ContainedProcess {
-    val target = targetProcess(commandLine)
+    requireTargetPipes(target)
     val directory = targetDirectory(target)
     val server = ServerSocket()
     var helper: Process? = null
@@ -316,7 +313,7 @@ private fun prepareContainedProcess(
         server.bind(InetSocketAddress(ProcessSupervisorMain.controlAddress(), 0), 1)
         server.soTimeout = CONTROL_TIMEOUT_MILLIS.toInt()
         val token = ByteArray(ProcessSupervisorMain.TOKEN_BYTES).also(SecureRandom()::nextBytes)
-        helper = helperProcess(server.localPort, directory, validateBeforeHelperLaunch)
+        helper = helperProcess(server.localPort, directory, runtime, validateBeforeHelperLaunch)
         helperPid = helper.pid()
         helper.outputStream.write(token)
         helper.outputStream.flush()
@@ -351,12 +348,11 @@ private fun prepareContainedProcess(
     }
 }
 
-private fun targetProcess(commandLine: GeneralCommandLine): ProcessBuilder =
-    commandLine.toProcessBuilder().also { target ->
-        requirePipe(target.redirectInput(), "input")
-        requirePipe(target.redirectOutput(), "output")
-        requirePipe(target.redirectError(), "error")
-    }
+private fun requireTargetPipes(target: ProcessBuilder) {
+    requirePipe(target.redirectInput(), "input")
+    requirePipe(target.redirectOutput(), "output")
+    requirePipe(target.redirectError(), "error")
+}
 
 private fun targetDirectory(target: ProcessBuilder): Path {
     val directory = target.directory()?.toPath()?.toAbsolutePath()?.normalize()
@@ -366,7 +362,7 @@ private fun targetDirectory(target: ProcessBuilder): Path {
 }
 
 private fun establishContainment(helperPid: Long, hello: Hello): ProcessSupervisorMain.WindowsJob? {
-    if (!SystemInfoRt.isWindows) {
+    if (!isWindows) {
         if (!ProcessSupervisorMain.verifyPosixSession(helperPid, hello.sid, hello.pgid)) {
             supervisorFailure("The process supervisor did not establish its containment session")
         }
@@ -393,7 +389,7 @@ private fun cleanupFailedPreparation(
     socket?.let { runCatching { it.close() } }
     val proven = when {
         job != null -> job.terminateAndAwait(TERMINATION_TIMEOUT_MILLIS)
-        containmentVerified && helperPid > 0 && !SystemInfoRt.isWindows ->
+        containmentVerified && helperPid > 0 && !isWindows ->
             terminatePosixContainment(checkNotNull(helper), helperPid)
         else -> false
     }
@@ -404,11 +400,12 @@ private fun cleanupFailedPreparation(
 private fun helperProcess(
     port: Int,
     directory: Path,
+    runtime: SupervisorRuntime,
     validateBeforeHelperLaunch: () -> String?,
 ): Process {
     val java = requiredJavaRuntime()
-    val classPath = supervisorClassPath()
-    val nativePath = requiredJnaNativePath()
+    val classPath = supervisorClassPath(runtime)
+    val nativePath = requiredJnaNativePath(runtime)
     val arguments = mutableListOf(
         java.toString(),
         "--enable-native-access=ALL-UNNAMED",
@@ -434,59 +431,28 @@ private fun requiredJavaRuntime(): Path {
     val java = Path.of(
         System.getProperty("java.home"),
         "bin",
-        if (SystemInfoRt.isWindows) "java.exe" else "java",
+        if (isWindows) "java.exe" else "java",
     )
     if (!Files.isRegularFile(java) || !Files.isExecutable(java)) {
-        supervisorFailure("The IDE Java runtime is unavailable")
+        supervisorFailure("The Java runtime is unavailable")
     }
     return java
 }
 
-private fun supervisorClassPath(): List<Path> {
-    val classPath = listOf(
-        ProcessSupervisorMain::class.java,
-        Native::class.java,
-        WinNT::class.java,
-        BaseTSD::class.java,
-    ).map { type ->
-        PathManager.getJarForClass(type)?.toAbsolutePath()?.normalize()
-            ?: supervisorFailure("The process supervisor classpath is missing ${type.name}")
-    }.distinct()
-    if (classPath.any { !Files.isReadable(it) || !(Files.isDirectory(it) || Files.isRegularFile(it)) }) {
-        supervisorFailure("The process supervisor classpath is unreadable")
-    }
+private fun supervisorClassPath(runtime: SupervisorRuntime): List<Path> {
+    val classPath = runtime.classPath.map { it.toAbsolutePath().normalize() }.distinct()
+    val unreadable = classPath.isEmpty() ||
+        classPath.any { !Files.isReadable(it) || !(Files.isDirectory(it) || Files.isRegularFile(it)) }
+    if (unreadable) supervisorFailure("The process supervisor classpath is unreadable")
     return classPath
 }
 
-private fun requiredJnaNativePath(): String {
-    val configured = System.getProperty(JNA_BOOT_LIBRARY_PATH_PROPERTY)?.takeIf(String::isNotBlank)
-    val paths = configured?.split(File.pathSeparator)?.map(Path::of) ?: discoverIdeJnaNativePath()
-    val invalid = paths.any { path -> !Files.isDirectory(path) || !Files.isReadable(path) }
-    if (invalid) supervisorFailure("The IDE JNA native library path is unreadable")
-    val nativePath = paths.joinToString(File.pathSeparator)
-    if (configured == null) System.setProperty(JNA_BOOT_LIBRARY_PATH_PROPERTY, nativePath)
-    return nativePath
-}
-
-private fun discoverIdeJnaNativePath(): List<Path> {
-    val root = Path.of(PathManager.getHomePath(), "lib", "jna").toAbsolutePath().normalize()
-    val candidates = try {
-        Files.list(root).use { entries ->
-            entries.filter { directory ->
-                Files.isDirectory(directory) && Files.isReadable(directory) &&
-                    JNA_DISPATCH_LIBRARY_NAMES.any { name ->
-                        val library = directory.resolve(name)
-                        Files.isRegularFile(library) && Files.isReadable(library)
-                    }
-            }.limit(2).toList()
-        }
-    } catch (_: IOException) {
-        emptyList()
-    } catch (_: SecurityException) {
-        emptyList()
+private fun requiredJnaNativePath(runtime: SupervisorRuntime): String {
+    val paths = runtime.jnaNativePath
+    if (paths.isEmpty() || paths.any { path -> !Files.isDirectory(path) || !Files.isReadable(path) }) {
+        supervisorFailure("The JNA native library path is unreadable")
     }
-    if (candidates.size != 1) supervisorFailure("The IDE JNA native library path is unavailable")
-    return candidates
+    return paths.joinToString(File.pathSeparator)
 }
 
 private fun readHello(input: DataInputStream, token: ByteArray, helperPid: Long): Hello {
@@ -618,12 +584,7 @@ private const val SUPERVISOR_EXIT_TIMEOUT_MILLIS = 5_000L
 private const val TERMINATION_TIMEOUT_MILLIS = 5_000L
 private const val TERMINATION_AWAIT_MILLIS = 6_000L
 private const val CANCEL_EXIT_CODE = 1
-private const val JNA_BOOT_LIBRARY_PATH_PROPERTY = "jna.boot.library.path"
-private val JNA_DISPATCH_LIBRARY_NAMES = setOf(
-    "jnidispatch.dll",
-    "libjnidispatch.jnilib",
-    "libjnidispatch.so",
-)
+internal val isWindows = System.getProperty("os.name").lowercase().startsWith("windows")
 private val HELPER_ENVIRONMENT_DENYLIST = setOf(
     "JAVA_TOOL_OPTIONS",
     "_JAVA_OPTIONS",

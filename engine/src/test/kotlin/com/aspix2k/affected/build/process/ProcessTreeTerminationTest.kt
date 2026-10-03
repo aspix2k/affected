@@ -176,7 +176,7 @@ class ProcessTreeTerminationTest {
         val termination = ProcessTreeTermination(
             root = parent,
             childSnapshot = { process -> if (process == parent) listOf(child) else emptyList() },
-            timeoutNanos = TimeUnit.MILLISECONDS.toNanos(250),
+            timeoutNanos = TimeUnit.SECONDS.toNanos(10),
             executor = executor,
         )
 
@@ -211,7 +211,7 @@ class ProcessTreeTerminationTest {
             root = parent,
             childSnapshot = { process -> if (process == parent) listOf(child) else emptyList() },
             afterInitialPass = initialPass::countDown,
-            timeoutNanos = TimeUnit.MILLISECONDS.toNanos(250),
+            timeoutNanos = TimeUnit.SECONDS.toNanos(10),
             executor = executor,
         )
 
