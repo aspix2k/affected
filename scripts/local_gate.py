@@ -17,6 +17,7 @@ SCRIPT_TESTS = (
     "scripts.tests.test_ci_scope",
     "scripts.tests.test_codeql_kotlin_compat_probe",
     "scripts.tests.test_fetch_gradle",
+    "scripts.tests.test_ide_smoke",
     "scripts.tests.test_local_gate",
     "scripts.tests.test_mcp_capabilities",
     "scripts.tests.test_pitest_gate",

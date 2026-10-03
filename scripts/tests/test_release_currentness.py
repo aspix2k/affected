@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
+import re
+import subprocess
 import unittest
 import urllib.error
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 from unittest.mock import patch
 
 from scripts import release_currentness as currentness
@@ -1160,6 +1165,426 @@ class ReleaseCurrentnessTest(unittest.TestCase):
         self.assertIn("promote=false", resolve)
         self.assertIn("exit 1", resolve.split("promote=false", 1)[1])
         self.assertIn("if: needs.resolve.outputs.promote == 'true'", workflow.split("  release:", 1)[1])
+
+
+SHA_OLD = "a" * 40
+SHA_NEW = "b" * 40
+
+
+def write_tree(root: Path, files: dict[str, str]) -> None:
+    """Create a small repository fixture under a temporary root."""
+    for relative, text in files.items():
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
+
+
+def stale_entry(identifier: str, local: dict[str, Any], policy: str = "latest", **extra: Any) -> dict[str, Any]:
+    """Build an inventory entry for a stale-pin fixture."""
+    return {"id": identifier, "local": local, "source": {"type": "pypi", "name": identifier}, "policy": policy, **extra}
+
+
+def stale_pin(local: str, expected: str, shas: set[str] | None = None, local_sha: str | None = None) -> currentness.StalePin:
+    """Build the structured stale-pin error a check raises."""
+    return currentness.StalePin("stale", local=local, local_sha=local_sha, expected=expected, expected_shas=shas)
+
+
+class FakeToolbox(currentness.Toolbox):
+    """Pretend a lock tool exists and record its invocations without running it."""
+
+    def __init__(self, available: set[str], fail: bool = False) -> None:
+        """Choose the tools on PATH and whether runs fail."""
+        super().__init__(which=lambda name: f"/bin/{name}" if name in available else None)
+        self.calls: list[tuple[list[str], str]] = []
+        self.fail = fail
+
+    def execute(self, step: currentness.Step, cwd: Path) -> None:
+        """Record the call and write the lock files a real tool would regenerate."""
+        argv = self.command(step, cwd)
+        if argv is None:
+            raise currentness.ApplyError(f"{step.tool} is not available")
+        self.calls.append((argv, str(cwd)))
+        if self.fail:
+            raise currentness.ApplyError(f"{step.tool} exited 1: resolver failure")
+        for output in step.outputs:
+            (currentness.ROOT / output).write_text("regenerated\n", encoding="utf-8")
+
+
+class ReportAllPinsTest(unittest.TestCase):
+    """One run reports every stale or unverifiable pin and keeps the failing exit."""
+
+    def entries(self) -> list[dict[str, Any]]:
+        """Return three entries: current, stale and unverifiable."""
+        return [stale_entry("fresh", {"type": "property"}), stale_entry("old", {"type": "property"}), stale_entry("broken", {"type": "property"})]
+
+    def remote(self, source: dict[str, Any], policy: str, series: str | None, transport: Any) -> tuple[str, None]:
+        """Resolve official versions, failing for one source."""
+        if source["name"] == "broken":
+            raise currentness.CurrentnessError("Unable to read official release endpoint")
+        return "2.0.0", None
+
+    def local(self, local: dict[str, Any]) -> tuple[str, None]:
+        """Return the local version by entry."""
+        return "2.0.0", None
+
+    def test_run_collects_every_failure_in_one_exception(self) -> None:
+        """Every bad pin is named once, in the single-line entry format."""
+        versions = {"fresh": "2.0.0", "old": "1.0.0", "broken": "2.0.0"}
+        with (
+            patch.object(currentness, "load_config", return_value=self.entries()),
+            patch.object(currentness, "validate_inventory_coverage"),
+            patch.object(currentness, "local_version", side_effect=lambda local: (versions.pop(next(iter(versions))), None)),
+            patch.object(currentness, "remote_version", side_effect=self.remote),
+            self.assertRaises(currentness.CurrentnessFailure) as caught,
+        ):
+            currentness.run(FakeTransport({}))
+        self.assertEqual(
+            ["old: old is stale: local 1.0.0, official 2.0.0", "broken: Unable to read official release endpoint"],
+            caught.exception.errors,
+        )
+
+    def test_offline_collects_every_local_drift(self) -> None:
+        """Offline mode reports all drifted compatibility pins, not only the first."""
+        drifted = [
+            {"id": name, "local": {"type": "property"}, "policy": "compatibility", "expected": "1",
+             "reason": "A reviewed compatibility exception for the offline test.", "evidence": ["build.gradle.kts"]}
+            for name in ("one", "two")
+        ]
+        with (
+            patch.object(currentness, "load_config", return_value=drifted),
+            patch.object(currentness, "validate_inventory_coverage"),
+            patch.object(currentness, "local_version", return_value=("2", None)),
+            self.assertRaises(currentness.CurrentnessFailure) as caught,
+        ):
+            currentness.run_offline()
+        self.assertEqual(2, len(caught.exception.errors))
+
+    def test_main_keeps_the_error_format_and_exit_code(self) -> None:
+        """Each bad pin prints one ERROR line on stderr and the run exits non-zero."""
+        entries = self.entries()
+        stderr, stdout = io.StringIO(), io.StringIO()
+        with TemporaryDirectory() as temporary:
+            report, summary = Path(temporary) / "report.txt", Path(temporary) / "summary.json"
+            with (
+                patch.object(currentness, "load_config", return_value=entries),
+                patch.object(currentness, "validate_inventory_coverage"),
+                patch.object(currentness, "Transport", return_value=FakeTransport({})),
+                patch.object(currentness, "local_version", side_effect=[("2.0.0", None), ("1.0.0", None), ("2.0.0", None)]),
+                patch.object(currentness, "remote_version", side_effect=self.remote),
+                patch.object(currentness, "plan_updates", return_value=[]),
+                contextlib.redirect_stderr(stderr),
+                contextlib.redirect_stdout(stdout),
+            ):
+                code = currentness.main(["--report", str(report), "--json", str(summary)])
+            self.assertEqual(1, code)
+            lines = stderr.getvalue().splitlines()
+            self.assertEqual("release-currentness: ERROR: old: old is stale: local 1.0.0, official 2.0.0", lines[0])
+            self.assertEqual(2, len(lines))
+            self.assertIn("Unverifiable or drifted (2)", report.read_text(encoding="utf-8"))
+            self.assertFalse(json.loads(summary.read_text(encoding="utf-8"))["ok"])
+
+    def test_write_cannot_run_offline(self) -> None:
+        """Applying updates needs the live check."""
+        with self.assertRaises(SystemExit) as caught, contextlib.redirect_stderr(io.StringIO()):
+            currentness.main(["--write", "--offline"])
+        self.assertEqual(2, caught.exception.code)
+
+    def test_pull_request_and_release_callers_keep_their_contract(self) -> None:
+        """Workflows call the script with no flags or with --offline and nothing else."""
+        text = "".join(path.read_text(encoding="utf-8") for path in (currentness.ROOT / ".github" / "workflows").glob("*.yml"))
+        invocations = re.findall(r"(?<!`)python3 scripts/release_currentness\.py[^\n`]*", text)
+        self.assertTrue(invocations)
+        self.assertTrue(all("--write" not in line and "--docker" not in line for line in invocations))
+
+
+class MechanicalUpdateTest(unittest.TestCase):
+    """The rewriter moves exactly the pin a local descriptor names."""
+
+    def apply(self, root: Path, entry: dict[str, Any], old: str, new: str, sha: str | None = None, toolbox: currentness.Toolbox | None = None) -> tuple[currentness.Update, currentness.Workspace]:
+        """Apply one update inside a fixture root."""
+        update = currentness.Update(entry, old, new, sha)
+        workspace = currentness.Workspace()
+        if not (root / currentness.SUPPORT_MATRIX).exists():
+            write_tree(root, {currentness.SUPPORT_MATRIX: "{}\n"})
+        with patch.object(currentness, "ROOT", root):
+            currentness.apply_update(update, workspace, toolbox or FakeToolbox(set()))
+            update.files = workspace.changed()
+        return update, workspace
+
+    def test_gradle_plugin_property_and_maven_coordinate(self) -> None:
+        """Gradle and property pins change in place and nowhere else."""
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            write_tree(root, {
+                "build.gradle.kts": 'plugins { id("info.solidsoft.pitest") version "1.0.0"\n id("other") version "1.0.0" }\n',
+                "core/build.gradle.kts": 'dependencies { implementation("org.tomlj:tomlj:2.1.1") }\n',
+                "gradle.properties": "affected.studio.version=2026.1.4.8\nother=2026.1.4.8\n",
+            })
+            self.apply(root, stale_entry("p", {"type": "gradle-plugin", "path": "build.gradle.kts", "name": "info.solidsoft.pitest"}), "1.0.0", "1.1.0")
+            tomlj, _ = self.apply(root, stale_entry("t", {"type": "maven", "name": "org.tomlj:tomlj"}), "2.1.1", "2.2.0")
+            self.apply(root, stale_entry("s", {"type": "property", "path": "gradle.properties", "name": "affected.studio.version"}), "2026.1.4.8", "2026.2.1.8")
+            self.assertEqual(["core/build.gradle.kts"], tomlj.files)
+            self.assertEqual('plugins { id("info.solidsoft.pitest") version "1.1.0"\n id("other") version "1.0.0" }\n', (root / "build.gradle.kts").read_text(encoding="utf-8"))
+            self.assertIn("tomlj:2.2.0", (root / "core/build.gradle.kts").read_text(encoding="utf-8"))
+            self.assertEqual("affected.studio.version=2026.2.1.8\nother=2026.1.4.8\n", (root / "gradle.properties").read_text(encoding="utf-8"))
+
+    def test_workflow_pip_pin_action_sha_and_branch_comment(self) -> None:
+        """Action SHAs move with their version comment; branch pins keep the branch name."""
+        workflow = (
+            "jobs:\n  a:\n    steps:\n"
+            f"      - uses: actions/checkout@{SHA_OLD} # v7.0.1\n"
+            f"      - uses: dtolnay/rust-toolchain@{SHA_OLD} # stable\n"
+            "      - run: python -m pip install ruff==0.16.9 uv==0.12.21\n"
+        )
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            write_tree(root, {".github/workflows/ci.yml": workflow})
+            self.apply(root, stale_entry("ruff", {"type": "pip-command", "name": "ruff", "path": ".github/workflows/ci.yml"}), "0.16.9", "0.16.10")
+            self.apply(root, stale_entry("checkout", {"type": "github-action", "name": "actions/checkout"}), "v7.0.1", "7.1.0", SHA_NEW)
+            self.apply(root, stale_entry("rust", {"type": "github-action", "name": "dtolnay/rust-toolchain"}, "branch"), SHA_OLD, "stable", SHA_NEW)
+            text = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+            self.assertIn(f"actions/checkout@{SHA_NEW} # v7.1.0", text)
+            self.assertIn(f"dtolnay/rust-toolchain@{SHA_NEW} # stable", text)
+            self.assertIn("ruff==0.16.10 uv==0.12.21", text)
+
+    def test_release_asset_moves_version_and_digest_together(self) -> None:
+        """A release asset pin carries its digest."""
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            write_tree(root, {".github/workflows/c.yml": f'env:\n  BUN_VERSION: "1.4.2"\n  BUN_SHA256: "{"c" * 64}"\n'})
+            entry = stale_entry("bun", {"type": "github-release-asset", "name": "BUN_VERSION", "digestName": "BUN_SHA256", "occurrences": {".github/workflows/c.yml": 1}})
+            self.apply(root, entry, "1.4.2", "1.5.0", "d" * 64)
+            self.assertEqual(f'env:\n  BUN_VERSION: "1.5.0"\n  BUN_SHA256: "{"d" * 64}"\n', (root / ".github/workflows/c.yml").read_text(encoding="utf-8"))
+
+    def test_matrix_value_moves_in_workflow_and_inventory_and_renames_the_id(self) -> None:
+        """A matrix pin updates the workflow, the inventory value and an id naming its minor."""
+        config = (
+            '{"schema":1,"entries":[\n'
+            '  {"id":"phpunit-13.4-matrix","local":{"type":"workflow-matrix","path":".github/workflows/c.yml","name":"phpunit","value":"13.4.0"},"policy":"latest"}\n]}\n'
+        )
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            write_tree(root, {
+                ".github/workflows/c.yml": '        include:\n          - php: "8.4"\n            phpunit: "13.4.0"\n',
+                currentness.CONFIG_PATH: config,
+                "conformance/cli-fixtures/composer/composer.json": '{"require-dev": {"phpunit/phpunit": "13.4.0"}}\n',
+                "conformance/cli-fixtures/composer/composer.lock": "lock\n",
+                "conformance/cli-fixtures/composer/locks/phpunit-13.4.0.lock": "old lock\n",
+            })
+            entry = {"id": "phpunit-13.4-matrix", "local": {"type": "workflow-matrix", "path": ".github/workflows/c.yml", "name": "phpunit", "value": "13.4.0"}, "policy": "latest"}
+            toolbox = FakeToolbox({"composer"})
+            fixture = root / "conformance/cli-fixtures/composer"
+
+            def fake_execute(step: currentness.Step, cwd: Path) -> None:
+                """Write the lock the scratch resolution produces."""
+                (cwd / "composer.lock").write_text("new lock\n", encoding="utf-8")
+
+            toolbox.execute = fake_execute  # type: ignore[method-assign]
+            update, _ = self.apply(root, entry, "13.4.0", "13.5.0", toolbox=toolbox)
+            self.assertEqual("phpunit-13.5-matrix", update.new_id)
+            self.assertIn('"id":"phpunit-13.5-matrix"', (root / currentness.CONFIG_PATH).read_text(encoding="utf-8"))
+            self.assertIn('"value":"13.5.0"', (root / currentness.CONFIG_PATH).read_text(encoding="utf-8"))
+            self.assertIn('phpunit: "13.5.0"', (root / ".github/workflows/c.yml").read_text(encoding="utf-8"))
+            self.assertEqual("new lock\n", (fixture / "locks/phpunit-13.5.0.lock").read_text(encoding="utf-8"))
+            self.assertFalse((fixture / "locks/phpunit-13.4.0.lock").exists())
+            self.assertEqual('{"require-dev": {"phpunit/phpunit": "13.4.0"}}\n', (fixture / "composer.json").read_text(encoding="utf-8"))
+            self.assertIn("conformance/cli-fixtures/composer/locks/phpunit-13.5.0.lock", update.files)
+
+    def test_support_matrix_verifier_moves_version_and_build(self) -> None:
+        """A product verifier endpoint changes only its own version and build."""
+        line = (
+            '      "verifier": {"type": "Rider", "endpoints": [{"id": "minimum", "version": "2025.3.5.2", "build": "253.1.1", "gradle": "present"}, '
+            '{"id": "current", "version": "2026.2.3.1", "build": "262.1.1", "gradle": "present"}]},\n'
+        )
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            write_tree(root, {currentness.SUPPORT_MATRIX: line})
+            entry = stale_entry("rider", {"type": "support-matrix-verifier", "path": currentness.SUPPORT_MATRIX, "product": "Rider", "endpoint": "current"})
+            self.apply(root, entry, "2026.2.3.1", "2026.2.4", "262.2.2")
+            text = (root / currentness.SUPPORT_MATRIX).read_text(encoding="utf-8")
+            self.assertIn('"version": "2026.2.4", "build": "262.2.2"', text)
+            self.assertIn('"version": "2025.3.5.2", "build": "253.1.1"', text)
+
+    def test_tested_version_prose_moves_but_range_lower_bounds_do_not(self) -> None:
+        """Exact tested versions follow the pin; a range bound that equals it stays."""
+        matrix = '      "versions": "Rust; cargo-nextest 0.9.143\u20130.9.x; Pest 5 tested at Pest 5.2.1 and 0.9.143",\n'
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            write_tree(root, {currentness.SUPPORT_MATRIX: matrix, "package.json": '{"devDependencies": {"jest": "0.9.143"}}\n'})
+            entry = stale_entry("jest", {"type": "json-dependency", "path": "package.json", "name": "jest"})
+            write_tree(root, {"package-lock.json": "old\n"})
+            update, _ = self.apply(root, entry, "0.9.143", "0.9.146", toolbox=FakeToolbox({"npm"}))
+            text = (root / currentness.SUPPORT_MATRIX).read_text(encoding="utf-8")
+            self.assertIn("0.9.143\u20130.9.x", text)
+            self.assertIn("and 0.9.146", text)
+            self.assertIn("support-matrix prose moved", update.flags)
+
+    def test_lock_regeneration_runs_the_real_tool_in_the_manifest_directory(self) -> None:
+        """An npm bump regenerates the lock through the tool, not by editing it."""
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            write_tree(root, {"node/package.json": '{"devDependencies": {"jest": "30.5.2"}}\n', "node/package-lock.json": "old\n"})
+            toolbox = FakeToolbox({"npm"})
+            entry = stale_entry("jest", {"type": "json-dependency", "path": "node/package.json", "name": "jest"})
+            update, _ = self.apply(root, entry, "30.5.2", "30.6.0", toolbox=toolbox)
+            self.assertEqual(["node/package-lock.json", "node/package.json"], update.files)
+            self.assertEqual("npm", toolbox.calls[0][0][0])
+            self.assertEqual(str(root / "node"), toolbox.calls[0][1])
+
+    def test_failed_tool_rolls_the_manifest_back(self) -> None:
+        """A resolver failure leaves no half-updated pin behind."""
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            write_tree(root, {"node/package.json": '{"devDependencies": {"jest": "30.5.2"}}\n', "node/package-lock.json": "old\n", currentness.SUPPORT_MATRIX: "{}\n"})
+            entry = stale_entry("jest", {"type": "json-dependency", "path": "node/package.json", "name": "jest"})
+            update = currentness.Update(entry, "30.5.2", "30.6.0", None, line="jest: stale")
+            with patch.object(currentness, "ROOT", root):
+                currentness.apply_updates([update], FakeToolbox({"npm"}, fail=True), FakeTransport({}))
+            self.assertEqual("manual", update.status)
+            self.assertIn("rolled back", update.reason)
+            self.assertEqual('{"devDependencies": {"jest": "30.5.2"}}\n', (root / "node/package.json").read_text(encoding="utf-8"))
+            self.assertEqual("old\n", (root / "node/package-lock.json").read_text(encoding="utf-8"))
+
+
+class UpdatePolicyTest(unittest.TestCase):
+    """Policies decide whether a stale pin moves, waits for a human, or needs a decision."""
+
+    def plan(self, entry: dict[str, Any], stale: currentness.StalePin, toolbox: currentness.Toolbox | None = None, files: dict[str, str] | None = None) -> currentness.Update:
+        """Plan one stale entry inside a fixture root."""
+        outcome = currentness.Outcome(entry, error=f"{entry['id']}: stale", stale=stale)
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            write_tree(root, {currentness.SUPPORT_MATRIX: "{}\n", **(files or {})})
+            with patch.object(currentness, "ROOT", root):
+                return currentness.plan_updates([outcome], FakeTransport({}), toolbox or FakeToolbox(set()))[0]
+
+    def test_major_version_change_needs_a_decision(self) -> None:
+        """A latest pin never crosses a major automatically."""
+        entry = stale_entry("jest", {"type": "property", "path": "p", "name": "jest"})
+        update = self.plan(entry, stale_pin("30.5.2", "31.0.0"), files={"p": "jest=30.5.2\n"})
+        self.assertEqual("decision", update.status)
+        self.assertIn("major version change", update.reason)
+
+    def test_calendar_year_change_and_zero_minor_are_major(self) -> None:
+        """IDE years and 0.x minors count as compatibility boundaries."""
+        for old, new in (("2026.2.1.8", "2027.1.1.1"), ("0.9.146", "0.10.0"), ("1.4.2", "1.3.9")):
+            entry = stale_entry("tool", {"type": "property", "path": "p", "name": "tool"})
+            update = self.plan(entry, stale_pin(old, new), files={"p": f"tool={old}\n"})
+            self.assertEqual("decision", update.status, (old, new))
+
+    def test_same_version_with_a_different_identity_needs_a_decision(self) -> None:
+        """A moved tag is investigated, not rewritten."""
+        entry = stale_entry("checkout", {"type": "github-action", "name": "actions/checkout"})
+        stale = currentness.StalePin("sha", local="v7.0.1", local_sha=SHA_OLD, expected="7.0.1", expected_shas={SHA_NEW}, identity_only=True)
+        self.assertEqual("decision", self.plan(entry, stale).status)
+
+    def test_minor_of_a_named_tool_is_applied_and_flagged(self) -> None:
+        """A support-matrix runner gets its minor applied with a review flag."""
+        entry = stale_entry("vitest", {"type": "property", "path": "p", "name": "vitest"})
+        files = {currentness.SUPPORT_MATRIX: '{"products": [{"versions": "Vitest 2\u20135"}]}\n', "p": "vitest=5.0.3\n"}
+        update = self.plan(entry, stale_pin("5.0.3", "5.1.0"), files=files)
+        self.assertEqual("auto", update.status)
+        self.assertTrue(any("support matrix" in flag for flag in update.flags))
+
+    def test_patch_of_an_unnamed_tool_is_not_flagged(self) -> None:
+        """Routine patches stay quiet."""
+        entry = stale_entry("ruff", {"type": "property", "path": "p", "name": "ruff"})
+        update = self.plan(entry, stale_pin("0.16.9", "0.16.10"), files={"p": "ruff=0.16.9\n"})
+        self.assertEqual(("auto", []), (update.status, update.flags))
+
+    def test_missing_lock_tool_leaves_the_pin_for_a_manual_command(self) -> None:
+        """Without the real tool the plan lists the exact command and touches nothing."""
+        entry = stale_entry("jest", {"type": "json-dependency", "path": "node/package.json", "name": "jest"})
+        files = {"node/package.json": '{"devDependencies": {"jest": "30.5.2"}}\n'}
+        update = self.plan(entry, stale_pin("30.5.2", "30.6.0"), files=files)
+        self.assertEqual("manual", update.status)
+        self.assertEqual(["cd node && npm install --package-lock-only --ignore-scripts --no-audit --no-fund"], update.commands)
+        self.assertIn("npm", update.reason)
+
+    def test_docker_makes_composer_available_only_when_asked(self) -> None:
+        """composer:2 is used only with --docker."""
+        step = currentness.Step("composer", ["composer", "update"], "d", [], "composer:2")
+        host = FakeToolbox({"docker"})
+        self.assertIsNone(host.command(step, Path("/x")))
+        host.docker = True
+        self.assertEqual(["docker", "run"], host.command(step, Path("/x"))[:2])  # type: ignore[index]
+
+    def test_gradle_wrapper_is_manual_with_the_wrapper_command(self) -> None:
+        """The wrapper moves with its jar and scripts, so it is never rewritten in place."""
+        entry = {"id": "gradle", "local": {"type": "gradle-wrapper"}, "source": {"type": "gradle"}, "policy": "latest"}
+        outcome = currentness.Outcome(entry, error="gradle: stale", stale=stale_pin("9.8.0", "9.9.0"))
+        transport = FakeTransport({"https://services.gradle.org/versions/current": {"checksum": "f" * 64}})
+        with TemporaryDirectory() as temporary, patch.object(currentness, "ROOT", Path(temporary).resolve()):
+            update = currentness.plan_updates([outcome], transport, FakeToolbox(set()))[0]
+        self.assertEqual("manual", update.status)
+        self.assertEqual([f"./gradlew wrapper --gradle-version 9.9.0 --distribution-type bin --gradle-distribution-sha256-sum {'f' * 64}"], update.commands)
+
+    def test_compatibility_pin_is_never_planned(self) -> None:
+        """A compatibility pin that drifted stays an error and produces no update."""
+        entry = {"id": "c", "local": {"type": "property"}, "policy": "compatibility", "expected": "1",
+                 "reason": "A reviewed compatibility exception for the policy test.", "evidence": ["build.gradle.kts"]}
+        with patch.object(currentness, "local_version", return_value=("2", None)):
+            outcomes = currentness.collect([entry], FakeTransport({}))
+        self.assertIsNone(outcomes[0].stale)
+        self.assertEqual([], currentness.plan_updates(outcomes, FakeTransport({}), FakeToolbox(set())))
+
+    def test_series_update_stays_inside_its_series(self) -> None:
+        """The official version a series pin moves to is resolved inside the series."""
+        self.assertEqual("11.5.60", currentness.newest(["11.5.60", "12.0.1", "11.6.0"], "11.5"))
+
+    def test_branch_pin_moves_to_the_branch_head_sha(self) -> None:
+        """A branch pin takes the head SHA reported by the source."""
+        entry = {"id": "rust", "local": {"type": "github-action", "name": "dtolnay/rust-toolchain"},
+                 "source": {"type": "github-branch", "name": "dtolnay/rust-toolchain", "branch": "stable"}, "policy": "branch"}
+        stale = stale_pin("stable", "stable", {SHA_NEW}, SHA_OLD)
+        workflow = f"      - uses: dtolnay/rust-toolchain@{SHA_OLD} # stable\n"
+        update = self.plan(entry, stale, files={".github/workflows/c.yml": workflow})
+        self.assertEqual(("auto", SHA_NEW), (update.status, update.new_sha))
+        self.assertEqual((SHA_OLD[:12], SHA_NEW[:12]), update.label)
+
+    def test_summary_lists_updates_manual_steps_and_decisions(self) -> None:
+        """The machine summary and its text agree and drive the exit status."""
+        auto = currentness.Update(stale_entry("a", {"type": "property"}), "1.0.0", "1.0.1", None, files=["f"])
+        manual = currentness.Update(stale_entry("m", {"type": "property"}), "1", "1.1", None, status="manual", reason="needs npm", commands=["npm ci"])
+        decision = currentness.Update(stale_entry("d", {"type": "property"}), "1", "2.0", None, status="decision", reason="major version change 1 -> 2.0")
+        summary = currentness.build_summary("check", [], [auto, manual, decision], [], [])
+        self.assertFalse(summary["ok"])
+        text = currentness.render_summary(summary)
+        for expected in ("Applicable with --write (1)", "a: 1.0.0 -> 1.0.1 (f)", "Needs manual update (1)", "$ npm ci", "Needs a decision (1)"):
+            self.assertIn(expected, text)
+        self.assertEqual(["a"], [item["id"] for item in summary["updates"]])
+        self.assertTrue(currentness.build_summary("check", [], [], [], [])["ok"])
+
+
+class WorkflowTest(unittest.TestCase):
+    """The scheduled workflow reports the full list but never publishes changes."""
+
+    def test_scheduled_failure_issue_carries_the_report_and_no_pull_request_is_opened(self) -> None:
+        """The issue body embeds the report; the workflow cannot push or open pull requests."""
+        text = (currentness.ROOT / ".github" / "workflows" / "currentness.yml").read_text(encoding="utf-8")
+        self.assertIn("--report", text)
+        self.assertIn("--body-file", text)
+        self.assertIn("release_currentness.py --write", text)
+        self.assertNotRegex(text, r"(?<!`)python3 scripts/release_currentness\.py[^\n`]*--write")
+        self.assertNotIn("pull-requests: write", text)
+        self.assertNotIn("contents: write", text)
+        self.assertNotIn("gh pr", text)
+        self.assertNotIn("git push", text)
+
+
+class SubprocessToolboxTest(unittest.TestCase):
+    """The toolbox turns a failing tool into a readable error."""
+
+    def test_non_zero_exit_names_the_command(self) -> None:
+        """A failing tool surfaces its exit code and output."""
+
+        def runner(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+            """Return a failed process result."""
+            return subprocess.CompletedProcess(args, 3, "", "resolver conflict")
+
+        toolbox = currentness.Toolbox(run=runner, which=lambda name: "/bin/x")
+        with self.assertRaisesRegex(currentness.ApplyError, "exited 3: resolver conflict"):
+            toolbox.execute(currentness.Step("npm", ["npm", "ci"], "", []), Path("/"))
 
 
 if __name__ == "__main__":

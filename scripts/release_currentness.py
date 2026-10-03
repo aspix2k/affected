@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Fail a release when a governed direct dependency pin is stale or unverifiable."""
+"""Fail a release when a governed direct dependency pin is stale or unverifiable, or apply the mechanical updates."""
 
 from __future__ import annotations
 
@@ -8,13 +8,18 @@ import argparse
 import json
 import os
 import re
+import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +71,37 @@ JETBRAINS_UPDATES_URL = "https://www.jetbrains.com/updates/updates.xml"
 
 class CurrentnessError(RuntimeError):
     """Describe a fail-closed currentness validation failure."""
+
+
+class StalePin(CurrentnessError):
+    """Describe a local pin that differs from its official source."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        local: str,
+        local_sha: str | None,
+        expected: str,
+        expected_shas: set[str] | None,
+        identity_only: bool = False,
+    ) -> None:
+        """Keep the structured local and official values next to the printable message."""
+        super().__init__(message)
+        self.local = local
+        self.local_sha = local_sha
+        self.expected = expected
+        self.expected_shas = expected_shas or set()
+        self.identity_only = identity_only
+
+
+class CurrentnessFailure(CurrentnessError):
+    """Carry every stale or unverifiable pin found in one run."""
+
+    def __init__(self, errors: list[str]) -> None:
+        """Join the per-pin error lines into one multi-line message."""
+        super().__init__("\n".join(errors))
+        self.errors = errors
 
 
 class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -279,6 +315,15 @@ def support_matrix_verifier_slot(local: dict[str, Any]) -> tuple[str, str, str]:
     return normalize_version(str(selected[0].get("version", ""))), since, build
 
 
+def gradle_script_files() -> list[Path]:
+    """List non-build, non-symlink Gradle scripts that may declare Maven coordinates."""
+    return [
+        file
+        for file in ROOT.rglob("*.gradle.kts")
+        if "build" not in file.relative_to(ROOT).parts and not file.is_symlink()
+    ]
+
+
 def local_version(local: dict[str, Any]) -> tuple[str, str | None]:
     """Extract a governed local version and optional immutable GitHub SHA."""
     kind = local.get("type")
@@ -346,9 +391,7 @@ def local_version(local: dict[str, Any]) -> tuple[str, str | None]:
         group, artifact = name.split(":", 1)
         classifier = local.get("classifier")
         values: list[str] = []
-        for file in ROOT.rglob("*.gradle.kts"):
-            if "build" in file.relative_to(ROOT).parts or file.is_symlink():
-                continue
+        for file in gradle_script_files():
             text = file.read_text(encoding="utf-8")
             suffix = rf":{re.escape(classifier)}" if classifier else ""
             values += re.findall(rf"{re.escape(group)}:{re.escape(artifact)}:([^\"$:\s]+){suffix}", text)
@@ -494,24 +537,29 @@ def github_tags(transport: Transport, repository: str) -> list[dict[str, Any]]:
     return data
 
 
-def github_ref_shas(transport: Transport, repository: str, ref: dict[str, Any]) -> set[str]:
-    """Return the tag object and recursively peeled commit SHAs."""
+def github_ref_chain(transport: Transport, repository: str, ref: dict[str, Any]) -> list[str]:
+    """Return the tag object SHA followed by every peeled SHA, commit last."""
     obj = ref.get("object")
     if not isinstance(obj, dict) or not SHA.fullmatch(str(obj.get("sha", ""))):
         raise CurrentnessError(f"Invalid GitHub ref object for {repository}")
-    shas = {obj["sha"]}
+    chain = [obj["sha"]]
     for _ in range(4):
         if obj.get("type") != "tag":
-            return shas
+            return chain
         obj = transport.json(f"https://api.github.com/repos/{repository}/git/tags/{obj['sha']}").get("object")
         if not isinstance(obj, dict) or not SHA.fullmatch(str(obj.get("sha", ""))):
             raise CurrentnessError(f"Invalid annotated tag for {repository}")
-        shas.add(obj["sha"])
+        chain.append(obj["sha"])
     raise CurrentnessError(f"Annotated tag chain is too deep for {repository}")
 
 
-def github_latest(transport: Transport, repository: str) -> tuple[str, set[str]]:
-    """Resolve the newest stable v-prefixed tag and its immutable identities."""
+def github_ref_shas(transport: Transport, repository: str, ref: dict[str, Any]) -> set[str]:
+    """Return the tag object and recursively peeled commit SHAs."""
+    return set(github_ref_chain(transport, repository, ref))
+
+
+def github_latest_chain(transport: Transport, repository: str) -> tuple[str, list[str]]:
+    """Resolve the newest stable v-prefixed tag and its ordered immutable identities."""
     refs = github_tags(transport, repository)
     versions: dict[str, dict[str, Any]] = {}
     for ref in refs:
@@ -521,7 +569,13 @@ def github_latest(transport: Transport, repository: str) -> tuple[str, set[str]]
         except CurrentnessError:
             continue
     version = newest(list(versions))
-    return version, github_ref_shas(transport, repository, versions[version])
+    return version, github_ref_chain(transport, repository, versions[version])
+
+
+def github_latest(transport: Transport, repository: str) -> tuple[str, set[str]]:
+    """Resolve the newest stable v-prefixed tag and its immutable identities."""
+    version, chain = github_latest_chain(transport, repository)
+    return version, set(chain)
 
 
 def github_release_asset_latest(
@@ -843,15 +897,32 @@ def validate_entry(entry: dict[str, Any], transport: Transport) -> str:
     if policy == "branch":
         local_shas = set(local_sha.split(",")) if local_sha else set()
         if local != expected or not local_shas or not local_shas.issubset(expected_shas or set()):
-            raise CurrentnessError(f"{identifier} is not pinned to current {expected}: {local}@{local_sha}")
+            raise StalePin(
+                f"{identifier} is not pinned to current {expected}: {local}@{local_sha}",
+                local=local,
+                local_sha=local_sha,
+                expected=expected,
+                expected_shas=expected_shas,
+            )
     else:
         if normalize_version(local) != normalize_version(expected):
-            raise CurrentnessError(f"{identifier} is stale: local {local}, official {expected}")
+            raise StalePin(
+                f"{identifier} is stale: local {local}, official {expected}",
+                local=local,
+                local_sha=local_sha,
+                expected=expected,
+                expected_shas=expected_shas,
+            )
         local_shas = set(local_sha.split(",")) if local_sha else set()
         if local_shas and not local_shas.issubset(expected_shas or set()):
             identity = "build" if local_config.get("type") == "support-matrix-verifier" else "SHA"
-            raise CurrentnessError(
-                f"{identifier} {identity} {local_sha} does not identify official {expected}"
+            raise StalePin(
+                f"{identifier} {identity} {local_sha} does not identify official {expected}",
+                local=local,
+                local_sha=local_sha,
+                expected=expected,
+                expected_shas=expected_shas,
+                identity_only=True,
             )
     if identifier == "gradle":
         validate_gradle_checksum(local, transport)
@@ -1126,18 +1197,6 @@ def validate_inventory_coverage(entries: list[dict[str, Any]]) -> None:
         raise CurrentnessError(f"Stale currentness inventory entries: {', '.join(stale)}")
 
 
-def run(transport: Transport | None = None) -> list[str]:
-    """Validate every governed direct pin and return a printable report."""
-    active = transport or Transport()
-    entries = load_config()
-    validate_inventory_coverage(entries)
-    report = []
-    for entry in entries:
-        try:
-            report.append(validate_entry(entry, active))
-        except CurrentnessError as error:
-            raise CurrentnessError(f"{entry.get('id', '<unknown>')}: {error}") from error
-    return report
 
 
 class OfflineRequest(Exception):
@@ -1160,37 +1219,756 @@ class OfflineTransport:
         raise OfflineRequest(url)
 
 
+@dataclass
+class Outcome:
+    """Hold the result of checking one governed pin."""
+
+    entry: dict[str, Any]
+    line: str | None = None
+    error: str | None = None
+    stale: StalePin | None = None
+
+
+def collect(entries: list[dict[str, Any]], transport: Any) -> list[Outcome]:
+    """Check every entry and keep going after a stale or unverifiable pin."""
+    outcomes: list[Outcome] = []
+    for entry in entries:
+        identifier = entry.get("id", "<unknown>")
+        try:
+            outcomes.append(Outcome(entry, line=validate_entry(entry, transport)))
+        except OfflineRequest:
+            outcomes.append(Outcome(entry, line=f"{identifier}: local pin readable"))
+        except StalePin as error:
+            outcomes.append(Outcome(entry, error=f"{identifier}: {error}", stale=error))
+        except CurrentnessError as error:
+            outcomes.append(Outcome(entry, error=f"{identifier}: {error}"))
+    return outcomes
+
+
+def report_lines(outcomes: list[Outcome]) -> list[str]:
+    """Return the passing report or raise one failure carrying every bad pin."""
+    errors = [outcome.error for outcome in outcomes if outcome.error]
+    if errors:
+        raise CurrentnessFailure(errors)
+    return [outcome.line or "" for outcome in outcomes]
+
+
+def run(transport: Transport | None = None) -> list[str]:
+    """Validate every governed direct pin and return a printable report."""
+    active = transport or Transport()
+    entries = load_config()
+    validate_inventory_coverage(entries)
+    return report_lines(collect(entries, active))
+
+
 def run_offline() -> list[str]:
     """Validate inventory coverage and every local pin without network access."""
     entries = load_config()
     validate_inventory_coverage(entries)
-    report = []
-    offline = OfflineTransport()
-    for entry in entries:
-        identifier = entry.get("id", "<unknown>")
+    return report_lines(collect(entries, OfflineTransport()))
+
+
+SUPPORT_MATRIX = "config/support-matrix.json"
+SUPPORT_DOCS = ("docs/SUPPORT.md", "README.md", "src/main/resources/META-INF/plugin.xml")
+CONFIG_PATH = "config/release-currentness.json"
+COMPOSER_FIXTURE = "conformance/cli-fixtures/composer"
+STEP_TIMEOUT_SECONDS = 900
+
+
+class ApplyError(CurrentnessError):
+    """Describe a pin that cannot be rewritten mechanically."""
+
+
+@dataclass
+class Edit:
+    """Replace capture groups of one regular expression inside one repository file."""
+
+    path: str
+    pattern: str
+    values: dict[int, Any]
+    flags: int = 0
+    optional: bool = False
+
+
+@dataclass
+class Step:
+    """Describe one real tool invocation that regenerates a lock file."""
+
+    tool: str
+    argv: list[str]
+    cwd: str
+    outputs: list[str]
+    image: str | None = None
+
+
+@dataclass
+class Update:
+    """Describe what one stale pin needs: a rewrite, a manual step, or a decision."""
+
+    entry: dict[str, Any]
+    old: str
+    new: str
+    new_sha: str | None
+    status: str = "auto"
+    reason: str = ""
+    commands: list[str] = field(default_factory=list)
+    flags: list[str] = field(default_factory=list)
+    files: list[str] = field(default_factory=list)
+    new_id: str | None = None
+    line: str = ""
+
+    @property
+    def identifier(self) -> str:
+        """Return the governed entry id."""
+        return str(self.entry["id"])
+
+    @property
+    def kind(self) -> str:
+        """Return the local extractor type."""
+        return str(self.entry.get("local", {}).get("type"))
+
+    @property
+    def label(self) -> tuple[str, str]:
+        """Return the old and new values as a reader should see them."""
+        if self.entry.get("policy") == "branch":
+            return (self.old[:12], str(self.new_sha)[:12])
+        return (self.old, self.new)
+
+
+@dataclass
+class Toolbox:
+    """Resolve real regeneration tools from PATH, or Docker when explicitly allowed."""
+
+    docker: bool = False
+    run: Callable[..., Any] = subprocess.run
+    which: Callable[[str], str | None] = shutil.which
+
+    def command(self, step: Step, cwd: Path) -> list[str] | None:
+        """Return the command line to run for a step, or None when no tool is available."""
+        if self.which(step.tool):
+            return step.argv
+        if self.docker and step.image and self.which("docker"):
+            return [
+                "docker", "run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}",
+                "-e", "COMPOSER_HOME=/tmp/composer", "-v", f"{cwd}:/work", "-w", "/work",
+                step.image, *step.argv[1:],
+            ]
+        return None
+
+    def execute(self, step: Step, cwd: Path) -> None:
+        """Run one step with a timeout and raise a readable error on failure."""
+        argv = self.command(step, cwd)
+        if argv is None:
+            raise ApplyError(f"{step.tool} is not available")
         try:
-            report.append(validate_entry(entry, offline))  # type: ignore[arg-type]
-        except OfflineRequest:
-            report.append(f"{identifier}: local pin readable")
+            result = self.run(argv, cwd=str(cwd), capture_output=True, text=True, timeout=STEP_TIMEOUT_SECONDS, check=False)
+        except subprocess.TimeoutExpired as error:
+            raise ApplyError(f"{shlex.join(step.argv)} timed out after {STEP_TIMEOUT_SECONDS}s") from error
+        except OSError as error:
+            raise ApplyError(f"{shlex.join(step.argv)} could not start: {error}") from error
+        if result.returncode != 0:
+            tail = " ".join(str(result.stderr or result.stdout or "").split())[-400:]
+            raise ApplyError(f"{shlex.join(step.argv)} exited {result.returncode}: {tail}")
+
+
+class Workspace:
+    """Write repository files with snapshots so a failed update can be rolled back."""
+
+    def __init__(self, dry: bool = False) -> None:
+        """Start with no touched files; a dry workspace never writes to disk."""
+        self.dry = dry
+        self.originals: dict[str, str | None] = {}
+        self.pending: dict[str, str | None] = {}
+
+    def snapshot(self, path: str) -> None:
+        """Remember the first on-disk content of a path."""
+        if path not in self.originals:
+            target = ROOT / path
+            self.originals[path] = target.read_text(encoding="utf-8") if target.is_file() else None
+
+    def read(self, path: str) -> str:
+        """Read the pending or on-disk content of a tracked file."""
+        if self.dry and path in self.pending and self.pending[path] is not None:
+            return str(self.pending[path])
+        return read_text(path)
+
+    def write(self, path: str, text: str) -> None:
+        """Store new content for a path, on disk unless the workspace is dry."""
+        self.snapshot(path)
+        if self.dry:
+            self.pending[path] = text
+        else:
+            (ROOT / path).write_text(text, encoding="utf-8")
+
+    def delete(self, path: str) -> None:
+        """Remove a path, on disk unless the workspace is dry."""
+        self.snapshot(path)
+        if self.dry:
+            self.pending[path] = None
+        elif (ROOT / path).exists():
+            (ROOT / path).unlink()
+
+    def current(self, path: str) -> str | None:
+        """Return the content a path has now."""
+        if self.dry and path in self.pending:
+            return self.pending[path]
+        target = ROOT / path
+        return target.read_text(encoding="utf-8") if target.is_file() else None
+
+    def changed(self) -> list[str]:
+        """List the touched paths whose content really changed."""
+        return sorted(path for path, original in self.originals.items() if self.current(path) != original)
+
+    def rollback(self) -> None:
+        """Restore every touched path to its snapshot."""
+        for path, original in self.originals.items():
+            target = ROOT / path
+            if original is None:
+                if target.exists():
+                    target.unlink()
+            else:
+                target.write_text(original, encoding="utf-8")
+        self.pending.clear()
+
+
+def replace_groups(match: re.Match[str], values: dict[int, Any]) -> str:
+    """Rebuild a match with selected capture groups replaced."""
+    text, base, last, parts = match.group(0), match.start(0), 0, []
+    for group in sorted(values):
+        if match.start(group) < 0:
+            continue
+        start, end = match.start(group) - base, match.end(group) - base
+        value = values[group]
+        parts.append(text[last:start])
+        parts.append(value(match.group(group)) if callable(value) else value)
+        last = end
+    parts.append(text[last:])
+    return "".join(parts)
+
+
+def apply_edit(workspace: Workspace, edit: Edit) -> int:
+    """Apply one regular-expression edit and return how many places changed."""
+    text = workspace.read(edit.path)
+    updated, count = re.subn(edit.pattern, lambda match: replace_groups(match, edit.values), text, flags=edit.flags)
+    if count and updated != text:
+        workspace.write(edit.path, updated)
+    return count
+
+
+def occurrence_paths(local: dict[str, Any]) -> list[str]:
+    """Return every workflow file a workflow pin is declared in."""
+    occurrences = local.get("occurrences")
+    if isinstance(occurrences, dict):
+        return [path for path in occurrences if isinstance(path, str)]
+    return [str(local["path"])] if isinstance(local.get("path"), str) else []
+
+
+def workflow_paths() -> list[str]:
+    """List every workflow file as a repository-relative path."""
+    directory = ROOT / ".github" / "workflows"
+    return sorted(file.relative_to(ROOT).as_posix() for pattern in ("*.yml", "*.yaml") for file in directory.glob(pattern))
+
+
+def edits_for(update: Update) -> list[Edit]:
+    """Translate a local descriptor into the exact file edits that move its pin."""
+    local = update.entry["local"]
+    kind, name, path = local.get("type"), str(local.get("name", "")), str(local.get("path", ""))
+    new, sha = update.new, update.new_sha
+    if kind == "gradle-plugin":
+        if name == "org.jetbrains.kotlin.jvm":
+            pattern = r'kotlin\(\s*"jvm"\s*\)\s+version\s+"([^"]+)"'
+        else:
+            pattern = rf'id\(\s*"{re.escape(name)}"\s*\)\s+version\s+"([^"]+)"'
+        return [Edit(path, pattern, {1: new})]
+    if kind == "property":
+        return [Edit(path, rf"(?m)^{re.escape(name)}=(.+)$", {1: new})]
+    if kind == "gradle-variable":
+        return [Edit(path, rf'(?m)^val\s+{re.escape(name)}\s*=\s*"([^"]+)"', {1: new})]
+    if kind == "gradle-setting":
+        return [Edit(path, rf'(?m)^\s*{re.escape(name)}\s*=\s*"([^"]+)"', {1: new})]
+    if kind == "gradle-testkit":
+        return [Edit(path, r'execute\([^;]*?,\s*"([0-9]+\.[0-9.]+)"\s*\)', {1: new}, re.DOTALL)]
+    if kind == "maven":
+        group, artifact = name.split(":", 1)
+        pattern = rf'{re.escape(group)}:{re.escape(artifact)}:([^"$:\s]+)'
+        return [Edit(file.relative_to(ROOT).as_posix(), pattern, {1: new}, optional=True) for file in gradle_script_files()]
+    if kind == "github-action":
+        pattern = rf"(?m)^\s*(?:-\s*)?uses:\s*{re.escape(name)}(?:/[^@\s]+)?@([0-9a-f]{{40}})\s+#\s*(\S+)\s*$"
+        values: dict[int, Any] = {1: str(sha)}
+        if update.entry.get("policy") != "branch":
+            values[2] = lambda comment: ("v" if comment[:1] in {"v", "V"} else "") + new
+        return [Edit(workflow, pattern, values, optional=True) for workflow in workflow_paths()]
+    if kind in {"workflow-value", "workflow-env"}:
+        pattern = rf'(?m)^\s*{re.escape(name)}:\s*"?([^"\s$]+)"?\s*$'
+        return [Edit(workflow, pattern, {1: new}) for workflow in occurrence_paths(local)]
+    if kind == "github-release-asset":
+        version = rf'(?m)^\s*{re.escape(name)}:\s*"?([^"\s$]+)"?\s*$'
+        digest = rf'(?m)^\s*{re.escape(str(local.get("digestName")))}:\s*"?([0-9a-f]+)"?\s*$'
+        return [
+            edit
+            for workflow in occurrence_paths(local)
+            for edit in (Edit(workflow, version, {1: new}), Edit(workflow, digest, {1: str(sha)}))
+        ]
+    if kind == "workflow-tool":
+        return [Edit(workflow, rf"(?m)^\s*tools:\s*.*\b{re.escape(name)}:([^,\s]+)", {1: new}) for workflow in occurrence_paths(local)]
+    if kind == "pip-command":
+        return [Edit(workflow, rf"\b{re.escape(name)}==([^\s]+)", {1: new}) for workflow in occurrence_paths(local)]
+    if kind == "json-dependency":
+        return [Edit(path, rf'"{re.escape(name)}"\s*:\s*"([^"]+)"', {1: new})]
+    if kind == "gem":
+        return [Edit(path, rf'gem\s+"{re.escape(name)}"\s*,\s*"([^"]+)"', {1: new})]
+    if kind == "nuget":
+        pattern = rf'<PackageReference\s+Include="{re.escape(name)}"\s+Version="([^"]+)"'
+        bracketed = lambda current: f"[{new}]" if current.startswith("[") else new
+        return [Edit(file.relative_to(ROOT).as_posix(), pattern, {1: bracketed}, re.IGNORECASE, optional=True) for file in dotnet_fixture_projects()]
+    if kind == "workflow-matrix":
+        value = re.escape(update.old)
+        pattern = rf'\b{re.escape(name)}:\s*(?:\[[^\]]*?\b({value})\b[^\]]*\]|"({value})")'
+        return [Edit(path, pattern, {1: new, 2: new})]
+    if kind == "support-matrix-verifier":
+        product, endpoint = re.escape(str(local.get("product"))), re.escape(str(local.get("endpoint")))
+        pattern = rf'"verifier": \{{"type": "{product}"[^\n]*?\{{"id": "{endpoint}", "version": "([^"]+)", "build": "([^"]+)"'
+        return [Edit(path, pattern, {1: new, 2: str(sha)})]
+    if kind == "gradle-wrapper":
+        raise ApplyError("the wrapper properties, scripts and jar move together; use the wrapper task")
+    raise ApplyError(f"no mechanical rewrite exists for {kind}; edit the pin by hand")
+
+
+def steps_for(update: Update) -> list[Step]:
+    """Return the real tool runs whose output must move together with a pin."""
+    local = update.entry["local"]
+    kind, name, path = local.get("type"), str(local.get("name", "")), str(local.get("path", ""))
+    directory = Path(path).parent.as_posix() if path else ""
+    if kind == "json-dependency" and path.endswith("package.json"):
+        argv = ["npm", "install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund"]
+        return [Step("npm", argv, directory, [f"{directory}/package-lock.json"])]
+    if kind == "json-dependency" and path.endswith("composer.json"):
+        return [Step("composer", composer_update(name), directory, [f"{directory}/composer.lock"], "composer:2")]
+    if kind == "gem":
+        return [Step("bundle", ["bundle", "lock", "--update", name], directory, [f"{directory}/Gemfile.lock"])]
+    if kind == "nuget":
+        steps = []
+        for project in dotnet_fixture_projects():
+            lock = project.parent / "packages.lock.json"
+            if lock.is_file() and name.lower() in project.read_text(encoding="utf-8").lower():
+                relative = lock.relative_to(ROOT).as_posix()
+                steps.append(Step("dotnet", ["dotnet", "restore", "--force-evaluate"], Path(relative).parent.as_posix(), [relative]))
+        return steps
+    if kind == "workflow-matrix" and name == "phpunit":
+        return [Step("composer", composer_update("phpunit/phpunit"), COMPOSER_FIXTURE, [], "composer:2")]
+    return []
+
+
+def composer_update(package: str) -> list[str]:
+    """Build the Composer command that re-resolves one fixture package without installing."""
+    return [
+        "composer", "update", package, "--with-all-dependencies", "--no-install",
+        "--no-plugins", "--no-scripts", "--no-interaction", "--no-progress",
+    ]
+
+
+def refresh_phpunit_lock(workspace: Workspace, toolbox: Toolbox, update: Update) -> None:
+    """Resolve the PHPUnit matrix lock in a scratch copy and rename it to the new version."""
+    old_lock = f"{COMPOSER_FIXTURE}/locks/phpunit-{update.old}.lock"
+    new_lock = f"{COMPOSER_FIXTURE}/locks/phpunit-{update.new}.lock"
+    seed = ROOT / (old_lock if (ROOT / old_lock).is_file() else f"{COMPOSER_FIXTURE}/composer.lock")
+    scratch_root = ROOT / "build"
+    scratch_root.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=scratch_root, prefix="currentness-") as temporary:
+        work = Path(temporary)
+        shutil.copytree(ROOT / COMPOSER_FIXTURE, work, dirs_exist_ok=True, symlinks=True, ignore=shutil.ignore_patterns("vendor", "locks"))
+        manifest = work / "composer.json"
+        text = manifest.read_text(encoding="utf-8")
+        pinned, count = re.subn(r'("phpunit/phpunit"\s*:\s*")[^"]+(")', lambda m: f"{m.group(1)}{update.new}{m.group(2)}", text)
+        if count == 0:
+            raise ApplyError("the Composer fixture does not pin phpunit/phpunit")
+        manifest.write_text(pinned, encoding="utf-8")
+        shutil.copyfile(seed, work / "composer.lock")
+        toolbox.execute(Step("composer", composer_update("phpunit/phpunit"), "", [], "composer:2"), work)
+        lock_text = (work / "composer.lock").read_text(encoding="utf-8")
+    workspace.write(new_lock, lock_text)
+    if old_lock != new_lock and (ROOT / old_lock).is_file():
+        workspace.delete(old_lock)
+
+
+def rewrite_config_entry(workspace: Workspace, update: Update) -> None:
+    """Move the matrix value kept in the inventory and rename an id that embeds its minor."""
+    text = workspace.read(CONFIG_PATH)
+    lines = text.split("\n")
+    marker = f'"id":"{update.identifier}"'
+    hits = [index for index, line in enumerate(lines) if marker in line]
+    if len(hits) != 1:
+        raise ApplyError(f"cannot find the inventory line of {update.identifier}")
+    line = lines[hits[0]]
+    moved = line.replace(f'"value":"{update.old}"', f'"value":"{update.new}"', 1)
+    if moved == line:
+        raise ApplyError(f"cannot find the matrix value of {update.identifier}")
+    old_minor, new_minor = minor_of(update.old), minor_of(update.new)
+    new_id = update.identifier.replace(old_minor, new_minor) if old_minor != new_minor and old_minor in update.identifier else update.identifier
+    lines[hits[0]] = moved.replace(marker, f'"id":"{new_id}"', 1)
+    update.new_id = new_id
+    workspace.write(CONFIG_PATH, "\n".join(lines))
+
+
+def minor_of(version: str) -> str:
+    """Return the major.minor prefix of a version."""
+    return ".".join(re.findall(r"\d+", version)[:2])
+
+
+def propagate_prose(workspace: Workspace, update: Update) -> bool:
+    """Move an exact tested version quoted in a support-matrix versions string."""
+    if "." not in update.old or update.kind == "support-matrix-verifier":
+        return False
+    text = workspace.read(SUPPORT_MATRIX)
+    pattern = re.compile(rf"(?<![\d.–])({re.escape(update.old)})(?![\d.]|[–+])")
+    changed = 0
+    lines = []
+    for line in text.split("\n"):
+        if '"versions":' in line:
+            line, count = pattern.subn(update.new, line)
+            changed += count
+        lines.append(line)
+    if changed:
+        workspace.write(SUPPORT_MATRIX, "\n".join(lines))
+    return bool(changed)
+
+
+def apply_update(update: Update, workspace: Workspace, toolbox: Toolbox) -> None:
+    """Rewrite one pin and regenerate what must move with it, or raise ApplyError."""
+    edits = edits_for(update)
+    total = 0
+    for edit in edits:
+        count = apply_edit(workspace, edit)
+        if count == 0 and not edit.optional:
+            raise ApplyError(f"pattern for {update.identifier} not found in {edit.path}")
+        total += count
+    if total == 0:
+        raise ApplyError(f"no occurrence of {update.identifier} was rewritten")
+    if update.kind == "workflow-matrix":
+        rewrite_config_entry(workspace, update)
+    if propagate_prose(workspace, update) and "support-matrix prose moved" not in update.flags:
+        update.flags.append("support-matrix prose moved")
+    if workspace.dry:
+        return
+    for step in steps_for(update):
+        cwd = ROOT / step.cwd
+        for output in step.outputs:
+            workspace.snapshot(output)
+        toolbox.execute(step, cwd)
+    if update.kind == "workflow-matrix" and str(update.entry["local"].get("name")) == "phpunit":
+        refresh_phpunit_lock(workspace, toolbox, update)
+
+
+def manifest_hint(update: Update) -> str:
+    """Describe the manual manifest edit that precedes a lock regeneration."""
+    local = update.entry["local"]
+    if update.kind == "workflow-matrix":
+        return f"set {local.get('name')} to {update.new} in the workflow matrix and as value in {CONFIG_PATH}"
+    return f"set {local.get('name')} to {update.new} in {local.get('path')}"
+
+
+def manual_commands(update: Update, transport: Any) -> list[str]:
+    """Return the exact commands for a pin that needs a human or a missing tool."""
+    local = update.entry["local"]
+    if local.get("type") == "gradle-wrapper":
+        try:
+            checksum = str(transport.json("https://services.gradle.org/versions/current").get("checksum", "<sha256>"))
+        except (CurrentnessError, OfflineRequest, AttributeError):
+            checksum = "<sha256>"
+        return [
+            f"./gradlew wrapper --gradle-version {update.new} --distribution-type bin --gradle-distribution-sha256-sum {checksum}"
+        ]
+    if update.kind == "workflow-matrix" and str(local.get("name")) == "phpunit":
+        fixture = shlex.quote(str(ROOT / COMPOSER_FIXTURE))
+        script = (
+            f"tmp=$(mktemp -d) && cp -R {fixture}/. \"$tmp\" && cd \"$tmp\" && rm -rf vendor locks"
+            f" && perl -pi -e 's/(\"phpunit\\/phpunit\": \")[^\"]+/${{1}}{update.new}/' composer.json"
+            f" && cp {fixture}/locks/phpunit-{update.old}.lock composer.lock"
+            f" && {shlex.join(composer_update('phpunit/phpunit'))}"
+            f" && cp composer.lock {fixture}/locks/phpunit-{update.new}.lock"
+            f" && rm {fixture}/locks/phpunit-{update.old}.lock"
+        )
+        return [script]
+    return [f"cd {step.cwd} && {shlex.join(step.argv)}" for step in steps_for(update)]
+
+
+def named_by_support_matrix(entry: dict[str, Any]) -> bool:
+    """Tell whether a pin's tool is named in a support-matrix versions string."""
+    try:
+        matrix = json.loads(read_text(SUPPORT_MATRIX))
+    except (CurrentnessError, json.JSONDecodeError):
+        return False
+    claims: list[str] = []
+
+    def walk(node: Any) -> None:
+        """Collect every versions string of the matrix."""
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == "versions" and isinstance(value, str):
+                    claims.append(value)
+                else:
+                    walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(matrix)
+    text = "\n".join(claims).lower()
+    local, source = entry.get("local", {}), entry.get("source", {})
+    for raw in (local.get("name"), source.get("name"), entry.get("id")):
+        token = re.split(r"[/:]", str(raw or "").lower())[-1].replace("_", "-")
+        token = re.sub(r"-version$", "", token)
+        if len(token) >= 3 and re.search(rf"(?<![\w.-]){re.escape(token)}(?![\w-])", text):
+            return True
+    return False
+
+
+def version_numbers(value: str) -> list[int] | None:
+    """Return the numeric release parts of a version, or None for non-versions."""
+    try:
+        normalized = normalize_version(value).split("+", 1)[0].split("-", 1)[0]
+    except CurrentnessError:
+        return None
+    return [int(part) for part in normalized.split(".") if part.isdigit()]
+
+
+def major_key(parts: list[int]) -> tuple[int, ...]:
+    """Return the compatibility-breaking prefix of a version."""
+    return tuple(parts[:2]) if parts[0] == 0 else (parts[0],)
+
+
+def decision_reason(update: Update, stale: StalePin) -> str | None:
+    """Return why a pin must not move without a human decision, if it must not."""
+    if stale.identity_only:
+        return f"the pinned identity does not match official {stale.expected}; verify the pin before changing it"
+    if update.entry.get("policy") == "branch":
+        return None
+    old, new = version_numbers(update.old), version_numbers(update.new)
+    if not old or not new:
+        return None
+    if major_key(new) != major_key(old):
+        return f"major version change {update.old} -> {update.new}"
+    if version_key(update.new) < version_key(update.old):
+        return f"official {update.new} is older than the pinned {update.old}"
+    return None
+
+
+def resolve_new_sha(entry: dict[str, Any], stale: StalePin, transport: Any) -> str | None:
+    """Pick the immutable identity a rewritten pin must carry."""
+    source = entry.get("source") or {}
+    if source.get("type") == "github" and entry.get("local", {}).get("type") == "github-action":
+        return github_latest_chain(transport, str(source.get("name")))[1][-1]
+    if source.get("type") in {"github-release-asset", "github-branch", "jetbrains-updates"} and len(stale.expected_shas) == 1:
+        return next(iter(stale.expected_shas))
+    return None
+
+
+def plan_updates(outcomes: list[Outcome], transport: Any, toolbox: Toolbox) -> list[Update]:
+    """Classify every stale pin as auto, manual or decision without writing anything."""
+    updates: list[Update] = []
+    for outcome in outcomes:
+        stale = outcome.stale
+        if stale is None:
+            continue
+        entry = outcome.entry
+        branch = entry.get("policy") == "branch"
+        update = Update(entry, str(stale.local_sha) if branch else stale.local, stale.expected, None, line=str(outcome.error))
+        updates.append(update)
+        reason = decision_reason(update, stale)
+        if reason:
+            update.status, update.reason = "decision", reason
+            continue
+        try:
+            update.new_sha = resolve_new_sha(entry, stale, transport)
         except CurrentnessError as error:
-            raise CurrentnessError(f"{identifier}: {error}") from error
-    return report
+            update.status, update.reason = "manual", f"cannot resolve the official identity: {error}"
+            continue
+        crosses_minor = bool(version_numbers(update.new) and version_numbers(update.old)) and minor_of(update.new) != minor_of(update.old)
+        if crosses_minor and named_by_support_matrix(entry):
+            update.flags.append("named by the support matrix: review its version claims")
+        dry = Workspace(dry=True)
+        try:
+            apply_update(update, dry, toolbox)
+        except ApplyError as error:
+            update.status, update.reason = "manual", str(error)
+            update.commands = manual_commands(update, transport)
+            continue
+        update.files = dry.changed()
+        missing = [step.tool for step in steps_for(update) if toolbox.command(step, ROOT / step.cwd) is None]
+        if missing:
+            update.status = "manual"
+            update.reason = f"{manifest_hint(update)}, then regenerate with {', '.join(sorted(set(missing)))} (not on PATH; --docker can use composer:2)"
+            update.commands = manual_commands(update, transport)
+            update.files = []
+    return updates
 
 
-def main() -> int:
-    """Run the fail-closed currentness gate from the repository root."""
+def apply_updates(updates: list[Update], toolbox: Toolbox, transport: Any) -> list[str]:
+    """Apply every auto update, rolling a failed one back into a manual step, and return generated files."""
+    generated: list[str] = []
+    touched_matrix = False
+    for update in updates:
+        if update.status != "auto":
+            continue
+        workspace = Workspace()
+        try:
+            apply_update(update, workspace, toolbox)
+        except (ApplyError, OSError) as error:
+            workspace.rollback()
+            update.status, update.reason, update.files = "manual", f"automatic update failed and was rolled back: {error}", []
+            update.commands = manual_commands(update, transport)
+            continue
+        except BaseException:
+            workspace.rollback()
+            raise
+        update.status = "updated"
+        update.files = workspace.changed()
+        touched_matrix = touched_matrix or SUPPORT_MATRIX in update.files
+    if touched_matrix:
+        generated = regenerate_support_docs(toolbox)
+    return generated
+
+
+def regenerate_support_docs(toolbox: Toolbox) -> list[str]:
+    """Regenerate the documents derived from the support matrix and return the ones that changed."""
+    before = {path: (ROOT / path).read_text(encoding="utf-8") for path in SUPPORT_DOCS}
+    for flag in ("--write", "--check"):
+        toolbox.execute(Step("python3", [sys.executable, "scripts/support_matrix.py", flag], "", []), ROOT)
+    return [path for path, text in before.items() if (ROOT / path).read_text(encoding="utf-8") != text]
+
+
+def build_summary(mode: str, outcomes: list[Outcome], updates: list[Update], extra_errors: list[str], generated: list[str]) -> dict[str, Any]:
+    """Build the machine-readable summary every renderer and exit code derives from."""
+    bound = {update.identifier for update in updates}
+    summary: dict[str, Any] = {
+        "mode": mode,
+        "current": [outcome.entry.get("id") for outcome in outcomes if outcome.line is not None and outcome.error is None],
+        "updates": [],
+        "manual": [],
+        "decisions": [],
+        "errors": [],
+        "generated": generated,
+    }
+    for update in updates:
+        old, new = update.label
+        base = {"id": update.new_id or update.identifier, "type": update.kind, "old": old, "new": new}
+        if update.status in {"updated", "auto"}:
+            summary["updates"].append({**base, "files": update.files, "flags": update.flags, "applied": update.status == "updated"})
+        elif update.status == "manual":
+            summary["manual"].append({**base, "reason": update.reason, "commands": update.commands, "flags": update.flags})
+        else:
+            summary["decisions"].append({**base, "reason": update.reason})
+    for outcome in outcomes:
+        identifier = str(outcome.entry.get("id"))
+        if outcome.error and identifier not in bound:
+            summary["errors"].append({"id": identifier, "message": outcome.error})
+    summary["errors"] += [{"id": "after-write", "message": message} for message in extra_errors]
+    summary["ok"] = not (summary["manual"] or summary["decisions"] or summary["errors"] or any(not item["applied"] for item in summary["updates"]))
+    return summary
+
+
+def render_summary(summary: dict[str, Any]) -> str:
+    """Render the summary as the concise text people and issues read."""
+    lines: list[str] = []
+    applied = summary["mode"] == "write"
+    updates = summary["updates"]
+    if updates:
+        lines.append(f"{'Updated' if applied else 'Applicable with --write'} ({len(updates)}):")
+        for item in updates:
+            suffix = f" [{'; '.join(item['flags'])}]" if item["flags"] else ""
+            lines.append(f"  {item['id']}: {item['old']} -> {item['new']} ({', '.join(item['files']) or 'no file change'}){suffix}")
+    if summary["generated"]:
+        lines.append(f"Regenerated: {', '.join(summary['generated'])}")
+    if summary["manual"]:
+        lines.append(f"Needs manual update ({len(summary['manual'])}):")
+        for item in summary["manual"]:
+            lines.append(f"  {item['id']}: {item['old']} -> {item['new']}: {item['reason']}")
+            lines.extend(f"      $ {command}" for command in item["commands"])
+    if summary["decisions"]:
+        lines.append(f"Needs a decision ({len(summary['decisions'])}):")
+        lines.extend(f"  {item['id']}: {item['old']} -> {item['new']}: {item['reason']}" for item in summary["decisions"])
+    if summary["errors"]:
+        lines.append(f"Unverifiable or drifted ({len(summary['errors'])}):")
+        lines.extend(f"  {item['message']}" for item in summary["errors"])
+    return "\n".join(lines)
+
+
+def write_file(path: str, text: str) -> None:
+    """Write an output file, creating its directory."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8")
+
+
+def recheck(transport: Any, expected_ids: set[str]) -> list[str]:
+    """Re-run the live check after a write and return failures nobody deferred on purpose."""
+    try:
+        entries = load_config()
+        validate_inventory_coverage(entries)
+    except CurrentnessError as error:
+        return [str(error)]
+    return [
+        str(outcome.error)
+        for outcome in collect(entries, transport)
+        if outcome.error and str(outcome.entry.get("id")) not in expected_ids
+    ]
+
+
+def main(arguments: list[str] | None = None) -> int:
+    """Run the fail-closed currentness gate, optionally applying mechanical updates."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--offline", action="store_true", help="check local pins and inventory without network access")
-    arguments = parser.parse_args()
+    parser.add_argument("--write", action="store_true", help="rewrite stale pins that need no manual step and print what is left")
+    parser.add_argument("--docker", action="store_true", help="with --write, regenerate Composer locks in the composer:2 image when composer is not on PATH")
+    parser.add_argument("--report", metavar="PATH", help="also write the plain-text summary to PATH")
+    parser.add_argument("--json", metavar="PATH", help="also write the machine-readable summary to PATH")
+    options = parser.parse_args(arguments)
+    if options.write and options.offline:
+        parser.error("--write needs the live check; drop --offline")
     try:
-        report = run_offline() if arguments.offline else run()
+        entries = load_config()
+        validate_inventory_coverage(entries)
     except CurrentnessError as error:
         print(f"release-currentness: ERROR: {error}", file=sys.stderr)
+        if options.report:
+            write_file(options.report, f"Unverifiable or drifted (1):\n  {error}\n")
         return 1
-    print("Release pins are current or carry a tested compatibility reason:")
-    for line in report:
-        print(f"  {line}")
-    return 0
+    transport: Any = OfflineTransport() if options.offline else Transport()
+    outcomes = collect(entries, transport)
+    toolbox = Toolbox(docker=options.docker)
+    updates = [] if options.offline else plan_updates(outcomes, transport, toolbox)
+    generated: list[str] = []
+    extra: list[str] = []
+    mode = "write" if options.write else "check"
+    if options.write:
+        try:
+            generated = apply_updates(updates, toolbox, transport)
+        except CurrentnessError as error:
+            extra.append(f"support documents could not be regenerated: {error}")
+        deferred = {update.identifier for update in updates if update.status != "updated"} | {
+            str(outcome.entry.get("id")) for outcome in outcomes if outcome.error and outcome.stale is None
+        }
+        extra += recheck(transport, deferred)
+    summary = build_summary(mode, outcomes, updates, extra, generated)
+    text = render_summary(summary)
+    if options.report:
+        write_file(options.report, f"{text}\n" if text else "")
+    if options.json:
+        write_file(options.json, json.dumps(summary, indent=2) + "\n")
+    if text:
+        print(text)
+    if summary["ok"]:
+        print("Release pins are current or carry a tested compatibility reason:")
+        for outcome in outcomes:
+            print(f"  {outcome.line or str(outcome.entry.get('id')) + ': updated'}")
+        return 0
+    if options.write:
+        problems = [update.line for update in updates if update.status != "updated"] + [item["message"] for item in summary["errors"]]
+    else:
+        problems = [outcome.error or "" for outcome in outcomes if outcome.error]
+    for problem in problems:
+        print(f"release-currentness: ERROR: {problem}", file=sys.stderr)
+    return 1
 
 
 if __name__ == "__main__":
