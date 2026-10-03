@@ -465,6 +465,10 @@ class AffectedState(
     }
     private var analyzeProject: suspend () -> AffectedAnalysis = { analyze() }
 
+    @Volatile
+    var lastVerification: VerificationRecord? = null
+        internal set
+
     val modules: List<AffectedModule> get() = snapshot().modules
 
     val affectedModules: Int get() = snapshot().affectedModules
@@ -516,6 +520,9 @@ class AffectedState(
     fun tryClaimVerification(): AffectedRunClaim? = AffectedRunSessions.getInstance(project).claim {
         state.tryClaimVerification()
     }
+
+    fun launchBaseCheck(record: VerificationRecord, onReport: (BaseCheckReport) -> Unit): Job =
+        scope.launch { onReport(BaseCheck.run(project, record)) }
 
     fun invalidate() {
         state.invalidate()

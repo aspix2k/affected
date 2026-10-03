@@ -39,6 +39,8 @@ constructor(
 
     fun resolvedBranch(): String? = resolvedBase?.first
 
+    fun comparisonBase(): String? = mergeBase
+
     fun modifiedAgainstBase(): Set<File> {
         val base = mergeBase ?: return emptySet()
         val paths = gitFields("diff", "--name-status", "--no-renames", "--relative", "-z", base)

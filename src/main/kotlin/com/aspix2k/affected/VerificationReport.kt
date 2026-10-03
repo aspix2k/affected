@@ -1,9 +1,12 @@
 package com.aspix2k.affected
 
+import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
+import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.text.StringUtil
 import java.io.File
 
 private val LOG = logger<Verification>()
@@ -40,6 +43,60 @@ internal fun reportOutcome(project: Project, prepared: Verification.Prepared, ou
             NotificationType.INFORMATION,
         )
     }
+    if (outcome.blocker == null && !outcome.passed) reportFailedGroups(project)
+}
+
+private fun reportFailedGroups(project: Project) {
+    val state = project.service<AffectedState>()
+    val record = state.lastVerification?.takeIf { it.failed.isNotEmpty() } ?: return
+    notifyAffected(
+        project,
+        AffectedBundle.message("notification.failed.title"),
+        AffectedBundle.message("notification.failed.text", record.failed.size),
+        NotificationType.WARNING,
+        NotificationAction.createSimpleExpiring(AffectedBundle.message("action.base.check.text")) {
+            state.launchBaseCheck(record) { report -> reportBaseCheck(project, report) }
+        },
+    )
+}
+
+internal fun reportBaseCheck(project: Project, report: BaseCheckReport) {
+    when (report.blocker) {
+        BaseCheckBlocker.NOT_STARTED -> notifyNotStarted(project)
+        BaseCheckBlocker.NO_FAILED_VERIFICATION -> notifyAffected(
+            project,
+            AffectedBundle.message("notification.base.title"),
+            AffectedBundle.message("notification.base.nothing.text"),
+            NotificationType.INFORMATION,
+        )
+        null -> notifyAffected(
+            project,
+            AffectedBundle.message("notification.base.title"),
+            baseCheckText(report),
+            if (report.verdicts.any { it.verdict == BaseVerdict.REGRESSION }) {
+                NotificationType.WARNING
+            } else {
+                NotificationType.INFORMATION
+            },
+        )
+    }
+}
+
+internal fun baseCheckText(report: BaseCheckReport): String {
+    val against = report.comparison?.let { AffectedBundle.message("notification.base.against", it) }
+    val lines = report.verdicts.map { group ->
+        val label = StringUtil.escapeXmlEntities("${group.systemId} ${group.root}")
+        when (group.verdict) {
+            BaseVerdict.REGRESSION -> AffectedBundle.message("notification.base.regression", label)
+            BaseVerdict.PRE_EXISTING -> AffectedBundle.message("notification.base.preexisting", label)
+            BaseVerdict.UNKNOWN -> AffectedBundle.message(
+                "notification.base.unknown",
+                label,
+                AffectedBundle.message("notification.base.reason.${group.reason?.id}"),
+            )
+        }
+    }
+    return (listOfNotNull(against) + lines).joinToString("<br>")
 }
 
 internal fun runSummaryText(summary: RunSummary): String {
@@ -113,9 +170,16 @@ internal fun uncoveredExtensions(files: List<File>): String =
 
 private const val MAX_LISTED_EXTENSIONS = 5
 
-internal fun notifyAffected(project: Project, title: String, content: String, type: NotificationType) {
+internal fun notifyAffected(
+    project: Project,
+    title: String,
+    content: String,
+    type: NotificationType,
+    vararg actions: NotificationAction,
+) {
     NotificationGroupManager.getInstance()
         .getNotificationGroup("AffectedTests")
         .createNotification(title, content, type)
+        .apply { actions.forEach(::addAction) }
         .notify(project)
 }

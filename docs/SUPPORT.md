@@ -111,6 +111,7 @@ exclusive run lease as the toolbar. Read tools never write project state.
 | changed-files | `affected_changed_files` | read | MCP-only |
 | run-verification | `affected_run_verification` | mutating | `com.aspix2k.affected.Run`, `com.aspix2k.affected.RunBeforeCommit`, `com.aspix2k.affected.RunBeforePush` |
 | run-named-task | `affected_run_task` | mutating | `com.aspix2k.affected.Detekt`, `com.aspix2k.affected.Lint`, `com.aspix2k.affected.Coverage` |
+| check-on-base | `affected_check_on_base` | mutating | MCP-only |
 | stop-owned | `affected_stop` | mutating | MCP-only |
 | status | `affected_status` | read | MCP-only |
 | doctor | `affected_doctor` | read | `com.aspix2k.affected.Diagnose` |

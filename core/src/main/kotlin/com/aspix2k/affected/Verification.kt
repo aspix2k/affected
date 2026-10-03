@@ -95,9 +95,12 @@ object Verification {
         try {
             if (plan.isEmpty) return withoutWork(prepared)
             if (!claim.markRunning()) return Outcome(plan, passed = false, Blocker.NOT_STARTED)
+            val state = project.service<AffectedState>()
+            state.lastVerification = null
             val stopAfterFirstFailure = AffectedSettings.getInstance().stopAfterFirstFailure
             val started = TimeSource.Monotonic.markNow()
             val durations = ConcurrentLinkedQueue<RecordedDuration>()
+            val results = ConcurrentLinkedQueue<GroupResult>()
             passed = runClaimedGroups(
                 project,
                 claim,
@@ -107,16 +110,7 @@ object Verification {
             ) { group ->
                 val groupStarted = TimeSource.Monotonic.markNow()
                 group.runInPlannedExecutionRoot(project) {
-                    when (val system = BuildSystems.byId(group.systemId)) {
-                        null -> false
-                        is ChangeAwareSuspendingBuildSystem ->
-                            system.runAndWaitSuspending(project, group.root, group.tasks, prepared.changes)
-                        is SuspendingBuildSystem ->
-                            system.runAndWaitSuspending(project, group.root, group.tasks)
-                        else -> withContext(Dispatchers.IO) {
-                            system.runAndWait(project, group.root, group.tasks)
-                        }
-                    }
+                    runBuildTasks(project, group.systemId, group.root, group.tasks, prepared.changes)
                 }.also { groupPassed ->
                     if (groupPassed) {
                         durations += group.recordedDuration(
@@ -124,8 +118,13 @@ object Verification {
                             System.currentTimeMillis(),
                         )
                     }
+                    results.recordGroup(claim, group, groupPassed)
                 }
             }
+            state.lastVerification = VerificationRecord(
+                plan.groups.mapNotNull { group -> results.firstOrNull { it.group == group } },
+                prepared.changes,
+            )
             val outcome = completedOutcome(plan, passed, prepared.unresolvedFiles, prepared.baseUnresolved)
             return if (outcome.passed) {
                 outcome.copy(
@@ -154,6 +153,23 @@ object Verification {
         verificationPassesWithoutWork(prepared) -> Outcome(prepared.plan, passed = true)
         else -> Outcome(prepared.plan, passed = false, Blocker.UNRESOLVED_CHANGES)
     }
+}
+
+internal fun MutableCollection<GroupResult>.recordGroup(claim: AffectedRunClaim, group: TaskGroup, passed: Boolean) {
+    if (passed || !claim.isTerminationRequested()) add(GroupResult(group, passed))
+}
+
+internal suspend fun runBuildTasks(
+    project: Project,
+    systemId: String,
+    root: String,
+    tasks: List<String>,
+    changes: BuildChanges,
+): Boolean = when (val system = BuildSystems.byId(systemId)) {
+    null -> false
+    is ChangeAwareSuspendingBuildSystem -> system.runAndWaitSuspending(project, root, tasks, changes)
+    is SuspendingBuildSystem -> system.runAndWaitSuspending(project, root, tasks)
+    else -> withContext(Dispatchers.IO) { system.runAndWait(project, root, tasks) }
 }
 
 internal fun completedOutcome(
@@ -242,6 +258,8 @@ internal fun ProjectChanges.Result.toBuildChanges(): BuildChanges = BuildChanges
     exactSelectionEligible = exactSelectionEligible
         .mapTo(HashSet()) { it.absoluteFile.normalize().invariantSeparatorsPath },
     comparedToBase = comparedToBase,
+    baseCommit = mergeBase,
+    baseBranch = resolvedBranch,
 )
 
 internal fun affectsConsumers(system: BuildSystem, path: String, signatureTouched: Boolean): Boolean =

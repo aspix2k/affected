@@ -140,6 +140,12 @@ internal suspend fun <T> withAffectedRun(
     block: suspend () -> T,
 ): T = withContext(AffectedRunContextElement(ActiveAffectedRunState(run, presentation))) { block() }
 
+internal class BaseCheckRun : AbstractCoroutineContextElement(Key) {
+    companion object Key : CoroutineContext.Key<BaseCheckRun>
+}
+
+internal suspend fun recordsDependencies(): Boolean = currentCoroutineContext()[BaseCheckRun] == null
+
 internal fun currentAffectedRunPresentation(): AffectedRunPresentation? =
     ActiveAffectedRun.current()?.presentation
 

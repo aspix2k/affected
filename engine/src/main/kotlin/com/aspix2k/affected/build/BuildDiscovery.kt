@@ -67,6 +67,8 @@ data class BuildChanges(
     val files: List<String>,
     val exactSelectionEligible: Set<String>,
     val comparedToBase: Boolean,
+    val baseCommit: String? = null,
+    val baseBranch: String? = null,
 )
 
 internal fun nestedBuildRoot(base: File, hasMarker: (File) -> Boolean): File? {
