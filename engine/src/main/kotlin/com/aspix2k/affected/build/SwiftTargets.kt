@@ -4,6 +4,11 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import java.io.File
 
+internal object SwiftTasks {
+    const val TEST = "test"
+    const val BUILD = "build"
+}
+
 internal object SwiftTargets {
 
     val SAFE_NAME = Regex("[A-Za-z0-9_]+")

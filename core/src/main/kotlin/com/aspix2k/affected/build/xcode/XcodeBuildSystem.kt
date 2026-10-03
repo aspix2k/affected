@@ -141,7 +141,6 @@ private fun xcodeProject(root: File): File? {
     }.getOrNull()
 }
 
-internal val XCODE_BUNDLE = Regex("""\.(?:xcodeproj|xcworkspace)$""")
 private val FOREIGN_ROOTS = listOf("settings.gradle.kts", "settings.gradle", "pom.xml")
 private const val XCODE_METADATA_DRIFT_MESSAGE =
     "Affected detected an Xcode scheme change after planning. Refresh the project model and run again."

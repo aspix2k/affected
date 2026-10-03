@@ -1,11 +1,9 @@
 package com.aspix2k.affected
 
 import com.aspix2k.affected.build.PlannedExecutionRoot
-import com.aspix2k.affected.build.process.CommandRunner
 import com.aspix2k.affected.build.projectExecutionRootGuard
 import com.aspix2k.affected.build.withPlannedExecutionRoot
 import com.aspix2k.affected.impact.TestSelection
-import com.intellij.openapi.project.Project
 import java.nio.file.Path
 
 data class ModuleInfo(
@@ -32,15 +30,6 @@ data class ModuleInfo(
 
 data class TaskGroup(val systemId: String, val root: String, val tasks: List<String>) {
     private val plannedExecutionRoot: PlannedExecutionRoot = PlannedExecutionRoot.capture(Path.of(root))
-
-    suspend fun runInPlannedExecutionRoot(project: Project, block: suspend () -> Boolean): Boolean {
-        val projectRoot = project.basePath?.let(Path::of) ?: return false
-        return runInPlannedExecutionRoot(
-            projectRoot,
-            onInvalid = { CommandRunner.refuseInvalidExecutionRoot(project, root, "Affected") },
-            block,
-        )
-    }
 
     internal suspend fun runInPlannedExecutionRoot(
         projectRoot: Path,

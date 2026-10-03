@@ -11,6 +11,7 @@ import com.aspix2k.affected.build.gradle.GradleBuildSystem
 import com.aspix2k.affected.build.xcode.XcodeBuildSystem
 import com.aspix2k.affected.runBoundedBlocking
 import com.aspix2k.affected.runClaimedGroupsWithPresentation
+import com.aspix2k.affected.runInPlannedExecutionRoot
 import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.openapi.externalSystem.service.execution.ExternalSystemJdkUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase

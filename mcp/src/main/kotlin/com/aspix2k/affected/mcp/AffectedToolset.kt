@@ -18,6 +18,7 @@ import com.aspix2k.affected.Verification
 import com.aspix2k.affected.build.BuildSystems
 import com.aspix2k.affected.projectBusy
 import com.aspix2k.affected.runClaimedGroups
+import com.aspix2k.affected.runInPlannedExecutionRoot
 import com.aspix2k.affected.runWithRequiredAdapter
 import com.aspix2k.affected.withSummary
 import com.intellij.mcpserver.McpToolCallResult
