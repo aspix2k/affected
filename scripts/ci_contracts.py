@@ -162,6 +162,9 @@ def check(root: Path = ROOT) -> None:
         "--tests com.aspix2k.affected.build.process.SequentialProcessCancellationTest",
         "--tests com.aspix2k.affected.build.SwiftPmNativeTest",
         "--tests com.aspix2k.affected.build.xcode.XcodeNativeTest",
+        ":engine:test",
+        "--tests com.aspix2k.affected.build.process.CommandSequenceTest",
+        "--tests com.aspix2k.affected.build.process.ProcessTreeTerminationTest",
         "-Paffected.cliConformance=true",
         "--rerun-tasks --no-daemon --no-parallel --max-workers=1",
     )
