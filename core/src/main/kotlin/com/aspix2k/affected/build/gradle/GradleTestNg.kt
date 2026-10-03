@@ -40,9 +40,11 @@ private fun testNgClassName(fileName: String, text: String): String {
     val simple = TESTNG_CLASS.find(text)?.groupValues?.get(1)
     require(!simple.isNullOrEmpty())
     require(fileName.substringBefore('.') == simple)
-    val pkg = TESTNG_PACKAGE.find(text)?.groupValues?.get(1)
-    return if (pkg.isNullOrEmpty()) simple else "$pkg.$simple"
+    val pkg = sourcePackageName(text)
+    return if (pkg.isEmpty()) simple else "$pkg.$simple"
 }
+
+internal fun sourcePackageName(text: String): String = TESTNG_PACKAGE.find(text)?.groupValues?.get(1).orEmpty()
 
 private val TESTNG_PACKAGE = Regex("""(?m)^\s*package\s+([\w.]+)\s*;?\s*$""")
 private val TESTNG_CLASS = Regex(

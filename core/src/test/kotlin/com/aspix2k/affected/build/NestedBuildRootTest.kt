@@ -8,6 +8,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class NestedBuildRootTest {
 
@@ -134,6 +135,25 @@ class NestedBuildRootTest {
         val capped = nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists)
         assertEquals(PerformanceBudgets.MAX_NESTED_ROOTS, capped.size)
         assertFalse(File(base, "apps/zz-extra") in capped)
+    }
+
+    @Test
+    fun `a truncated discovery is remembered per base until a scan completes`() {
+        val base = createTempDirectory("nested-caps").toFile()
+        markers(base, *(1..PerformanceBudgets.MAX_NESTED_ROOTS + 1).map { "apps/p$it" }.toTypedArray())
+
+        val scan = { nestedBuildRoots(base, CMAKE_LISTS, ::hasCMakeLists) }
+        scan()
+
+        assertTrue(NestedRootCaps.reachedUnder(base.path))
+        assertTrue(NestedRootCaps.reachedUnder(base.parentFile.path))
+        assertFalse(NestedRootCaps.reachedUnder(File(base, "apps").path))
+
+        File(base, "apps/p1").deleteRecursively()
+        File(base, "apps/p2").deleteRecursively()
+        scan()
+
+        assertFalse(NestedRootCaps.reachedUnder(base.path))
     }
 
     @Test

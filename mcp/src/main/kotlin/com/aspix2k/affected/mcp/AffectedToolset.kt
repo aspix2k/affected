@@ -1,5 +1,7 @@
 package com.aspix2k.affected.mcp
 
+import com.aspix2k.affected.AffectedDoctor
+import com.aspix2k.affected.AffectedMcpCoveringViews
 import com.aspix2k.affected.AffectedMcpInputs
 import com.aspix2k.affected.AffectedMcpSettings
 import com.aspix2k.affected.AffectedMcpView
@@ -9,12 +11,15 @@ import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.AffectedState
 import com.aspix2k.affected.AffectedStateSnapshot
+import com.aspix2k.affected.CoveringTestsLookup
+import com.aspix2k.affected.ProjectBaseBranch
 import com.aspix2k.affected.TaskPlanner
 import com.aspix2k.affected.Verification
 import com.aspix2k.affected.build.BuildSystems
 import com.aspix2k.affected.projectBusy
 import com.aspix2k.affected.runClaimedGroups
 import com.aspix2k.affected.runWithRequiredAdapter
+import com.aspix2k.affected.withSummary
 import com.intellij.mcpserver.McpToolCallResult
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
@@ -35,6 +40,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import java.nio.file.Path
 import kotlin.coroutines.coroutineContext
 
 class AffectedToolset : McpToolset {
@@ -57,7 +63,7 @@ class AffectedToolset : McpToolset {
     suspend fun affected_verification_plan(): McpToolCallResult {
         val project = coroutineContext.project
         if (project.basePath == null) return noBasePath()
-        return AffectedMcpViews.plan(freshSnapshot(project), settings().checkConsumers).toResult()
+        return AffectedMcpViews.plan(freshSnapshot(project), settings(project).checkConsumers).toResult()
     }
 
     @McpTool
@@ -83,7 +89,7 @@ class AffectedToolset : McpToolset {
         if (projectBusy(project)) return busy()
         val state = project.service<AffectedState>()
         state.refreshNow()
-        val preview = AffectedMcpViews.plan(state.snapshot(), settings().checkConsumers)
+        val preview = AffectedMcpViews.plan(state.snapshot(), settings(project).checkConsumers)
         if (preview.error) return preview.toResult()
         val claim = state.tryClaimReadyRun() ?: return cannotClaim()
         val prepared = claim.prepared ?: run {
@@ -95,7 +101,8 @@ class AffectedToolset : McpToolset {
             return busy()
         }
         val outcome = Verification.runClaimedAndWait(project, prepared, claim)
-        return AffectedMcpViews.withUncovered(verificationView(claim.snapshot, outcome), prepared.uncovered).toResult()
+        val view = verificationView(claim.snapshot, outcome).withSummary(outcome.summary)
+        return AffectedMcpViews.withUncovered(view, prepared.uncovered).toResult()
     }
 
     @McpTool
@@ -177,10 +184,19 @@ class AffectedToolset : McpToolset {
         val project = coroutineContext.project
         return AffectedMcpViews.status(
             snapshot = snapshot(project),
-            settings = settings(),
+            settings = settings(project),
             ownedRunning = AffectedRunSessions.getInstance(project).activeCount(),
         ).toResult()
     }
+
+    @McpTool
+    @McpToolHints(readOnlyHint = McpToolHintValue.TRUE)
+    @McpDescription(
+        "Explains why Affected finds nothing or cannot run: git, comparison base, build systems, " +
+            "tools on PATH, discovery limits, changed files and analysis state, each with a remedy."
+    )
+    suspend fun affected_doctor(): McpToolCallResult =
+        AffectedDoctor.view(AffectedDoctor.diagnose(AffectedDoctor.inspect(coroutineContext.project))).toResult()
 
     @McpTool
     @McpToolHints(readOnlyHint = McpToolHintValue.TRUE)
@@ -191,12 +207,33 @@ class AffectedToolset : McpToolset {
         AffectedMcpViews.availableTasks(freshSnapshot(coroutineContext.project)).toResult()
 
     @McpTool
+    @McpToolHints(readOnlyHint = McpToolHintValue.TRUE)
+    @McpDescription(
+        "Lists the test classes recorded as covering a .kt or .java file for Gradle and Maven JVM modules, " +
+            "read from the dependency maps on disk without starting any process. Reports map freshness " +
+            "and the reason when nothing is known."
+    )
+    suspend fun affected_tests_for_file(
+        @McpDescription("Path of a .kt or .java file inside the project, absolute or relative to the project base")
+        path: String,
+    ): McpToolCallResult {
+        val project = coroutineContext.project
+        val basePath = project.basePath ?: return noBasePath()
+        val validation = AffectedMcpInputs.validateSourceFile(basePath, path)
+        if (validation.error) return validation.toResult()
+        val file = Path.of(validation.data["path"] as String)
+        val result = withContext(Dispatchers.IO) { CoveringTestsLookup.find(project, file) }
+        return AffectedMcpCoveringViews.tests(validation.data["file"] as String, result).toResult()
+    }
+
+    @McpTool
     @McpToolHints(readOnlyHint = McpToolHintValue.FALSE, destructiveHint = McpToolHintValue.FALSE)
     @McpDescription(
-        "Changes plugin settings: the base branch, consumer compilation, commit and push guards, and running animation."
+        "Changes plugin settings: this project's base branch, consumer compilation, commit and push guards, " +
+            "and running animation."
     )
     suspend fun affected_configure(
-        @McpDescription("Base branch, for example develop, main or master")
+        @McpDescription("Base branch of this project, for example develop, main or master; empty or auto detects it")
         baseBranch: String? = null,
         @McpDescription("Whether to compile modules consuming a changed public API")
         checkConsumers: Boolean? = null,
@@ -209,8 +246,9 @@ class AffectedToolset : McpToolset {
         @McpDescription("Whether to also run the tests of modules that depend on a changed module")
         testDependents: Boolean? = null,
     ): McpToolCallResult {
+        val project = coroutineContext.project
         val view = AffectedMcpInputs.applySettings(
-            current = settings(),
+            current = settings(project),
             baseBranch = baseBranch,
             checkConsumers = checkConsumers,
             runBeforeCommit = runBeforeCommit,
@@ -220,7 +258,7 @@ class AffectedToolset : McpToolset {
         )
         if (view.error) return view.toResult()
         val next = AffectedSettings.getInstance()
-        next.baseBranch = view.data["baseBranch"] as String
+        if (baseBranch != null) project.service<ProjectBaseBranch>().configure(view.data["baseBranch"] as String)
         next.checkConsumers = view.data["checkConsumers"] as Boolean
         next.testDependents = view.data["testDependents"] as Boolean
         next.runBeforeCommit = view.data["runBeforeCommit"] as Boolean
@@ -240,10 +278,11 @@ class AffectedToolset : McpToolset {
         return state.snapshot()
     }
 
-    private fun settings(): AffectedMcpSettings {
+    private fun settings(project: Project): AffectedMcpSettings {
         val current = AffectedSettings.getInstance()
         return AffectedMcpSettings(
-            baseBranch = current.baseBranch,
+            baseBranch = project.service<ProjectBaseBranch>().configured ?: ProjectBaseBranch.AUTO_BRANCH,
+            resolvedBaseBranch = snapshot(project).changes?.resolvedBranch,
             checkConsumers = current.checkConsumers,
             runBeforeCommit = current.runBeforeCommit,
             runBeforePush = current.runBeforePush,

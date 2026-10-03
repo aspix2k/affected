@@ -2,6 +2,7 @@ package com.aspix2k.affected
 
 import com.aspix2k.affected.build.BuildSystems
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.components.service
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ModuleRootManager
@@ -22,12 +23,21 @@ object ProjectChanges {
         val comparedToBase: Boolean,
         val baseUnresolved: Boolean = false,
         val uncovered: List<File> = emptyList(),
+        val resolvedBranch: String? = null,
+        val gitUsable: Boolean = true,
     )
 
     fun collect(project: Project): Result {
         val (files, uncovered, analyzer) = changedFiles(project)
         return if (analyzer == null) {
-            Result(files, files.toSet(), emptySet(), comparedToBase = false, uncovered = uncovered)
+            Result(
+                files,
+                files.toSet(),
+                emptySet(),
+                comparedToBase = false,
+                uncovered = uncovered,
+                gitUsable = false,
+            )
         } else {
             Result(
                 files,
@@ -36,6 +46,7 @@ object ProjectChanges {
                 comparedToBase = analyzer.hasComparisonBase(),
                 baseUnresolved = !analyzer.hasComparisonBase(),
                 uncovered = uncovered,
+                resolvedBranch = analyzer.resolvedBranch(),
             )
         }
     }
@@ -58,7 +69,7 @@ object ProjectChanges {
         val localUncovered = localChanges(project, uncovers)
         val analyzer = ChangeAnalyzer(
             projectDir,
-            AffectedSettings.getInstance().baseBranch,
+            project.service<ProjectBaseBranch>().configured,
             extensions,
             includeAllFiles,
             sourceFileNames = names,

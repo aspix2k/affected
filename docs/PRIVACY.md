@@ -23,14 +23,16 @@ All of it is processed locally.
 
 ## What the plugin stores
 
-Six settings, in your IDE configuration directory:
+Five settings, in your IDE configuration directory:
 
-- the base branch to compare against;
 - whether consumers of a changed API are checked;
 - whether the verification runs before a commit;
 - whether it runs before a push;
 - whether verification stops after the first failure;
 - whether the toolbar icon animates during verification.
+
+The base branch to compare against, if you set one, is stored per project in
+the IDE's workspace file, which is not shared through version control.
 
 Compatible exact-selection adapters also keep a derived cache below the IDE
 system directory. It contains local paths, test identities, dependency maps,

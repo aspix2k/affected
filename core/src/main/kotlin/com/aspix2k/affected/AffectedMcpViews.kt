@@ -9,7 +9,15 @@ data class AffectedMcpSettings(
     val runBeforePush: Boolean = false,
     val animateWhileRunning: Boolean = true,
     val testDependents: Boolean = false,
-)
+    val resolvedBaseBranch: String? = null,
+) {
+    val baseBranchLabel: String
+        get() = if (baseBranch == ProjectBaseBranch.AUTO_BRANCH && resolvedBaseBranch != null) {
+            "$baseBranch ($resolvedBaseBranch)"
+        } else {
+            baseBranch
+        }
+}
 
 data class AffectedMcpView(
     val text: String,
@@ -36,7 +44,10 @@ object AffectedMcpViews {
         notReady(snapshot)?.let { return it }
         val prepared = snapshot.plans?.select(checkConsumers)
             ?: return unavailable("Prepared verification data is not available.")
-        return withUncovered(plan(snapshot, prepared.plan, prepared.unresolvedFiles), prepared.uncovered)
+        return withUncovered(
+            plan(snapshot, prepared.plan, prepared.unresolvedFiles, prepared.inventory.modules),
+            prepared.uncovered,
+        )
     }
 
     fun withUncovered(view: AffectedMcpView, uncovered: List<File>): AffectedMcpView {
@@ -48,7 +59,12 @@ object AffectedMcpViews {
         )
     }
 
-    fun plan(snapshot: AffectedStateSnapshot, plan: Plan, unresolvedFiles: Int = 0): AffectedMcpView {
+    fun plan(
+        snapshot: AffectedStateSnapshot,
+        plan: Plan,
+        unresolvedFiles: Int = 0,
+        modulesWithTests: Int? = null,
+    ): AffectedMcpView {
         notReady(snapshot)?.let { return it }
         val tasks = plan.groups.flatMap(TaskGroup::tasks)
         if (plan.isEmpty && unresolvedFiles > 0) {
@@ -79,7 +95,7 @@ object AffectedMcpViews {
                 "groups" to plan.groups.map { group ->
                     mapOf("systemId" to group.systemId, "root" to group.root, "tasks" to group.tasks)
                 },
-            ),
+            ) + listOfNotNull(modulesWithTests?.let { "modulesWithTests" to it }),
         )
     }
 
@@ -121,6 +137,7 @@ object AffectedMcpViews {
                 "affectedModules" to snapshot.affectedModules,
                 "ownedRunning" to ownedRunning,
                 "baseBranch" to settings.baseBranch,
+                "resolvedBaseBranch" to settings.resolvedBaseBranch,
                 "checkConsumers" to settings.checkConsumers,
                 "testDependents" to settings.testDependents,
                 "runBeforeCommit" to settings.runBeforeCommit,
@@ -171,4 +188,20 @@ object AffectedMcpViews {
         if (root == null) return file.invariantSeparatorsPath
         return file.relativeTo(root).invariantSeparatorsPath
     }
+}
+
+fun AffectedMcpView.withSummary(summary: RunSummary?): AffectedMcpView {
+    if (error || summary == null) return this
+    val saved = summary.estimatedSavedMillis?.let { " Skipped tasks took about ${formatDuration(it)} last time." }
+    return copy(
+        text = "$text Ran ${summary.modulesTested} of ${summary.modulesWithTests} modules with tests " +
+            "in ${formatDuration(summary.durationMillis)}.${saved.orEmpty()}",
+        data = data + mapOf(
+            "modulesTested" to summary.modulesTested,
+            "modulesWithTests" to summary.modulesWithTests,
+            "durationMillis" to summary.durationMillis,
+            "estimatedSavedMillis" to summary.estimatedSavedMillis,
+            "skippedWithoutEstimate" to summary.skippedWithoutEstimate,
+        ),
+    )
 }

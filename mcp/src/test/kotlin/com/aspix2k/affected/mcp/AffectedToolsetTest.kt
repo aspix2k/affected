@@ -2,16 +2,24 @@ package com.aspix2k.affected.mcp
 
 import com.aspix2k.affected.AffectedMcpView
 import com.aspix2k.affected.AffectedStateSnapshot
+import com.aspix2k.affected.AgentSetup
 import com.aspix2k.affected.AnalysisStatus
 import com.aspix2k.affected.Plan
+import com.aspix2k.affected.RunSummary
 import com.aspix2k.affected.TaskGroup
 import com.aspix2k.affected.Verification
 import com.aspix2k.affected.VerificationStatus
+import com.aspix2k.affected.withSummary
 import com.intellij.mcpserver.McpToolCallResultContent
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.annotations.McpToolHintValue
 import com.intellij.mcpserver.annotations.McpToolHints
 import com.intellij.openapi.project.Project
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import java.io.File
 import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -34,7 +42,9 @@ class AffectedToolsetTest {
                 "affected_run_task",
                 "affected_stop",
                 "affected_status",
+                "affected_doctor",
                 "affected_available_tasks",
+                "affected_tests_for_file",
                 "affected_configure",
             ),
             names,
@@ -45,7 +55,9 @@ class AffectedToolsetTest {
             "affected_verification_plan",
             "affected_changed_files",
             "affected_status",
+            "affected_doctor",
             "affected_available_tasks",
+            "affected_tests_for_file",
         )
         for (method in tools) {
             val hints = method.getAnnotation(McpToolHints::class.java)
@@ -60,6 +72,20 @@ class AffectedToolsetTest {
         assertEquals(McpToolHintValue.TRUE, stop.destructiveHint)
         val runTask = tools.single { it.name == "affected_run_task" }.getAnnotation(McpToolHints::class.java)
         assertEquals(McpToolHintValue.TRUE, runTask.destructiveHint)
+    }
+
+    @Test
+    fun `agent instructions reference only existing tools`() {
+        val tools = AffectedToolset::class.java.methods
+            .filter { it.isAnnotationPresent(McpTool::class.java) }
+            .map { it.name }
+        val documented = Json.parseToJsonElement(File("../config/mcp-capabilities.json").readText())
+            .jsonObject.getValue("operations").jsonArray
+            .map { it.jsonObject.getValue("mcp").jsonPrimitive.content }
+
+        assertTrue(AgentSetup.referencedTools.isNotEmpty())
+        assertTrue(tools.containsAll(AgentSetup.referencedTools), "${AgentSetup.referencedTools} vs $tools")
+        assertTrue(documented.containsAll(AgentSetup.referencedTools), "${AgentSetup.referencedTools} vs $documented")
     }
 
     @Test
@@ -89,6 +115,25 @@ class AffectedToolsetTest {
         assertEquals("unresolved-changes", partlyUnresolved.data["reason"])
         assertEquals(listOf(":alpha:test"), partlyUnresolved.data["tasks"])
         assertTrue(partlyUnresolved.text.contains("belong to no known build module"))
+    }
+
+    @Test
+    fun `a passed run reports what it covered and an unfinished estimate stays null`() {
+        val plan = Plan(listOf(TaskGroup("GRADLE", "/repo", listOf(":alpha:test"))), tested = 1, compiled = 0)
+        val summary = RunSummary(1, 41, 1, 48_000, null, 40)
+        val outcome = Verification.Outcome(plan, true, summary = summary)
+
+        val view = verificationView(snapshot(), outcome).withSummary(outcome.summary)
+        val failed = verificationView(snapshot(), Verification.Outcome(plan, false, summary = summary))
+            .withSummary(summary)
+
+        assertEquals(listOf(":alpha:test"), view.data["tasks"])
+        assertEquals(1, view.data["modulesTested"])
+        assertEquals(41, view.data["modulesWithTests"])
+        assertEquals(48_000L, view.data["durationMillis"])
+        assertEquals(null, view.data["estimatedSavedMillis"])
+        assertEquals(40, view.data["skippedWithoutEstimate"])
+        assertFalse(failed.data.containsKey("modulesTested"))
     }
 
     @Test

@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit
 
 class ChangeAnalyzer(
     internal val projectDir: File,
-    private val baseBranch: String,
+    private val baseBranch: String?,
     private val sourceExtensions: Set<String> = DEFAULT_EXTENSIONS,
     private val includeAllFiles: Boolean = false,
     private val gitExecutable: String = "git",
@@ -24,13 +24,17 @@ class ChangeAnalyzer(
 
     class GitFailure(message: String, cause: Throwable? = null) : Exception(message, cause)
 
-    private val mergeBase: String? by lazy(::resolveMergeBase)
+    private val resolvedBase: Pair<String, String>? by lazy(::resolveBase)
+
+    private val mergeBase: String? get() = resolvedBase?.second
 
     fun isUsable(): Boolean = projectDir.isDirectory && try {
         run("rev-parse", "--git-dir").exitCode == 0
     } catch (error: GitFailure) {
         if (error.cause is ExecutionException || error.cause is IOException) false else throw error
     }
+
+    fun resolvedBranch(): String? = resolvedBase?.first
 
     fun modifiedAgainstBase(): Set<File> {
         val base = mergeBase ?: return emptySet()
@@ -131,63 +135,21 @@ class ChangeAnalyzer(
 
         if (diff.isEmpty()) {
             if (!file.isFile) return false
-            return file.useLines { lines -> lines.any(::isPublicDeclaration) }
+            return file.useLines { lines -> lines.any(ApiSignatures::isPublicDeclaration) }
         }
 
-        val removed = signatures(diff, "-")
-        val added = signatures(diff, "+")
-
-        return removed != added
+        return ApiSignatures.changed(diff)
     }
 
-    private fun signatures(diff: List<String>, marker: String): Set<String> = diff
-        .filter { it.startsWith(marker) }
-        .map { it.drop(1) }
-        .filter(::isPublicDeclaration)
-        .mapTo(HashSet(), ::signatureOf)
-
-    private fun signatureOf(line: String): String {
-        val header = line.substringBefore('{')
-        var depth = 0
-        var typed = false
-        var body = header.length
-        for ((index, char) in header.withIndex()) {
-            when (char) {
-                '(', '[', '<' -> depth++
-                ')', ']' -> depth--
-                '>' -> if (header.getOrNull(index - 1) != '-') depth--
-                ':' -> if (depth == 0) typed = true
-                '=' -> if (depth == 0) body = minOf(body, index)
-            }
-        }
-        val inferredFromBody = !typed || CONST.containsMatchIn(header)
-        return (if (inferredFromBody) header else header.substring(0, body)).trim().replace(WHITESPACE, " ")
-    }
-
-    private fun isPublicDeclaration(line: String): Boolean {
-        val indent = line.takeWhile { it == ' ' }.length
-
-        if (PARAMETER.matches(line) || CONSTRUCTOR_PROPERTY.matches(line)) return indent <= PARAMETER_INDENT
-        if (PRIVATE.containsMatchIn(line)) return false
-        if (ENUM_CONSTANT.matches(line)) return indent <= MEMBER_INDENT
-
-        val declaration = DECLARATION.containsMatchIn(line) || TYPED_MEMBER.containsMatchIn(line)
-        if (!declaration) return false
-
-        if (indent <= MEMBER_INDENT) return true
-        if (indent <= NESTED_MEMBER_INDENT && NESTED_MEMBER.containsMatchIn(line)) return true
-
-        return EXPLICIT_MODIFIER.containsMatchIn(line)
-    }
-
-    private fun resolveMergeBase(): String? = candidateBranches()
-        .flatMap { listOf("origin/$it", it) }
-        .firstNotNullOfOrNull { ref ->
+    private fun resolveBase(): Pair<String, String>? = candidateBranches()
+        .flatMap { branch -> listOf("origin/$branch", branch).map { ref -> branch to ref } }
+        .firstNotNullOfOrNull { (branch, ref) ->
             run("merge-base", HEAD, ref).takeIf { it.exitCode == 0 }?.stdout?.trim()?.ifEmpty { null }
+                ?.let { branch to it }
         }
 
     private fun candidateBranches(): List<String> =
-        (listOf(baseBranch) + listOfNotNull(remoteDefaultBranch()) + FALLBACK_BRANCHES)
+        (listOfNotNull(baseBranch) + listOfNotNull(remoteDefaultBranch()) + FALLBACK_BRANCHES)
             .distinct()
             .filter { it.isNotBlank() }
 
@@ -268,53 +230,6 @@ class ChangeAnalyzer(
         private val GIT_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(90).toInt()
         private const val IDE_DIRECTORY = ".idea/"
         private val FALLBACK_BRANCHES = listOf("develop", "main", "master")
-
-        private const val MEMBER_INDENT = 4
-
-        private const val NESTED_MEMBER_INDENT = 8
-
-        private const val PARAMETER_INDENT = 8
-
-        private val EXPLICIT_MODIFIER = Regex(
-            """\b(public|protected|internal|open|abstract|sealed|override|const|lateinit)\b"""
-        )
-
-        private const val ANNOTATIONS = """^\s*(?:@\w+(?:\([^)]*\))?\s*)*"""
-
-        private const val MODIFIERS =
-            """(?:public\s+|protected\s+|internal\s+|open\s+|abstract\s+|sealed\s+|final\s+|override\s+|""" +
-                """data\s+|value\s+|annotation\s+|enum\s+|inline\s+|suspend\s+|expect\s+|actual\s+|""" +
-                """lateinit\s+|const\s+|external\s+|operator\s+|infix\s+|tailrec\s+|static\s+)*"""
-
-        private val DECLARATION = Regex(
-            ANNOTATIONS + MODIFIERS +
-                """(?:fun|def|val|var|class|interface|object|trait|typealias|constructor|record)\b"""
-        )
-
-        private val NESTED_MEMBER = Regex(
-            ANNOTATIONS + MODIFIERS + """(?:fun|def|class|interface|object|trait|constructor|record)\b"""
-        )
-
-        private val ENUM_CONSTANT = Regex("""^\s*[A-Z][A-Z0-9_]*(?:\(.*\))?\s*[,;]?\s*$""")
-
-        private val CONST = Regex("""\bconst\b""")
-
-        private val WHITESPACE = Regex("""\s+""")
-
-        private val PRIVATE = Regex(ANNOTATIONS + """(?:[a-z]+\s+)*private\b""")
-
-        private val CONSTRUCTOR_PROPERTY = Regex(
-            ANNOTATIONS + """(?:[a-z]+\s+)*va[lr]\s+\w+\s*:.*,\s*$"""
-        )
-
-        private val TYPED_MEMBER = Regex(
-            """^\s*(?:@\w+(?:\([^)]*\))?\s*)*""" +
-                """(?:public\s+|protected\s+|static\s+|final\s+|abstract\s+|synchronized\s+|""" +
-                """native\s+|default\s+|strictfp\s+|transient\s+|volatile\s+)*""" +
-                """[A-Za-z_][\w.<>\[\], ?]*\s+[A-Za-z_]\w*\s*[(;=]"""
-        )
-
-        private val PARAMETER = Regex("""^\s*(?:@\w+\s*)*[A-Za-z_]\w*\s*:\s*[\w<>\[\]?., ]+,?\s*$""")
     }
 }
 

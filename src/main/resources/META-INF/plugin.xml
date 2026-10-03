@@ -111,6 +111,11 @@
                    class="com.aspix2k.affected.AffectedModulesGroup"
                    popup="true"/>
             <separator/>
+            <action id="com.aspix2k.affected.Diagnose"
+                    class="com.aspix2k.affected.DiagnoseAction"/>
+            <action id="com.aspix2k.affected.AgentSetup"
+                    class="com.aspix2k.affected.AgentSetupAction"/>
+            <separator/>
             <group id="com.aspix2k.affected.Settings"
                    popup="true">
                 <action id="com.aspix2k.affected.BaseBranch"

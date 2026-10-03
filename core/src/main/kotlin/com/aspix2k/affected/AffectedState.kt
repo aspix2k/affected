@@ -46,6 +46,8 @@ data class AffectedStateSnapshot(
     val verificationStatus: VerificationStatus,
     val changes: ProjectChanges.Result? = null,
     val plans: Verification.PreparedPlans? = null,
+    val systems: List<BuildSystemSummary> = emptyList(),
+    val overBudget: Boolean = false,
 ) {
     val affectedModules: Int get() = modules.count { it.hasTests }
 }
@@ -54,6 +56,7 @@ internal data class AffectedAnalysis(
     val modules: List<AffectedModule>,
     val changes: ProjectChanges.Result,
     val plans: Verification.PreparedPlans,
+    val systems: List<BuildSystemSummary> = emptyList(),
 )
 
 internal const val MAX_PUBLISHED_MODULES = 4096
@@ -71,6 +74,7 @@ internal class AffectedStateStore(
         val analysis: AffectedAnalysis?,
         val verificationStatus: VerificationStatus,
         val runToken: Long?,
+        val overBudget: Boolean = false,
     )
 
     private val state = AtomicReference(
@@ -97,6 +101,8 @@ internal class AffectedStateStore(
             verificationStatus = current.verificationStatus,
             changes = current.analysis?.changes,
             plans = current.analysis?.plans,
+            systems = current.analysis?.systems.orEmpty(),
+            overBudget = current.overBudget,
         )
     }
 
@@ -106,6 +112,7 @@ internal class AffectedStateStore(
             val invalidated = current.copy(
                 revision = current.revision + 1,
                 analysisStatus = AnalysisStatus.ANALYZING,
+                overBudget = false,
             )
             if (state.compareAndSet(current, invalidated)) {
                 published()
@@ -116,7 +123,7 @@ internal class AffectedStateStore(
 
     fun complete(expectedRevision: Long, analysis: AffectedAnalysis): Boolean {
         if (analysis.modules.size > MAX_PUBLISHED_MODULES) {
-            fail(expectedRevision)
+            fail(expectedRevision, overBudget = true)
             return false
         }
         val completed = analysis.snapshot()
@@ -134,13 +141,17 @@ internal class AffectedStateStore(
         }
     }
 
-    fun fail(expectedRevision: Long): Boolean {
+    fun fail(expectedRevision: Long, overBudget: Boolean = false): Boolean {
         while (true) {
             val current = state.get()
             if (current.revision != expectedRevision) return false
             if (state.compareAndSet(
                     current,
-                    current.copy(analysisStatus = AnalysisStatus.UNAVAILABLE, analysis = null),
+                    current.copy(
+                        analysisStatus = AnalysisStatus.UNAVAILABLE,
+                        analysis = null,
+                        overBudget = overBudget,
+                    ),
                 )
             ) {
                 published()
@@ -211,6 +222,8 @@ internal class AffectedStateStore(
         verificationStatus = verificationStatus,
         changes = analysis?.changes,
         plans = analysis?.plans,
+        systems = analysis?.systems.orEmpty(),
+        overBudget = overBudget,
     )
 
     private fun AffectedAnalysis.snapshot() = AffectedAnalysis(
@@ -221,6 +234,7 @@ internal class AffectedStateStore(
             exactSelectionEligible = changes.exactSelectionEligible.toSet(),
         ),
         plans = plans,
+        systems = systems.toList(),
     )
 }
 
@@ -568,6 +582,7 @@ class AffectedState(
                 directOwners,
                 AffectedSettings.getInstance().testDependents,
             ),
+            systems = graph.systemSummaries(),
         )
     }
 

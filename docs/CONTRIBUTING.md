@@ -75,10 +75,14 @@ weakening the gate.
 
 `ChangeAnalyzer` asks git what changed: the diff against the merge base with the
 base branch, the working tree, and untracked files. The base branch is the
-configured one (Affected menu → Base branch, or the `affected_configure` MCP
-tool), otherwise the remote default branch (`origin/HEAD`), then `develop`,
-`main` or `master`, each tried as a remote branch first. Without any base the
-check does not pass.
+one configured for the project (Affected menu → Base branch, or the
+`affected_configure` MCP tool; an empty value or `auto` clears it), otherwise
+the remote default branch (`origin/HEAD`), then `develop`, `main` or `master`,
+each tried as a remote branch first. The choice lives in the project's
+workspace file (`ProjectBaseBranch`), not in VCS. A branch stored by an older
+version in the application settings still applies to projects that have not
+chosen one, unless it is the old default `develop`, which now means automatic.
+Without any base the check does not pass.
 
 Whether a change touched public API is a text heuristic, not a compiler. It
 errs toward running too much.

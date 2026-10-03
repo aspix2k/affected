@@ -264,7 +264,7 @@ class PitestGateTest(unittest.TestCase):
         self.assertEqual(
             1,
             self.check_impact(
-                self.impact_mutation("CollectorMapIOKt", "readFile", 351, 33, "RemoveConditionalMutator_ORDER_IF"),
+                self.impact_mutation("CollectorMapIOKt", "readFile", 368, 33, "RemoveConditionalMutator_ORDER_IF"),
             ),
         )
 
@@ -272,7 +272,7 @@ class PitestGateTest(unittest.TestCase):
         """Only the listed mutator at a listed position is classified."""
         with self.assertRaisesRegex(pitest_gate.PitestGateError, "1 surviving"):
             self.check_impact(
-                self.impact_mutation("CollectorMapIOKt", "readFile", 351, 33, "RemoveConditionalMutator_EQUAL_IF"),
+                self.impact_mutation("CollectorMapIOKt", "readFile", 368, 33, "RemoveConditionalMutator_EQUAL_IF"),
             )
 
     def test_directory_stream_close_is_equivalent_only_for_close_finally(self) -> None:
@@ -280,13 +280,13 @@ class PitestGateTest(unittest.TestCase):
         close = self.impact_mutation(
             "CollectorMapIOKt",
             "list",
-            344,
+            361,
             68,
             "VoidMethodCallMutator",
             "removed call to kotlin/jdk7/AutoCloseableKt::closeFinally",
         )
         other = self.impact_mutation(
-            "CollectorMapIOKt", "list", 344, 68, "VoidMethodCallMutator", "removed call to java/io/File::delete"
+            "CollectorMapIOKt", "list", 361, 68, "VoidMethodCallMutator", "removed call to java/io/File::delete"
         )
         self.assertEqual(1, self.check_impact(close))
         with self.assertRaisesRegex(pitest_gate.PitestGateError, "1 surviving"):
@@ -297,8 +297,8 @@ class PitestGateTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[2] / "core/src/main/kotlin/com/aspix2k/affected/impact"
         io = (root / "CollectorMapIO.kt").read_text(encoding="utf-8").splitlines()
         map_source = (root / "DependencyMap.kt").read_text(encoding="utf-8").splitlines()
-        self.assertEqual("    require(size in 1..MAX_FILE_SIZE)", io[350])
-        self.assertEqual("    require(!Files.isSymbolicLink(absolute))", io[337])
+        self.assertEqual("    require(size in 1..MAX_FILE_SIZE)", io[367])
+        self.assertEqual("    require(!Files.isSymbolicLink(absolute))", io[354])
         self.assertEqual("        require(expectedWorkers.size == parsed.size)", io[37])
         self.assertIn("expectedWorkers.isNotEmpty() && expectedTestClasses.isNotEmpty()", map_source[142])
         self.assertIn("dependencies.any", map_source[159])

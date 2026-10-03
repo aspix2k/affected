@@ -40,7 +40,9 @@ Built for multi-module projects and monorepos across 28 supported build ecosyste
   change, or run the tests of every module that depends on a changed one.
 - **Local by design.** No account, server, telemetry or project-specific config file.
 - **Optional MCP tools.** The same analysis snapshot and run actions when the
-  JetBrains MCP Server plugin is installed.
+  JetBrains MCP Server plugin is installed. **Affected > Set up for coding agents**
+  opens the MCP Server settings to connect your agent and adds ready-made
+  instructions to `AGENTS.md` so the agent verifies its own edits.
 
 ## Get started
 

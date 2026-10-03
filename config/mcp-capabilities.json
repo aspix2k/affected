@@ -56,8 +56,20 @@
       "mcpOnly": true
     },
     {
+      "id": "doctor",
+      "mcp": "affected_doctor",
+      "kind": "read",
+      "ui": ["com.aspix2k.affected.Diagnose"]
+    },
+    {
       "id": "available-tasks",
       "mcp": "affected_available_tasks",
+      "kind": "read",
+      "mcpOnly": true
+    },
+    {
+      "id": "tests-for-file",
+      "mcp": "affected_tests_for_file",
       "kind": "read",
       "mcpOnly": true
     },
