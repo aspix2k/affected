@@ -88,8 +88,11 @@ dependencies {
     }
     add("intellijPlatformTestDependencies", enforcedPlatform("com.fasterxml.jackson:jackson-bom:2.22.3"))
 
+    implementation(project(":engine"))
+
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
+    kover(project(":engine"))
     kover(project(":core"))
     kover(project(":mcp"))
 }
@@ -171,7 +174,7 @@ detekt {
     buildUponDefaultConfig = true
     autoCorrect = !providers.environmentVariable("CI").isPresent
     config.setFrom(files("$rootDir/config/detekt.yml"))
-    source.setFrom(files("src", "core/src", "mcp/src"))
+    source.setFrom(files("src", "engine/src", "core/src", "mcp/src"))
     parallel = true
 }
 

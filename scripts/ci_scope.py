@@ -12,7 +12,7 @@ from pathlib import Path
 GATES = ("plugin", "health", "codeql", "dependencies", "exact", "native")
 SHA = re.compile(r"^[0-9a-f]{40}$")
 ZERO_SHA = "0" * 40
-PRODUCT_PREFIXES = ("src/", "core/", "mcp/", "collector/")
+PRODUCT_PREFIXES = ("src/", "engine/", "core/", "mcp/", "collector/")
 DOC_FILES = frozenset(
     {
         "AGENTS.md",
@@ -175,9 +175,9 @@ def flags_for(path: str) -> dict[str, bool] | None:
         enabled = ["plugin"]
         if path.endswith(JVM_SUFFIXES):
             enabled.append("codeql")
-        if path.startswith(("core/", "collector/")):
+        if path.startswith(("engine/", "core/", "collector/")):
             enabled.append("exact")
-        if path.startswith("core/"):
+        if path.startswith(("engine/", "core/")):
             enabled.append("native")
         return selected_scope(*enabled)
     if path.startswith(("conformance/", "fixtures/")):

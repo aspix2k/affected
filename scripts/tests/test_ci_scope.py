@@ -55,6 +55,13 @@ class CiScopeTest(unittest.TestCase):
             {"plugin": True, "health": False, "codeql": True, "dependencies": False, "exact": True, "native": True},
         )
 
+    def test_engine_source_runs_like_core_source(self) -> None:
+        """The platform-free engine feeds the same adapters as core, so it opens the same gates."""
+        self.assertEqual(
+            ci_scope.scope_for(["engine/src/main/kotlin/Foo.kt"]),
+            ci_scope.scope_for(["core/src/main/kotlin/Foo.kt"]),
+        )
+
     def test_root_ui_source_does_not_start_native_adapter_fixtures(self) -> None:
         """Keep the exact matrix at its previous product boundary."""
         self.assertEqual(

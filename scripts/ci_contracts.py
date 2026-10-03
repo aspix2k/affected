@@ -199,11 +199,12 @@ def check(root: Path = ROOT) -> None:
 
     if "scripts/pitest_gate.py" not in mutation:
         raise CiContractError("Weekly mutation must fail on surviving mutants")
-    if ":core:pitest" not in mutation or "core/build/reports/pitest/mutations.xml" not in mutation:
-        raise CiContractError("Weekly mutation must run and gate the core PIT report")
-    core_build = read(root / "core/build.gradle.kts")
-    if "ExecutablePathKt*" not in core_build:
-        raise CiContractError("Weekly mutation must keep ExecutablePath in the core PIT target")
+    for module in ("core", "engine"):
+        if f":{module}:pitest" not in mutation or f"{module}/build/reports/pitest/mutations.xml" not in mutation:
+            raise CiContractError(f"Weekly mutation must run and gate the {module} PIT report")
+    engine_build = read(root / "engine/build.gradle.kts")
+    if "ExecutablePathKt*" not in engine_build:
+        raise CiContractError("Weekly mutation must keep ExecutablePath in the engine PIT target")
     currentness = read(root / "scripts/release_currentness.py")
     if "cache-redirector.jetbrains.com/repo1.maven.org/maven2" not in currentness:
         raise CiContractError("release_currentness must read Maven metadata through cache-redirector first")
@@ -233,8 +234,8 @@ def check(root: Path = ROOT) -> None:
         raise CiContractError("The MCP module must enforce the patched Jackson BOM")
     check_intellij_test_jackson_bom(root)
     root_build = read(root / "build.gradle.kts")
-    if 'kover(project(":core"))' not in root_build or 'kover(project(":mcp"))' not in root_build:
-        raise CiContractError("Kover must verify :core and :mcp, not only the root plugin sources")
+    if any(f'kover(project(":{module}"))' not in root_build for module in ("engine", "core", "mcp")):
+        raise CiContractError("Kover must verify :engine, :core and :mcp, not only the root plugin sources")
     bound = re.search(r"minBound\((\d+)\)", root_build)
     if bound is None or int(bound.group(1)) < 60:
         raise CiContractError("Kover line floor must stay at least 60")
