@@ -25,12 +25,13 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
-      - run: scripts/run_gradle.sh pitest :core:pitest
+      - run: scripts/run_gradle.sh pitest :core:pitest :engine:pitest
       - name: Fail on surviving mutants
         run: >-
           python3 scripts/pitest_gate.py
           build/reports/pitest/mutations.xml
           core/build/reports/pitest/mutations.xml
+          engine/build/reports/pitest/mutations.xml
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -38,6 +39,7 @@ jobs:
           path: |
             build/reports/pitest
             core/build/reports/pitest
+            engine/build/reports/pitest
           if-no-files-found: error
 
   report:

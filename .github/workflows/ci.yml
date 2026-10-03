@@ -193,6 +193,7 @@ jobs:
           name: failed-test-results
           path: |
             build/test-results
+            engine/build/test-results
             core/build/test-results
             mcp/build/test-results
           if-no-files-found: warn
@@ -378,6 +379,7 @@ jobs:
           path: |
             build/reports/dependency-analysis
             collector/build/reports/dependency-analysis
+            engine/build/reports/dependency-analysis
             core/build/reports/dependency-analysis
             mcp/build/reports/dependency-analysis
           if-no-files-found: warn

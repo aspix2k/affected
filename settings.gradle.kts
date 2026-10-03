@@ -15,6 +15,7 @@ pluginManagement {
 
 rootProject.name = "affected"
 
+include(":engine")
 include(":core")
 include(":collector")
 include(":mcp")

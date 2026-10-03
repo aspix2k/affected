@@ -1086,18 +1086,19 @@ class CiContractsTest(unittest.TestCase):
             with self.assertRaisesRegex(ci_contracts.CiContractError, "workflow_dispatch"):
                 ci_contracts.check(root)
 
-    def test_kover_must_include_core_and_mcp(self) -> None:
-        """MCP and core tests must count toward the coverage floor."""
-        with TemporaryDirectory() as directory:
-            root = Path(directory)
-            self.copy_workflows(root)
-            path = root / "build.gradle.kts"
-            path.write_text(
-                path.read_text(encoding="utf-8").replace('kover(project(":mcp"))\n', "", 1),
-                encoding="utf-8",
-            )
-            with self.assertRaisesRegex(ci_contracts.CiContractError, "Kover must verify"):
-                ci_contracts.check(root)
+    def test_kover_must_include_engine_core_and_mcp(self) -> None:
+        """Engine, MCP and core tests must count toward the coverage floor."""
+        for module in ("engine", "mcp"):
+            with self.subTest(module), TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.copy_workflows(root)
+                path = root / "build.gradle.kts"
+                path.write_text(
+                    path.read_text(encoding="utf-8").replace(f'kover(project(":{module}"))\n', "", 1),
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(ci_contracts.CiContractError, "Kover must verify"):
+                    ci_contracts.check(root)
 
     def test_kover_line_floor_cannot_drop_below_sixty(self) -> None:
         """A 19% floor no longer matches the measured :core+:mcp line coverage."""
@@ -1186,6 +1187,7 @@ class CiContractsTest(unittest.TestCase):
             "mcp/build.gradle.kts",
             "build.gradle.kts",
             "core/build.gradle.kts",
+            "engine/build.gradle.kts",
             "gradle/wrapper/gradle-wrapper.properties",
         ):
             destination = root / relative

@@ -1,5 +1,6 @@
 import info.solidsoft.gradle.pitest.PitestTask
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     kotlin("jvm")
@@ -20,6 +21,7 @@ repositories {
 }
 
 dependencies {
+    api(project(":engine"))
     implementation("org.tomlj:tomlj:2.2.0")
 
     intellijPlatform {
@@ -35,6 +37,13 @@ dependencies {
 }
 
 kotlin { jvmToolchain(21) }
+
+tasks.withType<KotlinCompile>().configureEach {
+    compilerOptions.freeCompilerArgs.add(
+        project(":engine").tasks.named<Jar>("jar").flatMap { it.archiveFile }
+            .map { "-Xfriend-paths=${it.asFile.absolutePath}" },
+    )
+}
 
 tasks.test {
     useJUnit()
@@ -78,21 +87,11 @@ tasks.test {
 }
 
 pitest {
-    targetClasses.set(
-        listOf(
-            "com.aspix2k.affected.TestRootResolver*",
-            "com.aspix2k.affected.AffectedMcpInputs*",
-            "com.aspix2k.affected.build.ExecutablePathKt*",
-            "com.aspix2k.affected.impact.*",
-        ),
-    )
+    targetClasses.set(listOf("com.aspix2k.affected.AffectedMcpInputs*"))
     targetTests.set(
         listOf(
-            "com.aspix2k.affected.TestRootResolverTest*",
             "com.aspix2k.affected.AffectedMcpInputsTest*",
             "com.aspix2k.affected.AffectedMcpViewsTest*",
-            "com.aspix2k.affected.build.ExecutablePathTest*",
-            "com.aspix2k.affected.impact.*Test*",
         ),
     )
     mutators.set(listOf("STRONGER"))

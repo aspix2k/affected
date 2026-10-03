@@ -17,7 +17,7 @@ The same path works as `-Paffected.ide.path=...` or as `AFFECTED_IDE_PATH`.
 
 ```sh
 ./gradlew detekt test runIde buildPlugin verifyPlugin
-./gradlew pitest :core:pitest
+./gradlew pitest :core:pitest :engine:pitest
 ./gradlew :collector:spotbugsMain :collector:spotbugsMaven buildHealth
 scripts/quality.sh analyzers
 scripts/quality.sh shell
@@ -28,6 +28,12 @@ python3 scripts/ci_contracts.py --check
 python3 scripts/mcp_capabilities.py --check
 python3 scripts/local_gate.py install
 ```
+
+The `engine` module is plain Kotlin/JVM with no IntelliJ Platform dependency
+and holds the code that never touches the IDE; `core` depends on it, and its
+compile tasks pass `-Xfriend-paths` so `internal` declarations stay visible
+across the boundary. Gson, kotlinx-coroutines and JNA are `compileOnly` there,
+so the plugin keeps the copies the platform bundles.
 
 After clone, run `python3 scripts/local_gate.py install` so `core.hooksPath` is
 `.githooks`. `pre-commit` runs detekt, script tests, CI contracts and the

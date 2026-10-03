@@ -180,7 +180,7 @@ class PitestGateTest(unittest.TestCase):
 
     def test_isreadable_early_return_stays_on_the_classified_line(self) -> None:
         """Line 54 is the isDirectory early return the equivalent-mutant matcher keys on."""
-        source = Path(__file__).resolve().parents[2] / "core/src/main/kotlin/com/aspix2k/affected/build/ExecutablePath.kt"
+        source = Path(__file__).resolve().parents[2] / "engine/src/main/kotlin/com/aspix2k/affected/build/ExecutablePath.kt"
         lines = source.read_text(encoding="utf-8").splitlines()
         self.assertEqual("    if (!isDirectory) return false", lines[53])
 
@@ -294,7 +294,7 @@ class PitestGateTest(unittest.TestCase):
 
     def test_classified_impact_positions_stay_on_their_source_lines(self) -> None:
         """The impact classifications key on lines that must keep holding the checks they describe."""
-        root = Path(__file__).resolve().parents[2] / "core/src/main/kotlin/com/aspix2k/affected/impact"
+        root = Path(__file__).resolve().parents[2] / "engine/src/main/kotlin/com/aspix2k/affected/impact"
         io = (root / "CollectorMapIO.kt").read_text(encoding="utf-8").splitlines()
         map_source = (root / "DependencyMap.kt").read_text(encoding="utf-8").splitlines()
         self.assertEqual("    require(size in 1..MAX_FILE_SIZE)", io[367])
