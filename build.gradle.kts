@@ -139,6 +139,15 @@ intellijPlatform {
     }
 }
 
+intellijPlatformTesting {
+    runIde {
+        register("runIdeProduct") {
+            type = providers.gradleProperty("affected.runIde.type").map(IntelliJPlatformType::valueOf)
+            version = providers.gradleProperty("affected.runIde.version")
+        }
+    }
+}
+
 tasks.named<VerifyPluginTask>("verifyPlugin") {
     if (verifierArchive.isPresent) {
         archiveFile.set(layout.projectDirectory.file(verifierArchive.get()))

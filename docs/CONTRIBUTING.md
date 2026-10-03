@@ -97,6 +97,9 @@ to change collection, module discovery or task selection, check the plugin live:
 
 1. `./gradlew buildPlugin`, then unpack `build/distributions/affected-<version>.zip`
    into the IDE's `plugins` directory, or start a sandbox with `./gradlew runIde --args=<project>`.
+   Another product runs the same way:
+   `./gradlew runIdeProduct -Paffected.runIde.type=PyCharm -Paffected.runIde.version=2026.2 --args=<project>`
+   (types as in `config/support-matrix.json`; products that need a license ask for it on the first start).
 2. Enable the IDE's MCP server (Settings | Tools | MCP Server) and open a project
    with an uncommitted change on a branch off the base branch.
 3. Find the MCP port (`lsof -nP -iTCP -sTCP:LISTEN`, the one that answers `/sse`) and run
