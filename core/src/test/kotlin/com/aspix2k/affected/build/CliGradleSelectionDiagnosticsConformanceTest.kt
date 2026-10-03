@@ -10,6 +10,7 @@ import com.aspix2k.affected.VerificationStatus
 import com.aspix2k.affected.build.gradle.GradleBuildSystem
 import com.aspix2k.affected.runBoundedBlocking
 import com.aspix2k.affected.runClaimedGroupsWithPresentation
+import com.aspix2k.affected.runInPlannedExecutionRoot
 import com.intellij.execution.ExecutionListener
 import com.intellij.execution.ExecutionManager
 import com.intellij.execution.process.ProcessEvent

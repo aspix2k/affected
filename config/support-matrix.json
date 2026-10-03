@@ -190,7 +190,7 @@
         },
         {
           "units": ["module"],
-          "path": "core/src/test/kotlin/com/aspix2k/affected/TaskPlannerTest.kt",
+          "path": "engine/src/test/kotlin/com/aspix2k/affected/TaskPlannerTest.kt",
           "marker": "an Android module gets a variant task",
           "gate": ".github/workflows/ci.yml",
           "gateMarker": "test koverXmlReport",

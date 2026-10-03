@@ -276,3 +276,5 @@ internal fun Path.isSecureXcodeDirectory(): Boolean =
     !Files.isSymbolicLink(this) &&
         Files.isDirectory(this, LinkOption.NOFOLLOW_LINKS) &&
         Files.isReadable(this)
+
+internal val XCODE_BUNDLE = Regex("""\.(?:xcodeproj|xcworkspace)$""")

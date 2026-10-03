@@ -69,11 +69,6 @@ private fun describeSwiftPackage(root: String): String? =
 private val DESCRIBE = listOf("swift", "package", "describe", "--type", "json")
 private const val DESCRIBE_TIMEOUT_SECONDS = 120L
 
-internal object SwiftTasks {
-    const val TEST = "test"
-    const val BUILD = "build"
-}
-
 internal fun swiftManifest(root: File): File? {
     if (FOREIGN_ROOTS.any { File(root, it).isRegularFileNoFollow() }) return null
     return File(root, "Package.swift").takeIf(File::isRegularFileNoFollow)

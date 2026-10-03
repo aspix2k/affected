@@ -26,44 +26,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal const val DEFAULT_UNRESOLVED_MESSAGE =
     "Affected could not resolve the planned modules. Refresh the project model and run again."
 
-internal sealed interface CliStep {
-    fun resolve(): CliCommand?
-}
-
-internal data class CliCommand(
-    val title: String,
-    val arguments: List<String>,
-    val environment: Map<String, String> = emptyMap(),
-    val continueOnFailure: Boolean = false,
-    val ownedTemporaryDirectories: List<Path> = emptyList(),
-) : CliStep {
-    init {
-        require(title.isNotBlank())
-        require(arguments.isNotEmpty())
-        require(ownedTemporaryDirectories.all(::isOwnedTemporaryDirectory))
-    }
-
-    override fun resolve(): CliCommand = this
-}
-
-internal class DeferredCliCommand private constructor(
-    private val command: () -> CliCommand?,
-) : CliStep {
-    constructor(
-        title: String,
-        environment: () -> Map<String, String>,
-        arguments: () -> List<String>?,
-    ) : this({ arguments()?.let { CliCommand(title, it, environment()) } })
-
-    constructor(title: String, arguments: () -> List<String>?) : this(title, { emptyMap() }, arguments)
-
-    override fun resolve(): CliCommand? = command()
-
-    companion object {
-        fun command(resolve: () -> CliCommand?): DeferredCliCommand = DeferredCliCommand(resolve)
-    }
-}
-
 internal class SequentialProcessHandler(
     private val workingDirectory: File,
     private val commands: List<CliStep>,
@@ -449,15 +411,6 @@ internal data class RunningCommand(
     val start: () -> Unit,
 )
 
-private fun isOwnedTemporaryDirectory(path: Path): Boolean = runCatching {
-    val normalized = path.toAbsolutePath().normalize()
-    normalized == path &&
-        normalized.fileName.toString().startsWith(OWNED_TEMPORARY_PREFIX) &&
-        Files.isDirectory(normalized, LinkOption.NOFOLLOW_LINKS) &&
-        !Files.isSymbolicLink(normalized) &&
-        normalized.toRealPath().startsWith(temporaryRoot())
-}.getOrDefault(false)
-
 private fun deleteOwnedTemporaryDirectory(path: Path): Boolean {
     repeat(CLEANUP_ATTEMPTS) { attempt ->
         if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return true
@@ -498,9 +451,6 @@ private fun deleteOwnedTemporaryDirectory(path: Path): Boolean {
     return false
 }
 
-private fun temporaryRoot(): Path = Path.of(System.getProperty("java.io.tmpdir")).toRealPath()
-
-private const val OWNED_TEMPORARY_PREFIX = "affected-"
 private const val CLEANUP_ATTEMPTS = 3
 private const val CLEANUP_BACKOFF_MILLIS = 50L
 private const val MAX_CLEANUP_ENTRIES = 100_000
