@@ -1,6 +1,7 @@
 package com.aspix2k.affected
 
 import com.intellij.ide.plugins.PluginManager
+import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -61,7 +62,7 @@ class AgentSetupAction : AnAction(), DumbAware {
 
 private fun mcpPlugin(): McpPlugin = when {
     !PluginManager.isPluginInstalled(mcpServerPlugin) -> McpPlugin.NOT_INSTALLED
-    PluginManager.getInstance().findEnabledPlugin(mcpServerPlugin) == null -> McpPlugin.DISABLED
+    PluginManagerCore.isDisabled(mcpServerPlugin) -> McpPlugin.DISABLED
     else -> McpPlugin.AVAILABLE
 }
 
