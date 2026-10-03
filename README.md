@@ -38,6 +38,10 @@ Built for multi-module projects and monorepos across 28 supported build ecosyste
   proven by the native build system or test runner.
 - **Consumer checks.** Optionally compile direct dependents after a public API
   change, or run the tests of every module that depends on a changed one.
+- **Commit and push checks.** Optionally run the plan before a commit or push,
+  including the tests of modules that depend on the change.
+- **Says what happened.** A short summary after each run, and **Affected > Diagnose**
+  explains what was detected and why nothing ran.
 - **Local by design.** No account, server, telemetry or project-specific config file.
 - **Optional MCP tools.** The same analysis snapshot and run actions when the
   JetBrains MCP Server plugin is installed. **Affected > Set up for coding agents**
