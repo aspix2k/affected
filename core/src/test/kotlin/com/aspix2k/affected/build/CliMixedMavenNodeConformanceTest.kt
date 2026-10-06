@@ -7,7 +7,6 @@ import com.aspix2k.affected.ProjectChanges
 import com.aspix2k.affected.TaskGroup
 import com.aspix2k.affected.Verification
 import com.aspix2k.affected.build.maven.MavenBuildSystem
-import com.aspix2k.affected.build.node.NodeBuildSystem
 import com.aspix2k.affected.runAndWait
 import com.aspix2k.affected.runBoundedBlocking
 import com.intellij.execution.executors.DefaultRunExecutor
@@ -51,7 +50,7 @@ class CliMixedMavenNodeConformanceTest : HeavyPlatformTestCase() {
         }
         ExtensionTestUtil.maskExtensions(
             BUILD_SYSTEM_POINT,
-            listOf(MavenBuildSystem(), NodeBuildSystem()),
+            listOf(MavenBuildSystem(), IdeNodeBuildSystem()),
             testRootDisposable,
         )
         previousStopAfterFirstFailure = AffectedSettings.getInstance().stopAfterFirstFailure

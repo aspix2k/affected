@@ -46,7 +46,7 @@ class CliMixedGradleKotlinToolchainConformanceTest : BasePlatformTestCase() {
         }
         ExtensionTestUtil.maskExtensions(
             BUILD_SYSTEM_POINT,
-            listOf(GradleBuildSystem(), KotlinToolchainBuildSystem()),
+            listOf(GradleBuildSystem(), IdeKotlinToolchainBuildSystem()),
             testRootDisposable,
         )
         previousStopAfterFirstFailure = AffectedSettings.getInstance().stopAfterFirstFailure

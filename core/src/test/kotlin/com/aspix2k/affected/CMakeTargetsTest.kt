@@ -1,6 +1,6 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.cmake.CMakeBuildSystem
+import com.aspix2k.affected.build.IdeCMakeBuildSystem
 import com.aspix2k.affected.build.cmake.CMakeTargets
 import java.io.File
 import kotlin.io.path.createTempDirectory
@@ -125,7 +125,7 @@ class CMakeTargetsTest {
     }
 
     private fun owners(root: File, source: String): List<Pair<String, String>> {
-        val system = CMakeBuildSystem()
+        val system = IdeCMakeBuildSystem()
         val graph = ModuleGraph(CMakeTargets.parse(root).map { ModuleGraph.Node(it, system) })
         return graph.nodesFor(File(root, source)).map { it.id to it.module.testTask }
     }

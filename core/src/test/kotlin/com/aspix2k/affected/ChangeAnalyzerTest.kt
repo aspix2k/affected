@@ -1,18 +1,18 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.KotlinToolchainBuildSystem
-import com.aspix2k.affected.build.RBuildSystem
-import com.aspix2k.affected.build.SwiftBuildSystem
-import com.aspix2k.affected.build.cargo.CargoBuildSystem
-import com.aspix2k.affected.build.dart.DartBuildSystem
-import com.aspix2k.affected.build.dart.FlutterBuildSystem
-import com.aspix2k.affected.build.go.GoBuildSystem
+import com.aspix2k.affected.build.IdeCargoBuildSystem
+import com.aspix2k.affected.build.IdeDartBuildSystem
+import com.aspix2k.affected.build.IdeFlutterBuildSystem
+import com.aspix2k.affected.build.IdeGoBuildSystem
+import com.aspix2k.affected.build.IdeKotlinToolchainBuildSystem
+import com.aspix2k.affected.build.IdeNodeBuildSystem
+import com.aspix2k.affected.build.IdePythonBuildSystem
+import com.aspix2k.affected.build.IdeRBuildSystem
+import com.aspix2k.affected.build.IdeRubyBuildSystem
+import com.aspix2k.affected.build.IdeSwiftBuildSystem
+import com.aspix2k.affected.build.IdeXcodeBuildSystem
 import com.aspix2k.affected.build.gradle.GradleBuildSystem
 import com.aspix2k.affected.build.maven.MavenBuildSystem
-import com.aspix2k.affected.build.node.NodeBuildSystem
-import com.aspix2k.affected.build.python.PythonBuildSystem
-import com.aspix2k.affected.build.ruby.RubyBuildSystem
-import com.aspix2k.affected.build.xcode.XcodeBuildSystem
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -403,7 +403,7 @@ internal class ChangeAnalyzerTest : GitRepositoryTest() {
         }
         val plan = File(dir, "App.xctestplan").apply { writeText("{}") }
 
-        val changes = analyze(dir, XcodeBuildSystem().sourceExtensions)
+        val changes = analyze(dir, IdeXcodeBuildSystem().sourceExtensions)
 
         assertEquals(setOf(scheme, plan), changes.files.toSet())
     }
@@ -467,7 +467,7 @@ internal class ChangeAnalyzerTest : GitRepositoryTest() {
         val changes = analyze(dir, extensions)
 
         assertTrue(changes.apiTouched.isEmpty())
-        assertTrue(changes.files.all { affectsConsumers(NodeBuildSystem(), it.path, signatureTouched = false) })
+        assertTrue(changes.files.all { affectsConsumers(IdeNodeBuildSystem(), it.path, signatureTouched = false) })
     }
 
     @Test
@@ -491,18 +491,18 @@ internal class ChangeAnalyzerTest : GitRepositoryTest() {
         assertEquals(files.size, changes.files.size)
         assertTrue(changes.apiTouched.isEmpty())
         val systems = mapOf(
-            "rust" to CargoBuildSystem(),
-            "go" to GoBuildSystem(),
-            "node" to NodeBuildSystem(),
-            "python" to PythonBuildSystem(),
-            "ruby" to RubyBuildSystem(),
+            "rust" to IdeCargoBuildSystem(),
+            "go" to IdeGoBuildSystem(),
+            "node" to IdeNodeBuildSystem(),
+            "python" to IdePythonBuildSystem(),
+            "ruby" to IdeRubyBuildSystem(),
         )
         assertTrue(changes.files.none { file ->
             val system = systems.getValue(file.relativeTo(dir).invariantSeparatorsPath.substringBefore('/'))
             affectsConsumers(system, file.path, signatureTouched = false)
         })
         assertTrue(
-            affectsConsumers(GoBuildSystem(), "/repo/test/production.go", signatureTouched = false),
+            affectsConsumers(IdeGoBuildSystem(), "/repo/test/production.go", signatureTouched = false),
             "a conventional test directory from another ecosystem must not hide Go production code",
         )
     }
@@ -510,15 +510,15 @@ internal class ChangeAnalyzerTest : GitRepositoryTest() {
     @Test
     fun `test sources of Dart, Flutter, Swift, Kotlin Toolchain and R do not affect consumers`() {
         val cases = listOf(
-            Triple(DartBuildSystem(), "/repo/test/alpha_test.dart", "/repo/lib/alpha.dart"),
-            Triple(FlutterBuildSystem(), "/repo/test/alpha_test.dart", "/repo/lib/alpha.dart"),
+            Triple(IdeDartBuildSystem(), "/repo/test/alpha_test.dart", "/repo/lib/alpha.dart"),
+            Triple(IdeFlutterBuildSystem(), "/repo/test/alpha_test.dart", "/repo/lib/alpha.dart"),
             Triple(
-                SwiftBuildSystem(),
+                IdeSwiftBuildSystem(),
                 "/repo/Tests/AlphaTests/AlphaTests.swift",
                 "/repo/Sources/Alpha/Alpha.swift",
             ),
-            Triple(KotlinToolchainBuildSystem(), "/repo/test/AlphaTest.kt", "/repo/src/Alpha.kt"),
-            Triple(RBuildSystem(), "/repo/tests/testthat/test-alpha.R", "/repo/R/alpha.R"),
+            Triple(IdeKotlinToolchainBuildSystem(), "/repo/test/AlphaTest.kt", "/repo/src/Alpha.kt"),
+            Triple(IdeRBuildSystem(), "/repo/tests/testthat/test-alpha.R", "/repo/R/alpha.R"),
         )
         cases.forEach { (system, test, production) ->
             assertFalse(affectsConsumers(system, test, signatureTouched = false), "${system.id} test")

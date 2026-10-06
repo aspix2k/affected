@@ -155,10 +155,16 @@ class RealRepositorySmokeTest(private val repository: RealRepository) {
         when (group.systemId) {
             "GO" -> goCommands(group.tasks)
             "NODE" -> nodeCommands(group.root, group.tasks, changes)
-            "CARGO" -> cargoCommands(group.root, group.tasks, changes, stopAfterFirstFailure = false)
+            "CARGO" -> cargoCommands(
+                group.root,
+                group.tasks,
+                changes,
+                stopAfterFirstFailure = false,
+                snapshotRoot = testSnapshotRoot,
+            )
             "CMAKE" -> cmakeCommands(group.root, group.tasks)
             "SWIFT" -> swiftCommands(group.tasks)
-            "DOTNET" -> dotnetSteps(group.root, group.tasks)
+            "DOTNET" -> dotnetSteps(testWorkspace(File(group.root)), group.root, group.tasks)
             "PYTHON" -> pythonSteps(group, modules, changes)
                 .map { it.withPythonInterpreter(pythonInterpreter(File(group.root))) }
             else -> otherCommands(group, modules, changes)

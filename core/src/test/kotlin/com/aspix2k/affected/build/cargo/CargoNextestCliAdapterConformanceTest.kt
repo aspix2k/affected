@@ -6,6 +6,7 @@ import com.aspix2k.affected.build.NativeProcessRunner
 import com.aspix2k.affected.build.OwnedSandbox
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.SequentialProcessHandler
+import com.aspix2k.affected.build.testSnapshotRoot
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
 import com.intellij.openapi.util.Key
@@ -26,11 +27,19 @@ class CargoNextestCliAdapterConformanceTest {
         val custom = nativePlan(root, "ci")
         val defaultResult = executeBatch(
             root,
-            cargoCommands(root.path, listOf("affected-alpha:${cargoNextestTask(default)}")),
+            cargoCommands(
+                root.path,
+                listOf("affected-alpha:${cargoNextestTask(default)}"),
+                snapshotRoot = testSnapshotRoot,
+            ),
         )
         val customResult = executeBatch(
             root,
-            cargoCommands(root.path, listOf("affected-alpha:${cargoNextestTask(custom)}")),
+            cargoCommands(
+                root.path,
+                listOf("affected-alpha:${cargoNextestTask(custom)}"),
+                snapshotRoot = testSnapshotRoot,
+            ),
         )
 
         assertEquals(CargoNextestMode.PACKAGES, default.mode)
@@ -45,7 +54,7 @@ class CargoNextestCliAdapterConformanceTest {
             cargoNextestTask(default, hasDoctests)
         }.filter { it.id in setOf("affected-alpha", "affected-gamma", "affected-delta") }
             .map { "${it.executionId}:${it.testTask}" }
-        val commands = cargoCommands(root.path, tasks)
+        val commands = cargoCommands(root.path, tasks, snapshotRoot = testSnapshotRoot)
         val result = executeBatch(root, commands)
 
         assertEquals(2, commands.size)
@@ -68,6 +77,7 @@ class CargoNextestCliAdapterConformanceTest {
                 listOf("affected-alpha:${cargoNextestTask(nativePlan(root))}"),
                 BuildChanges(listOf(source.path), setOf(source.path), comparedToBase = true),
                 unsafeCargoExecution = false,
+                snapshotRoot = testSnapshotRoot,
             ),
         )
 
@@ -83,6 +93,7 @@ class CargoNextestCliAdapterConformanceTest {
                 root.path,
                 listOf("affected-alpha:${cargoNextestTask(nativePlan(root, "ci"))}"),
                 stopAfterFirstFailure = true,
+                snapshotRoot = testSnapshotRoot,
             ),
             marker,
         )
@@ -100,6 +111,7 @@ class CargoNextestCliAdapterConformanceTest {
             root.path,
             listOf("affected-alpha:${cargoNextestTask(nativePlan(root, "ci"))}"),
             stopAfterFirstFailure = true,
+            snapshotRoot = testSnapshotRoot,
         )
         source.writeText(SLEEPING_TEST)
         assertBatchStops(root, cancellationCommands, processMarker)
@@ -114,6 +126,7 @@ class CargoNextestCliAdapterConformanceTest {
                 root.path,
                 listOf("affected-alpha:${cargoNextestTask(nativePlan(root))}"),
                 stopAfterFirstFailure = false,
+                snapshotRoot = testSnapshotRoot,
             ),
             marker,
         )
@@ -142,6 +155,7 @@ class CargoNextestCliAdapterConformanceTest {
                     "affected-beta:${cargoNextestTask(plan)}",
                 ),
                 stopAfterFirstFailure = false,
+                snapshotRoot = testSnapshotRoot,
             ),
             stopAfterFirstFailure = false,
         )
@@ -175,7 +189,7 @@ class CargoNextestCliAdapterConformanceTest {
     }
 
     private fun nativePlan(root: File, profile: String? = null): CargoNextestPlan {
-        val config = requireNotNull(cargoNextestValidationSnapshot(root, profile))
+        val config = requireNotNull(cargoNextestValidationSnapshot(root, testSnapshotRoot, profile))
         val environment = cargoNextestDiscoveryEnvironment("cargo")
         val version = execute(root, listOf("cargo-nextest", "--version"), environment)
         val configuration = execute(

@@ -14,7 +14,8 @@ class SwiftMultiRootTest {
     fun `two Swift packages without a root manifest produce modules for both and commands per root`() {
         val base = createTempDirectory("swift-multi").toFile()
         val roots = listOf("api", "worker").map { swiftPackage(base, "packages/$it") }
-        val system = SwiftBuildSystem { DESCRIBE }
+        val swift = SwiftBuildSystem { _, _ -> DESCRIBE }
+        val system = IdeBuildSystem(swift)
         val project = multiRootProject(base)
 
         val modules = system.modules(project)
@@ -34,15 +35,16 @@ class SwiftMultiRootTest {
     fun `a disappeared root leaves the keyed cache`() {
         val base = createTempDirectory("swift-multi-cache").toFile()
         val roots = listOf("api", "worker").map { swiftPackage(base, "packages/$it") }
-        val system = SwiftBuildSystem { DESCRIBE }
+        val swift = SwiftBuildSystem { _, _ -> DESCRIBE }
+        val system = IdeBuildSystem(swift)
         val project = multiRootProject(base)
 
         system.modules(project)
-        assertEquals(2, cachedRoots(system).size)
+        assertEquals(2, cachedRoots(swift).size)
         roots.last().deleteRecursively()
         system.modules(project)
 
-        assertEquals(setOf(roots.first().invariantSeparatorsPath), cachedRoots(system))
+        assertEquals(setOf(roots.first().invariantSeparatorsPath), cachedRoots(swift))
     }
 
     @Test
@@ -55,7 +57,7 @@ class SwiftMultiRootTest {
 
         assertEquals(
             listOf(base, File(base, "Examples/Demo")).map(File::getCanonicalFile),
-            SwiftBuildSystem().modules(multiRootProject(base)).map { File(it.root).canonicalFile }.distinct(),
+            IdeSwiftBuildSystem().modules(multiRootProject(base)).map { File(it.root).canonicalFile }.distinct(),
         )
     }
 

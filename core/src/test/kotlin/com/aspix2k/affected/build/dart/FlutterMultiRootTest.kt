@@ -2,6 +2,7 @@ package com.aspix2k.affected.build.dart
 
 import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.TaskPlanner
+import com.aspix2k.affected.build.IdeFlutterBuildSystem
 import com.aspix2k.affected.build.multiRootProject
 import java.io.File
 import kotlin.io.path.createTempDirectory
@@ -17,7 +18,7 @@ class FlutterMultiRootTest {
         val generated = flutter(base, "apps/mobile", "dev_dependencies:\n  build_runner: ^2.4.0\n")
         val plain = flutter(base, "apps/admin", "")
         val expected = setOf(generated, plain).map { it.invariantSeparatorsPath }.toSet()
-        val system = FlutterBuildSystem()
+        val system = IdeFlutterBuildSystem()
         val project = multiRootProject(base)
 
         val modules = system.modules(project)

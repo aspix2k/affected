@@ -16,7 +16,7 @@ class AntMultiRootTest {
         val first = root(base, "native", "<project><target name=\"test\"/></project>")
         val second = root(base, "apps/tools", "<project><target name=\"junit\"/></project>")
         val expected = setOf(first, second).map { it.invariantSeparatorsPath }.toSet()
-        val system = AntBuildSystem()
+        val system = IdeAntBuildSystem()
         val project = multiRootProject(base)
 
         val modules = system.modules(project)
@@ -37,7 +37,7 @@ class AntMultiRootTest {
         val base = createTempDirectory("ant-one").toFile()
         root(base, "native", "<project><target name=\"test\"/></project>")
         val second = root(base, "apps/tools", "<project><target name=\"junit\"/></project>")
-        val system = AntBuildSystem()
+        val system = IdeAntBuildSystem()
         val modules = system.modules(multiRootProject(base))
         val changed = modules.filter { it.root == second.invariantSeparatorsPath }
 
@@ -61,11 +61,11 @@ class AntMultiRootTest {
 
         assertEquals(
             listOf(baseRoot.invariantSeparatorsPath),
-            AntBuildSystem().modules(multiRootProject(withBase)).map { it.root },
+            IdeAntBuildSystem().modules(multiRootProject(withBase)).map { it.root },
         )
         assertEquals(
             listOf(nested.invariantSeparatorsPath),
-            AntBuildSystem().modules(multiRootProject(nestedOnly)).map { it.root },
+            IdeAntBuildSystem().modules(multiRootProject(nestedOnly)).map { it.root },
         )
     }
 

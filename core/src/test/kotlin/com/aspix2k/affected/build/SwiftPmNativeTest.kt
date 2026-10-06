@@ -22,8 +22,9 @@ class SwiftPmNativeTest {
 
     @Test
     fun `SwiftPM discovers targets and runs only affected test targets`() = fixture { root ->
-        val system = SwiftBuildSystem()
-        val modules = system.modules(root)
+        val engine = SwiftBuildSystem()
+        val system = IdeBuildSystem(engine)
+        val modules = engine.modules(testWorkspace(root), root)
         assertEquals(
             setOf("Alpha", "Beta", "Gamma", "Delta", "AlphaTests", "BetaTests", "GammaTests", "DeltaTests"),
             modules.mapTo(HashSet(), BuildModule::id),

@@ -4,6 +4,7 @@ import com.aspix2k.affected.build.BuildChanges
 import com.aspix2k.affected.build.CliConformanceRepository
 import com.aspix2k.affected.build.NativeProcessRunner
 import com.aspix2k.affected.build.OwnedSandbox
+import com.aspix2k.affected.build.noRootWorkspace
 import org.junit.Assume.assumeTrue
 import java.io.File
 import kotlin.test.Test
@@ -30,7 +31,8 @@ class DotnetMtpCliConformanceTest {
             val exactPlan = assertNotNull(dotnetMtpSelectionPlan(root.path, project, exactChanges))
             execute(root, dotnetBuildCommand(project).arguments, environment).requirePassed()
             assertTrue(nativeMtpAssetsProof(root.path, project), "restored MTP assets are not proven")
-            val exactArguments = dotnetMtpTestArguments(root.path, project, exactChanges, exactPlan, { exactChanges })
+            val exactArguments =
+                dotnetMtpTestArguments(noRootWorkspace, root.path, project, exactChanges, exactPlan, { exactChanges })
             assertEquals(
                 listOf(
                     "dotnet", "test", "--project", project, "--no-build",
@@ -48,7 +50,8 @@ class DotnetMtpCliConformanceTest {
             }
             val helperChanges = changes(helper)
             execute(root, dotnetBuildCommand(project).arguments, environment).requirePassed()
-            val fullArguments = dotnetMtpTestArguments(root.path, project, helperChanges, null, { helperChanges })
+            val fullArguments =
+                dotnetMtpTestArguments(noRootWorkspace, root.path, project, helperChanges, null, { helperChanges })
             assertEquals(listOf("dotnet", "test", "--project", project, "--no-build"), fullArguments)
             execute(root, fullArguments, environment).requirePassed()
             assertMarkers(markers, expected = setOf("alpha", "beta", "gamma"))
@@ -59,6 +62,7 @@ class DotnetMtpCliConformanceTest {
             val failingPlan = assertNotNull(dotnetMtpSelectionPlan(root.path, project, failingChanges))
             execute(root, dotnetBuildCommand(project).arguments, environment).requirePassed()
             val failingArguments = dotnetMtpTestArguments(
+                noRootWorkspace,
                 root.path,
                 project,
                 failingChanges,
@@ -83,7 +87,14 @@ class DotnetMtpCliConformanceTest {
             execute(root, dotnetBuildCommand(project).arguments, environment).requirePassed()
             assertEquals(
                 listOf("dotnet", "test", "--project", project, "--no-build"),
-                dotnetMtpTestArguments(root.path, project, alphaChanges, shadowedPlan, { alphaChanges }),
+                dotnetMtpTestArguments(
+                    noRootWorkspace,
+                    root.path,
+                    project,
+                    alphaChanges,
+                    shadowedPlan,
+                    { alphaChanges },
+                ),
             )
         }
     }

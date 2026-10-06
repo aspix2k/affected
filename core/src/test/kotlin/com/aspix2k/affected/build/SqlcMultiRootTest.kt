@@ -16,7 +16,7 @@ class SqlcMultiRootTest {
         val first = root(base, "native", "one")
         val second = root(base, "apps/tools", "two")
         val expected = setOf(first, second).map { it.invariantSeparatorsPath }.toSet()
-        val system = SqlcBuildSystem()
+        val system = IdeSqlcBuildSystem()
         val project = multiRootProject(base)
 
         val modules = system.modules(project)
@@ -37,7 +37,7 @@ class SqlcMultiRootTest {
         val base = createTempDirectory("sqlc-one").toFile()
         root(base, "native", "one")
         val second = root(base, "apps/tools", "two")
-        val system = SqlcBuildSystem()
+        val system = IdeSqlcBuildSystem()
         val modules = system.modules(multiRootProject(base))
         val changed = modules.filter { it.root == second.invariantSeparatorsPath }
 
@@ -61,11 +61,11 @@ class SqlcMultiRootTest {
 
         assertEquals(
             listOf(baseRoot, independent).map { it.invariantSeparatorsPath },
-            SqlcBuildSystem().modules(multiRootProject(withBase)).map { it.root },
+            IdeSqlcBuildSystem().modules(multiRootProject(withBase)).map { it.root },
         )
         assertEquals(
             listOf(nested.invariantSeparatorsPath),
-            SqlcBuildSystem().modules(multiRootProject(nestedOnly)).map { it.root },
+            IdeSqlcBuildSystem().modules(multiRootProject(nestedOnly)).map { it.root },
         )
     }
 

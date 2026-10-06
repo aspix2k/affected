@@ -4,6 +4,7 @@ import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.ProjectChanges
 import com.aspix2k.affected.TaskPlanner
 import com.aspix2k.affected.Verification
+import com.aspix2k.affected.build.IdeDotnetBuildSystem
 import com.aspix2k.affected.build.multiRootProject
 import java.io.File
 import kotlin.io.path.createTempDirectory
@@ -19,7 +20,7 @@ class DotnetMultiRootTest {
     fun `two solutions without a root manifest produce modules for both and commands per root`() {
         val base = createTempDirectory("dotnet-multi").toFile()
         val roots = listOf("api", "worker").map { solution(base, "services/$it") }
-        val system = DotnetBuildSystem()
+        val system = IdeDotnetBuildSystem()
         val project = multiRootProject(base)
 
         val modules = system.modules(project)
@@ -43,7 +44,7 @@ class DotnetMultiRootTest {
         val base = createTempDirectory("dotnet-multi-edges").toFile()
         val roots = listOf("api", "worker").map { solution(base, it) }
 
-        val modules = DotnetBuildSystem().modules(multiRootProject(base))
+        val modules = IdeDotnetBuildSystem().modules(multiRootProject(base))
 
         roots.forEach { root ->
             val rootPath = root.invariantSeparatorsPath
@@ -68,7 +69,7 @@ class DotnetMultiRootTest {
             )
         }
 
-        val modules = DotnetBuildSystem().modules(multiRootProject(base))
+        val modules = IdeDotnetBuildSystem().modules(multiRootProject(base))
         val core = base.resolve("core").invariantSeparatorsPath
 
         assertEquals(1, modules.count { it.id == "Shared" })
@@ -87,7 +88,7 @@ class DotnetMultiRootTest {
             "api/App/App.csproj",
             """<ItemGroup><ProjectReference Include="..\..\shared\Shared\Shared.csproj" /></ItemGroup>""",
         )
-        val system = DotnetBuildSystem()
+        val system = IdeDotnetBuildSystem()
         val graph = ModuleGraph(system.modules(multiRootProject(base)).map { ModuleGraph.Node(it, system) })
         val owned = File(base, "api/App/Program.cs").apply { writeText("class Program {}") }
         val outside = File(base, "shared/Shared/Shared.cs").apply { writeText("class Shared {}") }
@@ -110,12 +111,12 @@ class DotnetMultiRootTest {
         csproj(base, "one/One.csproj", "")
         csproj(base, "two/Two.csproj", "")
 
-        assertFalse(DotnetBuildSystem().isPresent(multiRootProject(base)))
+        assertFalse(IdeDotnetBuildSystem().isPresent(multiRootProject(base)))
 
         File(base, "two").deleteRecursively()
         assertEquals(
             listOf(File(base, "one").invariantSeparatorsPath),
-            DotnetBuildSystem().modules(multiRootProject(base)).map { it.root }.distinct(),
+            IdeDotnetBuildSystem().modules(multiRootProject(base)).map { it.root }.distinct(),
         )
     }
 

@@ -1,6 +1,7 @@
 package com.aspix2k.affected.build
 
 import com.aspix2k.affected.build.process.CliCommand
+import com.aspix2k.affected.build.process.CliStep
 import com.aspix2k.affected.build.python.PythonProjects
 import com.aspix2k.affected.build.python.PythonTestRunner
 import com.aspix2k.affected.build.python.pythonCommands
@@ -643,3 +644,5 @@ class CliUnittestConformanceTest {
         val passed: Boolean get() = completed && exitCode == 0
     }
 }
+
+private fun CliStep.resolveCommand(): CliCommand = checkNotNull(resolve())

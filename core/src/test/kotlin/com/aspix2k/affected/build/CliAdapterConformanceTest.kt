@@ -60,7 +60,8 @@ class CliAdapterConformanceTest {
     fun `Cargo commands run the selected workspace packages`() = fixture("cargo") { root ->
         val metadata = execute(root, listOf("cargo", "metadata", "--no-deps", "--format-version", "1"))
         val modules = CargoMetadata.parse(metadata, root.invariantSeparatorsPath)
-        val output = execute(root, cargoCommands(modules.map { "${it.executionId}:test" }).single().arguments)
+        val commands = cargoCommands(".", modules.map { "${it.executionId}:test" }, testSnapshotRoot)
+        val output = execute(root, commands.single().arguments)
 
         assertContains(output, "affected_alpha")
         assertContains(output, "affected_beta")

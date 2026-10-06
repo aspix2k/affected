@@ -237,7 +237,7 @@
     },
     {
       "id": "CARGO",
-      "implementation": "com.aspix2k.affected.build.cargo.CargoBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeCargoBuildSystem",
       "ecosystem": "Cargo",
       "languages": ["Rust", "TOML"],
       "runners": ["cargo test", "cargo nextest run", "cargo check --tests"],
@@ -260,7 +260,7 @@
     },
     {
       "id": "GO",
-      "implementation": "com.aspix2k.affected.build.go.GoBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeGoBuildSystem",
       "ecosystem": "Go modules",
       "languages": ["Go"],
       "runners": ["go test", "go build"],
@@ -283,7 +283,7 @@
     },
     {
       "id": "NODE",
-      "implementation": "com.aspix2k.affected.build.node.NodeBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeNodeBuildSystem",
       "ecosystem": "npm, Yarn, pnpm and Bun",
       "languages": ["JavaScript", "TypeScript", "JSX", "TSX", "Vue", "Svelte"],
       "runners": ["Jest", "Vitest", "node:test", "bun test", "package test", "tsc --noEmit"],
@@ -337,7 +337,7 @@
     },
     {
       "id": "DOTNET",
-      "implementation": "com.aspix2k.affected.build.dotnet.DotnetBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeDotnetBuildSystem",
       "ecosystem": ".NET",
       "languages": ["C#", "F#", "Visual Basic", "Razor"],
       "runners": ["VSTest with xUnit", "NUnit", "MSTest", "Microsoft Testing Platform with xUnit v3 4", "dotnet build"],
@@ -374,7 +374,7 @@
     },
     {
       "id": "PYTHON",
-      "implementation": "com.aspix2k.affected.build.python.PythonBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdePythonBuildSystem",
       "ecosystem": "Python projects",
       "languages": ["Python"],
       "runners": ["pytest", "unittest", "mypy"],
@@ -418,7 +418,7 @@
     },
     {
       "id": "COMPOSER",
-      "implementation": "com.aspix2k.affected.build.php.ComposerBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeComposerBuildSystem",
       "ecosystem": "Composer",
       "languages": ["PHP"],
       "runners": ["PHPUnit", "Pest", "PHPStan"],
@@ -459,7 +459,7 @@
     },
     {
       "id": "RUBY",
-      "implementation": "com.aspix2k.affected.build.ruby.RubyBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeRubyBuildSystem",
       "ecosystem": "Bundler",
       "languages": ["Ruby"],
       "runners": ["RSpec", "Minitest", "Test::Unit"],
@@ -482,7 +482,7 @@
     },
     {
       "id": "CMAKE",
-      "implementation": "com.aspix2k.affected.build.cmake.CMakeBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeCMakeBuildSystem",
       "ecosystem": "CMake",
       "languages": ["C", "C++"],
       "runners": ["CMake build", "CTest"],
@@ -511,7 +511,7 @@
     },
     {
       "id": "SBT",
-      "implementation": "com.aspix2k.affected.build.SbtBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeSbtBuildSystem",
       "ecosystem": "sbt",
       "languages": ["Scala", "Java", "Kotlin", "Groovy"],
       "runners": ["sbt test", "sbt compile"],
@@ -534,7 +534,7 @@
     },
     {
       "id": "ANT",
-      "implementation": "com.aspix2k.affected.build.AntBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeAntBuildSystem",
       "ecosystem": "Ant",
       "languages": ["Java", "Kotlin"],
       "runners": ["ant test", "ant compile"],
@@ -557,7 +557,7 @@
     },
     {
       "id": "KOTLIN_TOOLCHAIN",
-      "implementation": "com.aspix2k.affected.build.KotlinToolchainBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeKotlinToolchainBuildSystem",
       "ecosystem": "Kotlin Toolchain",
       "languages": ["Kotlin", "Java"],
       "runners": ["kotlin test", "kotlin build"],
@@ -589,7 +589,7 @@
     },
     {
       "id": "BAZEL",
-      "implementation": "com.aspix2k.affected.build.BazelBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeBazelBuildSystem",
       "ecosystem": "Bazel",
       "languages": ["Java", "Kotlin", "C", "C++", "Python", "Go", "Rust", "Starlark"],
       "runners": ["bazel test", "bazel build"],
@@ -621,7 +621,7 @@
     },
     {
       "id": "DART",
-      "implementation": "com.aspix2k.affected.build.dart.DartBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeDartBuildSystem",
       "ecosystem": "Dart",
       "languages": ["Dart"],
       "runners": ["dart test", "dart analyze"],
@@ -653,7 +653,7 @@
     },
     {
       "id": "FLUTTER",
-      "implementation": "com.aspix2k.affected.build.dart.FlutterBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeFlutterBuildSystem",
       "ecosystem": "Flutter",
       "languages": ["Dart"],
       "runners": ["flutter test", "flutter analyze"],
@@ -676,7 +676,7 @@
     },
     {
       "id": "MESON",
-      "implementation": "com.aspix2k.affected.build.MesonBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeMesonBuildSystem",
       "ecosystem": "Meson",
       "languages": ["C", "C++"],
       "runners": ["meson test", "meson compile"],
@@ -699,7 +699,7 @@
     },
     {
       "id": "MAKE",
-      "implementation": "com.aspix2k.affected.build.MakeBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeMakeBuildSystem",
       "ecosystem": "Make",
       "languages": ["C", "C++"],
       "runners": ["make test", "make check", "make"],
@@ -722,7 +722,7 @@
     },
     {
       "id": "NINJA",
-      "implementation": "com.aspix2k.affected.build.NinjaBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeNinjaBuildSystem",
       "ecosystem": "Ninja",
       "languages": ["C", "C++"],
       "runners": ["ninja test", "ninja check", "ninja"],
@@ -745,7 +745,7 @@
     },
     {
       "id": "RPROJECT",
-      "implementation": "com.aspix2k.affected.build.RBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeRBuildSystem",
       "ecosystem": "R",
       "languages": ["R"],
       "runners": ["testthat::test_local", "testthat::test_dir", "R CMD check"],
@@ -777,7 +777,7 @@
     },
     {
       "id": "PANTS",
-      "implementation": "com.aspix2k.affected.build.PantsBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdePantsBuildSystem",
       "ecosystem": "Pants",
       "languages": ["Python", "Rust", "Go", "Java", "Kotlin"],
       "runners": ["pants test", "pants check"],
@@ -785,7 +785,7 @@
       "selectionProofs": [
         {
           "units": ["project"],
-          "path": "core/src/test/kotlin/com/aspix2k/affected/build/PantsCommandTest.kt",
+          "path": "engine/src/test/kotlin/com/aspix2k/affected/build/PantsCommandTest.kt",
           "marker": "a Pants root runs one project test command",
           "gate": ".github/workflows/ci.yml",
           "gateMarker": "koverVerify",
@@ -800,7 +800,7 @@
     },
     {
       "id": "BUCK2",
-      "implementation": "com.aspix2k.affected.build.Buck2BuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeBuck2BuildSystem",
       "ecosystem": "Buck2",
       "languages": ["Starlark", "Python", "Rust", "Go", "Java", "Kotlin"],
       "runners": ["buck2 test", "buck2 build"],
@@ -808,7 +808,7 @@
       "selectionProofs": [
         {
           "units": ["project"],
-          "path": "core/src/test/kotlin/com/aspix2k/affected/build/Buck2CommandTest.kt",
+          "path": "engine/src/test/kotlin/com/aspix2k/affected/build/Buck2CommandTest.kt",
           "marker": "a Buck2 root runs one project test command",
           "gate": ".github/workflows/ci.yml",
           "gateMarker": "koverVerify",
@@ -823,7 +823,7 @@
     },
     {
       "id": "SWIFT",
-      "implementation": "com.aspix2k.affected.build.SwiftBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeSwiftBuildSystem",
       "ecosystem": "Swift",
       "languages": ["Swift", "Objective-C"],
       "runners": ["swift test", "swift build"],
@@ -840,7 +840,7 @@
         },
         {
           "units": ["project"],
-          "path": "core/src/test/kotlin/com/aspix2k/affected/build/SwiftCommandTest.kt",
+          "path": "engine/src/test/kotlin/com/aspix2k/affected/build/SwiftCommandTest.kt",
           "marker": "a Swift package runs one project test command",
           "gate": ".github/workflows/ci.yml",
           "gateMarker": "koverVerify",
@@ -855,7 +855,7 @@
     },
     {
       "id": "XCODE",
-      "implementation": "com.aspix2k.affected.build.xcode.XcodeBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeXcodeBuildSystem",
       "ecosystem": "Xcode",
       "languages": ["Swift", "Objective-C"],
       "runners": ["xcodebuild test", "xcodebuild build"],
@@ -878,7 +878,7 @@
     },
     {
       "id": "DBT",
-      "implementation": "com.aspix2k.affected.build.DbtBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeDbtBuildSystem",
       "ecosystem": "dbt",
       "languages": ["SQL", "YAML"],
       "runners": ["dbt test", "dbt compile"],
@@ -886,7 +886,7 @@
       "selectionProofs": [
         {
           "units": ["project"],
-          "path": "core/src/test/kotlin/com/aspix2k/affected/build/DbtCommandTest.kt",
+          "path": "engine/src/test/kotlin/com/aspix2k/affected/build/DbtCommandTest.kt",
           "marker": "a local DuckDB dbt root runs one project test command",
           "gate": ".github/workflows/ci.yml",
           "gateMarker": "koverVerify",
@@ -901,7 +901,7 @@
     },
     {
       "id": "SQLC",
-      "implementation": "com.aspix2k.affected.build.SqlcBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeSqlcBuildSystem",
       "ecosystem": "sqlc",
       "languages": ["SQL", "YAML", "JSON"],
       "runners": ["sqlc compile"],
@@ -924,7 +924,7 @@
     },
     {
       "id": "ATLAS",
-      "implementation": "com.aspix2k.affected.build.AtlasBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeAtlasBuildSystem",
       "ecosystem": "Atlas",
       "languages": ["SQL", "HCL"],
       "runners": ["atlas migrate validate"],
@@ -932,7 +932,7 @@
       "selectionProofs": [
         {
           "units": ["project"],
-          "path": "core/src/test/kotlin/com/aspix2k/affected/build/AtlasCommandTest.kt",
+          "path": "engine/src/test/kotlin/com/aspix2k/affected/build/AtlasCommandTest.kt",
           "marker": "a local Atlas root runs one migrate validate command",
           "gate": ".github/workflows/ci.yml",
           "gateMarker": "koverVerify",
@@ -947,7 +947,7 @@
     },
     {
       "id": "DENO",
-      "implementation": "com.aspix2k.affected.build.deno.DenoBuildSystem",
+      "implementation": "com.aspix2k.affected.build.IdeDenoBuildSystem",
       "ecosystem": "Deno",
       "languages": ["TypeScript", "JavaScript", "JSX", "TSX"],
       "runners": ["deno test"],

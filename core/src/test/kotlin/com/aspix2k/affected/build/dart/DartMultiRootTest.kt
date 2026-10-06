@@ -2,6 +2,7 @@ package com.aspix2k.affected.build.dart
 
 import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.TaskPlanner
+import com.aspix2k.affected.build.IdeDartBuildSystem
 import com.aspix2k.affected.build.multiRootProject
 import java.io.File
 import kotlin.io.path.createTempDirectory
@@ -17,7 +18,7 @@ class DartMultiRootTest {
         val generated = dart(base, "packages/models", "dev_dependencies:\n  build_runner: ^2.4.0\n")
         val plain = dart(base, "packages/cli", "")
         val expected = setOf(generated, plain).map { it.invariantSeparatorsPath }.toSet()
-        val system = DartBuildSystem()
+        val system = IdeDartBuildSystem()
         val project = multiRootProject(base)
 
         val modules = system.modules(project)
