@@ -27,6 +27,7 @@ object ProjectChanges {
         val uncovered: List<File> = emptyList(),
         val resolvedBranch: String? = null,
         val gitUsable: Boolean = true,
+        val mergeBase: String? = null,
     )
 
     fun collect(project: Project): Result {
@@ -49,6 +50,7 @@ object ProjectChanges {
                 baseUnresolved = !analyzer.hasComparisonBase(),
                 uncovered = uncovered,
                 resolvedBranch = analyzer.resolvedBranch(),
+                mergeBase = analyzer.comparisonBase(),
             )
         }
     }

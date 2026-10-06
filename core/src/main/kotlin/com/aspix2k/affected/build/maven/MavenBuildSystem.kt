@@ -13,6 +13,7 @@ import com.aspix2k.affected.build.isJvmTestSourceSet
 import com.aspix2k.affected.build.mavenInvocationArguments
 import com.aspix2k.affected.build.process.ProcessTreeTermination
 import com.aspix2k.affected.currentAffectedRunPresentation
+import com.aspix2k.affected.recordsDependencies
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
@@ -184,6 +185,7 @@ class MavenBuildSystem internal constructor(
         if (project.isDisposed) return false
         val presentation = currentAffectedRunPresentation()
         if (presentation != null && !AffectedExternalRunBinding.isSupported()) return false
+        val recordsDependencies = recordsDependencies()
 
         val collector = AtomicReference<MavenCollectorRun?>()
         val lifecycle = MavenRunLifecycle(collector)
@@ -197,10 +199,14 @@ class MavenBuildSystem internal constructor(
         }
         try {
             val published = withContext(Dispatchers.IO) {
-                (collectorFactory?.invoke(project) ?: collectorRun(project)).also { created ->
-                    collector.set(created)
-                    onCollectorPublished(created)
+                val created = if (recordsDependencies) {
+                    collectorFactory?.invoke(project) ?: collectorRun(project)
+                } else {
+                    null
                 }
+                collector.set(created)
+                onCollectorPublished(created)
+                created
             }
             if (lifecycle.execution.isCancellationRequested()) published?.cancel()
             val arguments = mavenInvocationArguments(

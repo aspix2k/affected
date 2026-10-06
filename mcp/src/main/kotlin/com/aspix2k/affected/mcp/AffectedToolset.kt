@@ -1,6 +1,7 @@
 package com.aspix2k.affected.mcp
 
 import com.aspix2k.affected.AffectedDoctor
+import com.aspix2k.affected.AffectedMcpBaseViews
 import com.aspix2k.affected.AffectedMcpCoveringViews
 import com.aspix2k.affected.AffectedMcpInputs
 import com.aspix2k.affected.AffectedMcpSettings
@@ -11,6 +12,7 @@ import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.AffectedState
 import com.aspix2k.affected.AffectedStateSnapshot
+import com.aspix2k.affected.BaseCheck
 import com.aspix2k.affected.CoveringTestsLookup
 import com.aspix2k.affected.ProjectBaseBranch
 import com.aspix2k.affected.TaskPlanner
@@ -157,6 +159,19 @@ class AffectedToolset : McpToolset {
         } finally {
             claim.close()
         }
+    }
+
+    @McpTool
+    @McpToolHints(readOnlyHint = McpToolHintValue.FALSE, destructiveHint = McpToolHintValue.FALSE)
+    @McpDescription(
+        "Re-runs the task groups that failed in the last verification on the comparison base, in a private " +
+            "checkout that never touches your working tree, and tells per group whether your change broke it " +
+            "(regression), it was already failing, or it could not be told. Uses the exclusive lease."
+    )
+    suspend fun affected_check_on_base(): McpToolCallResult {
+        val project = coroutineContext.project
+        if (project.basePath == null) return noBasePath()
+        return AffectedMcpBaseViews.check(BaseCheck.run(project)).toResult()
     }
 
     @McpTool

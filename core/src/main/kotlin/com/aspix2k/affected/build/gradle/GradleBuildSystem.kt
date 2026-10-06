@@ -5,6 +5,7 @@ import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.OwnedExternalTaskExecution
 import com.aspix2k.affected.affectedRunLabel
+import com.aspix2k.affected.build.BaseRuntimeBuildSystem
 import com.aspix2k.affected.build.BuildChanges
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.ChangeAwareSuspendingBuildSystem
@@ -16,6 +17,7 @@ import com.aspix2k.affected.build.requiredGradleFailureStrategyScript
 import com.aspix2k.affected.build.rootFallbackModule
 import com.aspix2k.affected.currentAffectedRunPresentation
 import com.aspix2k.affected.monitorGradleCancellation
+import com.aspix2k.affected.recordsDependencies
 import com.aspix2k.affected.runPreparedOwnedExternalTask
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.openapi.application.PathManager
@@ -46,6 +48,7 @@ import com.intellij.util.execution.ParametersListUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import org.jetbrains.plugins.gradle.service.GradleInstallationManager
 import org.jetbrains.plugins.gradle.settings.GradleSettings
 import org.jetbrains.plugins.gradle.util.GradleConstants
 import java.io.File
@@ -54,7 +57,18 @@ import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicReference
 
-class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuildSystem {
+class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuildSystem, BaseRuntimeBuildSystem {
+
+    override fun sameRuntime(project: Project, root: String, baseRoot: String): Boolean {
+        val linked = GradleSettings.getInstance(project).linkedProjectsSettings
+            .map { File(it.externalProjectPath).invariantSeparatorsPath }
+            .filter { root == it || root.startsWith("$it/") }
+            .maxByOrNull(String::length)
+            ?: return false
+        val installations = GradleInstallationManager.getInstance()
+        val jvm = installations.getGradleJvmPath(project, linked)
+        return !jvm.isNullOrEmpty() && jvm == installations.getGradleJvmPath(project, baseRoot)
+    }
 
     override val id: String = GradleConstants.SYSTEM_ID.id
 
@@ -165,6 +179,7 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
         }
         val presentation = currentAffectedRunPresentation()
         if (presentation != null && !AffectedExternalRunBinding.isSupported()) return false
+        val recordsDependencies = recordsDependencies()
         var binding: AffectedExternalRunBinding? = null
         val sessions = AffectedRunSessions.getInstance(project)
         val collector = AtomicReference<GradleCollectorRun?>()
@@ -181,7 +196,9 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
                 sessions = sessions,
                 execution = execution,
                 prepare = {
-                    val preparedCollector = publishGradleCollector(collector) { collectorRun(project) }
+                    val preparedCollector = publishGradleCollector(collector) {
+                        if (recordsDependencies) collectorRun(project) else null
+                    }
                     if (execution.isCancellationRequested()) preparedCollector?.cancel()
                     val selection = withContext(Dispatchers.IO) { gradleTaskSelection(tasks, changes) }
                     binding = presentation?.let {
