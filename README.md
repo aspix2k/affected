@@ -45,6 +45,8 @@ Built for multi-module projects and monorepos across 28 supported build ecosyste
 - **Regression or already failing.** After a failed check, **Check on base branch**
   reruns only the failed Gradle and Maven task groups in a private checkout of the
   comparison base and tells whether your change broke them.
+- **One settings page.** Settings | Tools | Affected holds the base branch and every switch;
+  the toolbar menu keeps the same toggles.
 - **Local by design.** No account, server, telemetry or project-specific config file.
 - **Optional MCP tools.** The same analysis snapshot and run actions when the
   JetBrains MCP Server plugin is installed. **Affected > Set up for coding agents**
