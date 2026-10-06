@@ -498,7 +498,7 @@
           "gateStep": "Run native CLI fixtures"
         }
       ],
-      "versions": "CMake 4.1+ and CTest 3.29+; tested with CMake 4.4.3",
+      "versions": "CMake 4.1+ and CTest 3.29+; tested with CMake 4.4.4",
       "support": "supported",
       "fixtures": [
         "conformance/cli-fixtures/cmake",

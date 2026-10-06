@@ -179,6 +179,7 @@ class AffectedMcpInputsTest {
     fun `paths that are empty missing outside the project or not JVM sources are rejected with a reason`() =
         withProject { base ->
             Files.writeString(base.resolve("Notes.md"), "x")
+            Files.createDirectory(base.resolve("Folder.kt"))
             val outside = createTempDirectory("affected-outside-").resolve("Other.kt")
             Files.writeString(outside, "class Other")
             val link = base.resolve("Link.kt")
@@ -190,6 +191,9 @@ class AffectedMcpInputsTest {
             assertEquals("invalid-path", reason("a".repeat(5000)))
             assertEquals("invalid-path", reason("bad\u0000.kt"))
             assertEquals("file-not-found", reason("Missing.kt"))
+            assertEquals("file-not-found", reason("a".repeat(4096)))
+            assertEquals("invalid-path", reason("a".repeat(4097)))
+            assertEquals("file-not-found", reason("Folder.kt"))
             assertEquals("outside-project", reason(outside.toString()))
             assertEquals("outside-project", reason(base.relativize(outside).toString()))
             assertEquals("outside-project", reason("Link.kt"))
