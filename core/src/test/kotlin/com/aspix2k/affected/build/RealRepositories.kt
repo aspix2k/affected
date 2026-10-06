@@ -15,6 +15,7 @@ data class RealRepository(
     val roots: List<String>,
     val modules: List<String>,
     val scenarios: List<RealScenario>,
+    val knownDefect: KnownDefect? = null,
 ) {
     override fun toString(): String = id
 }
@@ -28,6 +29,8 @@ data class RealScenario(
     val pass: Boolean,
     val testDependents: Boolean = false,
 )
+
+data class KnownDefect(val id: String, val failure: String)
 
 internal object RealRepositories {
 

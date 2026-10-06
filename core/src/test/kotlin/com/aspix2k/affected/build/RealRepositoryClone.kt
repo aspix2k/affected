@@ -24,8 +24,16 @@ internal object RealRepositoryClone {
             .map { it.drop(STATUS_PREFIX).trim() }
             .toSet()
 
-    fun restore(directory: File, files: List<String>) {
+    fun restore(directory: File, files: List<String>, baseline: Set<String>) {
         NativeProcessRunner.execute(listOf("git", "checkout", "--quiet", "--") + files, directory, TIMEOUT_SECONDS)
+        val produced = modified(directory) - baseline
+        if (produced.isNotEmpty()) {
+            NativeProcessRunner.execute(
+                listOf("git", "clean", "--quiet", "-d", "--force", "--") + produced,
+                directory,
+                TIMEOUT_SECONDS,
+            )
+        }
     }
 
     private const val TIMEOUT_SECONDS = 300L
