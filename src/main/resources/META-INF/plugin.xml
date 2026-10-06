@@ -14,7 +14,10 @@
             <li>Run supported ecosystems from one action.</li>
             <li>Keep all commands for one build-system root in one Run session.</li>
             <li>Narrow to the smallest unit proven by the native build system or test runner.</li>
-            <li>Optionally verify direct dependents after a public API change.</li>
+            <li>Optionally compile direct dependents after a public API change, or run the tests of every module that depends on the change.</li>
+            <li>Optionally run the plan before a commit or push.</li>
+            <li>After a failure, check the base branch to tell a regression from a test that was already failing (Gradle and Maven).</li>
+            <li>Diagnose explains what was detected and why nothing ran; one settings page holds every switch.</li>
             <li>No account, server, telemetry or project-specific configuration file.</li>
             <li>Optional JetBrains MCP Server tools use the same analysis snapshot and run lease.</li>
         </ul>
@@ -77,6 +80,11 @@
         <postStartupActivity implementation="com.aspix2k.affected.StartupRefresh"/>
         <checkinHandlerFactory implementation="com.aspix2k.affected.AffectedCheckinHandlerFactory"/>
         <errorHandler implementation="com.aspix2k.affected.AffectedErrorReportSubmitter"/>
+        <projectConfigurable parentId="tools"
+                             id="com.aspix2k.affected.settings"
+                             instance="com.aspix2k.affected.AffectedConfigurable"
+                             bundle="messages.AffectedBundle"
+                             key="settings.display.name"/>
     </extensions>
 
     <extensions defaultExtensionNs="com.intellij">
@@ -118,6 +126,9 @@
             <separator/>
             <group id="com.aspix2k.affected.Settings"
                    popup="true">
+                <action id="com.aspix2k.affected.OpenSettings"
+                        class="com.aspix2k.affected.OpenSettingsAction"/>
+                <separator/>
                 <action id="com.aspix2k.affected.BaseBranch"
                         class="com.aspix2k.affected.BaseBranchAction"/>
                 <action id="com.aspix2k.affected.CheckConsumers"
