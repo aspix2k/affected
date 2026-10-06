@@ -107,24 +107,43 @@ weakening the gate.
 ## Checking the plugin in a running IDE
 
 Unit and conformance tests never load the plugin into an IDE, and the product
-verifier only checks binary compatibility. Before a release, and after a change
-to change collection, module discovery or task selection, check the plugin live:
+verifier only checks binary compatibility. After a change to change collection,
+module discovery or task selection, and before a release, check the plugin live:
 
-1. `./gradlew buildPlugin`, then unpack `build/distributions/affected-<version>.zip`
-   into the IDE's `plugins` directory, or start a sandbox with `./gradlew runIde --args=<project>`.
-   Another product runs the same way:
-   `./gradlew runIdeProduct -Paffected.runIde.type=PyCharm -Paffected.runIde.version=2026.2 --args=<project>`
-   (types as in `config/support-matrix.json`; products that need a license ask for it on the first start).
-2. Enable the IDE's MCP server (Settings | Tools | MCP Server) and open a project
-   with an uncommitted change on a branch off the base branch.
-3. Find the MCP port (`lsof -nP -iTCP -sTCP:LISTEN`, the one that answers `/sse`) and run
+```sh
+python3 scripts/live_ide.py idea-gradle   # IntelliJ IDEA, Gradle project
+python3 scripts/live_ide.py idea-maven    # IntelliJ IDEA, Maven project
+python3 scripts/live_ide.py pycharm-python # PyCharm, Python project with pytest
+python3 scripts/live_ide.py all
+```
+
+Each scenario copies its fixture (`conformance/live-ide/gradle`, `conformance/live-ide/maven`,
+`conformance/cli-fixtures/python`) into a temporary directory, commits it on `main`, branches
+`feature` and leaves one uncommitted edit. It then resets the sandbox config under
+`.intellijPlatform/sandbox/affected` (MCP server enabled, project trusted), starts the IDE with
+`./gradlew runIde` or `runIdeProduct` and the init script `scripts/live-ide.init.gradle`, and waits
+for the MCP server and for the project model (`get_project_modules` lists the modules, and
+`affected_verification_plan` answers). It expects the changed file, the planned tasks and a passing
+run; for Gradle and Maven it also enables `testDependents` through `affected_configure` and expects the
+dependent module's tests too. The IDE is always stopped and the temporary state removed;
+`--report-dir <dir>` keeps the report, and after a failure the IDE log and thread dumps.
+A first run downloads the IDE (about 1.5 GB) and PyCharm needs the virtual environment's `pytest` from PyPI.
+
+The first-run dialogs are switched off with JVM properties, not clicks: `-Djb.consents.confirmation.enabled=false`
+(data sharing consent) and `-Dide.experimental.ui.onboarding=false` (New UI onboarding dialog); both block the IDE on a
+fresh sandbox. On a Linux machine without a display the Gradle run is wrapped in `xvfb-run` (`apt install xvfb lsof`).
+CI runs it weekly and by hand in `.github/workflows/live-ide.yml`, never on a pull request, and opens an issue when
+the scheduled run fails. Android Studio is not covered: its sandbox gets an MCP Server plugin built for another platform
+build and the server does not start. Products that ask for a license on the first start cannot run unattended.
+
+To check an already running IDE (any product), find the MCP port (`lsof -nP -iTCP -sTCP:LISTEN`, the
+one that answers `/sse`) and run
 
 ```sh
 python3 scripts/ide_smoke.py --port <port> --project <absolute project path> --task <expected task> --run
 ```
 
-The script fails when the changed files or the planned tasks differ from the
-expectation, or when the run does not pass.
+It fails when the changed files or the planned tasks differ from the expectation, or when the run does not pass.
 
 ## How it works
 

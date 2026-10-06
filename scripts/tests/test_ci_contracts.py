@@ -1163,12 +1163,42 @@ class CiContractsTest(unittest.TestCase):
                     with self.assertRaisesRegex(ci_contracts.CiContractError, "IntelliJ test runtime"):
                         ci_contracts.check(root)
 
+    def test_live_ide_must_never_run_on_pull_requests(self) -> None:
+        """The scheduled live IDE check must stay out of pull-request CI."""
+        for original, replacement in (
+            ("on:\n  schedule:", "on:\n  pull_request:\n  schedule:"),
+            ("on:\n  schedule:", "on:\n  push:\n  schedule:"),
+        ):
+            with self.subTest(trigger=replacement), TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.copy_workflows(root)
+                live = root / ".github/workflows/live-ide.yml"
+                live.write_text(live.read_text(encoding="utf-8").replace(original, replacement, 1), encoding="utf-8")
+                with self.assertRaisesRegex(ci_contracts.CiContractError, "must never run on"):
+                    ci_contracts.check(root)
+
+    def test_live_ide_must_report_scheduled_failures_under_a_display(self) -> None:
+        """Keep the failure issue and the virtual display of the live IDE check."""
+        for required, message in (
+            ("failure() && github.event_name == 'schedule'", "open or update an issue"),
+            ("xvfb", "virtual display"),
+            ("contents: read", "read-only contents"),
+        ):
+            with self.subTest(required=required), TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.copy_workflows(root)
+                live = root / ".github/workflows/live-ide.yml"
+                live.write_text(live.read_text(encoding="utf-8").replace(required, "removed"), encoding="utf-8")
+                with self.assertRaisesRegex(ci_contracts.CiContractError, message):
+                    ci_contracts.check(root)
+
     def copy_workflows(self, root: Path) -> None:
         """Copy the production workflow set into a temporary repository."""
         production = Path(__file__).resolve().parents[2]
         for relative in (
             ".github/workflows/ci.yml",
             ".github/workflows/conformance.yml",
+            ".github/workflows/live-ide.yml",
             ".github/workflows/codeql.yml",
             ".github/workflows/mutation.yml",
             ".github/workflows/dependency-review.yml",

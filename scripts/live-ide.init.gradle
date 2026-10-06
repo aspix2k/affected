@@ -1,0 +1,10 @@
+gradle.allprojects { project ->
+    project.tasks.configureEach { task ->
+        if (task instanceof JavaExec && task.name.startsWith('runIde')) {
+            def extra = System.getenv('AFFECTED_LIVE_IDE_JVM_ARGS')
+            if (extra) {
+                task.jvmArgs(extra.split(' ').findAll { !it.isEmpty() })
+            }
+        }
+    }
+}
