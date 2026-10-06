@@ -29,7 +29,7 @@ CONFIG = ROOT / "config" / "release-currentness.json"
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_TOTAL_BYTES = 32 * 1024 * 1024
 MAX_RELEASE_ASSET_BYTES = 64 * 1024 * 1024
-MAX_ENTRIES = 128
+MAX_ENTRIES = 192
 ALLOWED_HOSTS = {
     "api.github.com",
     "api.nuget.org",
@@ -782,7 +782,7 @@ def remote_version(source: dict[str, Any], policy: str, series: str | None, tran
         return newest(values), None
     if kind == "node":
         data = transport.json("https://nodejs.org/dist/index.json")
-        return newest([str(item.get("version", "")) for item in data]), None
+        return newest([str(item.get("version", "")) for item in data], series), None
     if kind == "go":
         data = transport.json("https://go.dev/dl/?mode=json")
         return newest([str(item.get("version", "")).removeprefix("go") for item in data if item.get("stable")]), None

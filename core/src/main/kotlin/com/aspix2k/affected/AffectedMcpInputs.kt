@@ -39,8 +39,9 @@ object AffectedMcpInputs {
             return sourceFileError("invalid-path", "File path is invalid.")
         }
         val real = runCatching { resolved.toRealPath() }.getOrNull()
-            ?.takeIf { Files.isRegularFile(it) }
-            ?: return sourceFileError("file-not-found", "File does not exist.")
+        if (real == null || !Files.isRegularFile(real)) {
+            return sourceFileError("file-not-found", "File does not exist.")
+        }
         if (!real.startsWith(base)) return sourceFileError("outside-project", "File is outside the project.")
         if (real.fileName.toString().substringAfterLast('.', "") !in SOURCE_EXTENSIONS) {
             return sourceFileError("unsupported-file", "Only .kt and .java files can be looked up.")
@@ -54,7 +55,7 @@ object AffectedMcpInputs {
 
     fun validateBaseBranch(branch: String): AffectedMcpView {
         val name = branch.trim().ifEmpty { ProjectBaseBranch.AUTO_BRANCH }
-        if (name != ProjectBaseBranch.AUTO_BRANCH && !branchName(name)) {
+        if (!branchName(name)) {
             return AffectedMcpView(
                 text = "Base branch is invalid.",
                 data = mapOf("reason" to "invalid-branch"),

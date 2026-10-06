@@ -114,7 +114,7 @@ class RealRepositorySmokeTest(private val repository: RealRepository) {
                 command.environment + environment(),
             )
         }
-        val output = results.joinToString("\n") { it.second.output }
+        val output = results.joinToString("\n") { it.second.output }.replace(ANSI_STYLE, "")
         val report = results.joinToString("\n") { (command, result) ->
             "${command.arguments.joinToString(" ")} -> exit ${result.exitCode}"
         }
@@ -178,6 +178,7 @@ class RealRepositorySmokeTest(private val repository: RealRepository) {
 
     companion object {
         private const val REAL_REPOSITORIES_PROPERTY = "affected.realRepositories"
+        private val ANSI_STYLE = Regex("\u001B\\[[0-9;]*m")
 
         @JvmStatic
         @Parameters(name = "{0}")

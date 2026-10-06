@@ -298,6 +298,18 @@ class ReleaseCurrentnessTest(unittest.TestCase):
 
         self.assertEqual("3.14.7", version)
 
+    def test_node_series_stays_on_the_declared_major_line(self) -> None:
+        """A Node pin narrowed to a series ignores releases of newer major lines."""
+        url = "https://nodejs.org/dist/index.json"
+        index = [{"version": "v26.10.0"}, {"version": "v24.21.0"}, {"version": "v24.18.0"}]
+        transport = RecordingReadTransport({url: json.dumps(index).encode()})
+
+        latest, _ = currentness.remote_version({"type": "node"}, "latest", None, transport)
+        series, _ = currentness.remote_version({"type": "node"}, "series", "24", transport)
+
+        self.assertEqual("26.10.0", latest)
+        self.assertEqual("24.21.0", series)
+
     def test_dotnet_ignores_go_live_release_candidates(self) -> None:
         """Select the newest supported SDK while a go-live release candidate is listed first."""
         url = "https://builds.dotnet.microsoft.com/dotnet/release-metadata/releases-index.json"
