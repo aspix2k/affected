@@ -1,6 +1,8 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.BaseRuntimeBuildSystem
 import com.aspix2k.affected.build.BuildChanges
+import com.aspix2k.affected.build.BuildSystems
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.logger
@@ -10,8 +12,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import org.jetbrains.plugins.gradle.service.GradleInstallationManager
-import org.jetbrains.plugins.gradle.settings.GradleSettings
 import java.io.File
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
@@ -22,7 +22,6 @@ object BaseCheck {
     private val LOG = logger<BaseCheck>()
     private val RUN_TIMEOUT = 30.minutes
     private val SUPPORTED_SYSTEMS = setOf("GRADLE", "MAVEN")
-    private const val GRADLE = "GRADLE"
     private const val CACHE_DIRECTORY = "affected"
 
     private class BaseContext(
@@ -101,7 +100,8 @@ object BaseCheck {
             ?.takeIf { File(it).isDirectory }
             ?.let { TaskGroup(group.systemId, it, group.tasks) }
         if (baseGroup == null || missingOnBase(group, context)) return BaseRun.Skipped(BaseNotRun.MODULE_MISSING)
-        if (group.systemId == GRADLE && !sameGradleJvm(context.project, group.root, baseGroup.root)) {
+        val runtime = BuildSystems.byId(group.systemId) as? BaseRuntimeBuildSystem
+        if (runtime?.sameRuntime(context.project, group.root, baseGroup.root) == false) {
             return BaseRun.Skipped(BaseNotRun.GRADLE_JVM_DIFFERS)
         }
         var accepted = false
@@ -129,16 +129,5 @@ object BaseCheck {
                 val onBase = node.sourceRoot?.let { translateToBase(it, context.projectRoot, context.baseRoot) }
                 onBase != null && !File(onBase).isDirectory
             }
-    }
-
-    private fun sameGradleJvm(project: Project, root: String, baseRoot: String): Boolean {
-        val linked = GradleSettings.getInstance(project).linkedProjectsSettings
-            .map { File(it.externalProjectPath).invariantSeparatorsPath }
-            .filter { root == it || root.startsWith("$it/") }
-            .maxByOrNull(String::length)
-            ?: return false
-        val installations = GradleInstallationManager.getInstance()
-        val jvm = installations.getGradleJvmPath(project, linked)
-        return !jvm.isNullOrEmpty() && jvm == installations.getGradleJvmPath(project, baseRoot)
     }
 }

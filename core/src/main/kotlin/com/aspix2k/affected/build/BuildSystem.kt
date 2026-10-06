@@ -26,6 +26,10 @@ interface BuildSystem {
     val singleOwnerPerRoot: Boolean get() = false
 }
 
+internal interface BaseRuntimeBuildSystem {
+    fun sameRuntime(project: Project, root: String, baseRoot: String): Boolean
+}
+
 internal interface SuspendingBuildSystem : BuildSystem {
     suspend fun modulesSuspending(project: Project): List<BuildModule> =
         runInterruptible(Dispatchers.IO) { modules(project) }

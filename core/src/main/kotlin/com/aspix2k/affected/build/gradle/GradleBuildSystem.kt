@@ -5,6 +5,7 @@ import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.OwnedExternalTaskExecution
 import com.aspix2k.affected.affectedRunLabel
+import com.aspix2k.affected.build.BaseRuntimeBuildSystem
 import com.aspix2k.affected.build.BuildChanges
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.ChangeAwareSuspendingBuildSystem
@@ -47,6 +48,7 @@ import com.intellij.util.execution.ParametersListUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import org.jetbrains.plugins.gradle.service.GradleInstallationManager
 import org.jetbrains.plugins.gradle.settings.GradleSettings
 import org.jetbrains.plugins.gradle.util.GradleConstants
 import java.io.File
@@ -55,7 +57,18 @@ import java.nio.file.LinkOption
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicReference
 
-class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuildSystem {
+class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuildSystem, BaseRuntimeBuildSystem {
+
+    override fun sameRuntime(project: Project, root: String, baseRoot: String): Boolean {
+        val linked = GradleSettings.getInstance(project).linkedProjectsSettings
+            .map { File(it.externalProjectPath).invariantSeparatorsPath }
+            .filter { root == it || root.startsWith("$it/") }
+            .maxByOrNull(String::length)
+            ?: return false
+        val installations = GradleInstallationManager.getInstance()
+        val jvm = installations.getGradleJvmPath(project, linked)
+        return !jvm.isNullOrEmpty() && jvm == installations.getGradleJvmPath(project, baseRoot)
+    }
 
     override val id: String = GradleConstants.SYSTEM_ID.id
 
