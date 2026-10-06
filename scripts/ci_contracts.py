@@ -109,6 +109,7 @@ def check(root: Path = ROOT) -> None:
         "scripts.tests.test_codeql_kotlin_compat_probe",
         "scripts.tests.test_docs_layout",
         "scripts.tests.test_fetch_gradle",
+        "scripts.tests.test_live_ide",
         "scripts.tests.test_local_gate",
         "scripts.tests.test_plugin_verifier_reports",
         "scripts.tests.test_product_claims",
@@ -195,6 +196,7 @@ def check(root: Path = ROOT) -> None:
     ):
         raise CiContractError("The Windows unittest junction proof must keep its runtime prerequisites")
     check_conformance(conformance)
+    check_live_ide(read(root / ".github/workflows/live-ide.yml"))
 
     pins = GRADLE_ACTION.findall(ci + conformance + codeql + mutation)
     if not pins or len(set(pins)) != 1:
@@ -579,6 +581,23 @@ def check_conformance(conformance: str) -> None:
             raise CiContractError(
                 f"The required exact-impact aggregate must bind and check {name}"
             )
+
+
+def check_live_ide(live: str) -> None:
+    """The live IDE check runs on a schedule or by hand, never on a pull request, and reports failures."""
+    triggers = has_on_block(live)
+    if "schedule:" not in triggers or "workflow_dispatch:" not in triggers:
+        raise CiContractError("live-ide.yml must run on a schedule and by hand")
+    for forbidden in ("pull_request", "push:", "merge_group"):
+        if forbidden in triggers:
+            raise CiContractError(f"live-ide.yml must never run on {forbidden.rstrip(':')}")
+    if "permissions:\n  contents: read\n" not in live:
+        raise CiContractError("live-ide.yml must default to read-only contents")
+    if "xvfb" not in live or "scripts/live_ide.py" not in live:
+        raise CiContractError("live-ide.yml must run scripts/live_ide.py under a virtual display")
+    report = slice_job(live, "report")
+    if "failure() && github.event_name == 'schedule'" not in report or "issues: write" not in report:
+        raise CiContractError("live-ide.yml must open or update an issue on scheduled failure")
 
 
 def has_on_block(workflow: str) -> str:

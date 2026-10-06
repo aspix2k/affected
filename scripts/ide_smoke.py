@@ -18,7 +18,9 @@ class SmokeError(Exception):
     """Report an unreachable server, a failed tool or an unmet expectation."""
 
 
-def post(port: int, session: str | None, payload: dict[str, Any]) -> tuple[str | None, dict[str, Any] | None]:
+def post(
+    port: int, session: str | None, payload: dict[str, Any], timeout: float = TIMEOUT_SECONDS
+) -> tuple[str | None, dict[str, Any] | None]:
     """Send one JSON-RPC message and return the session id with the decoded reply."""
     headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
     if session:
@@ -29,7 +31,7 @@ def post(port: int, session: str | None, payload: dict[str, Any]) -> tuple[str |
         headers=headers,
     )
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
             body = response.read().decode("utf-8")
             session = response.headers.get("Mcp-Session-Id") or session
     except (urllib.error.URLError, OSError) as error:
@@ -44,7 +46,7 @@ def decode(body: str) -> dict[str, Any] | None:
     return json.loads(text) if text.startswith("{") else None
 
 
-def connect(port: int) -> str | None:
+def connect(port: int, timeout: float = TIMEOUT_SECONDS) -> str | None:
     """Open an MCP session and return its id."""
     session, reply = post(
         port,
@@ -59,15 +61,23 @@ def connect(port: int) -> str | None:
                 "clientInfo": {"name": "affected-ide-smoke", "version": "1"},
             },
         },
+        timeout,
     )
     if reply is None or "result" not in reply:
         raise SmokeError(f"MCP server on port {port} rejected initialize: {reply}")
-    post(port, session, {"jsonrpc": "2.0", "method": "notifications/initialized"})
+    post(port, session, {"jsonrpc": "2.0", "method": "notifications/initialized"}, timeout)
     return session
 
 
-def call(port: int, session: str | None, tool: str, project: str) -> dict[str, Any]:
-    """Call one Affected tool for the project and return its structured content."""
+def call(
+    port: int,
+    session: str | None,
+    tool: str,
+    project: str,
+    arguments: dict[str, Any] | None = None,
+    timeout: float = TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """Call one tool for the project with optional extra arguments and return its structured content."""
     _, reply = post(
         port,
         session,
@@ -75,8 +85,9 @@ def call(port: int, session: str | None, tool: str, project: str) -> dict[str, A
             "jsonrpc": "2.0",
             "id": 2,
             "method": "tools/call",
-            "params": {"name": tool, "arguments": {"projectPath": project}},
+            "params": {"name": tool, "arguments": {**(arguments or {}), "projectPath": project}},
         },
+        timeout,
     )
     result = (reply or {}).get("result")
     if result is None:
