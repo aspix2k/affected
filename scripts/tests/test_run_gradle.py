@@ -132,7 +132,7 @@ done
 """,
                 env_updates={
                     "AFFECTED_GRADLE_HANG_DIR": str(dumps),
-                    "AFFECTED_GRADLE_IDLE_SECONDS": "3",
+                    "AFFECTED_GRADLE_IDLE_SECONDS": "10",
                     "AFFECTED_GRADLE_IDLE_POLL": "1",
                 },
             )
