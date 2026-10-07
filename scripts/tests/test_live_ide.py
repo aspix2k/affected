@@ -25,6 +25,11 @@ def git_output(project: Path, *arguments: str) -> str:
     return subprocess.run(["git", *arguments], cwd=project, check=True, capture_output=True, text=True).stdout
 
 
+def refusal(text: str) -> dict[str, Any]:
+    """Shape an error answer of a tool with the given text."""
+    return {"content": [{"type": "text", "text": text}], "isError": True}
+
+
 class FakeRepository:
     """Lay out a minimal repository root with a fixture, a wrapper and a script."""
 
@@ -260,6 +265,25 @@ class ExpectationsTest(unittest.TestCase):
         report = live_ide.expectations(self.port, "session", "/p", scenario, 5)
         self.assertEqual("planned tasks with dependents: :core:test, :app:test", report[-2])
         self.assertEqual("verification with dependents: passed", report[-1])
+
+    def test_a_busy_ide_is_asked_again_until_the_run_starts(self) -> None:
+        """Retry while the IDE refuses to start work, then return the outcome of the run."""
+        FakeMcp.replies["affected_run_verification"] = refusal("The IDE is busy and cannot start Affected work.")
+        pauses: list[float] = []
+
+        def pause(seconds: float) -> None:
+            """Let the IDE finish what kept it busy."""
+            pauses.append(seconds)
+            FakeMcp.replies["affected_run_verification"] = tool({"passed": True})
+
+        self.assertEqual({"passed": True}, live_ide.run_verification(self.port, "session", "/p", pause))
+        self.assertEqual(1, len(pauses))
+
+    def test_a_failed_run_is_not_mistaken_for_a_busy_ide(self) -> None:
+        """Pass a real failure through without waiting."""
+        FakeMcp.replies["affected_run_verification"] = refusal("Failed. Modules to test: 1")
+        with self.assertRaisesRegex(live_ide.ide_smoke.SmokeError, "Failed"):
+            live_ide.run_verification(self.port, "session", "/p", lambda seconds: self.fail("must not wait"))
 
     def broken_project(self, directory: str) -> Path:
         """Create the edited file of the Gradle scenario with the text the regression replaces."""
