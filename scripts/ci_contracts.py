@@ -365,7 +365,7 @@ def check_product_verifier(ci: str) -> None:
         if not has_line(job, line):
             raise CiContractError(f"The product verifier must keep {line}")
     required_tokens = (
-        "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+        "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
         "name: plugin",
         "path: build/verifier-input",
         "python3 scripts/plugin_verifier_reports.py artifact",

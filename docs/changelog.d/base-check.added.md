@@ -1,1 +1,0 @@
-- After a failed check, "Check on base branch" (and the `affected_check_on_base` MCP tool) reruns only the failed Gradle and Maven task groups in a private checkout of the comparison base and tells for each whether your change broke it, it was already failing, or it could not be told; your working tree, index and worktrees are not touched.

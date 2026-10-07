@@ -39,7 +39,7 @@ jobs:
           sudo timeout --kill-after=30s 10m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true install -y --no-install-recommends xvfb lsof libxtst6 libxi6 libxrender1 libxrandr2 libfreetype6 libfontconfig1
       - name: Check the plugin in a running IDE
         run: python3 scripts/live_ide.py ${{ matrix.scenario }} --report-dir "$RUNNER_TEMP/live-ide"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: live-ide-${{ matrix.scenario }}
