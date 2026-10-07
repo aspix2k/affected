@@ -1714,6 +1714,101 @@
           "pass": true
         }
       ]
+    },
+    {
+      "id": "maven-jsoup",
+      "url": "https://github.com/jhy/jsoup.git",
+      "sha": "088614f4a1454232a1f03c63b7f80742f1f2a854",
+      "license": "MIT",
+      "ecosystem": "MAVEN",
+      "budgetSeconds": 1200,
+      "tools": [
+        "mvn",
+        "java",
+        "git"
+      ],
+      "setup": [],
+      "roots": [
+        "."
+      ],
+      "modules": [],
+      "scenarios": [
+        {
+          "name": "production source",
+          "files": [
+            "src/main/java/org/jsoup/Jsoup.java"
+          ],
+          "tasks": [
+            "org.jsoup:jsoup:verify"
+          ],
+          "command": [],
+          "output": "Tests run: \\d+, Failures: 0",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "maven-gson-reactor",
+      "url": "https://github.com/google/gson.git",
+      "sha": "845664ba1c307e6c1910d07cfed2f622e0ad8df1",
+      "license": "Apache-2.0",
+      "ecosystem": "MAVEN",
+      "budgetSeconds": 1200,
+      "tools": [
+        "mvn",
+        "java",
+        "git"
+      ],
+      "setup": [],
+      "roots": [
+        "."
+      ],
+      "modules": [],
+      "scenarios": [
+        {
+          "name": "production source",
+          "files": [
+            "gson/src/main/java/com/google/gson/Gson.java"
+          ],
+          "tasks": [
+            "com.google.code.gson:gson:verify"
+          ],
+          "command": [],
+          "output": "Tests run: \\d+, Failures: 0",
+          "pass": false
+        }
+      ]
+    },
+    {
+      "id": "gradle-kotlinpoet-multiplatform",
+      "url": "https://github.com/square/kotlinpoet.git",
+      "sha": "189b4659311291b2466ad5246ac707eb2cad8103",
+      "license": "Apache-2.0",
+      "ecosystem": "GRADLE",
+      "budgetSeconds": 2400,
+      "tools": [
+        "java",
+        "git"
+      ],
+      "setup": [],
+      "roots": [
+        "."
+      ],
+      "modules": [],
+      "scenarios": [
+        {
+          "name": "production source",
+          "files": [
+            "kotlinpoet/src/jvmMain/kotlin/com/squareup/kotlinpoet/FileSpec.kt"
+          ],
+          "tasks": [
+            ":kotlinpoet:jvmTest"
+          ],
+          "command": [],
+          "output": "BUILD SUCCESSFUL",
+          "pass": true
+        }
+      ]
     }
   ]
 }
