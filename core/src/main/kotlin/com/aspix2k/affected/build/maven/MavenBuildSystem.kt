@@ -6,8 +6,10 @@ import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.AffectedSettings
 import com.aspix2k.affected.OwnedProcessExecution
 import com.aspix2k.affected.affectedRunLabel
+import com.aspix2k.affected.build.BuildChanges
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.SuspendingBuildSystem
+import com.aspix2k.affected.build.WorkspaceChangesBuildSystem
 import com.aspix2k.affected.build.gradle.JVM_SOURCE_EXTENSIONS
 import com.aspix2k.affected.build.isJvmTestSourceSet
 import com.aspix2k.affected.build.mavenInvocationArguments
@@ -91,13 +93,16 @@ class MavenBuildSystem internal constructor(
     private val onLaunchQueued: () -> Unit,
     private val runConfiguration: (Project, MavenRunnerParameters, ProgramRunner.Callback?) -> Unit =
         MavenRunConfigurationType::runConfiguration,
-) : SuspendingBuildSystem {
+) : SuspendingBuildSystem, WorkspaceChangesBuildSystem {
 
     constructor() : this(null, {}, {})
 
     internal constructor(onLaunchQueued: () -> Unit) : this(null, {}, onLaunchQueued)
 
-    override val id: String = "MAVEN"
+    override val id: String = MAVEN_SYSTEM_ID
+
+    override fun requiresWorkspace(module: BuildModule, changes: BuildChanges): Boolean =
+        mavenRequiresWorkspace(module.root, changes)
 
     override fun isTestSource(path: String): Boolean = isJvmTestSourceSet(path)
 

@@ -1,1 +1,2 @@
 - Maven: modules are now passed to Maven as `groupId:artifactId`. Before, a bare `artifactId` was passed, which Maven reads as a directory, so the run failed with "Could not find the selected project in the reactor" for every module whose directory is named differently from its artifact.
+- Maven: a changed `pom.xml` below the reactor root (for example a nested parent) or a file under `.mvn/` now checks the whole reactor instead of only the module that owns the file.
