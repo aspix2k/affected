@@ -43,7 +43,7 @@ Built for multi-module projects and monorepos across 28 supported build ecosyste
 - **Says what happened.** A short summary after each run, and **Affected > Diagnose**
   explains what was detected and why nothing ran.
 - **Regression or already failing.** After a failed check, **Check on base branch**
-  reruns only the failed Gradle and Maven task groups in a private checkout of the
+  reruns only the failed Gradle, Maven, Go and Cargo task groups in a private checkout of the
   comparison base and tells whether your change broke them.
 - **One settings page.** Settings | Tools | Affected holds the base branch and every switch;
   the toolbar menu keeps the same toggles.

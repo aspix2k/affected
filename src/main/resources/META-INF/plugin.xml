@@ -16,7 +16,7 @@
             <li>Narrow to the smallest unit proven by the native build system or test runner.</li>
             <li>Optionally compile direct dependents after a public API change, or run the tests of every module that depends on the change.</li>
             <li>Optionally run the plan before a commit or push.</li>
-            <li>After a failure, check the base branch to tell a regression from a test that was already failing (Gradle and Maven).</li>
+            <li>After a failure, check the base branch to tell a regression from a test that was already failing (Gradle, Maven, Go and Cargo).</li>
             <li>Diagnose explains what was detected and why nothing ran; one settings page holds every switch.</li>
             <li>No account, server, telemetry or project-specific configuration file.</li>
             <li>Optional JetBrains MCP Server tools use the same analysis snapshot and run lease.</li>

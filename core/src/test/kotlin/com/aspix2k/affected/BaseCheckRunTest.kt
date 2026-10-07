@@ -135,7 +135,7 @@ class BaseCheckRunTest : BasePlatformTestCase() {
         val failingBefore = group(File(root, "mod-b"), "mod-b:test")
         val newModule = group(root, "mod-new:test")
         val addedRoot = group(File(root, "mod-added"), "mod-added:test")
-        val foreign = group(root, "test", system = "CARGO")
+        val foreign = group(root, "test", system = "NODE")
 
         val report = BaseCheck.run(
             project,
@@ -155,7 +155,7 @@ class BaseCheckRunTest : BasePlatformTestCase() {
                     listOf("mod-added:test"),
                     BaseRun.Skipped(BaseNotRun.MODULE_MISSING),
                 ),
-                BaseGroupVerdict("CARGO", ".", listOf("test"), BaseRun.Skipped(BaseNotRun.UNSUPPORTED_SYSTEM)),
+                BaseGroupVerdict("NODE", ".", listOf("test"), BaseRun.Skipped(BaseNotRun.UNSUPPORTED_SYSTEM)),
             ),
             report.verdicts,
         )

@@ -68,7 +68,7 @@ class AffectedMcpBaseViewsTest {
     fun `an unsupported build system is reported as not supported yet`() {
         val view = AffectedMcpBaseViews.check(
             BaseCheckReport(
-                listOf(BaseGroupVerdict("CARGO", ".", listOf("test"), BaseRun.Skipped(BaseNotRun.UNSUPPORTED_SYSTEM))),
+                listOf(BaseGroupVerdict("NODE", ".", listOf("test"), BaseRun.Skipped(BaseNotRun.UNSUPPORTED_SYSTEM))),
             ),
         )
 

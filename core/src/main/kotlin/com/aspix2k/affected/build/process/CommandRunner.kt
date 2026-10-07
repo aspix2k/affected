@@ -4,6 +4,7 @@ import com.aspix2k.affected.AffectedOwnedSession
 import com.aspix2k.affected.AffectedRunPresentation
 import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.AffectedSettings
+import com.aspix2k.affected.BaseCheckRun
 import com.aspix2k.affected.ProcessAffectedRunChild
 import com.aspix2k.affected.affectedRunLabel
 import com.aspix2k.affected.build.continuesAfterFailure
@@ -20,6 +21,7 @@ import com.intellij.openapi.project.Project
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -83,6 +85,9 @@ object CommandRunner {
         }
     }
 
+    private suspend fun executionProjectRoot(project: Project): Path? =
+        currentCoroutineContext()[BaseCheckRun]?.root ?: project.basePath?.let(Path::of)
+
     internal suspend fun runBatchAndWait(
         project: Project,
         workingDirectory: String,
@@ -101,7 +106,7 @@ object CommandRunner {
             continueAfterFailure = continueAfterFailure,
             executionRootGuard = projectExecutionRootGuard(
                 Path.of(workingDirectory),
-                project.basePath?.let(Path::of),
+                executionProjectRoot(project),
             ),
         )
         ProcessTerminatedListener.attach(handler)
