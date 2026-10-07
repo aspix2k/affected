@@ -18,6 +18,7 @@ internal object RealRepositoryClone {
             TIMEOUT_SECONDS,
             environment,
         )
+        NativeProcessRunner.execute(listOf("git", "branch", BASE_BRANCH), directory, TIMEOUT_SECONDS, environment)
         val head = NativeProcessRunner.execute(listOf("git", "rev-parse", "HEAD"), directory, TIMEOUT_SECONDS)
         assertEquals(repository.sha, head.trim(), "${repository.id}: fetched commit differs from the pinned SHA")
     }
@@ -50,6 +51,7 @@ internal object RealRepositoryClone {
         }
     }
 
+    const val BASE_BRANCH = "affected-base"
     private const val TIMEOUT_SECONDS = 300L
     private const val STATUS_PREFIX = 3
     private const val FETCH_ATTEMPTS = 4

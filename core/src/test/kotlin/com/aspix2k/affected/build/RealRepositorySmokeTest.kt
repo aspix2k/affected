@@ -1,6 +1,9 @@
 package com.aspix2k.affected.build
 
 import com.aspix2k.affected.ChangeSet
+import com.aspix2k.affected.Engine
+import com.aspix2k.affected.EngineBlocker
+import com.aspix2k.affected.EngineRequest
 import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.TaskGroup
 import com.aspix2k.affected.Verification
@@ -15,6 +18,7 @@ import com.aspix2k.affected.build.node.nodeCommands
 import com.aspix2k.affected.build.php.composerCommands
 import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CliStep
+import com.aspix2k.affected.build.process.ideProcessHost
 import com.aspix2k.affected.build.python.PythonTestRunner
 import com.aspix2k.affected.build.python.pythonCommands
 import com.aspix2k.affected.build.python.pythonDeferredCommands
@@ -76,10 +80,26 @@ class RealRepositorySmokeTest(private val repository: RealRepository) {
                     File(root, it).appendText("\n")
                 }
                 assertEquals(baseline + scenario.files, RealRepositoryClone.modified(root))
+                assertEnginePlan(scenario, root)
                 runScenario(scenario, root, graph, own, deadline)
                 RealRepositoryClone.restore(root, scenario.files, baseline)
             }
         }
+    }
+
+    private fun assertEnginePlan(scenario: RealScenario, root: File) {
+        val cache = File(root.parentFile, "engine-cache").toPath()
+        val request = EngineRequest(root, RealRepositoryClone.BASE_BRANCH, cache, scenario.testDependents)
+        val plan = Engine.plan(request, ideProcessHost)
+        val tasks = plan.plan.groups.filter { it.systemId == repository.ecosystem }.flatMap { it.tasks }
+        assertTrue(
+            scenario.tasks.all { expected -> tasks.any { it.startsWith(expected) } },
+            "${scenario.name}: the engine planned $tasks (blocker ${plan.blocker}), expected ${scenario.tasks}",
+        )
+        assertTrue(
+            plan.blocker == null || plan.blocker == EngineBlocker.UNSUPPORTED_BUILD_SYSTEM,
+            "${scenario.name}: the engine is blocked by ${plan.blocker}: ${plan.unresolved}",
+        )
     }
 
     private fun assertKnownDefect(defect: KnownDefect, run: () -> Unit) {

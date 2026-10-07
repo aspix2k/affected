@@ -18,13 +18,16 @@ internal class FileWorkspace(
     override val stopAfterFirstFailure: Boolean,
     private val collectedChanges: () -> BuildChanges,
     private val output: (String, Boolean) -> Unit,
+    host: ProcessHost? = null,
 ) : Workspace {
 
     override val root: File = directory
 
-    override val helperAssets: Path? = null
+    override val helperAssets: Path? = runCatching {
+        Path.of(FileWorkspace::class.java.protectionDomain.codeSource.location.toURI())
+    }.getOrNull()
 
-    override val processHost: ProcessHost by lazy { ProcessHost.standalone(listOf(extractJnaNatives())) }
+    override val processHost: ProcessHost by lazy { host ?: ProcessHost.standalone(listOf(extractJnaNatives())) }
 
     override val commandRuns: CommandRuns = object : CommandRuns {
 

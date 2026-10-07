@@ -74,8 +74,9 @@ cli/build/install/affected/bin/affected run --base main --dependents
 It exits with 0 when every planned check passed (or nothing needed to run),
 1 when a check failed, 2 when success cannot be claimed (not a git repository,
 the base branch cannot be compared with, or a changed source has no owning
-check) and 64 on wrong usage. Without the plugin's helper assets test selection
-always falls back to the whole module.
+check) and 64 on wrong usage. The distribution carries the pytest, unittest,
+PHPUnit and .NET helpers in `agent/` next to `lib/`, where the adapters look
+for them, so those ecosystems select tests the same way the plugin does.
 
 A Gradle build in the repository root is read without the IDE by
 `GradleCommandLineBuildSystem`: it runs the wrapper (or `gradle`) once with an

@@ -54,6 +54,68 @@ class MainTest {
         assertTrue("not a usable git repository" in errors)
     }
 
+    @Test
+    fun `plan prints the checks a change needs and exits with success`() {
+        val root = repository()
+        File(root, "index.js").appendText("// changed\n")
+
+        val (code, output, errors) = run(listOf("plan", "--base", "main", "--dir", root.path))
+
+        assertEquals(EXIT_PASSED, code, errors)
+        assertTrue("Build systems: NODE (1)" in output, output)
+        assertTrue("Changed files against main: 1" in output, output)
+        assertTrue(Regex("NODE in \\.: \\S*:test").containsMatchIn(output), output)
+    }
+
+    @Test
+    fun `a branch without changes has nothing to run and passes`() {
+        val (code, output, _) = run(listOf("run", "--base", "main", "--dir", repository().path))
+
+        assertEquals(EXIT_PASSED, code)
+        assertTrue("Nothing to run." in output)
+    }
+
+    @Test
+    fun `a base branch that cannot be compared with blocks even when a plan exists`() {
+        val root = repository()
+        File(root, "index.js").appendText("// changed\n")
+
+        val (code, _, errors) = run(listOf("run", "--base", "release", "--dir", root.path))
+
+        assertEquals(EXIT_BLOCKED, code)
+        assertTrue("cannot compare with 'release'" in errors, errors)
+    }
+
+    @Test
+    fun `a changed source that no check owns is listed and blocks`() {
+        val root = repository()
+        File(root, "tools").mkdirs()
+        File(root, "pom.xml").writeText("<project>")
+        git(root, "add", ".")
+
+        val (code, _, errors) = run(listOf("plan", "--base", "main", "--dir", root.path))
+
+        assertEquals(EXIT_BLOCKED, code)
+        assertTrue(errors.isNotBlank())
+    }
+
+    private fun repository(): File {
+        val root = createTempDirectory("cli-repository").toFile().canonicalFile
+        File(root, "package.json").writeText("""{"name":"demo","version":"1.0.0","scripts":{"test":"node --test"}}""")
+        File(root, "index.js").writeText("module.exports = 1\n")
+        git(root, "init", "--quiet", "--initial-branch=main")
+        git(root, "add", ".")
+        git(root, "-c", "user.name=test", "-c", "user.email=test@example.invalid", "commit", "--quiet", "-m", "init")
+        git(root, "checkout", "--quiet", "-b", "feature")
+        return root
+    }
+
+    private fun git(root: File, vararg arguments: String) {
+        val process = ProcessBuilder(listOf("git") + arguments).directory(root).redirectErrorStream(true).start()
+        val output = process.inputStream.bufferedReader().readText()
+        assertEquals(0, process.waitFor(), output)
+    }
+
     private fun run(arguments: List<String>): Triple<Int, String, String> {
         val out = ByteArrayOutputStream()
         val err = ByteArrayOutputStream()

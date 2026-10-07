@@ -70,13 +70,24 @@ internal fun verificationPlans(
             TaskPlanner.plan(tested, consumers.map { it.info() })
         },
         unresolved = changes.files.filter { file ->
-            file.extension.lowercase() in graph.sourceExtensions &&
-                effectiveOwners[file].orEmpty().none { it.isVerifiable() || it in verifiedByConsumers }
+            val extension = file.extension.lowercase()
+            extension in graph.sourceExtensions &&
+                lacksOwnVerification(extension, effectiveOwners[file].orEmpty()) { it in verifiedByConsumers }
         },
     )
 }
 
 private fun ModuleGraph.Node.isVerifiable(): Boolean = module.hasTests || module.compileTask != null
+
+private fun lacksOwnVerification(
+    extension: String,
+    owners: List<ModuleGraph.Node>,
+    verifiedElsewhere: (ModuleGraph.Node) -> Boolean,
+): Boolean {
+    val verified = { node: ModuleGraph.Node -> node.isVerifiable() || verifiedElsewhere(node) }
+    val claiming = owners.filter { extension in it.system.sourceExtensions }.groupBy { it.system.id }
+    return if (claiming.isEmpty()) owners.none(verified) else claiming.values.any { it.none(verified) }
+}
 
 internal fun ChangeSet.toBuildChanges(): BuildChanges = BuildChanges(
     files = files.map { it.absoluteFile.normalize().invariantSeparatorsPath },
