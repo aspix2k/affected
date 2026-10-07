@@ -19,6 +19,9 @@ internal class SequentialProcessHandler(
 ) : ProcessHandler(), AffectedOwnedSession {
 
     private val notified = AtomicBoolean(false)
+    private val started = AtomicBoolean(false)
+
+    val commandStarted: Boolean get() = started.get()
 
     private val sequence = CommandSequence(
         workingDirectory,
@@ -34,6 +37,8 @@ internal class SequentialProcessHandler(
                     },
                 )
             }
+
+            override fun onCommandStarted(command: CliCommand) = started.set(true)
 
             override fun onTerminated(exitCode: Int) = notifyProcessTerminated(exitCode)
         },

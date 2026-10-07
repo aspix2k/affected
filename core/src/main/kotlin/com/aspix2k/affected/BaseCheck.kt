@@ -21,7 +21,8 @@ object BaseCheck {
 
     private val LOG = logger<BaseCheck>()
     private val RUN_TIMEOUT = 30.minutes
-    private val SUPPORTED_SYSTEMS = setOf("GRADLE", "MAVEN", "GO", "CARGO")
+    private val COMMAND_SYSTEMS = setOf("GO", "CARGO")
+    private val SUPPORTED_SYSTEMS = setOf("GRADLE", "MAVEN") + COMMAND_SYSTEMS
     private const val CACHE_DIRECTORY = "affected"
 
     private class BaseContext(
@@ -105,10 +106,11 @@ object BaseCheck {
             return BaseRun.Skipped(BaseNotRun.GRADLE_JVM_DIFFERS)
         }
         var accepted = false
+        val baseRun = BaseCheckRun(Path.of(context.baseRoot))
         val passed = withTimeoutOrNull(RUN_TIMEOUT) {
             baseGroup.runInPlannedExecutionRoot(Path.of(context.baseRoot), onInvalid = {}) {
                 accepted = true
-                withContext(BaseCheckRun(Path.of(context.baseRoot))) {
+                withContext(baseRun) {
                     runBuildTasks(context.project, group.systemId, baseGroup.root, group.tasks, context.changes)
                 }
             }
@@ -117,6 +119,8 @@ object BaseCheck {
             claim.isCancellationRequested() -> BaseRun.Skipped(BaseNotRun.STOPPED)
             passed == null -> BaseRun.Skipped(BaseNotRun.TIMED_OUT)
             !accepted -> BaseRun.Skipped(BaseNotRun.MODULE_MISSING)
+            !passed && group.systemId in COMMAND_SYSTEMS && !baseRun.commandStarted.get() ->
+                BaseRun.Skipped(BaseNotRun.COULD_NOT_RUN)
             else -> BaseRun.Finished(passed)
         }
     }

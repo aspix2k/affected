@@ -53,6 +53,7 @@ class SequentialProcessHandlerTest {
         assertTrue(handler.exitCode != 0)
         assertFalse(Files.exists(marker))
         assertFalse(Files.exists(temporary))
+        assertFalse(handler.commandStarted)
         assertTrue(output.contains("planned working directory"), output.toString())
     }
 
@@ -227,6 +228,7 @@ class SequentialProcessHandlerTest {
         assertTrue(handler.waitFor(30_000))
         assertEquals(0, handler.exitCode)
         assertTrue(output.indexOf("> first") < output.indexOf("> second"), output.toString())
+        assertTrue(handler.commandStarted)
     }
 
     @Test

@@ -1,0 +1,1 @@
+- "Check on base branch" for Go and Cargo answers "unknown" with the reason "the check could not be started on the base" when no command ran there, instead of reporting the failure as already present before your change.
