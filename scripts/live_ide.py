@@ -33,6 +33,7 @@ IDE_JVM_ARGS = (
     "-Dide.experimental.ui.onboarding=false",
 )
 THREAD_DUMP_SECONDS = 3
+BASE_CHECK_SECONDS = 900
 PROBE_SECONDS = 5
 POLL_SECONDS = 3
 IGNORED = (
@@ -120,6 +121,7 @@ class Scenario:
     wrapper: bool = False
     venv: bool = False
     jdk: bool = False
+    regression: tuple[str, str] | None = None
 
 
 SCENARIOS = {
@@ -137,6 +139,7 @@ SCENARIOS = {
             dependent_tasks=(":core:test", ":app:test"),
             wrapper=True,
             jdk=True,
+            regression=("return 1;", "return 2;"),
         ),
         Scenario(
             name="idea-maven",
@@ -384,7 +387,30 @@ def expectations(port: int, session: str | None, project: str, scenario: Scenari
         ide_smoke.call(port, session, "affected_configure", project, {"testDependents": True})
         report.append(f"planned tasks with dependents: {', '.join(plan(port, session, project, scenario.dependent_tasks, timeout))}")
         report.append(f"verification with dependents: {expect_run(port, session, project)}")
+    if scenario.regression:
+        report.append(f"base check: {expect_regression(port, session, project, scenario)}")
     return report
+
+
+def expect_regression(port: int, session: str | None, project: str, scenario: Scenario) -> str:
+    """Break the edited file, require the run to fail and the base check to blame the change."""
+    old, new = scenario.regression or ("", "")
+    edited = Path(project) / scenario.edited_file
+    source = edited.read_text(encoding="utf-8")
+    if old not in source:
+        raise LiveIdeError(f"{scenario.edited_file} does not contain {old!r}")
+    edited.write_text(source.replace(old, new, 1), encoding="utf-8")
+    try:
+        outcome = ide_smoke.call(port, session, "affected_run_verification", project)
+    except ide_smoke.SmokeError:
+        outcome = None
+    if outcome is not None:
+        raise LiveIdeError(f"verification passed with a breaking change: {outcome}")
+    verdicts = ide_smoke.call(port, session, "affected_check_on_base", project, timeout=BASE_CHECK_SECONDS)
+    found = [group.get("verdict") for group in verdicts.get("groups", [])]
+    if found != ["regression"]:
+        raise LiveIdeError(f"base check verdicts are {found}, expected ['regression']: {verdicts}")
+    return "regression"
 
 
 class Platform:
