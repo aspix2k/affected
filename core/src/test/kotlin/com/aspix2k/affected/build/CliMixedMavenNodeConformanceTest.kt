@@ -148,7 +148,11 @@ class CliMixedMavenNodeConformanceTest : HeavyPlatformTestCase() {
                     project,
                     Plan(
                         groups = listOf(
-                            TaskGroup("MAVEN", File(root, "backend").path, listOf(":test")),
+                            TaskGroup(
+                                "MAVEN",
+                                File(root, "backend").path,
+                                listOf("fixture:affected-mixed-maven-node:test"),
+                            ),
                             TaskGroup("NODE", File(root, "frontend").path, listOf(".:test")),
                         ),
                         tested = 2,

@@ -5,7 +5,7 @@
     <artifactId>live-maven</artifactId>
     <version>1</version>
   </parent>
-  <artifactId>core</artifactId>
+  <artifactId>live-core</artifactId>
   <dependencies>
     <dependency>
       <groupId>org.junit.jupiter</groupId>

@@ -126,6 +126,7 @@ class MavenBuildSystem internal constructor(
                 testTask = data.testTask,
                 compileTask = COMPILE_GOAL,
                 hasTests = mavenHoldsTests(data.directory, data.testSources),
+                executionId = data.selector,
                 systemId = id,
             )
         }
@@ -138,6 +139,7 @@ class MavenBuildSystem internal constructor(
 
     private data class Described(
         val mavenKey: String,
+        val selector: String,
         val id: String,
         val root: String,
         val directory: String,
@@ -160,6 +162,7 @@ class MavenBuildSystem internal constructor(
             val root = roots.getValue(mavenProject)
             Described(
                 mavenKey = mavenProject.mavenId.key,
+                selector = "${mavenProject.mavenId.groupId.orEmpty()}:${mavenProject.mavenId.artifactId.orEmpty()}",
                 id = mavenProject.mavenId.artifactId ?: directory.substringAfterLast('/'),
                 root = root,
                 directory = directory,

@@ -5,11 +5,11 @@
     <artifactId>live-maven</artifactId>
     <version>1</version>
   </parent>
-  <artifactId>app</artifactId>
+  <artifactId>live-app</artifactId>
   <dependencies>
     <dependency>
       <groupId>live</groupId>
-      <artifactId>core</artifactId>
+      <artifactId>live-core</artifactId>
       <version>1</version>
     </dependency>
     <dependency>

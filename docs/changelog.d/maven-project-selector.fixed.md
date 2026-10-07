@@ -1,0 +1,1 @@
+- Maven: modules are now passed to Maven as `groupId:artifactId`. Before, a bare `artifactId` was passed, which Maven reads as a directory, so the run failed with "Could not find the selected project in the reactor" for every module whose directory is named differently from its artifact.
