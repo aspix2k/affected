@@ -13,6 +13,7 @@ import com.aspix2k.affected.build.Workspace
 import com.aspix2k.affected.build.capability
 import com.aspix2k.affected.build.gradle.isGradleRoot
 import com.aspix2k.affected.build.maven.MAVEN_SYSTEM_ID
+import com.aspix2k.affected.build.process.ProcessHost
 import java.io.File
 import java.nio.file.Path
 
@@ -47,7 +48,9 @@ class EnginePlan internal constructor(
 
 object Engine {
 
-    fun plan(request: EngineRequest): EnginePlan {
+    fun plan(request: EngineRequest): EnginePlan = plan(request, null)
+
+    internal fun plan(request: EngineRequest, host: ProcessHost?): EnginePlan {
         var collected = BuildChanges(emptyList(), emptySet(), comparedToBase = false)
         val workspace = FileWorkspace(
             request.directory,
@@ -55,6 +58,7 @@ object Engine {
             request.stopAfterFirstFailure,
             { collected },
             request.output,
+            host,
         )
         val present = EngineBuildSystems.all().filter { it.isPresent(workspace) }
         val graph =
