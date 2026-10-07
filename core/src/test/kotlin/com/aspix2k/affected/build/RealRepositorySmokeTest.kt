@@ -3,6 +3,7 @@ package com.aspix2k.affected.build
 import com.aspix2k.affected.ChangeSet
 import com.aspix2k.affected.Engine
 import com.aspix2k.affected.EngineBlocker
+import com.aspix2k.affected.EnginePlan
 import com.aspix2k.affected.EngineRequest
 import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.TaskGroup
@@ -26,6 +27,8 @@ import com.aspix2k.affected.build.python.pythonInterpreter
 import com.aspix2k.affected.build.python.pythonToolchain
 import com.aspix2k.affected.build.python.withPythonInterpreter
 import com.aspix2k.affected.build.ruby.rubyCommands
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -67,6 +70,7 @@ class RealRepositorySmokeTest(private val repository: RealRepository) {
                 assertTrue(result.passed, "Setup failed: ${setup.joinToString(" ")}\n${result.output}")
             }
             val baseline = RealRepositoryClone.modified(root)
+            if (repository.ecosystem in ENGINE_ONLY) return@use probeThroughEngine(root, baseline, deadline)
             val project = multiRootProject(root)
             val discovered = buildSystems().filter { it.isPresent(project) }.associateWith { it.modules(project) }
             val own = discovered.entries.single { it.key.id == repository.ecosystem }.value
@@ -87,9 +91,40 @@ class RealRepositorySmokeTest(private val repository: RealRepository) {
         }
     }
 
-    private fun assertEnginePlan(scenario: RealScenario, root: File) {
+    private fun probeThroughEngine(root: File, baseline: Set<String>, deadline: Long) {
+        repository.scenarios.forEach { scenario ->
+            scenario.files.forEach {
+                assertTrue(File(root, it).isFile, "${scenario.name}: $it does not exist at ${repository.sha}")
+                File(root, it).appendText("\n")
+            }
+            assertEquals(baseline + scenario.files, RealRepositoryClone.modified(root))
+            val output = StringBuffer()
+            val plan = assertEnginePlan(scenario, root) { text, _ -> output.append(text) }
+            assertEquals(null, plan.blocker, "${scenario.name}: ${plan.unresolved}")
+            val passed = runBlocking {
+                withTimeoutOrNull(TimeUnit.SECONDS.toMillis(remainingSeconds(deadline))) { Engine.run(plan) }
+            }
+            val text = output.toString().replace(ANSI_STYLE, "")
+            assertNotNull(passed, "${scenario.name}: timed out\n$text")
+            assertTrue(Regex(scenario.output).containsMatchIn(text), "${scenario.name}: tests were not selected\n$text")
+            assertTrue(!scenario.pass || passed, "${scenario.name}: tests failed\n$text")
+            RealRepositoryClone.restore(root, scenario.files, baseline)
+        }
+    }
+
+    private fun assertEnginePlan(
+        scenario: RealScenario,
+        root: File,
+        output: (String, Boolean) -> Unit = { _, _ -> },
+    ): EnginePlan {
         val cache = File(root.parentFile, "engine-cache").toPath()
-        val request = EngineRequest(root, RealRepositoryClone.BASE_BRANCH, cache, scenario.testDependents)
+        val request = EngineRequest(
+            root,
+            RealRepositoryClone.BASE_BRANCH,
+            cache,
+            scenario.testDependents,
+            output = output,
+        )
         val plan = Engine.plan(request, ideProcessHost)
         val tasks = plan.plan.groups.filter { it.systemId == repository.ecosystem }.flatMap { it.tasks }
         assertTrue(
@@ -100,6 +135,7 @@ class RealRepositorySmokeTest(private val repository: RealRepository) {
             plan.blocker == null || plan.blocker == EngineBlocker.UNSUPPORTED_BUILD_SYSTEM,
             "${scenario.name}: the engine is blocked by ${plan.blocker}: ${plan.unresolved}",
         )
+        return plan
     }
 
     private fun assertKnownDefect(defect: KnownDefect, run: () -> Unit) {
@@ -246,6 +282,7 @@ class RealRepositorySmokeTest(private val repository: RealRepository) {
 
     companion object {
         private const val REAL_REPOSITORIES_PROPERTY = "affected.realRepositories"
+        private val ENGINE_ONLY = setOf("GRADLE", "MAVEN")
         private val ANSI_STYLE = Regex("\u001B\\[[0-9;]*m")
         private const val SKIP_MISSING_TOOLS_PROPERTY = "affected.realRepositories.skipMissingTools"
 
