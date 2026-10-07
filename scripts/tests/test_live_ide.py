@@ -256,9 +256,49 @@ class ExpectationsTest(unittest.TestCase):
     def test_gradle_expectations_cover_dependents(self) -> None:
         """Run once, enable dependents, expect the dependents' plan and run again."""
         FakeMcp.replies = SwitchingReplies(FakeMcp.replies)
-        report = live_ide.expectations(self.port, "session", "/p", GRADLE, 5)
+        scenario = dataclasses.replace(GRADLE, regression=None)
+        report = live_ide.expectations(self.port, "session", "/p", scenario, 5)
         self.assertEqual("planned tasks with dependents: :core:test, :app:test", report[-2])
         self.assertEqual("verification with dependents: passed", report[-1])
+
+    def broken_project(self, directory: str) -> Path:
+        """Create the edited file of the Gradle scenario with the text the regression replaces."""
+        edited = Path(directory) / GRADLE.edited_file
+        edited.parent.mkdir(parents=True)
+        edited.write_text("int value() { return 1; }\n", encoding="utf-8")
+        return edited
+
+    def test_a_breaking_edit_must_fail_and_be_blamed_on_the_change(self) -> None:
+        """Apply the breaking edit, see the run fail and the base check call it a regression."""
+        FakeMcp.replies["affected_run_verification"] = tool({}, error=True)
+        FakeMcp.replies["affected_check_on_base"] = tool({"groups": [{"verdict": "regression"}]})
+        with TemporaryDirectory() as directory:
+            edited = self.broken_project(directory)
+            self.assertEqual("regression", live_ide.expect_regression(self.port, "session", directory, GRADLE))
+            self.assertIn("return 2;", edited.read_text(encoding="utf-8"))
+
+    def test_a_breaking_edit_that_still_passes_is_reported(self) -> None:
+        """A run that passes after the breaking edit means the edit was not verified."""
+        with TemporaryDirectory() as directory:
+            self.broken_project(directory)
+            with self.assertRaisesRegex(live_ide.LiveIdeError, "passed with a breaking change"):
+                live_ide.expect_regression(self.port, "session", directory, GRADLE)
+
+    def test_another_verdict_than_regression_is_reported(self) -> None:
+        """A failure blamed on the base, or not judged, fails the check with the verdicts."""
+        FakeMcp.replies["affected_run_verification"] = tool({}, error=True)
+        FakeMcp.replies["affected_check_on_base"] = tool({"groups": [{"verdict": "pre-existing"}]})
+        with TemporaryDirectory() as directory:
+            self.broken_project(directory)
+            with self.assertRaisesRegex(live_ide.LiveIdeError, r"verdicts are \['pre-existing'\]"):
+                live_ide.expect_regression(self.port, "session", directory, GRADLE)
+
+    def test_a_fixture_without_the_text_to_break_is_reported(self) -> None:
+        """Do not silently skip the base check when the fixture changed."""
+        with TemporaryDirectory() as directory:
+            self.broken_project(directory).write_text("int value() { return 3; }\n", encoding="utf-8")
+            with self.assertRaisesRegex(live_ide.LiveIdeError, "does not contain"):
+                live_ide.expect_regression(self.port, "session", directory, GRADLE)
 
     def test_wrong_changed_files_fail(self) -> None:
         """Reject a different file list."""

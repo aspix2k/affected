@@ -189,7 +189,8 @@ Each scenario copies its fixture (`conformance/live-ide/gradle`, `conformance/li
 for the MCP server and for the project model (`get_project_modules` lists the modules, and
 `affected_verification_plan` answers). It expects the changed file, the planned tasks and a passing
 run; for Gradle and Maven it also enables `testDependents` through `affected_configure` and expects the
-dependent module's tests too. The IDE is always stopped and the temporary state removed;
+dependent module's tests too. The Gradle scenario then breaks the edited file, requires the run to fail and
+`affected_check_on_base` to call it a regression. The IDE is always stopped and the temporary state removed;
 `--report-dir <dir>` keeps the report, and after a failure the IDE log and thread dumps.
 A first run downloads the IDE (about 1.5 GB) and PyCharm needs the virtual environment's `pytest` from PyPI.
 
