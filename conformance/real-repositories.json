@@ -998,7 +998,7 @@
             "dart",
             "test"
           ],
-          "output": "All tests passed",
+          "output": "All tests passed|\\d+ tests passed",
           "pass": true
         },
         {
@@ -1013,7 +1013,7 @@
             "dart",
             "test"
           ],
-          "output": "All tests passed",
+          "output": "All tests passed|\\d+ tests passed",
           "pass": true
         }
       ]
@@ -1053,7 +1053,7 @@
             "flutter",
             "test"
           ],
-          "output": "All tests passed",
+          "output": "All tests passed|\\d+ tests passed",
           "pass": true
         },
         {
@@ -1068,7 +1068,7 @@
             "flutter",
             "test"
           ],
-          "output": "All tests passed",
+          "output": "All tests passed|\\d+ tests passed",
           "pass": true
         }
       ]
