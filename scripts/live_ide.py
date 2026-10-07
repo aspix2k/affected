@@ -34,6 +34,8 @@ IDE_JVM_ARGS = (
 )
 THREAD_DUMP_SECONDS = 3
 BASE_CHECK_SECONDS = 900
+BUSY_SECONDS = 300
+BUSY_ANSWER = "The IDE is busy"
 PROBE_SECONDS = 5
 POLL_SECONDS = 3
 IGNORED = (
@@ -389,9 +391,23 @@ def plan(port: int, session: str | None, project: str, tasks: Sequence[str], tim
         pause(POLL_SECONDS)
 
 
+def run_verification(
+    port: int, session: str | None, project: str, pause: Callable[[float], None] = time.sleep
+) -> dict[str, object]:
+    """Run the verification, waiting while the IDE says it is too busy to start one."""
+    deadline = time.monotonic() + BUSY_SECONDS
+    while True:
+        try:
+            return ide_smoke.call(port, session, "affected_run_verification", project)
+        except ide_smoke.SmokeError as error:
+            if BUSY_ANSWER not in str(error) or time.monotonic() >= deadline:
+                raise
+        pause(POLL_SECONDS)
+
+
 def expect_run(port: int, session: str | None, project: str) -> str:
     """Run the verification and require it to pass."""
-    outcome = ide_smoke.call(port, session, "affected_run_verification", project)
+    outcome = run_verification(port, session, project)
     if outcome.get("passed") is not True:
         raise LiveIdeError(f"verification did not pass: {outcome}")
     return "passed"
@@ -423,8 +439,10 @@ def expect_regression(port: int, session: str | None, project: str, scenario: Sc
         raise LiveIdeError(f"{scenario.edited_file} does not contain {old!r}")
     edited.write_text(source.replace(old, new, 1), encoding="utf-8")
     try:
-        outcome = ide_smoke.call(port, session, "affected_run_verification", project)
-    except ide_smoke.SmokeError:
+        outcome = run_verification(port, session, project)
+    except ide_smoke.SmokeError as error:
+        if BUSY_ANSWER in str(error):
+            raise LiveIdeError(f"the IDE stayed busy: {error}") from error
         outcome = None
     if outcome is not None:
         raise LiveIdeError(f"verification passed with a breaking change: {outcome}")
