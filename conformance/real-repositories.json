@@ -746,10 +746,6 @@
           "--no-scripts"
         ]
       ],
-      "knownDefect": {
-        "id": "COMPOSER-ROOT-PACKAGE-SCANS-VENDOR",
-        "failure": "tests failed\\nphp vendor/bin/phpunit \\. -> exit 1"
-      },
       "roots": [
         "."
       ],
@@ -1139,10 +1135,6 @@
         "git"
       ],
       "setup": [],
-      "knownDefect": {
-        "id": "SBT-MULTILINE-PROJECT",
-        "failure": "\\[root:compile\\] lacks \\[root:test\\]"
-      },
       "roots": [
         "."
       ],

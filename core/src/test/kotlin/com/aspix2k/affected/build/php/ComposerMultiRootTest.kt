@@ -28,8 +28,27 @@ class ComposerMultiRootTest {
         plan.groups.forEach { group ->
             val owned = modules.filter { it.executionRoot == group.root }
             val command = composerCommands(group.root, group.tasks, owned).single()
-            assertEquals(listOf("php", "vendor/bin/phpunit", "."), command.arguments, group.root)
+            assertEquals(listOf("php", "vendor/bin/phpunit", "./tests"), command.arguments, group.root)
         }
+    }
+
+    @Test
+    fun `a root package with a PHPUnit configuration runs its configured suites instead of scanning the root`() {
+        val base = createTempDirectory("composer-configured").toFile()
+        val root = composer(base, ".")
+        File(root, "phpunit.xml.dist").writeText("<phpunit/>")
+        File(root, "packages/tool/tests").mkdirs()
+        File(root, "packages/tool/composer.json").writeText("{\"name\":\"acme/tool\"}")
+        val system = ComposerBuildSystem()
+        val modules = system.modules(multiRootProject(base))
+        val plan = TaskPlanner.plan(modules.map { ModuleGraph.Node(it, system).info() }, emptyList())
+
+        val commands = composerCommands(plan.groups.single().root, plan.groups.single().tasks, modules)
+
+        assertEquals(
+            listOf(listOf("php", "vendor/bin/phpunit"), listOf("php", "vendor/bin/phpunit", "./packages/tool")),
+            commands.map { it.arguments },
+        )
     }
 
     private fun composer(base: File, path: String): File = File(base, path).also {

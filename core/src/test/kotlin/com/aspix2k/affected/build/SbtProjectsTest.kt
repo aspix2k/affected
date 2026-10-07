@@ -89,6 +89,40 @@ class SbtProjectsTest {
         assertNull(sbtModules(root))
     }
 
+    @Test
+    fun `a project placed with a chained in on the next line keeps its declared directory`() {
+        val root = module {
+            File(it, "build.sbt").writeText(
+                """
+                lazy val root = project
+                  .in(file("."))
+                  .settings(name := "example")
+                """.trimIndent(),
+            )
+            File(it, "src/test/scala/A.scala").apply {
+                parentFile.mkdirs()
+                writeText("class A")
+            }
+        }
+
+        val module = checkNotNull(sbtModules(root)).single()
+        assertEquals(root.invariantSeparatorsPath, module.contentRoots.single())
+        assertTrue(module.hasTests)
+    }
+
+    @Test
+    fun `a bare project without its default directory keeps the root fallback`() {
+        val root = module {
+            File(it, "build.sbt").writeText(
+                """
+                lazy val tool = project.settings(name := "tool").in(file("modules/tool"))
+                """.trimIndent(),
+            )
+        }
+
+        assertNull(sbtModules(root))
+    }
+
     private fun module(block: (File) -> Unit): File {
         val dir = createTempDirectory("sbt-projects").toFile()
         block(dir)

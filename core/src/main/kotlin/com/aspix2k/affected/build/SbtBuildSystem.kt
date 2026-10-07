@@ -88,14 +88,7 @@ internal fun sbtModules(root: File): List<BuildModule>? {
     if (!manifest.isRegularFileNoFollow()) return null
     val text = runCatching { manifest.readText() }.getOrNull() ?: return null
     if (UNPROVED_SBT_PROJECT.containsMatchIn(text)) return null
-    val declared = mutableListOf<Pair<String, String>>()
-    for (match in SBT_PROJECT.findAll(text)) {
-        val name = match.groupValues[1].removeSurrounding("`")
-        val directory = match.groupValues.drop(2).firstOrNull(String::isNotEmpty) ?: name
-        if (name.isEmpty() || ".." in directory || directory.startsWith("/")) return null
-        val relative = directory.replace('\\', '/').removePrefix("./").ifEmpty { "." }
-        declared += name to if (relative == ".") "." else relative
-    }
+    val declared = SBT_PROJECT.findAll(text).toList().map { sbtDeclaration(root, it) ?: return null }
     if (declared.isEmpty()) return listOf(sbtRootModule(root))
     if (declared.map { it.first }.distinct().size != declared.size) return null
     val rootPath = root.invariantSeparatorsPath
@@ -112,6 +105,15 @@ internal fun sbtModules(root: File): List<BuildModule>? {
             executionId = name,
         )
     }
+}
+
+private fun sbtDeclaration(root: File, match: MatchResult): Pair<String, String>? {
+    val name = match.groupValues[1].removeSurrounding("`")
+    val explicit = match.groupValues.drop(2).firstOrNull(String::isNotEmpty)
+    val directory = explicit ?: name
+    if (name.isEmpty() || ".." in directory || directory.startsWith("/")) return null
+    if (explicit == null && !File(root, directory).isDirectory) return null
+    return name to directory.replace('\\', '/').removePrefix("./").ifEmpty { "." }
 }
 
 internal fun sbtRequiresWorkspace(root: String, changes: BuildChanges): Boolean {
@@ -132,7 +134,7 @@ private val UNPROVED_SBT_PROJECT = Regex("""\b(?:Project|CrossProject|ProjectRef
 private val SBT_PROJECT = Regex(
     """lazy\s+val\s+(`[^`]+`|[A-Za-z_][\w]*)\s*=\s*""" +
         """(?:\(\s*project\s+in\s+file\(\s*"([^"]*)"\s*\)\s*\)|""" +
-        """project\.in\(\s*file\(\s*"([^"]*)"\s*\)\s*\)|""" +
+        """project\s*\.\s*in\(\s*file\(\s*"([^"]*)"\s*\)\s*\)|""" +
         """project\s+in\s+file\(\s*"([^"]*)"\s*\)|""" +
         """project\b)""",
 )
