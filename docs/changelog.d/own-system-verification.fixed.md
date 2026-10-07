@@ -1,1 +1,0 @@
-- A changed file is no longer counted as verified when only a neighbouring build system can check it: if the build system that claims the file type (for example Maven for `pom.xml`) has no runnable check for it, the change is reported as unresolved even when another system's module shares the directory and has tests.
