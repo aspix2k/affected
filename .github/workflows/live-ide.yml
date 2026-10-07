@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [idea-gradle, idea-maven, pycharm-python]
+        scenario: [idea-gradle, idea-maven, idea-go, idea-cargo, pycharm-python]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -34,9 +34,21 @@ jobs:
         with:
           python-version: "3.14.8"
       - name: Install the display and the libraries the IDE needs
+        shell: bash
         run: |
-          sudo timeout --kill-after=30s 2m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true update
-          sudo timeout --kill-after=30s 10m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true install -y --no-install-recommends xvfb lsof libxtst6 libxi6 libxrender1 libxrandr2 libfreetype6 libfontconfig1
+          set -euo pipefail
+          options=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true)
+          packages=(xvfb lsof libxtst6 libxi6 libxrender1 libxrandr2 libfreetype6 libfontconfig1)
+          for attempt in 1 2 3; do
+            if sudo timeout --kill-after=30s 3m apt-get "${options[@]}" update &&
+               sudo timeout --kill-after=30s 10m apt-get "${options[@]}" install -y --no-install-recommends "${packages[@]}"; then
+              exit 0
+            fi
+            echo "::warning::apt attempt $attempt failed"
+            sleep $((attempt * 20))
+          done
+          echo "::error::Could not install the display packages after 3 attempts."
+          exit 1
       - name: Check the plugin in a running IDE
         run: python3 scripts/live_ide.py ${{ matrix.scenario }} --report-dir "$RUNNER_TEMP/live-ide"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

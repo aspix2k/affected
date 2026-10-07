@@ -20,6 +20,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -140,7 +141,7 @@ internal suspend fun <T> withAffectedRun(
     block: suspend () -> T,
 ): T = withContext(AffectedRunContextElement(ActiveAffectedRunState(run, presentation))) { block() }
 
-internal class BaseCheckRun : AbstractCoroutineContextElement(Key) {
+internal class BaseCheckRun(val root: Path) : AbstractCoroutineContextElement(Key) {
     companion object Key : CoroutineContext.Key<BaseCheckRun>
 }
 

@@ -21,7 +21,7 @@ object BaseCheck {
 
     private val LOG = logger<BaseCheck>()
     private val RUN_TIMEOUT = 30.minutes
-    private val SUPPORTED_SYSTEMS = setOf("GRADLE", "MAVEN")
+    private val SUPPORTED_SYSTEMS = setOf("GRADLE", "MAVEN", "GO", "CARGO")
     private const val CACHE_DIRECTORY = "affected"
 
     private class BaseContext(
@@ -108,7 +108,7 @@ object BaseCheck {
         val passed = withTimeoutOrNull(RUN_TIMEOUT) {
             baseGroup.runInPlannedExecutionRoot(Path.of(context.baseRoot), onInvalid = {}) {
                 accepted = true
-                withContext(BaseCheckRun()) {
+                withContext(BaseCheckRun(Path.of(context.baseRoot))) {
                     runBuildTasks(context.project, group.systemId, baseGroup.root, group.tasks, context.changes)
                 }
             }

@@ -420,7 +420,7 @@ class RunScenarioTest(unittest.TestCase):
             self.assertEqual(0, live_ide.main(["idea-gradle"]))
         finally:
             live_ide.run_scenario = original
-        self.assertEqual(["idea-gradle", "idea-maven", "pycharm-python", "idea-gradle"], names)
+        self.assertEqual([*live_ide.SCENARIOS, "idea-gradle"], names)
 
     def test_smoke_error_is_a_failure_of_the_scenario(self) -> None:
         """Wrap tool failures from the MCP server in the live check error."""

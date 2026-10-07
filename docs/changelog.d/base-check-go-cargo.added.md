@@ -1,0 +1,1 @@
+- "Check on base branch" now also reruns failed Go and Cargo checks on the comparison base and tells a regression from a failure that was already there.
