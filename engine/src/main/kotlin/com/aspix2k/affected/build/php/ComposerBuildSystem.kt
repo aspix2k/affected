@@ -1,0 +1,321 @@
+package com.aspix2k.affected.build.php
+
+import com.aspix2k.affected.build.AllFileChangesBuildSystem
+import com.aspix2k.affected.build.BuildChanges
+import com.aspix2k.affected.build.BuildModule
+import com.aspix2k.affected.build.ChangeAwareEngineBuildSystem
+import com.aspix2k.affected.build.ManifestSearch
+import com.aspix2k.affected.build.ModuleDiscovery
+import com.aspix2k.affected.build.TransitiveTestConsumersBuildSystem
+import com.aspix2k.affected.build.Workspace
+import com.aspix2k.affected.build.WorkspaceChangesBuildSystem
+import com.aspix2k.affected.build.combineFingerprints
+import com.aspix2k.affected.build.failClosedModules
+import com.aspix2k.affected.build.isRegularFileNoFollow
+import com.aspix2k.affected.build.nestedBuildRoots
+import com.aspix2k.affected.build.pathSegments
+import com.aspix2k.affected.build.process.CliCommand
+import com.aspix2k.affected.build.retainBuildSnapshot
+import com.aspix2k.affected.build.runBatch
+import com.aspix2k.affected.build.runBatchAndWait
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
+import java.util.concurrent.ConcurrentHashMap
+
+internal class ComposerBuildSystem :
+    ChangeAwareEngineBuildSystem,
+    AllFileChangesBuildSystem,
+    TransitiveTestConsumersBuildSystem,
+    WorkspaceChangesBuildSystem {
+
+    private data class Snapshot(val stamp: String, val modules: List<BuildModule>)
+
+    private val cache = ConcurrentHashMap<String, Snapshot>()
+
+    override val id: String = "COMPOSER"
+
+    override fun isTestSource(path: String): Boolean =
+        pathSegments(path).any { it.equals("tests", ignoreCase = true) || it == "test" }
+
+    override val sourceExtensions: Set<String> = setOf("php", "json", "neon", "xml", "lock")
+
+    override fun isPresent(workspace: Workspace): Boolean = rootsOf(workspace).isNotEmpty()
+
+    override fun modules(workspace: Workspace): List<BuildModule> {
+        val roots = rootsOf(workspace)
+        cache.keys.retainAll(roots.mapTo(HashSet()) { it.invariantSeparatorsPath })
+        return roots.flatMap(::modulesOf)
+    }
+
+    private fun modulesOf(root: File): List<BuildModule> {
+        val stamp = combineFingerprints(
+            ManifestSearch.fingerprint(
+                root,
+                ManifestSearch.find(
+                    root,
+                    setOf(
+                        "composer.json", "composer.lock", "phpunit.xml", "phpunit.xml.dist", "phpunit.dist.xml",
+                        "phpstan.neon", "phpstan.neon.dist", "phpstan.dist.neon", "psalm.xml", "psalm.xml.dist",
+                    ),
+                ),
+            ),
+            ManifestSearch.layoutFingerprint(root) { it.name in COMPOSER_TEST_DIRECTORIES },
+            ComposerPest.layoutFingerprint(root),
+        )
+
+        val rootPath = root.invariantSeparatorsPath
+        if (stamp != null) cache[rootPath]?.takeIf { it.stamp == stamp }?.let { return it.modules }
+
+        val discovered = runCatching { ComposerPackages.parse(root) }.getOrNull()
+        val discovery = if (discovered.isNullOrEmpty()) {
+            failClosedModules(root, ComposerPackages.fallbackTask(root), null, discovered)
+        } else {
+            ModuleDiscovery(discovered, complete = true)
+        }
+        if (stamp != null && discovery.complete) {
+            cache.retainBuildSnapshot(rootPath, Snapshot(stamp, discovery.modules), discovery.modules.size)
+        }
+        return discovery.modules
+    }
+
+    override fun run(workspace: Workspace, root: String, tasks: List<String>) {
+        workspace.runBatch(root, commands(root, tasks), "Affected Composer")
+    }
+
+    override suspend fun runAndWait(workspace: Workspace, root: String, tasks: List<String>): Boolean =
+        workspace.runBatchAndWait(root, commands(root, tasks), "Affected Composer")
+
+    override suspend fun runAndWait(
+        workspace: Workspace,
+        root: String,
+        tasks: List<String>,
+        changes: BuildChanges,
+    ): Boolean {
+        if (!composerUsesPhpunitSelection(tasks)) {
+            return workspace.runBatchAndWait(
+                root,
+                composerCommands(root, tasks, modulesOf(File(root)), changes),
+                "Affected Composer",
+            )
+        }
+        val adapter = configuredPhpunitAdapter()
+            ?: workspace.helperAssets?.let(::findPhpunitAdapter)
+            ?: return workspace.runBatchAndWait(root, commands(root, tasks), "Affected Composer")
+        val selective = withContext(Dispatchers.IO) {
+            PhpunitSelectiveRun.create(workspace, Path.of(root), tasks, modulesOf(File(root)), changes, adapter)
+        } ?: return workspace.runBatchAndWait(root, commands(root, tasks), "Affected Composer")
+        return try {
+            val passed = workspace.runBatchAndWait(root, selective.commands, "Affected Composer")
+            passed && withContext(Dispatchers.IO) { selective.complete() }
+        } finally {
+            withContext(NonCancellable + Dispatchers.IO) { selective.close() }
+        }
+    }
+
+    override fun requiresWorkspace(module: BuildModule, changes: BuildChanges): Boolean {
+        return changes.files.any { pestWorkspaceChange(module.root, it) }
+    }
+
+    private fun commands(root: String, tasks: List<String>): List<CliCommand> =
+        composerCommands(root, tasks, modulesOf(File(root)))
+
+    private fun rootsOf(workspace: Workspace): List<File> =
+        workspace.root?.let { base ->
+            nestedBuildRoots(base, setOf("composer.json")) { File(it, "composer.json").isRegularFileNoFollow() }
+        }.orEmpty()
+}
+
+private fun configuredPhpunitAdapter(): Path? = System.getProperty(PHPUNIT_ADAPTER_PROPERTY)
+    ?.let(Path::of)
+    ?.toAbsolutePath()
+    ?.normalize()
+    ?.takeIf(::readablePhpunitAdapter)
+
+internal fun findPhpunitAdapter(classPath: Path): Path? {
+    var directory = classPath.toAbsolutePath().normalize().let {
+        if (Files.isDirectory(it, LinkOption.NOFOLLOW_LINKS)) it else it.parent
+    } ?: return null
+    repeat(MAX_PHPUNIT_PLUGIN_PARENT_DEPTH) {
+        val adapter = directory.resolve(PHPUNIT_ADAPTER_PATH)
+        if (readablePhpunitAdapter(adapter)) return adapter
+        directory = directory.parent ?: return null
+    }
+    return null
+}
+
+private fun readablePhpunitAdapter(path: Path): Boolean =
+    Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) && Files.isReadable(path) && !Files.isSymbolicLink(path)
+
+private val COMPOSER_TEST_DIRECTORIES = setOf("test", "tests", "Tests")
+
+internal fun pestWorkspaceChange(root: String, file: String): Boolean {
+    val rootPath = File(root).toPath().toAbsolutePath().normalize()
+    val filePath = File(file).toPath().toAbsolutePath().normalize()
+    if (!filePath.startsWith(rootPath)) return false
+    val relative = rootPath.relativize(filePath).joinToString("/")
+    if (relative in PEST_BOOT_FILES) return true
+    if (relative.startsWith("tests/Expectations/") || relative.startsWith("tests/Helpers/")) return true
+    if (!relative.startsWith("tests/")) return false
+    if (filePath.fileName.toString() == "Datasets.php") return true
+    return relative.split('/').drop(1).dropLast(1).contains("Datasets")
+}
+
+private val PEST_BOOT_FILES = setOf(
+    "tests/Pest.php",
+    "tests/Expectations.php",
+    "tests/Helpers.php",
+    "tests/Datasets.php",
+)
+
+internal fun composerCommands(
+    root: String,
+    tasks: List<String>,
+    modules: List<BuildModule>,
+    changes: BuildChanges? = null,
+): List<CliCommand> {
+    val planned = resolveComposerTasks(tasks, modules) ?: return emptyList()
+    val resolved = resolveComposerPaths(root, planned) ?: return emptyList()
+    return resolved.groupBy({ it.first }, { it.second }).flatMap { (task, paths) ->
+        when (task) {
+            ComposerPackages.ANALYSE ->
+                listOf(CliCommand("phpstan", listOf("php", "vendor/bin/phpstan", "analyse") + paths.distinct()))
+            ComposerPackages.PEST -> {
+                val suites = paths.distinct().sorted()
+                val selected = changes?.let { selectPestTestFiles(root, suites, it) }
+                listOf(CliCommand("pest", pestArguments(root, selected?.first ?: suites, selected?.second)))
+            }
+            ComposerPackages.TEST -> phpunitCommands(root, paths.distinct())
+            else -> return emptyList()
+        }
+    }
+}
+
+private fun phpunitCommands(root: String, paths: List<String>): List<CliCommand> {
+    val phpunit = listOf("php", "vendor/bin/phpunit")
+    val packages = paths - ROOT_PACKAGE
+    if (ROOT_PACKAGE !in paths) return listOf(CliCommand("phpunit", phpunit + packages))
+    val directory = File(root)
+    if (ComposerPackages.CONFIGS.none { File(directory, it).isFile }) {
+        val own = ComposerPackages.TEST_DIRS.filter { File(directory, it).isDirectory }
+            .distinctBy { File(directory, it).canonicalPath }
+            .map { "./$it" }
+            .ifEmpty { listOf(ROOT_PACKAGE) }
+        return listOf(CliCommand("phpunit", phpunit + own + packages))
+    }
+    val configured = CliCommand("phpunit", phpunit)
+    return if (packages.isEmpty()) listOf(configured) else listOf(configured, CliCommand("phpunit", phpunit + packages))
+}
+
+private const val ROOT_PACKAGE = "."
+
+private fun resolveComposerTasks(tasks: List<String>, modules: List<BuildModule>): List<Pair<String, String>>? {
+    val byName = modules.associateBy { it.executionId }
+    return tasks.map { task ->
+        val module = byName[task.substringBeforeLast(':')] ?: return null
+        val taskName = task.substringAfterLast(':')
+        if (module.testTask != taskName) return null
+        taskName to (module.contentRoots.singleOrNull() ?: return null)
+    }
+}
+
+private fun resolveComposerPaths(
+    root: String,
+    planned: List<Pair<String, String>>,
+): List<Pair<String, String>>? {
+    val pestDirectories = planned.filter { it.first == ComposerPackages.PEST }.map { File(it.second) }
+    val pestSuites = if (pestDirectories.isEmpty()) {
+        emptyMap()
+    } else {
+        ComposerPest.suiteDirectories(File(root), pestDirectories) ?: return null
+    }
+    val resolved = ArrayList<Pair<String, String>>()
+    for ((task, directory) in planned) {
+        val paths = if (task == ComposerPackages.PEST) {
+            pestSuites[pathKey(directory)]?.takeIf { it.isNotEmpty() } ?: return null
+        } else {
+            listOf(File(directory))
+        }
+        for (path in paths) resolved += task to (composerPackagePath(root, path.path) ?: return null)
+    }
+    return resolved
+}
+
+private fun pathKey(path: String): String = File(path).toPath().toAbsolutePath().normalize().toString()
+
+internal fun composerUsesPhpunitSelection(tasks: List<String>): Boolean =
+    tasks.none { it.substringAfterLast(':') in PEST_TASKS }
+
+private val PEST_TASKS = setOf(ComposerPackages.PEST)
+
+internal fun pestArguments(root: String, paths: List<String>, filter: String? = null): List<String> {
+    val cache = File(root, ".affected/pest-cache")
+    cache.mkdirs()
+    cache.setReadable(false, false)
+    cache.setWritable(false, false)
+    cache.setExecutable(false, false)
+    cache.setReadable(true, true)
+    cache.setWritable(true, true)
+    cache.setExecutable(true, true)
+    val named = if (filter.isNullOrEmpty()) emptyList() else listOf("--filter", filter)
+    return listOf(
+        "php",
+        "vendor/bin/pest",
+        "--cache-directory",
+        cache.invariantSeparatorsPath,
+        "--do-not-cache-result",
+        "--no-output",
+        "--configuration",
+        pestConfigurationFile(root),
+    ) + named + paths
+}
+
+internal fun pestConfigurationFile(root: String): String {
+    val dir = File(root)
+    val existing = listOf("phpunit.xml", "phpunit.xml.dist", "phpunit.dist.xml")
+        .map { File(dir, it) }
+        .firstOrNull { it.isFile }
+    if (existing != null) return existing.invariantSeparatorsPath
+    val generated = File(dir, ".affected/pest-phpunit.xml")
+    generated.parentFile.mkdirs()
+    generated.writeText(PEST_FALLBACK_PHPUNIT_XML)
+    generated.setReadable(false, false)
+    generated.setWritable(false, false)
+    generated.setExecutable(false, false)
+    generated.setReadable(true, true)
+    generated.setWritable(true, true)
+    return generated.invariantSeparatorsPath
+}
+
+private const val PEST_FALLBACK_PHPUNIT_XML =
+    """<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/13.3/phpunit.xsd"
+         bootstrap="../vendor/autoload.php"
+         colors="true">
+    <testsuites>
+        <testsuite name="default">
+            <directory suffix="Test.php">.</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>
+"""
+
+internal fun composerPackagePath(root: String, directory: String): String? {
+    val normalizedRoot = File(root).invariantSeparatorsPath.trimEnd('/')
+    val normalizedDirectory = File(directory).invariantSeparatorsPath
+    val relative = when {
+        normalizedDirectory == normalizedRoot -> "."
+        normalizedDirectory.startsWith("$normalizedRoot/") -> normalizedDirectory.removePrefix("$normalizedRoot/")
+        else -> return null
+    }
+    return if (relative == ".") relative else "./$relative"
+}
+
+private const val PHPUNIT_ADAPTER_PROPERTY = "affected.test.phpunitAdapter"
+private const val PHPUNIT_ADAPTER_PATH = "agent/affected-phpunit.php"
+private const val MAX_PHPUNIT_PLUGIN_PARENT_DEPTH = 5

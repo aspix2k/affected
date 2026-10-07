@@ -10,6 +10,7 @@ internal fun multiRootProject(root: File): Project = Proxy.newProxyInstance(
 ) { _, method, _ ->
     when (method.name) {
         "getBasePath" -> root.path
+        "getLocationHash" -> "multi-root"
         else -> error("Unexpected Project call: ${method.name}")
     }
 } as Project

@@ -2,6 +2,7 @@ package com.aspix2k.affected.build.ruby
 
 import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.TaskPlanner
+import com.aspix2k.affected.build.IdeRubyBuildSystem
 import com.aspix2k.affected.build.multiRootProject
 import java.io.File
 import kotlin.io.path.createTempDirectory
@@ -15,7 +16,7 @@ class RubyMultiRootTest {
     fun `two Ruby gems without a root manifest produce modules for both and commands per root`() {
         val base = createTempDirectory("ruby-multi").toFile()
         val roots = listOf("api", "worker").map { gem(base, "services/$it", it) }
-        val system = RubyBuildSystem()
+        val system = IdeRubyBuildSystem()
         val project = multiRootProject(base)
 
         val modules = system.modules(project)

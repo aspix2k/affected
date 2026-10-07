@@ -2,6 +2,7 @@ package com.aspix2k.affected.build.node
 
 import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.TaskPlanner
+import com.aspix2k.affected.build.IdeNodeBuildSystem
 import com.intellij.openapi.project.Project
 import java.io.File
 import java.lang.reflect.Proxy
@@ -16,7 +17,7 @@ class NodeMultiRootTest {
     fun `two Node apps without a root manifest produce modules for both and commands per root`() {
         val base = createTempDirectory("node-multi").toFile()
         val roots = listOf("web", "admin").map { app(base, "apps/$it", it) }
-        val system = NodeBuildSystem()
+        val system = IdeNodeBuildSystem()
         val project = project(base)
 
         val modules = system.modules(project)
@@ -42,7 +43,7 @@ class NodeMultiRootTest {
         }
         app(base, "apps/admin", "admin")
 
-        val modules = NodeBuildSystem().modules(project(base))
+        val modules = IdeNodeBuildSystem().modules(project(base))
 
         assertEquals(
             setOf("ui"),

@@ -16,7 +16,7 @@ class MesonMultiRootTest {
         val first = root(base, "native", "project('one', 'c')\ntest('t', exe)\n")
         val second = root(base, "apps/tools", "project('two', 'c')\ntest('t', exe)\n")
         val expected = setOf(first, second).map { it.invariantSeparatorsPath }.toSet()
-        val system = MesonBuildSystem()
+        val system = IdeMesonBuildSystem()
         val project = multiRootProject(base)
 
         val modules = system.modules(project)
@@ -37,7 +37,7 @@ class MesonMultiRootTest {
         val base = createTempDirectory("meson-one").toFile()
         root(base, "native", "project('one', 'c')\ntest('t', exe)\n")
         val second = root(base, "apps/tools", "project('two', 'c')\ntest('t', exe)\n")
-        val system = MesonBuildSystem()
+        val system = IdeMesonBuildSystem()
         val modules = system.modules(multiRootProject(base))
         val changed = modules.filter { it.root == second.invariantSeparatorsPath }
 
@@ -61,11 +61,11 @@ class MesonMultiRootTest {
 
         assertEquals(
             listOf(baseRoot.invariantSeparatorsPath),
-            MesonBuildSystem().modules(multiRootProject(withBase)).map { it.root },
+            IdeMesonBuildSystem().modules(multiRootProject(withBase)).map { it.root },
         )
         assertEquals(
             listOf(nested.invariantSeparatorsPath),
-            MesonBuildSystem().modules(multiRootProject(nestedOnly)).map { it.root },
+            IdeMesonBuildSystem().modules(multiRootProject(nestedOnly)).map { it.root },
         )
     }
 

@@ -16,7 +16,7 @@ class NinjaMultiRootTest {
         val first = root(base, "native", "build test: phony\n")
         val second = root(base, "apps/tools", "build check: phony\n")
         val expected = setOf(first, second).map { it.invariantSeparatorsPath }.toSet()
-        val system = NinjaBuildSystem()
+        val system = IdeNinjaBuildSystem()
         val project = multiRootProject(base)
 
         val modules = system.modules(project)
@@ -37,7 +37,7 @@ class NinjaMultiRootTest {
         val base = createTempDirectory("ninja-one").toFile()
         root(base, "native", "build test: phony\n")
         val second = root(base, "apps/tools", "build check: phony\n")
-        val system = NinjaBuildSystem()
+        val system = IdeNinjaBuildSystem()
         val modules = system.modules(multiRootProject(base))
         val changed = modules.filter { it.root == second.invariantSeparatorsPath }
 
@@ -61,11 +61,11 @@ class NinjaMultiRootTest {
 
         assertEquals(
             listOf(baseRoot.invariantSeparatorsPath),
-            NinjaBuildSystem().modules(multiRootProject(withBase)).map { it.root },
+            IdeNinjaBuildSystem().modules(multiRootProject(withBase)).map { it.root },
         )
         assertEquals(
             listOf(nested.invariantSeparatorsPath),
-            NinjaBuildSystem().modules(multiRootProject(nestedOnly)).map { it.root },
+            IdeNinjaBuildSystem().modules(multiRootProject(nestedOnly)).map { it.root },
         )
     }
 

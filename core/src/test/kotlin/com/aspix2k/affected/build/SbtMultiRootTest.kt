@@ -22,7 +22,7 @@ class SbtMultiRootTest {
             File(it, "src/test/scala/WorkerSpec.scala").writeText("")
         }
         val expected = setOf(multi, single).map { it.invariantSeparatorsPath }.toSet()
-        val system = SbtBuildSystem()
+        val system = IdeSbtBuildSystem()
         val project = multiRootProject(base)
 
         val modules = system.modules(project)

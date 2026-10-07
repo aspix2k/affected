@@ -2,6 +2,7 @@ package com.aspix2k.affected.build.deno
 
 import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.TaskPlanner
+import com.aspix2k.affected.build.IdeDenoBuildSystem
 import com.aspix2k.affected.build.multiRootProject
 import java.io.File
 import kotlin.io.path.createTempDirectory
@@ -17,7 +18,7 @@ class DenoMultiRootTest {
         val tasked = deno(base, "apps/web", """{ "tasks": { "test": "deno test -A" } }""")
         val plain = deno(base, "apps/admin", "{}")
         val expected = setOf(tasked, plain).map { it.invariantSeparatorsPath }.toSet()
-        val system = DenoBuildSystem()
+        val system = IdeDenoBuildSystem()
         val project = multiRootProject(base)
 
         val modules = system.modules(project)

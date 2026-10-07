@@ -3,18 +3,19 @@ package com.aspix2k.affected
 import com.aspix2k.affected.build.BuildChanges
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.BuildSystem
+import com.aspix2k.affected.build.IdeCargoBuildSystem
+import com.aspix2k.affected.build.IdeComposerBuildSystem
+import com.aspix2k.affected.build.IdePythonBuildSystem
 import com.aspix2k.affected.build.TransitiveTestConsumersBuildSystem
 import com.aspix2k.affected.build.WorkspaceChangesBuildSystem
-import com.aspix2k.affected.build.cargo.CargoBuildSystem
 import com.aspix2k.affected.build.cargo.CargoNextestMode
 import com.aspix2k.affected.build.cargo.CargoNextestPlan
 import com.aspix2k.affected.build.cargo.cargoCommands
 import com.aspix2k.affected.build.cargo.cargoNextestTask
 import com.aspix2k.affected.build.gradle.GradleBuildSystem
 import com.aspix2k.affected.build.languageExtensions
-import com.aspix2k.affected.build.php.ComposerBuildSystem
 import com.aspix2k.affected.build.php.ComposerPackages
-import com.aspix2k.affected.build.python.PythonBuildSystem
+import com.aspix2k.affected.build.testSnapshotRoot
 import com.intellij.openapi.project.Project
 import java.io.File
 import kotlin.io.path.createTempDirectory
@@ -393,7 +394,7 @@ class ModuleGraphTest {
     fun `Cargo custom build plan widens UI and execution to the same workspace`() {
         val root = createTempDirectory("module-graph-cargo-build-script").toFile()
         val task = cargoNextestTask(CargoNextestPlan(CargoNextestMode.WORKSPACE, "default", "0.9.143", true))
-        val system = CargoBuildSystem()
+        val system = IdeCargoBuildSystem()
         val graph = ModuleGraph(
             listOf(
                 ModuleGraph.Node(module(root, "alpha", "alpha").copy(testTask = task), system),
@@ -408,12 +409,12 @@ class ModuleGraphTest {
         assertEquals(listOf("alpha:$task", "beta:$task"), plan.groups.single().tasks)
         assertEquals(
             listOf("cargo-nextest", "nextest", "run", "--manifest-path", File(root, "Cargo.toml").path),
-            cargoCommands(root.path, plan.groups.single().tasks, changes.toBuildChanges(), false)
+            cargoCommands(root.path, plan.groups.single().tasks, changes.toBuildChanges(), testSnapshotRoot, false)
                 .first().arguments.take(5),
         )
         assertEquals(
             "--workspace",
-            cargoCommands(root.path, plan.groups.single().tasks, changes.toBuildChanges(), false)
+            cargoCommands(root.path, plan.groups.single().tasks, changes.toBuildChanges(), testSnapshotRoot, false)
                 .first().arguments.last(),
         )
     }
@@ -476,7 +477,7 @@ class ModuleGraphTest {
     @Test
     fun `a root Pest boot file change runs every Pest package`() {
         val root = createTempDirectory("module-graph-pest-bootstrap").toFile()
-        val system = ComposerBuildSystem()
+        val system = IdeComposerBuildSystem()
         val rootModule = BuildModule(
             id = "affected/root",
             root = root.invariantSeparatorsPath,
@@ -553,7 +554,7 @@ class ModuleGraphTest {
             compileTask = "build",
             dependencies = setOf(alpha.key),
         )
-        val python = PythonBuildSystem()
+        val python = IdePythonBuildSystem()
         val graph = ModuleGraph(listOf(ModuleGraph.Node(alpha, python), ModuleGraph.Node(beta, python)))
         val production = File(root, "alpha/core.py").apply { writeText("VALUE = 1\n") }
         val test = File(root, "alpha/tests/test_core.py").apply { parentFile.mkdirs(); writeText("def test(): pass\n") }

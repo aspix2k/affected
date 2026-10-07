@@ -23,7 +23,7 @@ class RMultiRootTest {
             File(it, "tests/testthat/test-b.R").writeText("")
             File(it, "renv.lock").writeText("{}")
         }
-        val system = RBuildSystem()
+        val system = IdeRBuildSystem()
         val project = multiRootProject(base)
 
         val modules = system.modules(project)

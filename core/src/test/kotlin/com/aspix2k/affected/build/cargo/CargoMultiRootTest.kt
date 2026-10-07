@@ -2,7 +2,9 @@ package com.aspix2k.affected.build.cargo
 
 import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.TaskPlanner
+import com.aspix2k.affected.build.IdeCargoBuildSystem
 import com.aspix2k.affected.build.multiRootProject
+import com.aspix2k.affected.build.testSnapshotRoot
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -15,7 +17,7 @@ class CargoMultiRootTest {
     fun `two Cargo projects without a root manifest produce modules for both and commands per root`() {
         val base = createTempDirectory("cargo-multi").toFile()
         val roots = listOf("api", "worker").map { crate(base, "services/$it", it) }
-        val system = CargoBuildSystem()
+        val system = IdeCargoBuildSystem()
         val project = multiRootProject(base)
 
         val modules = system.modules(project)
@@ -25,7 +27,7 @@ class CargoMultiRootTest {
         assertEquals(roots.map { it.invariantSeparatorsPath }.toSet(), modules.map { it.root }.toSet())
         assertEquals(roots.map { it.invariantSeparatorsPath }.toSet(), plan.groups.map { it.root }.toSet())
         plan.groups.forEach { group ->
-            val command = cargoCommands(group.root, group.tasks).single()
+            val command = cargoCommands(group.root, group.tasks, snapshotRoot = testSnapshotRoot).single()
             assertEquals(listOf("cargo", "test", "--workspace"), command.arguments)
         }
     }

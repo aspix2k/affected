@@ -8,7 +8,6 @@ import com.aspix2k.affected.AnalysisStatus
 import com.aspix2k.affected.TaskGroup
 import com.aspix2k.affected.VerificationStatus
 import com.aspix2k.affected.build.gradle.GradleBuildSystem
-import com.aspix2k.affected.build.xcode.XcodeBuildSystem
 import com.aspix2k.affected.runBoundedBlocking
 import com.aspix2k.affected.runClaimedGroupsWithPresentation
 import com.aspix2k.affected.runInPlannedExecutionRoot
@@ -131,7 +130,7 @@ class AffectedMixedRunNativeTest : BasePlatformTestCase() {
             group.runInPlannedExecutionRoot(project) {
                 when (group.systemId) {
                     "GRADLE" -> GradleBuildSystem().runAndWaitSuspending(project, group.root, group.tasks)
-                    "XCODE" -> XcodeBuildSystem().runAndWaitSuspending(project, group.root, group.tasks)
+                    "XCODE" -> IdeXcodeBuildSystem().runAndWaitSuspending(project, group.root, group.tasks)
                     else -> false
                 }
             }

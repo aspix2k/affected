@@ -4,7 +4,7 @@ import com.aspix2k.affected.build.AllFileChangesBuildSystem
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.BuildSystem
 import com.aspix2k.affected.build.BuildSystems
-import com.aspix2k.affected.build.RBuildSystem
+import com.aspix2k.affected.build.IdeRBuildSystem
 import com.intellij.openapi.project.Project
 import java.io.File
 import java.lang.reflect.Proxy
@@ -56,7 +56,7 @@ class BuildSystemsVfsCostTest {
     }
 
     private class CountingR(
-        private val delegate: RBuildSystem = RBuildSystem(),
+        private val delegate: IdeRBuildSystem = IdeRBuildSystem(),
     ) : BuildSystem by delegate, AllFileChangesBuildSystem {
         var moduleCalls = 0
 

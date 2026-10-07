@@ -2,6 +2,7 @@ package com.aspix2k.affected.build.python
 
 import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.TaskPlanner
+import com.aspix2k.affected.build.IdePythonBuildSystem
 import com.intellij.openapi.project.Project
 import java.io.File
 import java.lang.reflect.Proxy
@@ -16,7 +17,7 @@ class PythonMultiRootTest {
     fun `two Python projects without a root manifest produce modules for both and commands per root`() {
         val base = createTempDirectory("python-multi").toFile()
         val roots = listOf("api", "worker").map { project(base, "services/$it", it) }
-        val system = PythonBuildSystem()
+        val system = IdePythonBuildSystem()
         val project = project(base)
 
         val modules = system.modules(project)

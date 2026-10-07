@@ -33,7 +33,8 @@ The `engine` module is plain Kotlin/JVM with no IntelliJ Platform dependency
 and holds the code that never touches the IDE; `core` depends on it, and its
 compile tasks pass `-Xfriend-paths` so `internal` declarations stay visible
 across the boundary. Gson, kotlinx-coroutines and JNA are `compileOnly` there,
-so the plugin keeps the copies the platform bundles.
+so the plugin keeps the copies the platform bundles; tomlj, which the platform
+does not bundle, is an `implementation` dependency of `engine`.
 
 The process layer lives in `engine` as well. `CommandSequence` runs a list of
 `CliStep`s on JDK processes and reports text, command start and finish and the
@@ -43,6 +44,18 @@ takes its classpath and a directory with the JNA native library from a
 `SupervisorRuntime`. A host supplies both through `ProcessHost`; `core` passes
 the IDE's through `ideProcessHost`, and `SequentialProcessHandler` only
 forwards the sequence events to the platform `ProcessHandler`.
+
+Build systems that need nothing but the project directory live in `engine` as
+`EngineBuildSystem`s and take a `Workspace` instead of a `Project`: the project
+root, a per-project cache directory, the stop-after-first-failure setting, the
+location of the helper scripts and jars the plugin ships, an interpreter hint,
+the `ProcessHost`, the change set and `CommandRuns`, which starts or awaits a
+command sequence. `core` builds an `IdeWorkspace` from a `Project`; its
+`CommandRuns` is `CommandRunner`, so the Run tool window, the stop button and
+exit codes are unchanged. Each engine adapter is registered in `plugin.xml`
+through an `Ide...BuildSystem` that wraps it in `IdeBuildSystem`, the bridge to
+the `BuildSystem` extension point. Gradle and Maven stay in `core` on the IDE
+model.
 
 After clone, run `python3 scripts/local_gate.py install` so `core.hooksPath` is
 `.githooks`. `pre-commit` runs detekt, script tests, CI contracts and the

@@ -16,7 +16,7 @@ class MakeMultiRootTest {
         val first = root(base, "native", "test:\n\t@echo ok\n")
         val second = root(base, "apps/tools", "check:\n\t@echo ok\n")
         val expected = setOf(first, second).map { it.invariantSeparatorsPath }.toSet()
-        val system = MakeBuildSystem()
+        val system = IdeMakeBuildSystem()
         val project = multiRootProject(base)
 
         val modules = system.modules(project)
@@ -37,7 +37,7 @@ class MakeMultiRootTest {
         val base = createTempDirectory("make-one").toFile()
         root(base, "native", "test:\n\t@echo ok\n")
         val second = root(base, "apps/tools", "check:\n\t@echo ok\n")
-        val system = MakeBuildSystem()
+        val system = IdeMakeBuildSystem()
         val modules = system.modules(multiRootProject(base))
         val changed = modules.filter { it.root == second.invariantSeparatorsPath }
 
@@ -61,11 +61,11 @@ class MakeMultiRootTest {
 
         assertEquals(
             listOf(baseRoot.invariantSeparatorsPath),
-            MakeBuildSystem().modules(multiRootProject(withBase)).map { it.root },
+            IdeMakeBuildSystem().modules(multiRootProject(withBase)).map { it.root },
         )
         assertEquals(
             listOf(nested.invariantSeparatorsPath),
-            MakeBuildSystem().modules(multiRootProject(nestedOnly)).map { it.root },
+            IdeMakeBuildSystem().modules(multiRootProject(nestedOnly)).map { it.root },
         )
     }
 

@@ -7,6 +7,7 @@ import com.aspix2k.affected.build.BuildSystems
 import com.aspix2k.affected.build.SuspendingBuildSystem
 import com.aspix2k.affected.build.TransitiveTestConsumersBuildSystem
 import com.aspix2k.affected.build.WorkspaceChangesBuildSystem
+import com.aspix2k.affected.build.capability
 import com.intellij.openapi.project.Project
 import java.io.File
 
@@ -101,7 +102,7 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
         return directOwners.mapValues { (_, owners) ->
             owners.groupBy { it.system to it.buildRoot }.flatMap { (key, group) ->
                 val (system, root) = key
-                val workspaceSystem = system as? WorkspaceChangesBuildSystem
+                val workspaceSystem = system.capability<WorkspaceChangesBuildSystem>()
                 val requiresWorkspace = workspaceSystem != null &&
                     group.any { workspaceSystem.requiresWorkspace(it.module, changes) }
                 val own = if (requiresWorkspace) {
@@ -143,7 +144,9 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
     }
 
     fun transitiveTestConsumers(targets: Set<Node>, everySystem: Boolean = false): List<Node> {
-        val eligible = { node: Node -> everySystem || node.system is TransitiveTestConsumersBuildSystem }
+        val eligible = { node: Node ->
+            everySystem || node.system.capability<TransitiveTestConsumersBuildSystem>() != null
+        }
         val eligibleTargets = targets.filterTo(LinkedHashSet(), eligible)
         val reached = LinkedHashSet(eligibleTargets)
         var frontier = eligibleTargets

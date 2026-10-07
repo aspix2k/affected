@@ -1,20 +1,20 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.KotlinToolchainBuildSystem
-import com.aspix2k.affected.build.RBuildSystem
-import com.aspix2k.affected.build.SbtBuildSystem
-import com.aspix2k.affected.build.SwiftBuildSystem
-import com.aspix2k.affected.build.cargo.CargoBuildSystem
-import com.aspix2k.affected.build.cmake.CMakeBuildSystem
-import com.aspix2k.affected.build.dart.DartBuildSystem
-import com.aspix2k.affected.build.dart.FlutterBuildSystem
-import com.aspix2k.affected.build.deno.DenoBuildSystem
-import com.aspix2k.affected.build.dotnet.DotnetBuildSystem
-import com.aspix2k.affected.build.node.NodeBuildSystem
-import com.aspix2k.affected.build.php.ComposerBuildSystem
-import com.aspix2k.affected.build.python.PythonBuildSystem
-import com.aspix2k.affected.build.ruby.RubyBuildSystem
-import com.aspix2k.affected.build.xcode.XcodeBuildSystem
+import com.aspix2k.affected.build.IdeCMakeBuildSystem
+import com.aspix2k.affected.build.IdeCargoBuildSystem
+import com.aspix2k.affected.build.IdeComposerBuildSystem
+import com.aspix2k.affected.build.IdeDartBuildSystem
+import com.aspix2k.affected.build.IdeDenoBuildSystem
+import com.aspix2k.affected.build.IdeDotnetBuildSystem
+import com.aspix2k.affected.build.IdeFlutterBuildSystem
+import com.aspix2k.affected.build.IdeKotlinToolchainBuildSystem
+import com.aspix2k.affected.build.IdeNodeBuildSystem
+import com.aspix2k.affected.build.IdePythonBuildSystem
+import com.aspix2k.affected.build.IdeRBuildSystem
+import com.aspix2k.affected.build.IdeRubyBuildSystem
+import com.aspix2k.affected.build.IdeSbtBuildSystem
+import com.aspix2k.affected.build.IdeSwiftBuildSystem
+import com.aspix2k.affected.build.IdeXcodeBuildSystem
 import com.intellij.openapi.project.Project
 import java.io.File
 import java.lang.reflect.Proxy
@@ -107,22 +107,22 @@ class BuildSystemDetectionTest {
 
     private companion object {
         val systems = listOf<Pair<(Project) -> Boolean, Marker>>(
-            RubyBuildSystem()::isPresent to Marker("Gemfile"),
-            ComposerBuildSystem()::isPresent to Marker("composer.json"),
-            PythonBuildSystem()::isPresent to Marker("pyproject.toml"),
-            CMakeBuildSystem()::isPresent to Marker("CMakeLists.txt"),
-            NodeBuildSystem()::isPresent to Marker("package.json"),
-            DotnetBuildSystem()::isPresent to Marker("app.csproj", multiRoot = false),
-            DotnetBuildSystem()::isPresent to Marker("app.sln"),
-            XcodeBuildSystem()::isPresent to Marker("App.xcodeproj", bundle = true),
-            SbtBuildSystem()::isPresent to Marker("build.sbt"),
-            CargoBuildSystem()::isPresent to Marker("Cargo.toml"),
-            SwiftBuildSystem()::isPresent to Marker("Package.swift"),
-            RBuildSystem()::isPresent to Marker("DESCRIPTION", content = "Package: probe\n"),
-            KotlinToolchainBuildSystem()::isPresent to Marker("project.yaml", extras = mapOf("kotlin" to "")),
-            DenoBuildSystem()::isPresent to Marker("deno.json", content = "{}"),
-            DartBuildSystem()::isPresent to Marker("pubspec.yaml", content = "name: probe\n"),
-            FlutterBuildSystem()::isPresent to Marker(
+            IdeRubyBuildSystem()::isPresent to Marker("Gemfile"),
+            IdeComposerBuildSystem()::isPresent to Marker("composer.json"),
+            IdePythonBuildSystem()::isPresent to Marker("pyproject.toml"),
+            IdeCMakeBuildSystem()::isPresent to Marker("CMakeLists.txt"),
+            IdeNodeBuildSystem()::isPresent to Marker("package.json"),
+            IdeDotnetBuildSystem()::isPresent to Marker("app.csproj", multiRoot = false),
+            IdeDotnetBuildSystem()::isPresent to Marker("app.sln"),
+            IdeXcodeBuildSystem()::isPresent to Marker("App.xcodeproj", bundle = true),
+            IdeSbtBuildSystem()::isPresent to Marker("build.sbt"),
+            IdeCargoBuildSystem()::isPresent to Marker("Cargo.toml"),
+            IdeSwiftBuildSystem()::isPresent to Marker("Package.swift"),
+            IdeRBuildSystem()::isPresent to Marker("DESCRIPTION", content = "Package: probe\n"),
+            IdeKotlinToolchainBuildSystem()::isPresent to Marker("project.yaml", extras = mapOf("kotlin" to "")),
+            IdeDenoBuildSystem()::isPresent to Marker("deno.json", content = "{}"),
+            IdeDartBuildSystem()::isPresent to Marker("pubspec.yaml", content = "name: probe\n"),
+            IdeFlutterBuildSystem()::isPresent to Marker(
                 "pubspec.yaml",
                 content = "name: probe\ndependencies:\n  flutter:\n    sdk: flutter\n",
             ),

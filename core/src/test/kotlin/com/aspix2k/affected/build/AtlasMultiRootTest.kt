@@ -16,7 +16,7 @@ class AtlasMultiRootTest {
         val first = root(base, "native", "one")
         val second = root(base, "apps/tools", "two")
         val expected = setOf(first, second).map { it.invariantSeparatorsPath }.toSet()
-        val system = AtlasBuildSystem()
+        val system = IdeAtlasBuildSystem()
         val project = multiRootProject(base)
 
         val modules = system.modules(project)
@@ -37,7 +37,7 @@ class AtlasMultiRootTest {
         val base = createTempDirectory("atlas-one").toFile()
         root(base, "native", "one")
         val second = root(base, "apps/tools", "two")
-        val system = AtlasBuildSystem()
+        val system = IdeAtlasBuildSystem()
         val modules = system.modules(multiRootProject(base))
         val changed = modules.filter { it.root == second.invariantSeparatorsPath }
 
@@ -61,11 +61,11 @@ class AtlasMultiRootTest {
 
         assertEquals(
             listOf(baseRoot, independent).map { it.invariantSeparatorsPath },
-            AtlasBuildSystem().modules(multiRootProject(withBase)).map { it.root },
+            IdeAtlasBuildSystem().modules(multiRootProject(withBase)).map { it.root },
         )
         assertEquals(
             listOf(nested.invariantSeparatorsPath),
-            AtlasBuildSystem().modules(multiRootProject(nestedOnly)).map { it.root },
+            IdeAtlasBuildSystem().modules(multiRootProject(nestedOnly)).map { it.root },
         )
     }
 

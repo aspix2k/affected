@@ -2,6 +2,7 @@ package com.aspix2k.affected.build.php
 
 import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.TaskPlanner
+import com.aspix2k.affected.build.IdeComposerBuildSystem
 import com.aspix2k.affected.build.multiRootProject
 import java.io.File
 import kotlin.io.path.createTempDirectory
@@ -15,7 +16,7 @@ class ComposerMultiRootTest {
     fun `two Composer packages without a root manifest produce modules for both and commands per root`() {
         val base = createTempDirectory("composer-multi").toFile()
         val roots = listOf("api", "worker").map { composer(base, "services/$it") }
-        val system = ComposerBuildSystem()
+        val system = IdeComposerBuildSystem()
         val project = multiRootProject(base)
 
         val modules = system.modules(project)
@@ -39,7 +40,7 @@ class ComposerMultiRootTest {
         File(root, "phpunit.xml.dist").writeText("<phpunit/>")
         File(root, "packages/tool/tests").mkdirs()
         File(root, "packages/tool/composer.json").writeText("{\"name\":\"acme/tool\"}")
-        val system = ComposerBuildSystem()
+        val system = IdeComposerBuildSystem()
         val modules = system.modules(multiRootProject(base))
         val plan = TaskPlanner.plan(modules.map { ModuleGraph.Node(it, system).info() }, emptyList())
 

@@ -354,7 +354,10 @@ class CliCommandTest {
 
     @Test
     fun `root fallbacks widen Cargo and Go to the whole project`() {
-        assertEquals(listOf("cargo", "test", "--workspace"), cargoCommands(listOf(".:test")).single().arguments)
+        assertEquals(
+            listOf("cargo", "test", "--workspace"),
+            cargoCommands(".", listOf(".:test"), testSnapshotRoot).single().arguments,
+        )
         assertEquals(listOf("go", "test", "./..."), goCommands(listOf(".:test")).single().arguments)
         assertEquals(
             listOf("dotnet", "test"),
@@ -515,7 +518,7 @@ class CliCommandTest {
     fun `Cargo and Go batch compatible packages`() {
         assertEquals(
             listOf("cargo", "test", "-p", "core", "-p", "ui"),
-            cargoCommands(listOf("core:test", "ui:test")).single().arguments,
+            cargoCommands(".", listOf("core:test", "ui:test"), testSnapshotRoot).single().arguments,
         )
         assertEquals(
             listOf("go", "test", "example.com/core", "example.com/ui"),
@@ -526,7 +529,7 @@ class CliCommandTest {
     @Test
     fun `Cargo nextest batches selected packages with its native package filter`() {
         val ciTask = cargoNextestTask(CargoNextestPlan(CargoNextestMode.PACKAGES, "ci", "0.9.143", false))
-        val ciConfig = requireNotNull(cargoNextestSnapshot(ciTask))
+        val ciConfig = requireNotNull(cargoNextestSnapshot(ciTask, testSnapshotRoot))
         assertEquals(
             listOf(
                 listOf(
@@ -542,10 +545,11 @@ class CliCommandTest {
                     "-p", "core", "-p", "ui",
                 ),
             ),
-            cargoCommands("/workspace", listOf("core:$ciTask", "ui:$ciTask")).map(CliCommand::arguments),
+            cargoCommands("/workspace", listOf("core:$ciTask", "ui:$ciTask"), snapshotRoot = testSnapshotRoot)
+                .map(CliCommand::arguments),
         )
         val defaultTask = cargoNextestTask("default")
-        val defaultConfig = requireNotNull(cargoNextestSnapshot(defaultTask))
+        val defaultConfig = requireNotNull(cargoNextestSnapshot(defaultTask, testSnapshotRoot))
         assertEquals(
             listOf(
                 listOf(
@@ -558,7 +562,8 @@ class CliCommandTest {
                     "cargo", "test", "--doc", "--manifest-path", "/workspace/Cargo.toml", "--workspace",
                 ),
             ),
-            cargoCommands("/workspace", listOf(".:$defaultTask")).map(CliCommand::arguments),
+            cargoCommands("/workspace", listOf(".:$defaultTask"), snapshotRoot = testSnapshotRoot)
+                .map(CliCommand::arguments),
         )
     }
 
@@ -572,6 +577,7 @@ class CliCommandTest {
                 "binary:${cargoNextestTask(plan, hasDoctests = false)}",
                 "no-doc-lib:${cargoNextestTask(plan, hasDoctests = false)}",
             ),
+            snapshotRoot = testSnapshotRoot,
         )
 
         assertEquals(2, commands.size)
@@ -586,7 +592,7 @@ class CliCommandTest {
     fun `Cargo widens resource and generated changes to the workspace`() {
         val changed = listOf("schema.json", "alpha/build.rs", "alpha/src/generated/value.rs")
         val task = cargoNextestTask("default")
-        val config = requireNotNull(cargoNextestSnapshot(task))
+        val config = requireNotNull(cargoNextestSnapshot(task, testSnapshotRoot))
 
         changed.forEach { path ->
             assertEquals(
@@ -610,6 +616,7 @@ class CliCommandTest {
                         comparedToBase = true,
                     ),
                     unsafeCargoExecution = false,
+                    snapshotRoot = testSnapshotRoot,
                 ).map(CliCommand::arguments),
             )
             assertEquals(
@@ -623,6 +630,7 @@ class CliCommandTest {
                         comparedToBase = true,
                     ),
                     unsafeCargoExecution = false,
+                    snapshotRoot = testSnapshotRoot,
                 ).single().arguments,
             )
         }
@@ -642,6 +650,7 @@ class CliCommandTest {
                 listOf("alpha:$task"),
                 BuildChanges(listOf(source.path), setOf(source.path), comparedToBase = true),
                 unsafeCargoExecution = false,
+                snapshotRoot = testSnapshotRoot,
             ).first().arguments.takeLast(2),
         )
         source.delete()
@@ -651,6 +660,7 @@ class CliCommandTest {
                 listOf("alpha:$task"),
                 BuildChanges(listOf(source.path), emptySet(), comparedToBase = true),
                 unsafeCargoExecution = false,
+                snapshotRoot = testSnapshotRoot,
             ).first().arguments.contains("--workspace"),
         )
     }
@@ -665,7 +675,12 @@ class CliCommandTest {
 
         assertEquals(
             listOf("cargo", "test", "--workspace"),
-            cargoCommands(root.path, listOf("alpha:$task"), unsafeCargoExecution = true).single().arguments,
+            cargoCommands(
+                root.path,
+                listOf("alpha:$task"),
+                unsafeCargoExecution = true,
+                snapshotRoot = testSnapshotRoot,
+            ).single().arguments,
         )
     }
 

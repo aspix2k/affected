@@ -5,6 +5,7 @@ import com.aspix2k.affected.build.CliConformanceRepository
 import com.aspix2k.affected.build.ManifestSearch
 import com.aspix2k.affected.build.NativeProcessRunner
 import com.aspix2k.affected.build.OwnedSandbox
+import com.aspix2k.affected.build.noRootWorkspace
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.nio.file.Files
@@ -62,15 +63,16 @@ class DotnetCliConformanceTest {
 
     private fun collectBaseline(context: Context): Pair<DotnetTestSnapshot, Long> {
         val metadata = assertNotNull(
-            readDotnetProjectMetadata(context.rootPath, context.project, context.productionProjects),
+            readDotnetProjectMetadata(noRootWorkspace, context.rootPath, context.project, context.productionProjects),
         )
-        val before = assertNotNull(analyzeDotnetProject(metadata, emptySet(), context.cache))
+        val before = assertNotNull(analyzeDotnetProject(noRootWorkspace, metadata, emptySet(), context.cache))
         val report = newDotnetReport(context.cache.resolve("reports"))
         val duration = measureTimeMillis {
             execute(context.root, dotnetTestArguments(context.project, DotnetTestSelection.Full, report))
         }
         val full = assertNotNull(readDotnetTestReport(report))
-        val after = assertNotNull(analyzeDotnetProject(metadata, full.tests.values.toSet(), context.cache))
+        val after =
+            assertNotNull(analyzeDotnetProject(noRootWorkspace, metadata, full.tests.values.toSet(), context.cache))
         assertTrue("Beta" in after.classes.getValue("Alpha.Tests.AlphaTest"))
         assertEquals(before.identity, after.identity)
         assertEquals(before.testAssemblySha256, after.testAssemblySha256)
@@ -86,10 +88,11 @@ class DotnetCliConformanceTest {
         alpha: File,
     ): DotnetTestSelection.Exact {
         val metadata = assertNotNull(
-            readDotnetProjectMetadata(context.rootPath, context.project, context.productionProjects),
+            readDotnetProjectMetadata(noRootWorkspace, context.rootPath, context.project, context.productionProjects),
         )
-        val current = assertNotNull(analyzeDotnetProject(metadata, baseline.classes.keys, context.cache))
-            .snapshot(baseline.tests)
+        val current = assertNotNull(
+            analyzeDotnetProject(noRootWorkspace, metadata, baseline.classes.keys, context.cache),
+        ).snapshot(baseline.tests)
         assertEquals(baseline.identity, current.identity)
         assertEquals(baseline.testAssemblySha256, current.testAssemblySha256)
         assertEquals(baseline.classes, current.classes)
@@ -122,9 +125,13 @@ class DotnetCliConformanceTest {
                 "<ItemGroup><Compile Update=\"AlphaValue.cs\" AutoGen=\"true\" /></ItemGroup></Project>",
             ),
         )
-        assertFalse(dotnetChangedSourcesAreOwned(context.rootPath, context.productionProjects, changes(alpha)))
+        assertFalse(
+            dotnetChangedSourcesAreOwned(noRootWorkspace, context.rootPath, context.productionProjects, changes(alpha)),
+        )
         project.writeText(original)
-        assertTrue(dotnetChangedSourcesAreOwned(context.rootPath, context.productionProjects, changes(alpha)))
+        assertTrue(
+            dotnetChangedSourcesAreOwned(noRootWorkspace, context.rootPath, context.productionProjects, changes(alpha)),
+        )
 
         val dynamic = File(context.root, "Alpha/DynamicValue.cs").apply {
             writeText(
@@ -135,7 +142,8 @@ class DotnetCliConformanceTest {
         execute(context.root, dotnetBuildCommand(context.project).arguments)
         assertNull(
             analyzeDotnetProject(
-                assertNotNull(readDotnetProjectMetadata(context.rootPath, context.project)),
+                noRootWorkspace,
+                assertNotNull(readDotnetProjectMetadata(noRootWorkspace, context.rootPath, context.project)),
                 baseline.classes.keys,
                 context.cache,
             ),
@@ -155,7 +163,8 @@ class DotnetCliConformanceTest {
         execute(context.root, dotnetBuildCommand(context.project).arguments)
         val changed = assertNotNull(
             analyzeDotnetProject(
-                assertNotNull(readDotnetProjectMetadata(context.rootPath, context.project)),
+                noRootWorkspace,
+                assertNotNull(readDotnetProjectMetadata(noRootWorkspace, context.rootPath, context.project)),
                 baseline.classes.keys,
                 context.cache,
             ),
@@ -183,7 +192,8 @@ class DotnetCliConformanceTest {
         execute(context.root, dotnetBuildCommand(context.project).arguments)
         assertNull(
             analyzeDotnetProject(
-                assertNotNull(readDotnetProjectMetadata(context.rootPath, context.project)),
+                noRootWorkspace,
+                assertNotNull(readDotnetProjectMetadata(noRootWorkspace, context.rootPath, context.project)),
                 baseline.classes.keys,
                 context.cache,
             ),
@@ -241,19 +251,30 @@ class DotnetCliConformanceTest {
 
     private fun analyzeCurrent(context: Context, baseline: DotnetTestSnapshot): DotnetAnalyzedState? =
         analyzeDotnetProject(
-            assertNotNull(readDotnetProjectMetadata(context.rootPath, context.project, context.productionProjects)),
+            noRootWorkspace,
+            assertNotNull(
+                readDotnetProjectMetadata(
+                    noRootWorkspace,
+                    context.rootPath,
+                    context.project,
+                    context.productionProjects,
+                ),
+            ),
             baseline.classes.keys,
             context.cache,
         )
 
     private fun assertFrameworkFilter(context: Context, project: String, expected: String) {
         execute(context.root, dotnetBuildCommand(project).arguments)
-        val metadata = assertNotNull(readDotnetProjectMetadata(context.rootPath, project))
+        val metadata = assertNotNull(readDotnetProjectMetadata(noRootWorkspace, context.rootPath, project))
         val fullReport = newDotnetReport(context.cache.resolve("reports"))
         execute(context.root, dotnetTestArguments(project, DotnetTestSelection.Full, fullReport))
         val full = assertNotNull(readDotnetTestReport(fullReport))
         assertEquals(2, full.tests.size)
-        val analyzed = assertNotNull(analyzeDotnetProject(metadata, full.tests.values.toSet(), context.cache), project)
+        val analyzed = assertNotNull(
+            analyzeDotnetProject(noRootWorkspace, metadata, full.tests.values.toSet(), context.cache),
+            project,
+        )
         assertTrue("Alpha" in analyzed.classes.getValue(expected.substringBeforeLast('.')))
         val exactReport = newDotnetReport(context.cache.resolve("reports"))
         execute(context.root, dotnetTestArguments(project, DotnetTestSelection.Exact(listOf(expected)), exactReport))
@@ -275,9 +296,10 @@ class DotnetCliConformanceTest {
             ),
         )
         execute(context.root, dotnetBuildCommand(project).arguments)
-        val metadata = assertNotNull(readDotnetProjectMetadata(context.rootPath, project))
+        val metadata = assertNotNull(readDotnetProjectMetadata(noRootWorkspace, context.rootPath, project))
         assertNull(
             analyzeDotnetProject(
+                noRootWorkspace,
                 metadata,
                 setOf("MSTest.Tests.AlphaTest", "MSTest.Tests.BetaTest"),
                 context.cache,
@@ -297,9 +319,10 @@ class DotnetCliConformanceTest {
             ),
         )
         execute(context.root, dotnetBuildCommand(project).arguments)
-        val metadata = assertNotNull(readDotnetProjectMetadata(context.rootPath, project))
+        val metadata = assertNotNull(readDotnetProjectMetadata(noRootWorkspace, context.rootPath, project))
         assertNull(
             analyzeDotnetProject(
+                noRootWorkspace,
                 metadata,
                 setOf("NUnit.Tests.AlphaTest", "NUnit.Tests.BetaTest"),
                 context.cache,
@@ -311,7 +334,7 @@ class DotnetCliConformanceTest {
 
     private fun assertConfigurationFallback(context: Context) {
         val settings = File(context.root, "custom.runsettings").apply { writeText("<RunSettings />\n") }
-        assertNull(readDotnetProjectMetadata(context.rootPath, context.project))
+        assertNull(readDotnetProjectMetadata(noRootWorkspace, context.rootPath, context.project))
         assertTrue(settings.delete())
         val project = File(context.root, context.project)
         val original = project.readText()
@@ -321,7 +344,7 @@ class DotnetCliConformanceTest {
                 "<Target Name=\"CustomVSTestInput\" BeforeTargets=\"VSTest\" /></Project>",
             ),
         )
-        assertNull(readDotnetProjectMetadata(context.rootPath, context.project))
+        assertNull(readDotnetProjectMetadata(noRootWorkspace, context.rootPath, context.project))
         project.writeText(original)
         project.writeText(
             original.replace(
@@ -330,7 +353,7 @@ class DotnetCliConformanceTest {
                     "</UseMicrosoftTestingPlatformRunner></PropertyGroup></Project>",
             ),
         )
-        assertNull(readDotnetProjectMetadata(context.rootPath, context.project))
+        assertNull(readDotnetProjectMetadata(noRootWorkspace, context.rootPath, context.project))
     }
 
     private fun context(root: File): Context {

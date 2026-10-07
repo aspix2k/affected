@@ -2,6 +2,7 @@ package com.aspix2k.affected.build.cmake
 
 import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.TaskPlanner
+import com.aspix2k.affected.build.IdeCMakeBuildSystem
 import com.aspix2k.affected.build.multiRootProject
 import java.io.File
 import java.nio.file.Path
@@ -17,7 +18,7 @@ class CMakeMultiRootTest {
     fun `two CMake projects without a root manifest produce modules for both and commands per root`() {
         val base = createTempDirectory("cmake-multi").toFile()
         val roots = listOf("engine", "tools").map { cmake(base, "native/$it", "out-$it") }
-        val system = CMakeBuildSystem()
+        val system = IdeCMakeBuildSystem()
         val project = multiRootProject(base)
 
         val modules = system.modules(project)
@@ -38,11 +39,11 @@ class CMakeMultiRootTest {
     @Test
     fun `sibling roots never share a baseline directory`() {
         val system = Path.of("system")
-        val one = cmakeCacheDirectory(system, "hash", Path.of("/repo/native/engine"))
-        val two = cmakeCacheDirectory(system, "hash", Path.of("/repo/native/tools"))
+        val one = cmakeCacheDirectory(system, Path.of("/repo/native/engine"))
+        val two = cmakeCacheDirectory(system, Path.of("/repo/native/tools"))
 
         assertNotEquals(one, two)
-        assertEquals(one, cmakeCacheDirectory(system, "hash", Path.of("/repo/native/engine")))
+        assertEquals(one, cmakeCacheDirectory(system, Path.of("/repo/native/engine")))
     }
 
     private fun cmake(base: File, path: String, tree: String): File = File(base, path).also {

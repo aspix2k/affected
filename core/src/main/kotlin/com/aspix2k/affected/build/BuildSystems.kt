@@ -20,21 +20,22 @@ object BuildSystems {
         of(project).flatMapTo(HashSet()) { it.sourceExtensions }.ifEmpty { ChangeAnalyzer.DEFAULT_EXTENSIONS }
 
     fun sourceFileNames(): Set<String> =
-        point.extensionList.filterIsInstance<NamedSourceBuildSystem>().flatMapTo(HashSet()) { it.sourceFileNames }
+        point.extensionList.mapNotNull { it.capability<NamedSourceBuildSystem>() }
+            .flatMapTo(HashSet()) { it.sourceFileNames }
 
     fun sourceFileNames(project: Project): Set<String> =
-        of(project).filterIsInstance<NamedSourceBuildSystem>().flatMapTo(HashSet()) { it.sourceFileNames }
+        of(project).mapNotNull { it.capability<NamedSourceBuildSystem>() }.flatMapTo(HashSet()) { it.sourceFileNames }
 
     fun includesAllFileChanges(project: Project, systems: List<BuildSystem> = point.extensionList): Boolean =
         presentAllFileSystems(project, systems).isNotEmpty()
 
     fun generatedFileChangeRoots(project: Project, systems: List<BuildSystem> = point.extensionList): List<String> =
         presentAllFileSystems(project, systems)
-            .filter { (it as AllFileChangesBuildSystem).includeGeneratedFiles }
+            .filter { it.capability<AllFileChangesBuildSystem>()?.includeGeneratedFiles == true }
             .flatMap { system -> system.modules(project).map(BuildModule::root) }
 
     private fun presentAllFileSystems(project: Project, systems: List<BuildSystem>): List<BuildSystem> =
-        systems.filter { it is AllFileChangesBuildSystem && it.isPresent(project) }
+        systems.filter { it.capability<AllFileChangesBuildSystem>() != null && it.isPresent(project) }
 }
 
 internal fun languageExtensions(extensions: Set<String>): Set<String> = extensions - DATA_FORMATS

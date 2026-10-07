@@ -30,6 +30,9 @@ internal interface BaseRuntimeBuildSystem {
     fun sameRuntime(project: Project, root: String, baseRoot: String): Boolean
 }
 
+internal inline fun <reified T> BuildSystem.capability(): T? =
+    this as? T ?: (this as? IdeBuildSystem)?.engine as? T
+
 internal interface SuspendingBuildSystem : BuildSystem {
     suspend fun modulesSuspending(project: Project): List<BuildModule> =
         runInterruptible(Dispatchers.IO) { modules(project) }

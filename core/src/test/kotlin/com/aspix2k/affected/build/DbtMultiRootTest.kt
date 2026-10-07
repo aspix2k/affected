@@ -16,7 +16,7 @@ class DbtMultiRootTest {
         val first = root(base, "native", "one")
         val second = root(base, "apps/tools", "two")
         val expected = setOf(first, second).map { it.invariantSeparatorsPath }.toSet()
-        val system = DbtBuildSystem()
+        val system = IdeDbtBuildSystem()
         val project = multiRootProject(base)
 
         val modules = system.modules(project)
@@ -43,7 +43,7 @@ class DbtMultiRootTest {
         val base = createTempDirectory("dbt-one").toFile()
         root(base, "native", "one")
         val second = root(base, "apps/tools", "two")
-        val system = DbtBuildSystem()
+        val system = IdeDbtBuildSystem()
         val modules = system.modules(multiRootProject(base))
         val changed = modules.filter { it.root == second.invariantSeparatorsPath }
 
@@ -67,11 +67,11 @@ class DbtMultiRootTest {
 
         assertEquals(
             listOf(baseRoot.invariantSeparatorsPath),
-            DbtBuildSystem().modules(multiRootProject(withBase)).map { it.root },
+            IdeDbtBuildSystem().modules(multiRootProject(withBase)).map { it.root },
         )
         assertEquals(
             listOf(nested.invariantSeparatorsPath),
-            DbtBuildSystem().modules(multiRootProject(nestedOnly)).map { it.root },
+            IdeDbtBuildSystem().modules(multiRootProject(nestedOnly)).map { it.root },
         )
     }
 

@@ -2,7 +2,6 @@ package com.aspix2k.affected.build
 
 import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.TaskPlanner
-import com.aspix2k.affected.build.go.GoBuildSystem
 import com.aspix2k.affected.build.go.GoPackages
 import com.aspix2k.affected.build.go.goCommands
 import org.junit.Assume.assumeTrue
@@ -21,7 +20,7 @@ class CliGoConformanceTest {
         val modules = GoPackages.parse(metadata, root.invariantSeparatorsPath)
         val alpha = modules.single { it.executionId == "example.com/affected-fixture/alpha" }
         val changed = File(root, "alpha/excluded_test.go")
-        val graph = ModuleGraph(modules.map { ModuleGraph.Node(it, GoBuildSystem()) })
+        val graph = ModuleGraph(modules.map { ModuleGraph.Node(it, IdeGoBuildSystem()) })
         val owners = graph.nodesFor(changed)
         assertEquals(listOf(alpha.id), owners.map(ModuleGraph.Node::id))
         val plan = TaskPlanner.plan(owners.map(ModuleGraph.Node::info), emptyList())

@@ -1,8 +1,9 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.IdeBuildSystem
+import com.aspix2k.affected.build.IdeComposerBuildSystem
+import com.aspix2k.affected.build.IdePythonBuildSystem
 import com.aspix2k.affected.build.MAX_CACHED_MODULES
-import com.aspix2k.affected.build.php.ComposerBuildSystem
-import com.aspix2k.affected.build.python.PythonBuildSystem
 import com.aspix2k.affected.build.retainBuildSnapshot
 import com.aspix2k.affected.build.shouldRetainBuildSnapshot
 import com.intellij.openapi.project.Project
@@ -43,7 +44,7 @@ class BuildSystemCacheTest {
 
     @Test
     fun `python keeps a snapshot that fits the cache budget`() {
-        val system = PythonBuildSystem()
+        val system = IdePythonBuildSystem()
         val first = system.modules(project(projectRoot("fits")))
         assertEquals(setOf("fits-root", "fits-child"), first.map { it.id }.toSet())
         assertEquals(2, cachedModuleCount(system))
@@ -56,7 +57,7 @@ class BuildSystemCacheTest {
         val timestamp = System.currentTimeMillis() - 10_000
         assertTrue(File(first, "pyproject.toml").setLastModified(timestamp))
         assertTrue(File(second, "pyproject.toml").setLastModified(timestamp))
-        val system = PythonBuildSystem()
+        val system = IdePythonBuildSystem()
 
         assertEquals(setOf("first-root", "first-child"), system.modules(project(first)).map { it.id }.toSet())
         assertEquals(setOf("second-root", "second-child"), system.modules(project(second)).map { it.id }.toSet())
@@ -67,7 +68,7 @@ class BuildSystemCacheTest {
         val root = projectRoot("first")
         val child = File(root, "child/pyproject.toml")
         val timestamp = child.lastModified()
-        val system = PythonBuildSystem()
+        val system = IdePythonBuildSystem()
         assertEquals(setOf("first-root", "first-child"), system.modules(project(root)).map { it.id }.toSet())
         child.writeText("[project]\nname = \"other-child\"\n")
         assertTrue(child.setLastModified(timestamp))
@@ -78,7 +79,7 @@ class BuildSystemCacheTest {
     @Test
     fun `a new test directory invalidates cached module capabilities`() {
         val root = projectRoot("layout")
-        val system = PythonBuildSystem()
+        val system = IdePythonBuildSystem()
         assertTrue(system.modules(project(root)).none { it.hasTests })
 
         File(root, "child/tests").mkdirs()
@@ -93,7 +94,7 @@ class BuildSystemCacheTest {
             .first(File::isDirectory)
         val root = createTempDirectory("cache-pest").toFile()
         assertTrue(source.copyRecursively(root, overwrite = true))
-        val system = ComposerBuildSystem()
+        val system = IdeComposerBuildSystem()
         assertTrue(system.modules(project(root)).single { it.id == "affected/pest-fixture-root" }.hasTests.not())
 
         File(root, "tests/RootTest.php").writeText("<?php\n")
@@ -110,7 +111,7 @@ class BuildSystemCacheTest {
         assertTrue(source.copyRecursively(root, overwrite = true))
         val deepSuite = (1..10).fold(File(root, "tests/deep")) { directory, depth -> File(directory, "d$depth") }
         assertTrue(deepSuite.mkdirs())
-        val system = ComposerBuildSystem()
+        val system = IdeComposerBuildSystem()
         assertTrue(system.modules(project(root)).single { it.id == "affected/pest-fixture-root" }.hasTests.not())
 
         File(deepSuite, "RootTest.php").writeText("<?php\n")
@@ -124,10 +125,11 @@ class BuildSystemCacheTest {
         File(this, "child/pyproject.toml").writeText("[project]\nname = \"$prefix-child\"\n")
     }
 
-    private fun cachedModuleCount(system: Any): Int {
-        val field = system.javaClass.getDeclaredField("cache")
+    private fun cachedModuleCount(system: IdeBuildSystem): Int {
+        val engine = system.engine
+        val field = engine.javaClass.getDeclaredField("cache")
         field.isAccessible = true
-        val snapshot = (field.get(system) as ConcurrentHashMap<*, *>).values.single()
+        val snapshot = (field.get(engine) as ConcurrentHashMap<*, *>).values.single()
         val modules = snapshot.javaClass.getDeclaredField("modules")
         modules.isAccessible = true
         return (modules.get(snapshot) as List<*>).size

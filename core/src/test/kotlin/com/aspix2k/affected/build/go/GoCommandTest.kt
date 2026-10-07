@@ -3,8 +3,9 @@ package com.aspix2k.affected.build.go
 import com.aspix2k.affected.ModuleGraph
 import com.aspix2k.affected.TaskPlanner
 import com.aspix2k.affected.build.BuildModule
-import com.aspix2k.affected.build.BuildSystem
-import com.aspix2k.affected.build.ChangeAwareSuspendingBuildSystem
+import com.aspix2k.affected.build.ChangeAwareEngineBuildSystem
+import com.aspix2k.affected.build.EngineBuildSystem
+import com.aspix2k.affected.build.IdeGoBuildSystem
 import com.intellij.openapi.project.Project
 import org.junit.Assume.assumeTrue
 import java.io.File
@@ -20,10 +21,10 @@ class GoCommandTest {
     @Test
     fun `a changed Go test file keeps the package test command`() {
         val command = goCommands(listOf("example.com/alpha:test")).single()
-        val system: BuildSystem = GoBuildSystem()
+        val system: EngineBuildSystem = GoBuildSystem()
 
         assertEquals(listOf("go", "test", "example.com/alpha"), command.arguments)
-        assertFalse(system is ChangeAwareSuspendingBuildSystem)
+        assertFalse(system is ChangeAwareEngineBuildSystem)
     }
 
     @Test
@@ -38,7 +39,7 @@ class GoCommandTest {
             GoPackages.COMPILE,
             true,
         )
-        val graph = ModuleGraph(listOf(ModuleGraph.Node(module, GoBuildSystem())))
+        val graph = ModuleGraph(listOf(ModuleGraph.Node(module, IdeGoBuildSystem())))
 
         listOf(
             "alpha_test.go" to "package alpha\n",
@@ -75,7 +76,7 @@ class GoCommandTest {
             true,
         )
 
-        val graph = ModuleGraph(listOf(ModuleGraph.Node(module, GoBuildSystem())))
+        val graph = ModuleGraph(listOf(ModuleGraph.Node(module, IdeGoBuildSystem())))
         val plan = TaskPlanner.plan(graph.nodesFor(source).map(ModuleGraph.Node::info), emptyList())
         val command = goCommands(plan.groups.single().tasks).single()
 
@@ -124,7 +125,7 @@ class GoCommandTest {
         val base = createTempDirectory("go-multi").toFile()
         val roots = listOf("a", "b").map { File(base, "services/$it") }
         roots.forEach { goMod().copyRecursively(it) }
-        val system = GoBuildSystem()
+        val system = IdeGoBuildSystem()
         val project = project(base)
 
         val modules = system.modules(project)
@@ -167,7 +168,7 @@ class GoCommandTest {
         File(base, "exp/sub/exp.go").apply { parentFile.mkdirs() }.writeText("package sub\n")
         File(base, "vendor/dep/go.mod").apply { parentFile.mkdirs() }.writeText("module example.com/dep\n\ngo 1.21\n")
         File(base, "testdata/sample/go.mod").apply { parentFile.mkdirs() }.writeText("module example.com/sample\n")
-        val system = GoBuildSystem()
+        val system = IdeGoBuildSystem()
         val modules = system.modules(project(base))
         val graph = ModuleGraph(modules.map { ModuleGraph.Node(it, system) })
 

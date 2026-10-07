@@ -1,6 +1,6 @@
 package com.aspix2k.affected
 
-import com.aspix2k.affected.build.node.NodeBuildSystem
+import com.aspix2k.affected.build.IdeNodeBuildSystem
 import com.aspix2k.affected.build.node.NodeWorkspaces
 import org.junit.Assume.assumeTrue
 import java.io.File
@@ -197,7 +197,7 @@ class NodeWorkspacesTest {
     }
 
     private fun planned(root: File, changed: String): List<String> {
-        val system = NodeBuildSystem()
+        val system = IdeNodeBuildSystem()
         val graph = ModuleGraph(NodeWorkspaces.parse(root, delegateTests = true).map { ModuleGraph.Node(it, system) })
         val owners = graph.nodesFor(File(root, changed)).map { it.info() }
         return TaskPlanner.plan(owners, emptyList()).groups.flatMap { it.tasks }.sorted()

@@ -14,7 +14,7 @@ class KotlinToolchainMultiRootTest {
     fun `two toolchain projects without a root manifest produce modules for both and commands per root`() {
         val base = createTempDirectory("toolchain-multi").toFile()
         val roots = listOf("api", "worker").map { toolchain(base, "services/$it") }
-        val system = KotlinToolchainBuildSystem()
+        val system = IdeKotlinToolchainBuildSystem()
         val project = multiRootProject(base)
 
         val modules = system.modules(project)
