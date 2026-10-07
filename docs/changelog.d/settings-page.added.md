@@ -1,1 +1,0 @@
-- Settings | Tools | Affected: one page with the base branch and every switch that used to live only in the toolbar menu; the menu keeps its toggles and gets a Settings item.

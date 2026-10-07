@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.22.0] - 2026-10-07
+
+### Added
+
+- After a failed check, "Check on base branch" (and the `affected_check_on_base` MCP tool) reruns only the failed Gradle and Maven task groups in a private checkout of the comparison base and tells for each whether your change broke it, it was already failing, or it could not be told; your working tree, index and worktrees are not touched.
+- Settings | Tools | Affected: one page with the base branch and every switch that used to live only in the toolbar menu; the menu keeps its toggles and gets a Settings item.
+
+### Fixed
+
+- Composer: a root package with a PHPUnit configuration now runs its configured test suites instead of pointing PHPUnit at the project root, which also collected tests from `vendor/`; without a configuration only the package test directories are passed.
+- sbt: a project placed with `.in(file(...))` on the next line keeps its declared directory, so its tests are found; a bare `project` whose default directory does not exist falls back to the whole build instead of a module that matches nothing.
+- R: exact test-file selection no longer fails on R builds that reject the escaped dot in the selection expression.
+
 ## [3.21.0] - 2026-10-03
 
 ### Added
@@ -819,7 +832,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.21.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.22.0...HEAD
+[3.22.0]: https://github.com/aspix2k/affected/compare/v3.21.0...v3.22.0
 [3.21.0]: https://github.com/aspix2k/affected/compare/v3.20.0...v3.21.0
 [3.20.0]: https://github.com/aspix2k/affected/compare/v3.19.0...v3.20.0
 [3.19.0]: https://github.com/aspix2k/affected/compare/v3.18.0...v3.19.0
