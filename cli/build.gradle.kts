@@ -35,6 +35,22 @@ application {
     applicationName = "affected"
 }
 
+distributions {
+    main {
+        contents {
+            val helpers = project(":core").layout.projectDirectory
+            into("agent") {
+                from(helpers.file("src/main/python/affected_pytest.py")) { rename { "affected-pytest.py" } }
+                from(helpers.file("src/main/python/affected_unittest.py")) { rename { "affected-unittest.py" } }
+                from(helpers.file("src/main/php/affected_phpunit.php")) { rename { "affected-phpunit.php" } }
+            }
+            into("agent/dotnet/Affected.DotnetAnalyzer") {
+                from(helpers.dir("src/main/dotnet/Affected.DotnetAnalyzer"))
+            }
+        }
+    }
+}
+
 tasks.test {
     useJUnit()
     testLogging { events("passed", "failed", "skipped") }

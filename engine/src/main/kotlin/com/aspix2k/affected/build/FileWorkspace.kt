@@ -22,7 +22,9 @@ internal class FileWorkspace(
 
     override val root: File = directory
 
-    override val helperAssets: Path? = null
+    override val helperAssets: Path? = runCatching {
+        Path.of(FileWorkspace::class.java.protectionDomain.codeSource.location.toURI())
+    }.getOrNull()
 
     override val processHost: ProcessHost by lazy { ProcessHost.standalone(listOf(extractJnaNatives())) }
 
