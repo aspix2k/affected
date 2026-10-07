@@ -38,9 +38,30 @@ internal class GradleCommandLineBuildSystem : EngineBuildSystem, WorkspaceChange
 
     override fun sourceRoots(module: BuildModule): List<String> = module.contentRoots.drop(1)
 
+    override fun consumerRoots(root: String, candidateRoots: Set<String>): Set<String> =
+        gradleConsumerRoots(root, candidateRoots)
+
     override fun modules(workspace: Workspace): List<BuildModule> {
         val root = workspace.root?.takeIf(::isGradleRoot) ?: return emptyList()
-        return readModel(workspace, root)?.let { gradleCommandLineModules(root, it) } ?: listOf(unverifiable(root))
+        return compositeModules(workspace, root) ?: listOf(unverifiable(root))
+    }
+
+    private fun compositeModules(workspace: Workspace, root: File): List<BuildModule>? {
+        val launcher = gradleLauncher(root)
+        val pending = ArrayDeque(listOf(GradleBuild(null, root)))
+        val seen = HashSet<File>()
+        val builds = ArrayList<Pair<List<BuildModule>, List<File>>>()
+        while (pending.isNotEmpty()) {
+            val build = pending.removeFirst()
+            if (!seen.add(build.directory.canonicalFile)) continue
+            if (seen.size > MAX_BUILDS) return null
+            val model = readModel(workspace, launcher, build.directory) ?: return null
+            val modules = gradleCommandLineModules(root, build, model) ?: return null
+            val included = gradleIncludedBuilds(model) ?: return null
+            builds += modules to included.map { it.directory.canonicalFile }
+            pending += included
+        }
+        return gradleCompositeDependencies(builds)
     }
 
     override fun run(workspace: Workspace, root: String, tasks: List<String>) =
@@ -54,7 +75,7 @@ internal class GradleCommandLineBuildSystem : EngineBuildSystem, WorkspaceChange
         return CliCommand("gradle", listOf(gradleLauncher(File(root))) + tasks + failureArguments)
     }
 
-    private fun readModel(workspace: Workspace, root: File): JsonObject? = runCatching {
+    private fun readModel(workspace: Workspace, launcher: String, root: File): JsonObject? = runCatching {
         val directory = Files.createDirectories(workspace.cacheDirectory.resolve("gradle"))
         val script = directory.resolve("affected-model.init.gradle")
         Files.writeString(script, MODEL_INIT_SCRIPT)
@@ -63,7 +84,7 @@ internal class GradleCommandLineBuildSystem : EngineBuildSystem, WorkspaceChange
             workspace.capture(
                 root.invariantSeparatorsPath,
                 listOf(
-                    gradleLauncher(root),
+                    launcher,
                     "--init-script",
                     script.toString(),
                     "-D$MODEL_OUTPUT_PROPERTY=$output",
@@ -85,6 +106,7 @@ internal class GradleCommandLineBuildSystem : EngineBuildSystem, WorkspaceChange
     private companion object {
         const val TITLE = "Affected Gradle"
         const val MODEL_TIMEOUT_SECONDS = 900L
+        const val MAX_BUILDS = 64
     }
 }
 
@@ -95,37 +117,56 @@ internal fun gradleLauncher(root: File): String {
     return if (wrapper.isFile) wrapper.absolutePath else "gradle"
 }
 
-internal fun gradleCommandLineModules(root: File, model: JsonObject): List<BuildModule>? = runCatching {
-    if (model.get("includedBuilds").asInt != 0) return null
-    val rootPath = root.invariantSeparatorsPath
-    val projects = model.getAsJsonArray("projects").map { it.asJsonObject }
-    val tasks = GradleTaskModel(
-        projects.associate { project ->
-            val tests = project.strings("tests").toSet()
-            val names = project.strings("tasks").filterTo(HashSet()) { it in tests || !isGradleUnitTestTask(it) }
-            project.directory() to names
-        },
-        projects.associate { it.directory() to it.strings("tests").toSet() },
-    )
-    val built = projects.associate { project ->
-        val path = project.get("path").asString
-        val id = path.takeUnless { it == ":" }.orEmpty()
-        val testSources = project.strings("testSources").map(::normalized)
-        val sources = (project.strings("sources").map(::normalized) + testSources).distinct() - project.directory()
-        val roots = listOf(project.directory()) + sources
-        val module = gradleModule(
-            id,
-            project.directory(),
-            rootPath,
-            roots,
-            testSources,
-            tasks,
-            rootPath to id,
-        )
-        path to (module to project.strings("dependencies").toSet())
+internal class GradleBuild(val name: String?, val directory: File)
+
+internal fun gradleIncludedBuilds(model: JsonObject): List<GradleBuild>? = runCatching {
+    model.getAsJsonArray("includedBuilds").map { it.asJsonObject }.map { build ->
+        GradleBuild(build.get("name").asString.also { require(it.isNotBlank()) }, File(build.get("directory").asString))
     }
-    gradleModulesWithDependencies(built).takeIf { it.isNotEmpty() }
 }.getOrNull()
+
+internal fun gradleCompositeDependencies(builds: List<Pair<List<BuildModule>, List<File>>>): List<BuildModule> {
+    val byRoot = builds.associate { (modules, _) -> modules.firstOrNull()?.root to modules }
+    return builds.flatMap { (modules, included) ->
+        val provided = included.flatMapTo(HashSet()) { directory ->
+            byRoot[directory.invariantSeparatorsPath].orEmpty().map(BuildModule::key)
+        }
+        modules.map { it.copy(dependencies = it.dependencies + provided) }
+    }
+}
+
+internal fun gradleCommandLineModules(root: File, build: GradleBuild, model: JsonObject): List<BuildModule>? =
+    runCatching {
+        val rootPath = root.invariantSeparatorsPath
+        val buildPath = build.directory.canonicalFile.invariantSeparatorsPath
+        val prefix = build.name?.let { ":$it" }.orEmpty()
+        val projects = model.getAsJsonArray("projects").map { it.asJsonObject }
+        val tasks = GradleTaskModel(
+            projects.associate { project ->
+                val tests = project.strings("tests").toSet()
+                val names = project.strings("tasks").filterTo(HashSet()) { it in tests || !isGradleUnitTestTask(it) }
+                project.directory() to names
+            },
+            projects.associate { it.directory() to it.strings("tests").toSet() },
+        )
+        val built = projects.associate { project ->
+            val path = project.get("path").asString
+            val id = path.takeUnless { it == ":" }.orEmpty()
+            val testSources = project.strings("testSources").map(::normalized)
+            val sources = (project.strings("sources").map(::normalized) + testSources).distinct() - project.directory()
+            val module = gradleModule(
+                id,
+                project.directory(),
+                buildPath,
+                listOf(project.directory()) + sources,
+                testSources,
+                tasks,
+                rootPath to "$prefix$id",
+            )
+            path to (module to project.strings("dependencies").toSet())
+        }
+        gradleModulesWithDependencies(built).takeIf { it.isNotEmpty() }
+    }.getOrNull()
 
 private fun JsonObject.directory(): String = normalized(get("directory").asString)
 
@@ -174,8 +215,9 @@ if (affectedModelOutput != null) {
                 dependencies: dependencies as List,
             ]
         }
+        def includedBuilds = build.includedBuilds.collect { [name: it.name, directory: it.projectDir.absolutePath] }
         new File(affectedModelOutput).setText(
-            groovy.json.JsonOutput.toJson([includedBuilds: build.includedBuilds.size(), projects: projects]),
+            groovy.json.JsonOutput.toJson([includedBuilds: includedBuilds, projects: projects]),
             'UTF-8',
         )
     }
