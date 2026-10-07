@@ -1,10 +1,6 @@
 package com.aspix2k.affected.build
 
-internal interface EngineBuildSystem {
-
-    val id: String
-
-    val sourceExtensions: Set<String>
+internal interface EngineBuildSystem : BuildSystemTraits {
 
     fun isPresent(workspace: Workspace): Boolean
 
@@ -13,12 +9,6 @@ internal interface EngineBuildSystem {
     fun run(workspace: Workspace, root: String, tasks: List<String>)
 
     suspend fun runAndWait(workspace: Workspace, root: String, tasks: List<String>): Boolean
-
-    fun isTestSource(path: String): Boolean = false
-
-    val consumersNeedSignatureChange: Boolean get() = false
-
-    val singleOwnerPerRoot: Boolean get() = false
 }
 
 internal interface ChangeAwareEngineBuildSystem : EngineBuildSystem {

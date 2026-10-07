@@ -57,6 +57,35 @@ through an `Ide...BuildSystem` that wraps it in `IdeBuildSystem`, the bridge to
 the `BuildSystem` extension point. Gradle and Maven stay in `core` on the IDE
 model.
 
+The module graph and the verification plan are computed in `engine` too
+(`ModuleGraph`, `verificationPlans`), from a `ChangeSet` and the traits every
+build system exposes through `BuildSystemTraits`. `Engine.plan` and
+`Engine.run` put it together without an IDE: a `FileWorkspace` over a plain
+directory, changes from `ChangeAnalyzer` against an explicitly named base
+branch, and the registered engine adapters. The `cli` module is its
+command-line front end:
+
+```bash
+./gradlew :cli:installDist
+cli/build/install/affected/bin/affected plan --base main
+cli/build/install/affected/bin/affected run --base main --dependents
+```
+
+It exits with 0 when every planned check passed (or nothing needed to run),
+1 when a check failed, 2 when success cannot be claimed (not a git repository,
+the base branch cannot be compared with, or a changed source has no owning
+check) and 64 on wrong usage. Without the plugin's helper assets test selection
+always falls back to the whole module.
+
+A Gradle build in the repository root is read without the IDE by
+`GradleCommandLineBuildSystem`: it runs the wrapper (or `gradle`) once with an
+init script that writes projects, task names, typed `Test` tasks, source set
+directories and project dependencies as JSON, and builds the same modules the
+IDE adapter does through the shared `gradleModule`. A composite build or a
+model that cannot be read becomes one unverifiable module, so the run is
+refused instead of passing. Maven builds and Gradle builds outside the root
+are refused as unsupported.
+
 After clone, run `python3 scripts/local_gate.py install` so `core.hooksPath` is
 `.githooks`. `pre-commit` runs detekt, script tests, CI contracts and the
 analyzer policy. `pre-push` adds ShellCheck. This is the cheap half of CI, not

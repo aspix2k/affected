@@ -62,6 +62,13 @@ class CiScopeTest(unittest.TestCase):
             ci_scope.scope_for(["core/src/main/kotlin/Foo.kt"]),
         )
 
+    def test_cli_source_runs_plugin_and_codeql_like_the_ui_module(self) -> None:
+        """The command-line front end is product code but owns no adapter, so it skips the fixture matrix."""
+        self.assertEqual(
+            ci_scope.scope_for(["cli/src/main/kotlin/Main.kt"]),
+            ci_scope.scope_for(["src/main/kotlin/Action.kt"]),
+        )
+
     def test_root_ui_source_does_not_start_native_adapter_fixtures(self) -> None:
         """Keep the exact matrix at its previous product boundary."""
         self.assertEqual(

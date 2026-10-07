@@ -131,7 +131,7 @@ class AffectedStateTest {
                 if (attempts == 1) throw ProcessCanceledException()
                 AffectedAnalysis(
                     modules = emptyList(),
-                    changes = ProjectChanges.Result(emptyList(), emptySet(), emptySet(), comparedToBase = true),
+                    changes = ChangeSet(emptyList(), emptySet(), emptySet(), comparedToBase = true),
                     plans = emptyPlans(),
                 )
             },
@@ -161,7 +161,7 @@ class AffectedStateTest {
             analyzeProject = {
                 AffectedAnalysis(
                     modules = listOf(current),
-                    changes = ProjectChanges.Result(emptyList(), emptySet(), emptySet(), comparedToBase = true),
+                    changes = ChangeSet(emptyList(), emptySet(), emptySet(), comparedToBase = true),
                     plans = emptyPlans(),
                 )
             },
@@ -194,7 +194,7 @@ class AffectedStateTest {
                 if (attempts == 1) state.invalidate()
                 AffectedAnalysis(
                     modules = listOf(module(":attempt$attempts")),
-                    changes = ProjectChanges.Result(emptyList(), emptySet(), emptySet(), comparedToBase = true),
+                    changes = ChangeSet(emptyList(), emptySet(), emptySet(), comparedToBase = true),
                     plans = emptyPlans(),
                 )
             },
@@ -222,7 +222,7 @@ class AffectedStateTest {
                 analyses++
                 AffectedAnalysis(
                     modules = listOf(nextModule),
-                    changes = ProjectChanges.Result(emptyList(), emptySet(), emptySet(), comparedToBase = true),
+                    changes = ChangeSet(emptyList(), emptySet(), emptySet(), comparedToBase = true),
                     plans = emptyPlans(),
                 )
             },

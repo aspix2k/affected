@@ -235,7 +235,7 @@ class AffectedMcpViewsTest {
         analysisStatus: AnalysisStatus,
         verificationStatus: VerificationStatus = VerificationStatus.IDLE,
         modules: List<AffectedModule> = emptyList(),
-        changes: ProjectChanges.Result? = null,
+        changes: ChangeSet? = null,
         plans: Verification.PreparedPlans? = null,
     ) = AffectedStateSnapshot(
         revision = 1,
@@ -258,9 +258,9 @@ class AffectedMcpViewsTest {
         tasks = tasks,
     )
 
-    private fun changes(path: String, api: Boolean = false): ProjectChanges.Result {
+    private fun changes(path: String, api: Boolean = false): ChangeSet {
         val file = File(path)
-        return ProjectChanges.Result(
+        return ChangeSet(
             files = listOf(file),
             apiTouched = if (api) setOf(file) else emptySet(),
             exactSelectionEligible = emptySet(),

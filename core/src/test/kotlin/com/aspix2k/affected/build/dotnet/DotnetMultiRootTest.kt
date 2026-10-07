@@ -1,7 +1,7 @@
 package com.aspix2k.affected.build.dotnet
 
+import com.aspix2k.affected.ChangeSet
 import com.aspix2k.affected.ModuleGraph
-import com.aspix2k.affected.ProjectChanges
 import com.aspix2k.affected.TaskPlanner
 import com.aspix2k.affected.Verification
 import com.aspix2k.affected.build.IdeDotnetBuildSystem
@@ -92,7 +92,7 @@ class DotnetMultiRootTest {
         val graph = ModuleGraph(system.modules(multiRootProject(base)).map { ModuleGraph.Node(it, system) })
         val owned = File(base, "api/App/Program.cs").apply { writeText("class Program {}") }
         val outside = File(base, "shared/Shared/Shared.cs").apply { writeText("class Shared {}") }
-        val changes = ProjectChanges.Result(
+        val changes = ChangeSet(
             listOf(owned, outside),
             emptySet(),
             setOf(owned, outside),

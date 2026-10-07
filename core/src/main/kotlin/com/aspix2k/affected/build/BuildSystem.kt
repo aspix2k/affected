@@ -5,11 +5,7 @@ import com.intellij.openapi.project.Project
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 
-interface BuildSystem {
-
-    val id: String
-
-    val sourceExtensions: Set<String>
+interface BuildSystem : BuildSystemTraits {
 
     fun isPresent(project: Project): Boolean
 
@@ -18,20 +14,11 @@ interface BuildSystem {
     fun run(project: Project, root: String, tasks: List<String>)
 
     fun runAndWait(project: Project, root: String, tasks: List<String>): Boolean
-
-    fun isTestSource(path: String): Boolean = false
-
-    val consumersNeedSignatureChange: Boolean get() = false
-
-    val singleOwnerPerRoot: Boolean get() = false
 }
 
 internal interface BaseRuntimeBuildSystem {
     fun sameRuntime(project: Project, root: String, baseRoot: String): Boolean
 }
-
-internal inline fun <reified T> BuildSystem.capability(): T? =
-    this as? T ?: (this as? IdeBuildSystem)?.engine as? T
 
 internal interface SuspendingBuildSystem : BuildSystem {
     suspend fun modulesSuspending(project: Project): List<BuildModule> =

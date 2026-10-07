@@ -5,7 +5,7 @@ import com.intellij.openapi.project.Project
 
 internal fun verificationPlan(
     graph: ModuleGraph,
-    changes: ProjectChanges.Result,
+    changes: ChangeSet,
     checkConsumers: Boolean,
 ): Plan = Verification.prepare(graph, changes).select(checkConsumers).plan
 

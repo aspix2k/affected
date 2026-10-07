@@ -1,7 +1,7 @@
 package com.aspix2k.affected.build
 
+import com.aspix2k.affected.ChangeSet
 import com.aspix2k.affected.ModuleGraph
-import com.aspix2k.affected.ProjectChanges
 import com.aspix2k.affected.TaskGroup
 import com.aspix2k.affected.Verification
 import com.aspix2k.affected.build.cargo.cargoCommands
@@ -113,7 +113,7 @@ class RealRepositorySmokeTest(private val repository: RealRepository) {
         deadline: Long,
     ) {
         val files = scenario.files.map { File(root, it) }
-        val changes = ProjectChanges.Result(files, emptySet(), files.toSet(), comparedToBase = true)
+        val changes = ChangeSet(files, emptySet(), files.toSet(), comparedToBase = true)
         val prepared = Verification.prepare(graph, changes, testDependents = scenario.testDependents).testsOnly
         val plan = prepared.plan
         val group = assertNotNull(

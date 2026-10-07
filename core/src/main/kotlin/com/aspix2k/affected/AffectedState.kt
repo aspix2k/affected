@@ -44,7 +44,7 @@ data class AffectedStateSnapshot(
     val analysisStatus: AnalysisStatus,
     val modules: List<AffectedModule>,
     val verificationStatus: VerificationStatus,
-    val changes: ProjectChanges.Result? = null,
+    val changes: ChangeSet? = null,
     val plans: Verification.PreparedPlans? = null,
     val systems: List<BuildSystemSummary> = emptyList(),
     val overBudget: Boolean = false,
@@ -54,7 +54,7 @@ data class AffectedStateSnapshot(
 
 internal data class AffectedAnalysis(
     val modules: List<AffectedModule>,
-    val changes: ProjectChanges.Result,
+    val changes: ChangeSet,
     val plans: Verification.PreparedPlans,
     val systems: List<BuildSystemSummary> = emptyList(),
 )
@@ -240,7 +240,7 @@ internal class AffectedStateStore(
 
 class AffectedRunClaim internal constructor(
     val snapshot: AffectedStateSnapshot,
-    val changes: ProjectChanges.Result?,
+    val changes: ChangeSet?,
     val prepared: Verification.Prepared?,
     private val markRunning: () -> Boolean,
     private val release: () -> Unit,
@@ -603,7 +603,7 @@ class AffectedState(
 internal fun affectedModules(graph: ModuleGraph, files: List<File>): List<AffectedModule> =
     affectedModules(files.flatMap(graph::nodesFor))
 
-internal fun affectedModules(graph: ModuleGraph, changes: ProjectChanges.Result): List<AffectedModule> =
+internal fun affectedModules(graph: ModuleGraph, changes: ChangeSet): List<AffectedModule> =
     affectedModules(graph.ownersForChanges(changes.toBuildChanges()).values.flatten())
 
 private fun affectedModules(nodes: List<ModuleGraph.Node>): List<AffectedModule> =
