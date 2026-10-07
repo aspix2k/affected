@@ -130,8 +130,9 @@ dependent module's tests too. The IDE is always stopped and the temporary state 
 A first run downloads the IDE (about 1.5 GB) and PyCharm needs the virtual environment's `pytest` from PyPI.
 
 The first-run dialogs are switched off with JVM properties, not clicks: `-Djb.consents.confirmation.enabled=false`
-(data sharing consent) and `-Dide.experimental.ui.onboarding=false` (New UI onboarding dialog); both block the IDE on a
-fresh sandbox. On a Linux machine without a display the Gradle run is wrapped in `xvfb-run` (`apt install xvfb lsof`).
+(data sharing consent), `-Djb.privacy.policy.text=<!--999.999-->` (user agreement on a machine that never ran a
+JetBrains IDE) and `-Dide.experimental.ui.onboarding=false` (New UI onboarding dialog); each blocks the IDE on a
+fresh sandbox. After a failure the IDE is asked for a thread dump, which lands in the collected Gradle output. On a Linux machine without a display the Gradle run is wrapped in `xvfb-run` (`apt install xvfb lsof`).
 CI runs it weekly and by hand in `.github/workflows/live-ide.yml`, never on a pull request, and opens an issue when
 the scheduled run fails. Android Studio is not covered: its sandbox gets an MCP Server plugin built for another platform
 build and the server does not start. Products that ask for a license on the first start cannot run unattended.
