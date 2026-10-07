@@ -12,7 +12,7 @@ from pathlib import Path
 GATES = ("plugin", "health", "codeql", "dependencies", "exact", "native")
 SHA = re.compile(r"^[0-9a-f]{40}$")
 ZERO_SHA = "0" * 40
-PRODUCT_PREFIXES = ("src/", "engine/", "core/", "mcp/", "collector/")
+PRODUCT_PREFIXES = ("src/", "engine/", "core/", "mcp/", "cli/", "collector/")
 DOC_FILES = frozenset(
     {
         "AGENTS.md",

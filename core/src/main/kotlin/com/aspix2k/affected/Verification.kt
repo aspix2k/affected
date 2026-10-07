@@ -1,12 +1,9 @@
 package com.aspix2k.affected
 
 import com.aspix2k.affected.build.BuildChanges
-import com.aspix2k.affected.build.BuildSystem
 import com.aspix2k.affected.build.BuildSystems
 import com.aspix2k.affected.build.ChangeAwareSuspendingBuildSystem
 import com.aspix2k.affected.build.SuspendingBuildSystem
-import com.aspix2k.affected.build.gradle.isAndroidInstrumentationSource
-import com.aspix2k.affected.build.gradle.selectAndroidTestTask
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.Dispatchers
@@ -57,7 +54,7 @@ object Verification {
 
     internal fun prepare(
         graph: ModuleGraph,
-        changes: ProjectChanges.Result,
+        changes: ChangeSet,
         owners: Map<File, List<ModuleGraph.Node>> = changes.files.associateWith(graph::nodesFor),
         testDependents: Boolean = false,
     ): PreparedPlans {
@@ -191,98 +188,4 @@ fun <T> runWithRequiredAdapter(
     run: (T) -> Boolean,
 ): Boolean {
     return adapter != null && run(adapter)
-}
-
-private data class VerificationPlans(
-    val testsOnly: Plan,
-    val withConsumers: Plan,
-    val unresolved: List<File> = emptyList(),
-)
-
-private fun verificationPlans(
-    graph: ModuleGraph,
-    changes: ProjectChanges.Result,
-    owners: Map<File, List<ModuleGraph.Node>>,
-    testDependents: Boolean,
-): VerificationPlans {
-    if (changes.files.isEmpty()) {
-        val empty = Plan(emptyList(), 0, 0)
-        return VerificationPlans(empty, empty)
-    }
-    val effectiveOwners = graph.ownersForChanges(changes.toBuildChanges(), owners)
-    val changed = effectiveOwners.values.flatten().distinct()
-    val testConsumers = graph.transitiveTestConsumers(changed.toSet()) + if (testDependents) {
-        val production = effectiveOwners.flatMapTo(HashSet()) { (file, nodes) ->
-            nodes.filterNot { it.system.isTestSource(it.pathInBuildRoot(file)) }
-        }
-        graph.transitiveTestConsumers(production, everySystem = true)
-    } else {
-        emptyList()
-    }
-    val apiNodes = effectiveOwners.flatMapTo(HashSet()) { (file, nodes) ->
-        nodes.filter { node ->
-            affectsConsumers(
-                system = node.system,
-                path = node.pathInBuildRoot(file),
-                signatureTouched = file in changes.apiTouched,
-            )
-        }
-    }
-    val changedNodes = changed.toSet()
-    val tested = (changed + testConsumers).distinct().map { node ->
-        androidTestInfo(node, if (node in changedNodes) pathsOwnedBy(node, effectiveOwners) else emptyList())
-    }
-    val testsOnly = TaskPlanner.plan(tested, emptyList())
-    val consumers = if (apiNodes.isEmpty()) emptyList() else graph.directDependents(apiNodes)
-    val verifiedByConsumers = changed.filterTo(HashSet()) { node ->
-        !node.isVerifiable() && graph.transitiveTestConsumers(setOf(node), testDependents).any { it.isVerifiable() }
-    }
-    return VerificationPlans(
-        testsOnly = testsOnly,
-        withConsumers = if (consumers.isEmpty()) {
-            testsOnly
-        } else {
-            TaskPlanner.plan(tested, consumers.map { it.info() })
-        },
-        unresolved = changes.files.filter { file ->
-            file.extension.lowercase() in graph.sourceExtensions &&
-                effectiveOwners[file].orEmpty().none { it.isVerifiable() || it in verifiedByConsumers }
-        },
-    )
-}
-
-private fun ModuleGraph.Node.isVerifiable(): Boolean = module.hasTests || module.compileTask != null
-
-internal fun ProjectChanges.Result.toBuildChanges(): BuildChanges = BuildChanges(
-    files = files.map { it.absoluteFile.normalize().invariantSeparatorsPath },
-    exactSelectionEligible = exactSelectionEligible
-        .mapTo(HashSet()) { it.absoluteFile.normalize().invariantSeparatorsPath },
-    comparedToBase = comparedToBase,
-    baseCommit = mergeBase,
-    baseBranch = resolvedBranch,
-)
-
-internal fun affectsConsumers(system: BuildSystem, path: String, signatureTouched: Boolean): Boolean =
-    signatureTouched || !system.consumersNeedSignatureChange && !system.isTestSource(path)
-
-private fun ModuleGraph.Node.pathInBuildRoot(file: File): String =
-    file.invariantSeparatorsPath.removePrefix("${buildRoot.trimEnd('/')}/")
-
-private fun pathsOwnedBy(
-    node: ModuleGraph.Node,
-    owners: Map<File, List<ModuleGraph.Node>>,
-): List<String> = owners.mapNotNull { (file, nodes) ->
-    file.invariantSeparatorsPath.takeIf { node in nodes }
-}
-
-private fun androidTestInfo(node: ModuleGraph.Node, changedPaths: List<String>): ModuleInfo {
-    val info = node.info()
-    if (info.systemId != "GRADLE" || changedPaths.isEmpty()) return info
-    return info.copy(
-        testTask = selectAndroidTestTask(
-            info.testTask,
-            node.module.extraTasks,
-            changedPaths.all(::isAndroidInstrumentationSource),
-        ),
-    )
 }

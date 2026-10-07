@@ -5,7 +5,7 @@ import com.aspix2k.affected.build.BuildChanges
 internal fun AffectedStateStore.complete(expectedRevision: Long, modules: List<AffectedModule>): Boolean =
     complete(expectedRevision, AffectedAnalysis(modules, EMPTY_CHANGES, EMPTY_PLANS))
 
-private val EMPTY_CHANGES = ProjectChanges.Result(emptyList(), emptySet(), emptySet(), comparedToBase = false)
+private val EMPTY_CHANGES = ChangeSet(emptyList(), emptySet(), emptySet(), comparedToBase = false)
 
 private val EMPTY_PLANS = Verification.PreparedPlans(
     testsOnly = Verification.Prepared(

@@ -2,14 +2,13 @@ package com.aspix2k.affected
 
 import com.aspix2k.affected.build.BuildChanges
 import com.aspix2k.affected.build.BuildModule
-import com.aspix2k.affected.build.BuildSystem
-import com.aspix2k.affected.build.BuildSystems
-import com.aspix2k.affected.build.SuspendingBuildSystem
+import com.aspix2k.affected.build.BuildSystemTraits
 import com.aspix2k.affected.build.TransitiveTestConsumersBuildSystem
 import com.aspix2k.affected.build.WorkspaceChangesBuildSystem
 import com.aspix2k.affected.build.capability
-import com.intellij.openapi.project.Project
 import java.io.File
+
+data class BuildSystemSummary(val id: String, val modules: Int, val roots: Int)
 
 class ModuleGraph internal constructor(private val nodes: List<Node>) {
 
@@ -17,7 +16,7 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
         nodes.flatMapTo(HashSet()) { it.system.sourceExtensions }
     }
 
-    data class Node(val module: BuildModule, val system: BuildSystem) {
+    data class Node(val module: BuildModule, val system: BuildSystemTraits) {
 
         val id: String get() = module.id
         val buildRoot: String get() = module.root
@@ -98,7 +97,7 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
             File(path).let { it to nodesFor(it) }
         },
     ): Map<File, List<Node>> {
-        val workspaceNodes = HashMap<Pair<BuildSystem, String>, List<Node>>()
+        val workspaceNodes = HashMap<Pair<BuildSystemTraits, String>, List<Node>>()
         return directOwners.mapValues { (_, owners) ->
             owners.groupBy { it.system to it.buildRoot }.flatMap { (key, group) ->
                 val (system, root) = key
@@ -119,7 +118,7 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
 
     private fun consumerNodes(
         workspaceSystem: WorkspaceChangesBuildSystem?,
-        system: BuildSystem,
+        system: BuildSystemTraits,
         root: String,
     ): List<Node> {
         if (workspaceSystem == null) return emptyList()
@@ -194,17 +193,5 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
             .map { owners -> owners.maxBy { it.module.id.length } }
     }
 
-    companion object {
-        suspend fun create(project: Project): ModuleGraph {
-            val nodes = BuildSystems.of(project).flatMap { system ->
-                val modules = if (system is SuspendingBuildSystem) {
-                    system.modulesSuspending(project)
-                } else {
-                    system.modules(project)
-                }
-                modules.map { Node(it, system) }
-            }
-            return ModuleGraph(nodes)
-        }
-    }
+    companion object
 }

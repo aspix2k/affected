@@ -33,6 +33,8 @@ open class IdeBuildSystem internal constructor(
 
     override fun isTestSource(path: String): Boolean = engine.isTestSource(path)
 
+    override val capabilitySource: Any get() = engine
+
     override val consumersNeedSignatureChange: Boolean get() = engine.consumersNeedSignatureChange
 
     override val singleOwnerPerRoot: Boolean get() = engine.singleOwnerPerRoot

@@ -196,6 +196,7 @@ jobs:
             engine/build/test-results
             core/build/test-results
             mcp/build/test-results
+            cli/build/test-results
           if-no-files-found: warn
 
   package:

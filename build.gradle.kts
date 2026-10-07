@@ -174,7 +174,7 @@ detekt {
     buildUponDefaultConfig = true
     autoCorrect = !providers.environmentVariable("CI").isPresent
     config.setFrom(files("$rootDir/config/detekt.yml"))
-    source.setFrom(files("src", "engine/src", "core/src", "mcp/src"))
+    source.setFrom(files("src", "engine/src", "core/src", "mcp/src", "cli/src"))
     parallel = true
 }
 

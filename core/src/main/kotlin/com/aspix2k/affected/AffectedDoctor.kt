@@ -13,8 +13,6 @@ import kotlinx.coroutines.runInterruptible
 import java.io.File
 import java.text.MessageFormat
 
-data class BuildSystemSummary(val id: String, val modules: Int, val roots: Int)
-
 enum class DoctorSeverity { OK, WARNING, PROBLEM }
 
 data class DoctorSystem(val id: String, val tool: String?, val toolFound: Boolean)

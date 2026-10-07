@@ -195,7 +195,7 @@ class AffectedAnalysisStateTest {
     )
 
     private fun analysis(id: String, path: String = "/repo/ready.kt"): AffectedAnalysis {
-        val changes = ProjectChanges.Result(
+        val changes = ChangeSet(
             files = listOf(File(path)),
             apiTouched = emptySet(),
             exactSelectionEligible = emptySet(),

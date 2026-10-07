@@ -18,22 +18,10 @@ import java.io.File
 
 object ProjectChanges {
 
-    data class Result(
-        val files: List<File>,
-        val apiTouched: Set<File>,
-        val exactSelectionEligible: Set<File>,
-        val comparedToBase: Boolean,
-        val baseUnresolved: Boolean = false,
-        val uncovered: List<File> = emptyList(),
-        val resolvedBranch: String? = null,
-        val gitUsable: Boolean = true,
-        val mergeBase: String? = null,
-    )
-
-    fun collect(project: Project): Result {
+    fun collect(project: Project): ChangeSet {
         val (files, uncovered, analyzer) = changedFiles(project)
         return if (analyzer == null) {
-            Result(
+            ChangeSet(
                 files,
                 files.toSet(),
                 emptySet(),
@@ -42,7 +30,7 @@ object ProjectChanges {
                 gitUsable = false,
             )
         } else {
-            Result(
+            ChangeSet(
                 files,
                 analyzer.apiTouchedAmong(files),
                 analyzer.modifiedAgainstBase(),
@@ -55,7 +43,7 @@ object ProjectChanges {
         }
     }
 
-    suspend fun collectSuspending(project: Project): Result =
+    suspend fun collectSuspending(project: Project): ChangeSet =
         runInterruptible(Dispatchers.IO) { collect(project) }
 
     private fun changedFiles(project: Project): Triple<List<File>, List<File>, ChangeAnalyzer?> {

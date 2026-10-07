@@ -120,14 +120,14 @@ class ModuleGraphTest {
         val source = root.createFile("lib/src/main/kotlin/Lib.kt")
 
         buildLogic.forEach { file ->
-            val changes = ProjectChanges.Result(listOf(file), emptySet(), setOf(file), comparedToBase = true)
+            val changes = ChangeSet(listOf(file), emptySet(), setOf(file), comparedToBase = true)
             assertEquals(
                 setOf(":", ":app", ":lib"),
                 graph.ownersForChanges(changes.toBuildChanges()).getValue(file).mapTo(HashSet()) { it.id },
                 file.path,
             )
         }
-        val sourceChanges = ProjectChanges.Result(listOf(source), emptySet(), setOf(source), comparedToBase = true)
+        val sourceChanges = ChangeSet(listOf(source), emptySet(), setOf(source), comparedToBase = true)
         assertEquals(
             listOf(":lib"),
             graph.ownersForChanges(sourceChanges.toBuildChanges()).getValue(source).map { it.id },
@@ -253,7 +253,7 @@ class ModuleGraphTest {
             ),
         )
         val resource = File(root, "alpha/schema.json").apply { writeText("{}") }
-        val changes = ProjectChanges.Result(listOf(resource), emptySet(), setOf(resource), comparedToBase = true)
+        val changes = ChangeSet(listOf(resource), emptySet(), setOf(resource), comparedToBase = true)
         val owners = graph.ownersForChanges(changes.toBuildChanges())
 
         assertEquals(setOf("alpha", "beta"), owners.getValue(resource).mapTo(HashSet()) { it.id })
@@ -280,7 +280,7 @@ class ModuleGraphTest {
             writeText("class Other")
         }
         val workflow = File(root.parentFile, "${root.name}-outside/ci.yml").apply { writeText("on: push") }
-        val changes = ProjectChanges.Result(
+        val changes = ChangeSet(
             listOf(owned, outside, workflow),
             emptySet(),
             setOf(owned, outside),
@@ -304,7 +304,7 @@ class ModuleGraphTest {
             parentFile.mkdirs()
             writeText("class Core")
         }
-        val changes = ProjectChanges.Result(listOf(production), emptySet(), setOf(production), comparedToBase = true)
+        val changes = ChangeSet(listOf(production), emptySet(), setOf(production), comparedToBase = true)
         val tasks = { testDependents: Boolean ->
             Verification.prepare(graph, changes, testDependents = testDependents).testsOnly.plan
                 .groups.flatMap { it.tasks }.toSet()
@@ -324,7 +324,7 @@ class ModuleGraphTest {
             parentFile.mkdirs()
             writeText("class CoreTest")
         }
-        val changes = ProjectChanges.Result(listOf(test), emptySet(), setOf(test), comparedToBase = true)
+        val changes = ChangeSet(listOf(test), emptySet(), setOf(test), comparedToBase = true)
         val plan = Verification.prepare(graph, changes, testDependents = true).testsOnly.plan
 
         assertEquals(listOf("core:test"), plan.groups.flatMap { it.tasks })
@@ -335,7 +335,7 @@ class ModuleGraphTest {
         val root = createTempDirectory("module-graph-uncovered").toFile()
         val graph = ModuleGraph(listOf(ModuleGraph.Node(module(root, "alpha", "alpha"), system("GRADLE"))))
         val script = File(root, "tools/sync.py")
-        val changes = ProjectChanges.Result(emptyList(), emptySet(), emptySet(), comparedToBase = true)
+        val changes = ChangeSet(emptyList(), emptySet(), emptySet(), comparedToBase = true)
             .copy(uncovered = listOf(script))
         val prepared = Verification.prepare(graph, changes)
 
@@ -353,7 +353,7 @@ class ModuleGraphTest {
             parentFile.mkdirs()
             writeText("server: {}")
         }
-        val changes = ProjectChanges.Result(listOf(resource), emptySet(), setOf(resource), comparedToBase = true)
+        val changes = ChangeSet(listOf(resource), emptySet(), setOf(resource), comparedToBase = true)
         val prepared = Verification.prepare(graph, changes)
 
         assertEquals(listOf("alpha:test"), prepared.testsOnly.plan.groups.single().tasks)
@@ -378,7 +378,7 @@ class ModuleGraphTest {
         )
         val tested = File(root, "alpha/Main.kt").apply { parentFile.mkdirs(); writeText("class Main") }
         val untested = File(root, "beta/Other.kt").apply { parentFile.mkdirs(); writeText("class Other") }
-        val changes = ProjectChanges.Result(
+        val changes = ChangeSet(
             listOf(tested, untested),
             emptySet(),
             setOf(tested, untested),
@@ -402,7 +402,7 @@ class ModuleGraphTest {
             ),
         )
         val source = File(root, "alpha/lib.rs").apply { writeText("pub fn alpha() {}") }
-        val changes = ProjectChanges.Result(listOf(source), emptySet(), setOf(source), comparedToBase = true)
+        val changes = ChangeSet(listOf(source), emptySet(), setOf(source), comparedToBase = true)
         val plan = verificationPlan(graph, changes, checkConsumers = false)
 
         assertEquals(setOf("alpha", "beta"), affectedModules(graph, changes).mapTo(HashSet(), AffectedModule::id))
@@ -446,7 +446,7 @@ class ModuleGraphTest {
             listOf("Alpha:build", "Facade.Tests:test", "Hidden.Tests:test"),
             verificationPlan(
                 graph,
-                ProjectChanges.Result(listOf(changed), emptySet(), setOf(changed), comparedToBase = true),
+                ChangeSet(listOf(changed), emptySet(), setOf(changed), comparedToBase = true),
                 checkConsumers = false,
             ).groups.single().tasks,
         )
@@ -468,7 +468,7 @@ class ModuleGraphTest {
             listOf("affected/alpha:test", "affected/beta:test"),
             verificationPlan(
                 graph,
-                ProjectChanges.Result(listOf(changed), emptySet(), setOf(changed), comparedToBase = true),
+                ChangeSet(listOf(changed), emptySet(), setOf(changed), comparedToBase = true),
                 checkConsumers = false,
             ).groups.single().tasks,
         )
@@ -494,7 +494,7 @@ class ModuleGraphTest {
             parentFile.mkdirs()
             writeText("<?php")
         }
-        val changes = ProjectChanges.Result(listOf(bootstrap), emptySet(), setOf(bootstrap), comparedToBase = true)
+        val changes = ChangeSet(listOf(bootstrap), emptySet(), setOf(bootstrap), comparedToBase = true)
 
         assertEquals(
             setOf("affected/root", "affected/alpha", "affected/beta"),
@@ -541,7 +541,7 @@ class ModuleGraphTest {
     }
 
     private fun ModuleGraph.owners(file: File): Set<String> {
-        val changes = ProjectChanges.Result(listOf(file), emptySet(), setOf(file), comparedToBase = true)
+        val changes = ChangeSet(listOf(file), emptySet(), setOf(file), comparedToBase = true)
         return ownersForChanges(changes.toBuildChanges()).getValue(file).mapTo(HashSet()) { it.id }
     }
 
@@ -561,7 +561,7 @@ class ModuleGraphTest {
         val plans = { file: File ->
             Verification.prepare(
                 graph,
-                ProjectChanges.Result(listOf(file), emptySet(), setOf(file), comparedToBase = true),
+                ChangeSet(listOf(file), emptySet(), setOf(file), comparedToBase = true),
             )
         }
 

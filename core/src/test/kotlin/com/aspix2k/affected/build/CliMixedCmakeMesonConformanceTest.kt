@@ -1,9 +1,10 @@
 package com.aspix2k.affected.build
 
 import com.aspix2k.affected.AffectedSettings
+import com.aspix2k.affected.ChangeSet
 import com.aspix2k.affected.ModuleGraph
-import com.aspix2k.affected.ProjectChanges
 import com.aspix2k.affected.Verification
+import com.aspix2k.affected.create
 import com.aspix2k.affected.runBoundedBlocking
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.ui.RunContentManager
@@ -137,7 +138,7 @@ class CliMixedCmakeMesonConformanceTest : BasePlatformTestCase() {
         vararg paths: String,
     ): Verification.Prepared {
         val files = paths.map { File(root, it) }
-        val changes = ProjectChanges.Result(
+        val changes = ChangeSet(
             files = files,
             apiTouched = emptySet(),
             exactSelectionEligible = files.toSet(),

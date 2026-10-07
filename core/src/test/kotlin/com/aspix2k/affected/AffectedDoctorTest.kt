@@ -174,7 +174,7 @@ class AffectedDoctorTest {
 
     private fun snapshot(
         analysisStatus: AnalysisStatus = AnalysisStatus.READY,
-        changes: ProjectChanges.Result? = null,
+        changes: ChangeSet? = null,
         plans: Verification.PreparedPlans? = null,
         systems: List<BuildSystemSummary> = emptyList(),
         overBudget: Boolean = false,
@@ -195,7 +195,7 @@ class AffectedDoctorTest {
         gitUsable: Boolean = true,
         resolvedBranch: String? = null,
         baseUnresolved: Boolean = false,
-    ) = ProjectChanges.Result(
+    ) = ChangeSet(
         files = files,
         apiTouched = emptySet(),
         exactSelectionEligible = emptySet(),

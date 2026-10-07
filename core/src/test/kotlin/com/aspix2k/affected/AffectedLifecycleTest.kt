@@ -135,7 +135,7 @@ class AffectedLifecycleTest : BasePlatformTestCase() {
                     executionId = module.executionId,
                 ),
             ),
-            changes = ProjectChanges.Result(
+            changes = ChangeSet(
                 files = listOf(source),
                 apiTouched = emptySet(),
                 exactSelectionEligible = setOf(source),

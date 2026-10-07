@@ -84,7 +84,7 @@ class AffectedPresentationRefreshTest {
 
             val analyzer = ChangeAnalyzer(directory, "main")
             val collected = analyzer.collect()
-            val changes = ProjectChanges.Result(
+            val changes = ChangeSet(
                 files = collected.files,
                 apiTouched = collected.apiTouched,
                 exactSelectionEligible = analyzer.modifiedAgainstBase(),
@@ -100,7 +100,7 @@ class AffectedPresentationRefreshTest {
                 before,
                 AffectedAnalysis(
                     modules = listOf(module(":before")),
-                    changes = ProjectChanges.Result(emptyList(), emptySet(), emptySet(), comparedToBase = true),
+                    changes = ChangeSet(emptyList(), emptySet(), emptySet(), comparedToBase = true),
                     plans = emptyPlans(0),
                 ),
             )
