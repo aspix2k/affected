@@ -28,7 +28,7 @@ class GradleCommandLineModulesTest {
             """,
         )
 
-        val modules = checkNotNull(gradleCommandLineModules(root, model)).associateBy { it.id }
+        val modules = checkNotNull(gradleCommandLineModules(root, GradleBuild(null, root), model)).associateBy { it.id }
 
         assertEquals(setOf("", ":core", ":app"), modules.keys)
         val core = modules.getValue(":core")
@@ -58,7 +58,7 @@ class GradleCommandLineModulesTest {
             """,
         )
 
-        val module = checkNotNull(gradleCommandLineModules(root, model)).single()
+        val module = checkNotNull(gradleCommandLineModules(root, GradleBuild(null, root), model)).single()
 
         assertEquals("test", module.testTask)
         assertEquals(setOf("jvmTest"), module.additionalTestTasks)
@@ -66,13 +66,43 @@ class GradleCommandLineModulesTest {
     }
 
     @Test
-    fun `a composite build or an unreadable model is not turned into modules`() {
+    fun `an included build runs from the root under its composite path and feeds the build that includes it`() {
         val root = createTempDirectory("gradle-model-composite").toFile().canonicalFile
-        val project = """{"path":":","directory":"$root","tasks":[],"tests":[],"sources":[],"testSources":[]}"""
+        val library = File(root, "library").apply { File(this, "src/test/java").mkdirs() }
+        File(library, "src/test/java/LibTest.java").writeText("class LibTest {}")
+        val main = model(
+            root,
+            """{"path":":","directory":"$root","tasks":["compileJava"],"tests":[],"sources":[],"testSources":[]}""",
+            included = """{"name":"library","directory":"$library"}""",
+        )
+        val included = model(
+            root,
+            """
+            {"path":":","directory":"$library","tasks":["test","compileTestJava"],"tests":["test"],
+             "sources":[],"testSources":["$library/src/test/java"],"dependencies":[]}
+            """,
+        )
 
-        assertNull(gradleCommandLineModules(root, model(root, project, includedBuilds = 1)))
-        assertNull(gradleCommandLineModules(root, JsonParser.parseString("""{"projects":[]}""").asJsonObject))
-        assertNull(gradleCommandLineModules(root, JsonParser.parseString("""{"includedBuilds":0}""").asJsonObject))
+        val builds = checkNotNull(gradleIncludedBuilds(main))
+        val own = checkNotNull(gradleCommandLineModules(root, GradleBuild(null, root), main))
+        val provided = checkNotNull(gradleCommandLineModules(root, builds.single(), included))
+        val modules = gradleCompositeDependencies(listOf(own to listOf(library), provided to emptyList()))
+
+        val lib = modules.single { it.root == library.invariantSeparatorsPath }
+        assertEquals(root.invariantSeparatorsPath, lib.executionRoot)
+        assertEquals(":library", lib.executionId)
+        assertEquals(setOf(lib.key), modules.single { it.root == root.invariantSeparatorsPath }.dependencies)
+    }
+
+    @Test
+    fun `an unreadable model is not turned into modules`() {
+        val root = createTempDirectory("gradle-model-broken").toFile().canonicalFile
+        fun json(text: String) = JsonParser.parseString(text).asJsonObject
+
+        assertNull(gradleCommandLineModules(root, GradleBuild(null, root), json("""{"projects":[]}""")))
+        assertNull(gradleCommandLineModules(root, GradleBuild(null, root), json("{}")))
+        assertNull(gradleIncludedBuilds(json("""{"includedBuilds":1}""")))
+        assertNull(gradleIncludedBuilds(json("""{"includedBuilds":[{"name":"","directory":"x"}]}""")))
     }
 
     @Test
@@ -85,7 +115,7 @@ class GradleCommandLineModulesTest {
         assertEquals(wrapper.absolutePath, gradleLauncher(root))
     }
 
-    private fun model(root: File, projects: String, includedBuilds: Int = 0) = JsonParser.parseString(
-        """{"includedBuilds":$includedBuilds,"projects":[${projects.replace("\\", "/")}]}""",
+    private fun model(root: File, projects: String, included: String = "") = JsonParser.parseString(
+        """{"includedBuilds":[${included.replace("\\", "/")}],"projects":[${projects.replace("\\", "/")}]}""",
     ).asJsonObject.also { check(root.isDirectory) }
 }

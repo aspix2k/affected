@@ -82,9 +82,11 @@ A Gradle build in the repository root is read without the IDE by
 `GradleCommandLineBuildSystem`: it runs the wrapper (or `gradle`) once with an
 init script that writes projects, task names, typed `Test` tasks, source set
 directories and project dependencies as JSON, and builds the same modules the
-IDE adapter does through the shared `gradleModule`. A composite build or a
-model that cannot be read becomes one unverifiable module, so the run is
-refused instead of passing.
+IDE adapter does through the shared `gradleModule`. Included builds are read
+the same way, one model per build; their tasks run from the root under the
+composite path (`:library:test`), and every module of a build depends on the
+modules of the builds it includes. A model that cannot be read becomes one
+unverifiable module, so the run is refused instead of passing.
 
 A Maven reactor in the repository root is read by
 `MavenCommandLineBuildSystem` straight from the `pom.xml` files: modules

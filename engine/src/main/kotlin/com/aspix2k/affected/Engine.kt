@@ -11,6 +11,7 @@ import com.aspix2k.affected.build.NamedSourceBuildSystem
 import com.aspix2k.affected.build.SourceRootsBuildSystem
 import com.aspix2k.affected.build.Workspace
 import com.aspix2k.affected.build.capability
+import com.aspix2k.affected.build.gradle.GRADLE_SYSTEM_ID
 import com.aspix2k.affected.build.gradle.isGradleRoot
 import com.aspix2k.affected.build.maven.MAVEN_SYSTEM_ID
 import com.aspix2k.affected.build.process.ProcessHost
@@ -153,9 +154,10 @@ private fun hasUnsupportedBuild(root: File, graph: ModuleGraph): Boolean {
     if (ManifestSearch.find(root, setOf("pom.xml")).any { it.parentFile.absoluteFile !in reactor }) return true
     val settings = ManifestSearch.find(root, GRADLE_SETTINGS_FILES).map { it.parentFile.absoluteFile }
     val scripts = ManifestSearch.find(root, GRADLE_BUILD_FILES)
-    val buildSrc = File(root, "buildSrc").absoluteFile
+    val known = graph.all().filter { it.system.id == GRADLE_SYSTEM_ID }
+        .mapTo(HashSet()) { File(it.module.root).absoluteFile }
     return if (isGradleRoot(root)) {
-        settings.any { it != root.absoluteFile && it != buildSrc }
+        settings.any { it != root.absoluteFile && it !in known && !(it.name == "buildSrc" && it.parentFile in known) }
     } else {
         settings.isNotEmpty() || scripts.isNotEmpty()
     }
