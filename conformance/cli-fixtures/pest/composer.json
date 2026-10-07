@@ -10,7 +10,7 @@
     }
   ],
   "require-dev": {
-    "pestphp/pest": "5.3.0",
+    "pestphp/pest": "5.3.1",
     "affected/fixture-pest-alpha": "1.0.0",
     "affected/fixture-pest-beta": "1.0.0"
   },
