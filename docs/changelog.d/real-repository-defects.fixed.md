@@ -1,0 +1,3 @@
+- Composer: a root package with a PHPUnit configuration now runs its configured test suites instead of pointing PHPUnit at the project root, which also collected tests from `vendor/`; without a configuration only the package test directories are passed.
+- sbt: a project placed with `.in(file(...))` on the next line keeps its declared directory, so its tests are found; a bare `project` whose default directory does not exist falls back to the whole build instead of a module that matches nothing.
+- R: exact test-file selection no longer fails on R builds that reject the escaped dot in the selection expression.

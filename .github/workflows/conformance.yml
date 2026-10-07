@@ -147,7 +147,7 @@ jobs:
     needs: [scope]
     if: needs.scope.outputs.native == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 95
+    timeout-minutes: 125
     env:
       CARGO_NEXTEST_VERSION: "0.9.146"
       CARGO_NEXTEST_SHA256: "682c21b777c333e96fd532e114d3a5a894e0729ab88d94c0a9f20f8419695428"
@@ -349,7 +349,7 @@ jobs:
 
       - name: Run real repository smoke lane
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        timeout-minutes: 45
+        timeout-minutes: 70
         env:
           COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
         run: >-

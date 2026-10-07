@@ -62,6 +62,16 @@ the CLI toolchains. The required checks `verify` and `exact-impact` always
 report; unknown paths fail closed. Weekly jobs run `pitest` and the release
 currentness check.
 
+The real repository smoke lane clones the pinned projects of
+`conformance/real-repositories.json`, runs each adapter headlessly on a
+one-line change and runs the planned command: `RealRepositorySmokeTest` with
+`-Paffected.realRepositories=true`, scheduled in `conformance.yml`. A missing
+tool fails the lane; add `-Paffected.realRepositories.skipMissingTools=true` to
+skip those probes locally. A scenario with an open adapter defect carries
+`knownDefect` (`id` and a `failure` regex for the assertion message): the lane
+then requires that exact failure and turns red the day the defect is fixed, so
+remove the field in the fixing change.
+
 Enqueue ready PRs with `gh pr merge --auto --squash` using a user token.
 Do not merge by hand and do not enable auto-merge from Actions
 `GITHUB_TOKEN`: those merges suppress push workflows, including Release.

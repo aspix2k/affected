@@ -78,6 +78,10 @@ tasks.test {
     )
     val realRepositories = providers.gradleProperty("affected.realRepositories").orElse("false").get()
     systemProperty("affected.realRepositories", realRepositories)
+    systemProperty(
+        "affected.realRepositories.skipMissingTools",
+        providers.gradleProperty("affected.realRepositories.skipMissingTools").orElse("false").get(),
+    )
     if (realRepositories == "true") outputs.upToDateWhen { false }
     System.getProperty("affected.phpunitVersion")?.let { systemProperty("affected.phpunitVersion", it) }
     doFirst {

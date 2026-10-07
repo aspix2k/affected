@@ -724,6 +724,996 @@
           "pass": true
         }
       ]
+    },
+    {
+      "id": "composer-inflector",
+      "url": "https://github.com/doctrine/inflector.git",
+      "sha": "288d99b85cac099b2db56b52a9bf62652ff66f61",
+      "license": "MIT",
+      "ecosystem": "COMPOSER",
+      "budgetSeconds": 600,
+      "tools": [
+        "php",
+        "composer",
+        "git"
+      ],
+      "setup": [
+        [
+          "composer",
+          "install",
+          "--no-interaction",
+          "--no-progress",
+          "--no-scripts"
+        ]
+      ],
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "doctrine/inflector"
+      ],
+      "scenarios": [
+        {
+          "name": "production class",
+          "files": [
+            "src/Inflector.php"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "php",
+            "vendor/bin/phpunit"
+          ],
+          "output": "OK \\(\\d+ tests|Tests: \\d+",
+          "pass": true
+        },
+        {
+          "name": "test class",
+          "files": [
+            "tests/InflectorTest.php"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "php",
+            "vendor/bin/phpunit"
+          ],
+          "output": "OK \\(\\d+ tests|Tests: \\d+",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "composer-pest-macroable",
+      "url": "https://github.com/spatie/macroable.git",
+      "sha": "349e30df1d88e20736995f78fe84a075e434c764",
+      "license": "MIT",
+      "ecosystem": "COMPOSER",
+      "budgetSeconds": 600,
+      "tools": [
+        "php",
+        "composer",
+        "git"
+      ],
+      "setup": [
+        [
+          "composer",
+          "install",
+          "--no-interaction",
+          "--no-progress",
+          "--no-scripts"
+        ]
+      ],
+      "knownDefect": {
+        "id": "COMPOSER-PEST-PHPUNIT-CONFIG",
+        "failure": "spatie/macroable is not among"
+      },
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "spatie/macroable"
+      ],
+      "scenarios": [
+        {
+          "name": "production class",
+          "files": [
+            "src/Macroable.php"
+          ],
+          "tasks": [
+            ".:test-pest"
+          ],
+          "command": [
+            "php",
+            "vendor/bin/pest"
+          ],
+          "output": "Tests:\\s+\\d+ passed",
+          "pass": true
+        },
+        {
+          "name": "test file",
+          "files": [
+            "tests/MacroableTest.php"
+          ],
+          "tasks": [
+            ".:test-pest"
+          ],
+          "command": [
+            "php",
+            "vendor/bin/pest"
+          ],
+          "output": "Tests:\\s+\\d+ passed",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "ruby-rspec-tty-color",
+      "url": "https://github.com/piotrmurach/tty-color.git",
+      "sha": "e2410967c13e0d3e2297456db22495cb246b22f5",
+      "license": "MIT",
+      "ecosystem": "RUBY",
+      "budgetSeconds": 600,
+      "tools": [
+        "ruby",
+        "bundle",
+        "git"
+      ],
+      "setup": [
+        [
+          "bundle",
+          "install"
+        ]
+      ],
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "tty-color"
+      ],
+      "scenarios": [
+        {
+          "name": "library file",
+          "files": [
+            "lib/tty/color.rb"
+          ],
+          "tasks": [
+            ".:test-rspec"
+          ],
+          "command": [
+            "bundle",
+            "exec"
+          ],
+          "output": "\\d+ examples, 0 failures",
+          "pass": true
+        },
+        {
+          "name": "spec file",
+          "files": [
+            "spec/unit/color_spec.rb"
+          ],
+          "tasks": [
+            ".:test-rspec"
+          ],
+          "command": [
+            "bundle",
+            "exec"
+          ],
+          "output": "\\d+ examples, 0 failures",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "ruby-minitest-mustache",
+      "url": "https://github.com/mustache/mustache.git",
+      "sha": "b015f866942a6eb45ce4d34009f2ba6ff16ce4c1",
+      "license": "MIT",
+      "ecosystem": "RUBY",
+      "budgetSeconds": 600,
+      "tools": [
+        "ruby",
+        "bundle",
+        "git"
+      ],
+      "setup": [
+        [
+          "bundle",
+          "install"
+        ]
+      ],
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "mustache"
+      ],
+      "scenarios": [
+        {
+          "name": "library file",
+          "files": [
+            "lib/mustache.rb"
+          ],
+          "tasks": [
+            ".:test-minitest"
+          ],
+          "command": [
+            "bundle",
+            "exec"
+          ],
+          "output": "\\d+ runs, \\d+ assertions, 0 failures, 0 errors",
+          "pass": true
+        },
+        {
+          "name": "test file",
+          "files": [
+            "test/mustache_test.rb"
+          ],
+          "tasks": [
+            ".:test-minitest"
+          ],
+          "command": [
+            "bundle",
+            "exec"
+          ],
+          "output": "\\d+ runs, \\d+ assertions, 0 failures, 0 errors",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "dart-pub-semver",
+      "url": "https://github.com/dart-lang/pub_semver.git",
+      "sha": "960f91309e325ae037e5f1434acb77b83a12d91e",
+      "license": "BSD-3-Clause",
+      "ecosystem": "DART",
+      "budgetSeconds": 600,
+      "tools": [
+        "dart",
+        "git"
+      ],
+      "setup": [
+        [
+          "dart",
+          "pub",
+          "get"
+        ]
+      ],
+      "roots": [
+        "."
+      ],
+      "modules": [],
+      "scenarios": [
+        {
+          "name": "library file",
+          "files": [
+            "lib/src/version.dart"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "dart",
+            "test"
+          ],
+          "output": "All tests passed|\\d+ tests passed",
+          "pass": true
+        },
+        {
+          "name": "test file",
+          "files": [
+            "test/version_test.dart"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "dart",
+            "test"
+          ],
+          "output": "All tests passed|\\d+ tests passed",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "flutter-shimmer",
+      "url": "https://github.com/hnvn/flutter_shimmer.git",
+      "sha": "56ccab72c2012f75181a0746938b77242ed732a6",
+      "license": "BSD-3-Clause",
+      "ecosystem": "FLUTTER",
+      "budgetSeconds": 900,
+      "tools": [
+        "flutter",
+        "git"
+      ],
+      "setup": [
+        [
+          "flutter",
+          "pub",
+          "get"
+        ]
+      ],
+      "roots": [
+        "."
+      ],
+      "modules": [],
+      "scenarios": [
+        {
+          "name": "library file",
+          "files": [
+            "lib/shimmer.dart"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "flutter",
+            "test"
+          ],
+          "output": "All tests passed|\\d+ tests passed",
+          "pass": true
+        },
+        {
+          "name": "test file",
+          "files": [
+            "test/shimmer_test.dart"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "flutter",
+            "test"
+          ],
+          "output": "All tests passed|\\d+ tests passed",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "deno-code-block-writer",
+      "url": "https://github.com/dsherret/code-block-writer.git",
+      "sha": "96de18325769606589307281ce355f18eca830b2",
+      "license": "MIT",
+      "ecosystem": "DENO",
+      "budgetSeconds": 600,
+      "tools": [
+        "deno",
+        "git"
+      ],
+      "setup": [],
+      "roots": [
+        "."
+      ],
+      "modules": [],
+      "scenarios": [
+        {
+          "name": "module",
+          "files": [
+            "mod.ts"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "deno",
+            "test"
+          ],
+          "output": "\\d+ passed",
+          "pass": true
+        },
+        {
+          "name": "test module",
+          "files": [
+            "mod.test.ts"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "deno",
+            "test"
+          ],
+          "output": "\\d+ passed",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "sbt-scala3-example",
+      "url": "https://github.com/scala/scala3-example-project.git",
+      "sha": "3cc7f108958c189e0c8172987d1e5ce02d37ab01",
+      "license": "CC0-1.0",
+      "ecosystem": "SBT",
+      "budgetSeconds": 900,
+      "tools": [
+        "sbt",
+        "java",
+        "git"
+      ],
+      "setup": [],
+      "roots": [
+        "."
+      ],
+      "modules": [],
+      "scenarios": [
+        {
+          "name": "production source",
+          "files": [
+            "src/main/scala/PatternMatching.scala"
+          ],
+          "tasks": [
+            "root:test"
+          ],
+          "command": [
+            "sbt"
+          ],
+          "output": "Passed: Total \\d+, Failed 0",
+          "pass": true
+        },
+        {
+          "name": "test source",
+          "files": [
+            "src/test/scala/MySuite.scala"
+          ],
+          "tasks": [
+            "root:test"
+          ],
+          "command": [
+            "sbt"
+          ],
+          "output": "Passed: Total \\d+, Failed 0",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "make-jsmn",
+      "url": "https://github.com/zserge/jsmn.git",
+      "sha": "25647e692c7906b96ffd2b05ca54c097948e879c",
+      "license": "MIT",
+      "ecosystem": "MAKE",
+      "budgetSeconds": 300,
+      "tools": [
+        "make",
+        "cc",
+        "git"
+      ],
+      "setup": [],
+      "roots": [
+        "."
+      ],
+      "modules": [],
+      "scenarios": [
+        {
+          "name": "header",
+          "files": [
+            "jsmn.h"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "make",
+            "test"
+          ],
+          "output": "FAILED: 0",
+          "pass": true
+        },
+        {
+          "name": "test source",
+          "files": [
+            "test/tests.c"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "make",
+            "test"
+          ],
+          "output": "FAILED: 0",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "meson-pkgconf",
+      "url": "https://github.com/pkgconf/pkgconf.git",
+      "sha": "d908d63634c13b9a4f88d2fe4578d95048a6b13c",
+      "license": "ISC",
+      "ecosystem": "MESON",
+      "budgetSeconds": 900,
+      "tools": [
+        "meson",
+        "ninja",
+        "cc",
+        "git"
+      ],
+      "setup": [],
+      "roots": [
+        "."
+      ],
+      "modules": [],
+      "scenarios": [
+        {
+          "name": "library source",
+          "files": [
+            "libpkgconf/tuple.c"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "meson",
+            "test",
+            "-C",
+            "build"
+          ],
+          "output": "Fail:\\s+0",
+          "pass": true
+        },
+        {
+          "name": "test source",
+          "files": [
+            "tests/test-runner.c"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "meson",
+            "test",
+            "-C",
+            "build"
+          ],
+          "output": "Fail:\\s+0",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "bazel-googletest",
+      "url": "https://github.com/google/googletest.git",
+      "sha": "988ea2c1798de7779f656df2281dd36d6039a17a",
+      "license": "BSD-3-Clause",
+      "ecosystem": "BAZEL",
+      "budgetSeconds": 1500,
+      "tools": [
+        "bazel",
+        "cc",
+        "git"
+      ],
+      "setup": [],
+      "roots": [
+        "."
+      ],
+      "modules": [],
+      "scenarios": [
+        {
+          "name": "library source",
+          "files": [
+            "googletest/src/gtest.cc"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "bazel",
+            "test"
+          ],
+          "output": "tests pass",
+          "pass": true
+        },
+        {
+          "name": "test source",
+          "files": [
+            "googletest/test/gtest_unittest.cc"
+          ],
+          "tasks": [
+            "googletest/test:test"
+          ],
+          "command": [
+            "bazel",
+            "test"
+          ],
+          "output": "tests pass",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "r-testthat-prettyunits",
+      "url": "https://github.com/r-lib/prettyunits.git",
+      "sha": "a321ec23ea30b904540bb8b0d30f2a519512d90e",
+      "license": "MIT",
+      "ecosystem": "RPROJECT",
+      "budgetSeconds": 600,
+      "tools": [
+        "Rscript",
+        "git"
+      ],
+      "setup": [],
+      "roots": [
+        "."
+      ],
+      "modules": [],
+      "scenarios": [
+        {
+          "name": "package source",
+          "files": [
+            "R/sizes.R"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "Rscript",
+            "-e"
+          ],
+          "output": "PASS\\s+\\d+",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "dotnet-smartenum",
+      "url": "https://github.com/ardalis/SmartEnum.git",
+      "sha": "9bc3f7a430552649e598cce7d2d2f481fb54a1b9",
+      "license": "MIT",
+      "ecosystem": "DOTNET",
+      "budgetSeconds": 900,
+      "tools": [
+        "dotnet",
+        "git"
+      ],
+      "setup": [],
+      "environment": {
+        "DOTNET_CLI_UI_LANGUAGE": "en",
+        "DOTNET_NOLOGO": "1",
+        "DOTNET_ROLL_FORWARD": "Major"
+      },
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "src/SmartEnum/SmartEnum.csproj",
+        "src/SmartEnum.SystemTextJson/SmartEnum.SystemTextJson.csproj"
+      ],
+      "scenarios": [
+        {
+          "name": "production file in the core project",
+          "files": [
+            "src/SmartEnum/SmartEnum.cs"
+          ],
+          "tasks": [
+            "test/SmartEnum.UnitTests/SmartEnum.UnitTests.csproj:test",
+            "test/SmartEnum.SystemTextJson.UnitTests/SmartEnum.SystemTextJson.UnitTests.csproj:test"
+          ],
+          "command": [
+            "dotnet",
+            "test"
+          ],
+          "output": "Passed!",
+          "pass": true
+        },
+        {
+          "name": "test file in a dependent project",
+          "files": [
+            "test/SmartEnum.SystemTextJson.UnitTests/FlagTestEnums.cs"
+          ],
+          "tasks": [
+            "test/SmartEnum.SystemTextJson.UnitTests/SmartEnum.SystemTextJson.UnitTests.csproj:test"
+          ],
+          "command": [
+            "dotnet",
+            "test"
+          ],
+          "output": "Passed!",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "python-pluggy",
+      "url": "https://github.com/pytest-dev/pluggy.git",
+      "sha": "60b15251ee18560f781c557b6b9ef3de4d786bee",
+      "license": "MIT",
+      "ecosystem": "PYTHON",
+      "budgetSeconds": 600,
+      "tools": [
+        "python3",
+        "uv",
+        "git"
+      ],
+      "setup": [
+        [
+          "uv",
+          "venv",
+          "-p",
+          "3.13",
+          ".venv"
+        ],
+        [
+          "uv",
+          "pip",
+          "install",
+          "-p",
+          ".venv",
+          "-e",
+          ".",
+          "pytest",
+          "pytest-benchmark",
+          "coverage"
+        ]
+      ],
+      "environment": {
+        "SETUPTOOLS_SCM_PRETEND_VERSION": "1.6.0"
+      },
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "pluggy"
+      ],
+      "scenarios": [
+        {
+          "name": "production module in a src layout",
+          "files": [
+            "src/pluggy/_manager.py"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "python"
+          ],
+          "output": "\\d+ passed",
+          "pass": true
+        },
+        {
+          "name": "test module",
+          "files": [
+            "testing/test_pluginmanager.py"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "python"
+          ],
+          "output": "\\d+ passed",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "go-typ-workspace",
+      "url": "https://github.com/applejag/typ.git",
+      "sha": "5c0ab2b53b751aa5a1493f4805a3ac0642196f46",
+      "license": "MIT",
+      "ecosystem": "GO",
+      "budgetSeconds": 600,
+      "tools": [
+        "go",
+        "git"
+      ],
+      "setup": [],
+      "roots": [
+        ".",
+        "sync2/internal/go_1_23"
+      ],
+      "modules": [
+        "gopkg.in/typ.v4/sync2",
+        "gopkg.in/typ.v4/internal/go_1_23"
+      ],
+      "scenarios": [
+        {
+          "name": "production file in the root module",
+          "files": [
+            "sync2/keyedmutex.go"
+          ],
+          "tasks": [
+            "gopkg.in/typ.v4/sync2:test"
+          ],
+          "command": [
+            "go",
+            "test",
+            "gopkg.in/typ.v4/sync2"
+          ],
+          "output": "ok\\s+gopkg.in/typ.v4/sync2\\s",
+          "pass": true
+        },
+        {
+          "name": "test file in the second workspace module",
+          "files": [
+            "sync2/internal/go_1_23/map_iter_test.go"
+          ],
+          "tasks": [
+            "gopkg.in/typ.v4/internal/go_1_23:test"
+          ],
+          "command": [
+            "go",
+            "test",
+            "gopkg.in/typ.v4/internal/go_1_23"
+          ],
+          "output": "ok\\s+gopkg.in/typ.v4/internal/go_1_23\\s",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "cargo-roxmltree-exclude",
+      "url": "https://github.com/RazrFalcon/roxmltree.git",
+      "sha": "3f5c78dea57662b43a2f41961397b1f5ffe27166",
+      "license": "MIT OR Apache-2.0",
+      "ecosystem": "CARGO",
+      "budgetSeconds": 900,
+      "tools": [
+        "cargo",
+        "cargo-nextest",
+        "git"
+      ],
+      "setup": [],
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "roxmltree"
+      ],
+      "scenarios": [
+        {
+          "name": "production file in the root package",
+          "files": [
+            "src/parse.rs"
+          ],
+          "tasks": [
+            "roxmltree:test"
+          ],
+          "command": [
+            "cargo",
+            "test"
+          ],
+          "output": "test result: ok",
+          "pass": true
+        },
+        {
+          "name": "integration test file",
+          "files": [
+            "tests/dom-api.rs"
+          ],
+          "tasks": [
+            "roxmltree:test"
+          ],
+          "command": [
+            "cargo",
+            "test"
+          ],
+          "output": "test result: ok",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "pnpm-jest-ms",
+      "url": "https://github.com/vercel/ms.git",
+      "sha": "4ff48cec099f0514c3e9bbca18706c9c21122bfb",
+      "license": "MIT",
+      "ecosystem": "NODE",
+      "budgetSeconds": 600,
+      "tools": [
+        "node",
+        "pnpm",
+        "git"
+      ],
+      "setup": [
+        [
+          "pnpm",
+          "install",
+          "--frozen-lockfile",
+          "--ignore-scripts"
+        ]
+      ],
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "ms"
+      ],
+      "scenarios": [
+        {
+          "name": "production file",
+          "files": [
+            "src/index.ts"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "pnpm",
+            "test"
+          ],
+          "output": "Tests:\\s+\\d+ passed",
+          "pass": true
+        },
+        {
+          "name": "test file",
+          "files": [
+            "src/parse.test.ts"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "pnpm",
+            "test"
+          ],
+          "output": "Tests:\\s+\\d+ passed",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "pnpm-vitest-antfu-utils",
+      "url": "https://github.com/antfu/utils.git",
+      "sha": "91f8cf73bebddae8f7ebcac82e47c9bcba9805e2",
+      "license": "MIT",
+      "ecosystem": "NODE",
+      "budgetSeconds": 600,
+      "tools": [
+        "node",
+        "pnpm",
+        "git"
+      ],
+      "setup": [
+        [
+          "pnpm",
+          "install",
+          "--frozen-lockfile",
+          "--ignore-scripts"
+        ]
+      ],
+      "roots": [
+        "."
+      ],
+      "modules": [
+        "@antfu/utils"
+      ],
+      "scenarios": [
+        {
+          "name": "production file",
+          "files": [
+            "src/array.ts"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "pnpm",
+            "test"
+          ],
+          "output": "Test Files\\s+\\d+ passed",
+          "pass": true
+        },
+        {
+          "name": "test file",
+          "files": [
+            "src/array.test.ts"
+          ],
+          "tasks": [
+            ".:test"
+          ],
+          "command": [
+            "pnpm",
+            "test"
+          ],
+          "output": "Test Files\\s+\\d+ passed",
+          "pass": true
+        }
+      ]
     }
   ]
 }

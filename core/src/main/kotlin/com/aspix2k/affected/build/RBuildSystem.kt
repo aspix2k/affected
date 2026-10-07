@@ -249,7 +249,7 @@ private const val TEST_FILE_EXPRESSION =
         "if (version < \"3.0.0\" || version >= \"4.0.0\") " +
         "testthat::test_dir(\"tests/testthat\") else {paths <- commandArgs(trailingOnly = TRUE); " +
         "Sys.setenv(TESTTHAT_PARALLEL = \"false\"); " +
-        "contexts <- sub(\"\\\\.[rR]$\", \"\", " +
+        "contexts <- sub(\"[.][rR]$\", \"\", " +
         "sub(\"^test[-_.]?\", \"\", basename(paths))); testthat::test_local(\".\", " +
         "filter = paste0(\"^(\", paste(contexts, collapse = \"|\"), \")$\"))}})"
 private val PACKAGE_TEST_ARGUMENTS = listOf("Rscript", "-e", "testthat::test_local(\".\")")

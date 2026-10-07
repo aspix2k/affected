@@ -181,21 +181,38 @@ internal fun composerCommands(
 ): List<CliCommand> {
     val planned = resolveComposerTasks(tasks, modules) ?: return emptyList()
     val resolved = resolveComposerPaths(root, planned) ?: return emptyList()
-    return resolved.groupBy({ it.first }, { it.second }).map { (task, paths) ->
+    return resolved.groupBy({ it.first }, { it.second }).flatMap { (task, paths) ->
         when (task) {
             ComposerPackages.ANALYSE ->
-                CliCommand("phpstan", listOf("php", "vendor/bin/phpstan", "analyse") + paths.distinct())
+                listOf(CliCommand("phpstan", listOf("php", "vendor/bin/phpstan", "analyse") + paths.distinct()))
             ComposerPackages.PEST -> {
                 val suites = paths.distinct().sorted()
                 val selected = changes?.let { selectPestTestFiles(root, suites, it) }
-                CliCommand("pest", pestArguments(root, selected?.first ?: suites, selected?.second))
+                listOf(CliCommand("pest", pestArguments(root, selected?.first ?: suites, selected?.second)))
             }
-            ComposerPackages.TEST ->
-                CliCommand("phpunit", listOf("php", "vendor/bin/phpunit") + paths.distinct())
+            ComposerPackages.TEST -> phpunitCommands(root, paths.distinct())
             else -> return emptyList()
         }
     }
 }
+
+private fun phpunitCommands(root: String, paths: List<String>): List<CliCommand> {
+    val phpunit = listOf("php", "vendor/bin/phpunit")
+    val packages = paths - ROOT_PACKAGE
+    if (ROOT_PACKAGE !in paths) return listOf(CliCommand("phpunit", phpunit + packages))
+    val directory = File(root)
+    if (ComposerPackages.CONFIGS.none { File(directory, it).isFile }) {
+        val own = ComposerPackages.TEST_DIRS.filter { File(directory, it).isDirectory }
+            .distinctBy { File(directory, it).canonicalPath }
+            .map { "./$it" }
+            .ifEmpty { listOf(ROOT_PACKAGE) }
+        return listOf(CliCommand("phpunit", phpunit + own + packages))
+    }
+    val configured = CliCommand("phpunit", phpunit)
+    return if (packages.isEmpty()) listOf(configured) else listOf(configured, CliCommand("phpunit", phpunit + packages))
+}
+
+private const val ROOT_PACKAGE = "."
 
 private fun resolveComposerTasks(tasks: List<String>, modules: List<BuildModule>): List<Pair<String, String>>? {
     val byName = modules.associateBy { it.executionId }
