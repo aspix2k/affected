@@ -315,10 +315,23 @@ jobs:
           channel: stable
 
       - name: Install native fixture tools
+        shell: bash
         run: |
+          set -euo pipefail
           python -m pip install cmake==4.4.4 pytest==9.1.1 ruff==0.16.10 uv==0.12.23
-          sudo timeout --kill-after=30s 2m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true update
-          sudo timeout --kill-after=30s 15m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true install -y --no-install-recommends ant ant-optional meson ninja-build gcc make r-base r-cran-testthat
+          install_packages() {
+            sudo timeout --kill-after=30s 2m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true update
+            sudo timeout --kill-after=30s 15m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true install -y --no-install-recommends ant ant-optional meson ninja-build gcc make r-base r-cran-testthat
+          }
+          for attempt in 1 2 3; do
+            if install_packages; then
+              exit 0
+            fi
+            echo "::warning::apt attempt $attempt failed"
+            sleep $((attempt * 20))
+          done
+          echo "::error::Could not install the native fixture packages after 3 attempts."
+          exit 1
 
       - name: Check Python adapters
         run: |

@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.23.0] - 2026-10-08
+
+### Added
+
+- "Check on base branch" now also reruns failed Go and Cargo checks on the comparison base and tells a regression from a failure that was already there; when the check could not be started on the base it answers "unknown" instead of blaming the base.
+
 ## [3.22.1] - 2026-10-07
 
 ### Fixed
@@ -841,7 +847,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.22.1...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.23.0...HEAD
+[3.23.0]: https://github.com/aspix2k/affected/compare/v3.22.1...v3.23.0
 [3.22.1]: https://github.com/aspix2k/affected/compare/v3.22.0...v3.22.1
 [3.22.0]: https://github.com/aspix2k/affected/compare/v3.21.0...v3.22.0
 [3.21.0]: https://github.com/aspix2k/affected/compare/v3.20.0...v3.21.0
