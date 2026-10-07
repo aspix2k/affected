@@ -142,6 +142,8 @@ internal suspend fun <T> withAffectedRun(
 ): T = withContext(AffectedRunContextElement(ActiveAffectedRunState(run, presentation))) { block() }
 
 internal class BaseCheckRun(val root: Path) : AbstractCoroutineContextElement(Key) {
+    val commandStarted = AtomicBoolean()
+
     companion object Key : CoroutineContext.Key<BaseCheckRun>
 }
 

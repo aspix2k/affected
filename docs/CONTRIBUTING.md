@@ -125,6 +125,9 @@ skip those probes locally. A scenario with an open adapter defect carries
 `knownDefect` (`id` and a `failure` regex for the assertion message): the lane
 then requires that exact failure and turns red the day the defect is fixed, so
 remove the field in the fixing change.
+The Linux job of that lane runs on `ubuntu-24.04`, not `ubuntu-latest`: the
+Ubuntu 26.04 image has no Swift toolchain, which `swift-log` needs. Move it
+when Swift is available there.
 
 Enqueue ready PRs with `gh pr merge --auto --squash` using a user token.
 Do not merge by hand and do not enable auto-merge from Actions

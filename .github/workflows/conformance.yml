@@ -146,7 +146,7 @@ jobs:
     name: CLI native fixtures / Linux
     needs: [scope]
     if: needs.scope.outputs.native == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 125
     env:
       CARGO_NEXTEST_VERSION: "0.9.146"

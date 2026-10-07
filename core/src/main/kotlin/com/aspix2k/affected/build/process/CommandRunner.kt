@@ -85,8 +85,12 @@ object CommandRunner {
         }
     }
 
-    private suspend fun executionProjectRoot(project: Project): Path? =
-        currentCoroutineContext()[BaseCheckRun]?.root ?: project.basePath?.let(Path::of)
+    private fun executionProjectRoot(project: Project, baseRun: BaseCheckRun?): Path? =
+        baseRun?.root ?: project.basePath?.let(Path::of)
+
+    private fun recordStart(baseRun: BaseCheckRun?, handler: SequentialProcessHandler) {
+        if (handler.commandStarted) baseRun?.commandStarted?.set(true)
+    }
 
     internal suspend fun runBatchAndWait(
         project: Project,
@@ -99,6 +103,7 @@ object CommandRunner {
     ): Boolean {
         if (project.isDisposed) return false
 
+        val baseRun = currentCoroutineContext()[BaseCheckRun]
         val handler = SequentialProcessHandler(
             File(workingDirectory),
             commands,
@@ -106,7 +111,7 @@ object CommandRunner {
             continueAfterFailure = continueAfterFailure,
             executionRootGuard = projectExecutionRootGuard(
                 Path.of(workingDirectory),
-                executionProjectRoot(project),
+                executionProjectRoot(project, baseRun),
             ),
         )
         ProcessTerminatedListener.attach(handler)
@@ -161,6 +166,7 @@ object CommandRunner {
             }
             throw cancelled
         } finally {
+            recordStart(baseRun, handler)
             if (registered) sessions.unregister(handler as AffectedOwnedSession)
         }
     }

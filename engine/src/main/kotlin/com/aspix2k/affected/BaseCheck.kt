@@ -25,6 +25,7 @@ enum class BaseNotRun(val id: String) {
     STOPPED("stopped"),
     UNSUPPORTED_SYSTEM("not-supported-yet"),
     GRADLE_JVM_DIFFERS("gradle-jvm-differs"),
+    COULD_NOT_RUN("could-not-run"),
 }
 
 sealed interface BaseRun {
