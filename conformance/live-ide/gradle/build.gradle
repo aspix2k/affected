@@ -10,4 +10,8 @@ subprojects {
     }
 
     tasks.withType(Test).configureEach { useJUnitPlatform() }
+
+    sourceSets.configureEach { sourceSet ->
+        tasks.register("audit${sourceSet.name.capitalize()}")
+    }
 }

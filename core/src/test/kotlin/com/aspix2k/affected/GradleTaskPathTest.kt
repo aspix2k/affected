@@ -367,6 +367,18 @@ class GradleTaskPathTest {
     }
 
     @Test
+    fun `a tool task created for the test source set next to its main twin is not a test task`() {
+        val available = setOf(
+            "test", "compileTestJava", "spotbugsMain", "spotbugsTest", "artifactsReportMain", "artifactsReportTest",
+            "explodeJarMain", "explodeJarTest", "jvmTest",
+        )
+
+        assertEquals(listOf("test", "jvmTest"), gradleUnitTestTasks(available, setOf("test")))
+        assertEquals(setOf("jvmTest"), gradleKmpAdditionalTestTasks(available, "test", setOf("test")))
+        assertEquals(setOf("test", "jvmTest"), gradleUnitTestTasks(available).toSet())
+    }
+
+    @Test
     fun `multiplatform test tasks the IDE does not type as tests are kept`() {
         val available = setOf("jvmTest", "jsTest", "iosSimulatorArm64Test", "allTests", "jvmTestClasses", "check")
 

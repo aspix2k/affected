@@ -24,7 +24,7 @@ internal fun gradleUnitTestTasks(available: Set<String>, typedTests: Set<String>
     val typed = typedTests.filter {
         it in available && it !in GRADLE_LIFECYCLE_TASKS && !it.startsWith("connected", ignoreCase = true)
     }
-    val named = available.filter(::isGradleUnitTestTask)
+    val named = available.filter { isGradleUnitTestTask(it) && !isSourceSetToolTask(it, available) }
     if (typed.isNotEmpty()) return (typed + named.filter { it.endsWith("Test") }).distinct()
     return if (named.any(ANDROID_UNIT_TEST::matches)) named - "test" else named
 }
@@ -67,6 +67,9 @@ private fun isCompileCodeTask(name: String): Boolean {
 }
 
 private fun isTestCompileName(name: String): Boolean = "test" in name.lowercase()
+
+private fun isSourceSetToolTask(name: String, available: Set<String>): Boolean =
+    name.endsWith("Test") && name.length > "Test".length && "${name.removeSuffix("Test")}Main" in available
 
 internal fun isGradleUnitTestTask(name: String): Boolean {
     val n = name.lowercase()
