@@ -8,8 +8,10 @@ import com.aspix2k.affected.build.EngineBuildSystems
 import com.aspix2k.affected.build.FileWorkspace
 import com.aspix2k.affected.build.ManifestSearch
 import com.aspix2k.affected.build.NamedSourceBuildSystem
+import com.aspix2k.affected.build.SourceRootsBuildSystem
 import com.aspix2k.affected.build.Workspace
 import com.aspix2k.affected.build.capability
+import com.aspix2k.affected.build.gradle.isGradleRoot
 import java.io.File
 import java.nio.file.Path
 
@@ -54,10 +56,10 @@ object Engine {
             request.output,
         )
         val present = EngineBuildSystems.all().filter { it.isPresent(workspace) }
-        val changes = collect(request, present)
-        collected = changes.toBuildChanges()
         val graph =
             ModuleGraph(present.flatMap { system -> system.modules(workspace).map { ModuleGraph.Node(it, system) } })
+        val changes = collect(request, present, sourceRoots(request.directory, graph))
+        collected = changes.toBuildChanges()
         val plans = verificationPlans(
             graph,
             changes,
@@ -68,8 +70,7 @@ object Engine {
             !changes.gitUsable -> EngineBlocker.NOT_A_GIT_REPOSITORY
             changes.baseUnresolved || changes.resolvedBranch != request.baseBranch ->
                 EngineBlocker.NO_COMPARISON_BASE
-            ManifestSearch.find(request.directory, IDE_ONLY_MANIFESTS).isNotEmpty() ->
-                EngineBlocker.UNSUPPORTED_BUILD_SYSTEM
+            hasUnsupportedBuild(request.directory) -> EngineBlocker.UNSUPPORTED_BUILD_SYSTEM
             present.isEmpty() -> EngineBlocker.NO_BUILD_SYSTEM
             plans.unresolved.isNotEmpty() -> EngineBlocker.UNRESOLVED_CHANGES
             else -> null
@@ -102,7 +103,19 @@ object Engine {
         return passed
     }
 
-    private fun collect(request: EngineRequest, present: List<EngineBuildSystem>): ChangeSet {
+    private fun sourceRoots(directory: File, graph: ModuleGraph): Set<String> {
+        val base = directory.absoluteFile.invariantSeparatorsPath.trimEnd('/')
+        return graph.all().flatMapTo(HashSet()) { node ->
+            node.system.capability<SourceRootsBuildSystem>()?.sourceRoots(node.module).orEmpty()
+                .mapNotNull { root -> root.takeIf { it.startsWith("$base/") }?.removePrefix("$base/") }
+        }
+    }
+
+    private fun collect(
+        request: EngineRequest,
+        present: List<EngineBuildSystem>,
+        sourceRoots: Set<String>,
+    ): ChangeSet {
         val includeAllFiles = present.any { it.capability<AllFileChangesBuildSystem>() != null }
         val analyzer = ChangeAnalyzer(
             request.directory,
@@ -111,6 +124,7 @@ object Engine {
             includeAllFiles,
             sourceFileNames = present.mapNotNull { it.capability<NamedSourceBuildSystem>() }
                 .flatMapTo(HashSet()) { it.sourceFileNames },
+            sourceRoots = if (includeAllFiles) emptySet() else sourceRoots,
         )
         if (!analyzer.isUsable()) {
             return ChangeSet(emptyList(), emptySet(), emptySet(), comparedToBase = false, gitUsable = false)
@@ -128,10 +142,17 @@ object Engine {
     }
 }
 
-private val IDE_ONLY_MANIFESTS = setOf(
-    "settings.gradle",
-    "settings.gradle.kts",
-    "build.gradle",
-    "build.gradle.kts",
-    "pom.xml",
-)
+private fun hasUnsupportedBuild(root: File): Boolean {
+    if (ManifestSearch.find(root, setOf("pom.xml")).isNotEmpty()) return true
+    val settings = ManifestSearch.find(root, GRADLE_SETTINGS_FILES).map { it.parentFile.absoluteFile }
+    val scripts = ManifestSearch.find(root, GRADLE_BUILD_FILES)
+    val buildSrc = File(root, "buildSrc").absoluteFile
+    return if (isGradleRoot(root)) {
+        settings.any { it != root.absoluteFile && it != buildSrc }
+    } else {
+        settings.isNotEmpty() || scripts.isNotEmpty()
+    }
+}
+
+private val GRADLE_SETTINGS_FILES = setOf("settings.gradle", "settings.gradle.kts")
+private val GRADLE_BUILD_FILES = setOf("build.gradle", "build.gradle.kts")

@@ -7,6 +7,7 @@ import com.aspix2k.affected.build.dart.FlutterBuildSystem
 import com.aspix2k.affected.build.deno.DenoBuildSystem
 import com.aspix2k.affected.build.dotnet.DotnetBuildSystem
 import com.aspix2k.affected.build.go.GoBuildSystem
+import com.aspix2k.affected.build.gradle.GradleCommandLineBuildSystem
 import com.aspix2k.affected.build.node.NodeBuildSystem
 import com.aspix2k.affected.build.php.ComposerBuildSystem
 import com.aspix2k.affected.build.python.PythonBuildSystem
@@ -15,7 +16,9 @@ import com.aspix2k.affected.build.xcode.XcodeBuildSystem
 
 internal object EngineBuildSystems {
 
-    fun all(): List<EngineBuildSystem> = listOf(
+    fun all(): List<EngineBuildSystem> = adapters() + GradleCommandLineBuildSystem()
+
+    fun adapters(): List<EngineBuildSystem> = listOf(
         CargoBuildSystem(),
         GoBuildSystem(),
         NodeBuildSystem(),

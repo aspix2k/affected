@@ -57,6 +57,10 @@ internal interface AllFileChangesBuildSystem {
 
 internal interface TransitiveTestConsumersBuildSystem
 
+internal interface SourceRootsBuildSystem {
+    fun sourceRoots(module: BuildModule): List<String>
+}
+
 internal interface WorkspaceChangesBuildSystem {
     fun requiresWorkspace(module: BuildModule, changes: BuildChanges): Boolean
 

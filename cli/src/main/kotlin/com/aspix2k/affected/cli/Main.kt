@@ -110,8 +110,8 @@ private fun explain(blocker: EngineBlocker, arguments: Arguments, plan: EnginePl
         "Affected: cannot compare with '${arguments.baseBranch}'. " +
             "Fetch the branch with enough history (for example `git fetch origin ${arguments.baseBranch}`)."
     EngineBlocker.UNSUPPORTED_BUILD_SYSTEM ->
-        "Affected: this repository has Gradle or Maven builds, which the command line cannot analyse yet; " +
-            "use the IDE plugin for it."
+        "Affected: this repository has a Maven build or a Gradle build outside its root, " +
+            "which the command line cannot analyse yet; use the IDE plugin for it."
     EngineBlocker.NO_BUILD_SYSTEM ->
         "Affected: no supported build system was found in ${arguments.directory}, so nothing can be verified."
     EngineBlocker.UNRESOLVED_CHANGES ->
