@@ -8,6 +8,7 @@ import os
 import platform as host
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -26,7 +27,12 @@ FIXTURES = ROOT / "conformance"
 INIT_SCRIPT = ROOT / "scripts" / "live-ide.init.gradle"
 SANDBOXES = ROOT / ".intellijPlatform" / "sandbox" / "affected"
 JVM_ARGS_ENV = "AFFECTED_LIVE_IDE_JVM_ARGS"
-IDE_JVM_ARGS = ("-Djb.consents.confirmation.enabled=false", "-Dide.experimental.ui.onboarding=false")
+IDE_JVM_ARGS = (
+    "-Djb.consents.confirmation.enabled=false",
+    "-Djb.privacy.policy.text=<!--999.999-->",
+    "-Dide.experimental.ui.onboarding=false",
+)
+THREAD_DUMP_SECONDS = 3
 PROBE_SECONDS = 5
 POLL_SECONDS = 3
 IGNORED = (
@@ -288,14 +294,22 @@ def find_mcp_port(config: Path, runner: Runner = subprocess.run) -> int | None:
     return None
 
 
-def stop_ide(config: Path, process: subprocess.Popen[str] | None, runner: Runner = subprocess.run) -> None:
-    """Ask the sandbox IDE to quit, then end the Gradle run that started it."""
+def signal_ide(config: Path, number: int, runner: Runner = subprocess.run) -> int:
+    """Send a signal to every process of the sandbox IDE and return how many received it."""
     listing = runner(["ps", "-eo", "pid=,args="], check=False, capture_output=True, text=True, timeout=30).stdout
+    delivered = 0
     for pid in ide_pids(config, listing):
         try:
-            os.kill(pid, 15)
+            os.kill(pid, number)
         except OSError:
             continue
+        delivered += 1
+    return delivered
+
+
+def stop_ide(config: Path, process: subprocess.Popen[str] | None, runner: Runner = subprocess.run) -> None:
+    """Ask the sandbox IDE to quit, then end the Gradle run that started it."""
+    signal_ide(config, signal.SIGTERM, runner)
     if process is None:
         return
     try:
@@ -412,6 +426,11 @@ class Platform:
         """Return the MCP port of the sandbox IDE once it answers."""
         return find_mcp_port(self.config) if self.config else None
 
+    def dump_threads(self) -> None:
+        """Make the IDE print its threads into the Gradle output, which shows what a stuck start waits for."""
+        if self.config and host.system() != "Windows" and signal_ide(self.config, signal.SIGQUIT):
+            time.sleep(THREAD_DUMP_SECONDS)
+
     def stop(self) -> None:
         """Quit the IDE and the Gradle run."""
         if self.config:
@@ -463,6 +482,7 @@ def run_scenario(
     except (LiveIdeError, ide_smoke.SmokeError) as error:
         failure = error if isinstance(error, LiveIdeError) else LiveIdeError(str(error))
         report.append(f"FAILED: {failure}")
+        machine.dump_threads()
     finally:
         machine.stop()
         if report_dir is not None:

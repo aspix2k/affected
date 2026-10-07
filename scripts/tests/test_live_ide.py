@@ -11,6 +11,7 @@ from http.server import HTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
+from unittest import mock
 
 from scripts import live_ide
 from scripts.tests.test_ide_smoke import FakeMcp, tool
@@ -147,6 +148,23 @@ class SandboxTest(unittest.TestCase):
         )
         self.assertEqual([10, 12], live_ide.ide_pids(config, listing))
 
+    def test_a_signal_reaches_only_the_sandbox_processes_that_still_exist(self) -> None:
+        """Count the processes that took the signal and skip the ones that are already gone."""
+        config = Path("/s/config_runIde")
+        listing = "  10 java -Didea.config.path=/s/config_runIde\n  11 java -Didea.config.path=/s/config_runIde\n"
+        done = subprocess.CompletedProcess([], 0, listing, "")
+        sent: list[tuple[int, int]] = []
+
+        def kill(pid: int, number: int) -> None:
+            """Record the signal and behave as if process 11 has exited."""
+            if pid == 11:
+                raise ProcessLookupError
+            sent.append((pid, number))
+
+        with mock.patch.object(live_ide.os, "kill", kill):
+            self.assertEqual(1, live_ide.signal_ide(config, 3, lambda *args, **keywords: done))
+        self.assertEqual([(10, 3)], sent)
+
     def test_lsof_output_is_read_as_ports(self) -> None:
         """Parse the -Fn field lines of lsof."""
         done = subprocess.CompletedProcess([], 0, "p1\nn127.0.0.1:63343\nn[::1]:64342\n", "")
@@ -260,6 +278,7 @@ class FakePlatform(live_ide.Platform):
 
     log = "idea log line"
     stopped = False
+    dumped = False
     port_number = 0
     prepared = False
     project_seen: Path | None = None
@@ -284,6 +303,10 @@ class FakePlatform(live_ide.Platform):
         """Return the fake server port."""
         return FakePlatform.port_number
 
+    def dump_threads(self) -> None:
+        """Remember that a thread dump was requested."""
+        FakePlatform.dumped = True
+
     def stop(self) -> None:
         """Remember that the IDE was stopped."""
         FakePlatform.stopped = True
@@ -305,6 +328,7 @@ class RunScenarioTest(unittest.TestCase):
         self.server.projects = []  # type: ignore[attr-defined]
         FakePlatform.port_number = self.server.server_address[1]
         FakePlatform.stopped = False
+        FakePlatform.dumped = False
         FakePlatform.project_seen = None
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.scenario = dataclasses.replace(PYTHON, venv=False)
@@ -321,6 +345,7 @@ class RunScenarioTest(unittest.TestCase):
             report = live_ide.run_scenario(self.scenario, report_dir, 5, FakePlatform, 5)
             self.assertIn("verification: passed", report)
             self.assertTrue(FakePlatform.stopped)
+            self.assertFalse(FakePlatform.dumped)
             self.assertFalse(FakePlatform.project_seen and FakePlatform.project_seen.parent.exists())
             self.assertEqual(["pycharm-python-report.txt"], [path.name for path in report_dir.iterdir()])
 
@@ -334,6 +359,7 @@ class RunScenarioTest(unittest.TestCase):
             self.assertIn("idea log line", (report_dir / "pycharm-python-idea.log").read_text(encoding="utf-8"))
             self.assertIn("FAILED", (report_dir / "pycharm-python-report.txt").read_text(encoding="utf-8"))
             self.assertTrue(FakePlatform.stopped)
+            self.assertTrue(FakePlatform.dumped)
             self.assertFalse(FakePlatform.project_seen and FakePlatform.project_seen.parent.exists())
 
     def test_main_runs_every_scenario_for_all_and_fails_when_one_fails(self) -> None:
