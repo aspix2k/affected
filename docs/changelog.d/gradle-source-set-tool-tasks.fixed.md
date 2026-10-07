@@ -1,0 +1,1 @@
+- Gradle: a tool task created for the test source set next to a `...Main` twin (for example `spotbugsTest` beside `spotbugsMain`, or the dependency-analysis tasks) is no longer run as a test task; multiplatform test tasks are still kept.
