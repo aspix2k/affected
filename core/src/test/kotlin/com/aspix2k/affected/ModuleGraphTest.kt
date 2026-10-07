@@ -293,6 +293,28 @@ class ModuleGraphTest {
     }
 
     @Test
+    fun `a file is unresolved when the build system that claims it cannot verify it, whoever else owns it`() {
+        val root = createTempDirectory("module-graph-claimed").toFile()
+        val node = object : BuildSystem by system("NODE") {
+            override val sourceExtensions: Set<String> = setOf("js", "json")
+        }
+        val maven = object : BuildSystem by system("MAVEN") {
+            override val sourceExtensions: Set<String> = setOf("java", "xml")
+        }
+        val web = module(root, "web", ".")
+        val reactor = module(root, "reactor", ".").copy(hasTests = false)
+        val graph = ModuleGraph(listOf(ModuleGraph.Node(web, node), ModuleGraph.Node(reactor, maven)))
+        val pom = File(root, "pom.xml").apply { writeText("<project>") }
+        val script = File(root, "index.js").apply { writeText("1") }
+        val changes = ChangeSet(listOf(pom, script), emptySet(), setOf(pom, script), comparedToBase = true)
+
+        val prepared = Verification.prepare(graph, changes).select(checkConsumers = false)
+
+        assertEquals(listOf(pom), prepared.unresolved)
+        assertEquals(listOf("web:test"), prepared.plan.groups.single { it.systemId == "NODE" }.tasks)
+    }
+
+    @Test
     fun `dependents are tested transitively only when the option is on`() {
         val root = createTempDirectory("module-graph-dependents").toFile()
         val core = module(root, "core", "core")
