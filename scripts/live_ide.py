@@ -144,10 +144,10 @@ SCENARIOS = {
             gradle_task="runIde",
             gradle_properties=(),
             edited_file="core/src/main/java/live/Core.java",
-            modules=("core", "app"),
+            modules=("live-core", "live-app"),
             files=("core/src/main/java/live/Core.java",),
-            tasks=("core:test",),
-            dependent_tasks=("core:test", "app:test"),
+            tasks=("live:live-core:test",),
+            dependent_tasks=("live:live-core:test", "live:live-app:test"),
             jdk=True,
         ),
         Scenario(

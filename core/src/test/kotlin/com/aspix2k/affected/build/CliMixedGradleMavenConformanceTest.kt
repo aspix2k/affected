@@ -108,7 +108,7 @@ class CliMixedGradleMavenConformanceTest : HeavyPlatformTestCase() {
         )
         assertEquals(listOf("MAVEN"), prepared.plan.groups.map { it.systemId }.distinct())
         assertEquals(File(root, "maven").canonicalPath, File(prepared.plan.groups.single().root).canonicalPath)
-        assertEquals(listOf("affected-mixed-gradle-maven:test"), prepared.plan.groups.single().tasks)
+        assertEquals(listOf("fixture:affected-mixed-gradle-maven:test"), prepared.plan.groups.single().tasks)
     }
 
     fun testSimultaneousChangesRunBothGroupsInOneVerificationSession() {
@@ -160,7 +160,11 @@ class CliMixedGradleMavenConformanceTest : HeavyPlatformTestCase() {
                     Plan(
                         groups = listOf(
                             TaskGroup(GradleConstants.SYSTEM_ID.id, File(root, "gradle").path, listOf("test")),
-                            TaskGroup("MAVEN", File(root, "maven").path, listOf(":test")),
+                            TaskGroup(
+                                "MAVEN",
+                                File(root, "maven").path,
+                                listOf("fixture:affected-mixed-gradle-maven:test"),
+                            ),
                         ),
                         tested = 2,
                         compiled = 0,

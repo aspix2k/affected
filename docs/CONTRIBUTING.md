@@ -83,8 +83,17 @@ init script that writes projects, task names, typed `Test` tasks, source set
 directories and project dependencies as JSON, and builds the same modules the
 IDE adapter does through the shared `gradleModule`. A composite build or a
 model that cannot be read becomes one unverifiable module, so the run is
-refused instead of passing. Maven builds and Gradle builds outside the root
-are refused as unsupported.
+refused instead of passing.
+
+A Maven reactor in the repository root is read by
+`MavenCommandLineBuildSystem` straight from the `pom.xml` files: modules
+(including those listed in profiles), `groupId:artifactId`, and dependencies
+on other reactor modules, including the ones a parent declares. A pom that
+cannot be read with certainty (a property in an identifier or a module path,
+a duplicate artifact, a missing or broken file) makes the reactor one
+unverifiable module. Any mention of the Failsafe plugin switches the goal to
+`verify`. Gradle or Maven builds that are not part of the root build are
+refused as unsupported.
 
 After clone, run `python3 scripts/local_gate.py install` so `core.hooksPath` is
 `.githooks`. `pre-commit` runs detekt, script tests, CI contracts and the

@@ -12,6 +12,7 @@ import com.aspix2k.affected.build.SourceRootsBuildSystem
 import com.aspix2k.affected.build.Workspace
 import com.aspix2k.affected.build.capability
 import com.aspix2k.affected.build.gradle.isGradleRoot
+import com.aspix2k.affected.build.maven.MAVEN_SYSTEM_ID
 import java.io.File
 import java.nio.file.Path
 
@@ -70,7 +71,7 @@ object Engine {
             !changes.gitUsable -> EngineBlocker.NOT_A_GIT_REPOSITORY
             changes.baseUnresolved || changes.resolvedBranch != request.baseBranch ->
                 EngineBlocker.NO_COMPARISON_BASE
-            hasUnsupportedBuild(request.directory) -> EngineBlocker.UNSUPPORTED_BUILD_SYSTEM
+            hasUnsupportedBuild(request.directory, graph) -> EngineBlocker.UNSUPPORTED_BUILD_SYSTEM
             present.isEmpty() -> EngineBlocker.NO_BUILD_SYSTEM
             plans.unresolved.isNotEmpty() -> EngineBlocker.UNRESOLVED_CHANGES
             else -> null
@@ -142,8 +143,10 @@ object Engine {
     }
 }
 
-private fun hasUnsupportedBuild(root: File): Boolean {
-    if (ManifestSearch.find(root, setOf("pom.xml")).isNotEmpty()) return true
+private fun hasUnsupportedBuild(root: File, graph: ModuleGraph): Boolean {
+    val reactor = graph.all().filter { it.system.id == MAVEN_SYSTEM_ID }
+        .flatMapTo(HashSet()) { node -> node.module.contentRoots.map { File(it).absoluteFile } }
+    if (ManifestSearch.find(root, setOf("pom.xml")).any { it.parentFile.absoluteFile !in reactor }) return true
     val settings = ManifestSearch.find(root, GRADLE_SETTINGS_FILES).map { it.parentFile.absoluteFile }
     val scripts = ManifestSearch.find(root, GRADLE_BUILD_FILES)
     val buildSrc = File(root, "buildSrc").absoluteFile
