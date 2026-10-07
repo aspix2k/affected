@@ -40,7 +40,7 @@ class ComposerMultiRootTest {
         File(root, "phpunit.xml.dist").writeText("<phpunit/>")
         File(root, "packages/tool/tests").mkdirs()
         File(root, "packages/tool/composer.json").writeText("{\"name\":\"acme/tool\"}")
-        val system = ComposerBuildSystem()
+        val system = IdeComposerBuildSystem()
         val modules = system.modules(multiRootProject(base))
         val plan = TaskPlanner.plan(modules.map { ModuleGraph.Node(it, system).info() }, emptyList())
 
