@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.22.1] - 2026-10-07
+
+### Fixed
+
+- Gradle: a tool task created for the test source set next to a `...Main` twin (for example `spotbugsTest` beside `spotbugsMain`, or the dependency-analysis tasks) is no longer run as a test task; multiplatform test tasks are still kept.
+- Maven: modules are now passed to Maven as `groupId:artifactId`. Before, a bare `artifactId` was passed, which Maven reads as a directory, so the run failed with "Could not find the selected project in the reactor" for every module whose directory is named differently from its artifact.
+- Maven: a changed `pom.xml` below the reactor root (for example a nested parent) or a file under `.mvn/` now checks the whole reactor instead of only the module that owns the file.
+- A changed file is no longer counted as verified when only a neighbouring build system can check it: if the build system that claims the file type (for example Maven for `pom.xml`) has no runnable check for it, the change is reported as unresolved even when another system's module shares the directory and has tests.
+
 ## [3.22.0] - 2026-10-07
 
 ### Added
@@ -832,7 +841,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.22.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.22.1...HEAD
+[3.22.1]: https://github.com/aspix2k/affected/compare/v3.22.0...v3.22.1
 [3.22.0]: https://github.com/aspix2k/affected/compare/v3.21.0...v3.22.0
 [3.21.0]: https://github.com/aspix2k/affected/compare/v3.20.0...v3.21.0
 [3.20.0]: https://github.com/aspix2k/affected/compare/v3.19.0...v3.20.0
