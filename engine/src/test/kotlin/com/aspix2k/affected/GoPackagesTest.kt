@@ -44,6 +44,24 @@ class GoPackagesTest {
     }
 
     @Test
+    fun `a package that reaches another one only from its tests depends on it`() {
+        val packages = """
+            { "Dir": "/ws/app/lib", "ImportPath": "example.com/app/lib" }
+            { "Dir": "/ws/app/helper", "ImportPath": "example.com/app/helper" }
+            {
+                "Dir": "/ws/app/e2e",
+                "ImportPath": "example.com/app/e2e",
+                "TestImports": ["example.com/app/lib", "testing"],
+                "XTestImports": ["example.com/app/helper", "example.com/app/e2e"]
+            }
+        """.trimIndent()
+
+        val e2e = GoPackages.parse(packages, "/ws/app").single { it.id == "example.com/app/e2e" }
+
+        assertEquals(setOf("/ws/app|example.com/app/lib", "/ws/app|example.com/app/helper"), e2e.dependencies)
+    }
+
+    @Test
     fun `only packages from this module are dependencies`() {
         val app = GoPackages.parse(stream, "/ws/app").single { it.id == "example.com/app" }
 
