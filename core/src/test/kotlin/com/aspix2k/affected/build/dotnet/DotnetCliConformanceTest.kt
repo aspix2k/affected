@@ -133,21 +133,23 @@ class DotnetCliConformanceTest {
             dotnetChangedSourcesAreOwned(noRootWorkspace, context.rootPath, context.productionProjects, changes(alpha)),
         )
 
-        val dynamic = File(context.root, "Alpha/DynamicValue.cs").apply {
-            writeText(
-                "namespace Alpha; public static class DynamicValue { " +
-                    "public static object Load(string name) => System.Reflection.Assembly.Load(name); }\n",
+        val dynamic = File(context.root, "Alpha/DynamicValue.cs")
+        listOf(
+            "public static object Load(string name) => System.Reflection.Assembly.Load(name);",
+            "public static object Start(string tool) => System.Diagnostics.Process.Start(tool);",
+        ).forEach { member ->
+            dynamic.writeText("namespace Alpha; public static class DynamicValue { $member }\n")
+            execute(context.root, dotnetBuildCommand(context.project).arguments)
+            assertNull(
+                analyzeDotnetProject(
+                    noRootWorkspace,
+                    assertNotNull(readDotnetProjectMetadata(noRootWorkspace, context.rootPath, context.project)),
+                    baseline.classes.keys,
+                    context.cache,
+                ),
+                member,
             )
         }
-        execute(context.root, dotnetBuildCommand(context.project).arguments)
-        assertNull(
-            analyzeDotnetProject(
-                noRootWorkspace,
-                assertNotNull(readDotnetProjectMetadata(noRootWorkspace, context.rootPath, context.project)),
-                baseline.classes.keys,
-                context.cache,
-            ),
-        )
         assertTrue(dynamic.delete())
         execute(context.root, dotnetBuildCommand(context.project).arguments)
     }
