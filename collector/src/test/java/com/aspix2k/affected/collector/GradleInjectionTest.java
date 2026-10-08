@@ -674,13 +674,13 @@ public class GradleInjectionTest {
         Path exactOutput = temporary.newFolder("gradle-eight-exact-output").toPath();
         writeFixture(project);
 
-        BuildResult baseline = execute(project, baselineOutput, "testDebugUnitTest", false, "8.14.5");
+        BuildResult baseline = execute(project, baselineOutput, "testDebugUnitTest", false, "8.14.6");
         assertComplete(baselineOutput, 6, baseline.getOutput());
         promote(baselineOutput, project.resolve(".affected/maps"));
         writeAlpha(project, "int result = 1; return result;");
         clearExecuted(project);
 
-        BuildResult exact = execute(project, exactOutput, "testDebugUnitTest", false, "8.14.5");
+        BuildResult exact = execute(project, exactOutput, "testDebugUnitTest", false, "8.14.6");
 
         assertComplete(exactOutput, 4, false, exact.getOutput());
         assertEquals(setOf("AlphaTest", "GammaTest", "VintageAlphaTest"), executedTests(project));
