@@ -13,6 +13,8 @@ import org.jetbrains.org.objectweb.asm.Type;
 import org.jetbrains.org.objectweb.asm.commons.AdviceAdapter;
 
 import java.io.InputStream;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -25,6 +27,8 @@ final class AffectedClassInstrumenter {
     private static final String HIT_DESCRIPTOR = "(Ljava/lang/Class;)V";
     private static final String EXECUTION_FIELD = "$affectedExecutionId";
     private static final String THREAD = "java/lang/Thread";
+    private static final Set<String> CONNECT_METHODS =
+        Collections.unmodifiableSet(new HashSet<String>(Arrays.asList("connect", "blockingConnect")));
 
     private AffectedClassInstrumenter() {
     }
@@ -60,16 +64,31 @@ final class AffectedClassInstrumenter {
     }
 
     static byte[] instrumentProcessBuilder(byte[] bytes) {
+        return instrumentJvmBoundary(bytes, Collections.singleton("start"), "processStarted", true);
+    }
+
+    static byte[] instrumentConnections(byte[] bytes) {
+        return instrumentJvmBoundary(bytes, CONNECT_METHODS, "connectionOpened", false);
+    }
+
+    private static byte[] instrumentJvmBoundary(byte[] bytes, Set<String> methods, String hook, boolean command) {
         if (bytes == null) return null;
         ClassReader reader = new ClassReader(bytes);
         ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
-        reader.accept(new ProcessBuilderVisitor(writer), ClassReader.EXPAND_FRAMES);
+        reader.accept(new JvmBoundaryVisitor(writer, methods, hook, command), ClassReader.EXPAND_FRAMES);
         return writer.toByteArray();
     }
 
-    private static final class ProcessBuilderVisitor extends ClassVisitor {
-        private ProcessBuilderVisitor(ClassVisitor delegate) {
+    private static final class JvmBoundaryVisitor extends ClassVisitor {
+        private final Set<String> methods;
+        private final String hook;
+        private final boolean command;
+
+        private JvmBoundaryVisitor(ClassVisitor delegate, Set<String> methods, String hook, boolean command) {
             super(Opcodes.ASM9, delegate);
+            this.methods = methods;
+            this.hook = hook;
+            this.command = command;
         }
 
         @Override
@@ -81,7 +100,8 @@ final class AffectedClassInstrumenter {
             String[] exceptions
         ) {
             MethodVisitor visitor = super.visitMethod(access, name, descriptor, signature, exceptions);
-            if (!"start".equals(name) || (access & Opcodes.ACC_STATIC) != 0) return visitor;
+            int skipped = Opcodes.ACC_STATIC | Opcodes.ACC_ABSTRACT | Opcodes.ACC_NATIVE;
+            if (!methods.contains(name) || (access & skipped) != 0) return visitor;
             return new AdviceAdapter(Opcodes.ASM9, visitor, access, name, descriptor) {
                 @Override
                 protected void onMethodEnter() {
@@ -96,13 +116,15 @@ final class AffectedClassInstrumenter {
                     visitLdcInsn(AffectedCollectorAgent.class.getName());
                     visitMethodInsn(
                         Opcodes.INVOKEVIRTUAL, CLASS_LOADER, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;", false);
-                    visitLdcInsn("processStarted");
-                    push(1);
+                    visitLdcInsn(hook);
+                    push(command ? 1 : 0);
                     newArray(Type.getType(Class.class));
-                    dup();
-                    push(0);
-                    visitLdcInsn(Type.getType(java.util.List.class));
-                    arrayStore(Type.getType(Class.class));
+                    if (command) {
+                        dup();
+                        push(0);
+                        visitLdcInsn(Type.getType(java.util.List.class));
+                        arrayStore(Type.getType(Class.class));
+                    }
                     visitMethodInsn(
                         Opcodes.INVOKEVIRTUAL,
                         CLASS,
@@ -110,14 +132,16 @@ final class AffectedClassInstrumenter {
                         "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;",
                         false);
                     visitInsn(Opcodes.ACONST_NULL);
-                    push(1);
+                    push(command ? 1 : 0);
                     newArray(Type.getType(Object.class));
-                    dup();
-                    push(0);
-                    loadThis();
-                    visitMethodInsn(
-                        Opcodes.INVOKEVIRTUAL, "java/lang/ProcessBuilder", "command", "()Ljava/util/List;", false);
-                    arrayStore(Type.getType(Object.class));
+                    if (command) {
+                        dup();
+                        push(0);
+                        loadThis();
+                        visitMethodInsn(
+                            Opcodes.INVOKEVIRTUAL, "java/lang/ProcessBuilder", "command", "()Ljava/util/List;", false);
+                        arrayStore(Type.getType(Object.class));
+                    }
                     visitMethodInsn(
                         Opcodes.INVOKEVIRTUAL,
                         "java/lang/reflect/Method",

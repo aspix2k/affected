@@ -394,8 +394,8 @@ public class CollectorContractTest {
         state.processStarted(Arrays.asList("java", "-cp", "agent.jar", "net.bytebuddy.agent.Attacher", "1"));
         state.endExecution("second");
 
-        assertTrue(state.startedProcess("fixture.StartsProcessTest"));
-        assertFalse(state.startedProcess("fixture.MocksTest"));
+        assertTrue(state.reachedAnotherProcess("fixture.StartsProcessTest"));
+        assertFalse(state.reachedAnotherProcess("fixture.MocksTest"));
         assertTrue(state.isSupported());
     }
 
@@ -409,7 +409,7 @@ public class CollectorContractTest {
         starter.join();
         state.endExecution("running");
 
-        assertTrue(state.startedProcess("fixture.RunningTest"));
+        assertTrue(state.reachedAnotherProcess("fixture.RunningTest"));
         assertTrue(state.isSupported());
     }
 
@@ -421,6 +421,61 @@ public class CollectorContractTest {
         AffectedCollectorAgent.processStarted(Collections.singletonList("tool"));
 
         assertFalse(state.isSupported());
+    }
+
+    @Test
+    public void aConnectionOpenedDuringATestMarksThatTestClassAndIsIgnoredBetweenTests() throws Exception {
+        AffectedCollectorAgent.CollectorState state = AffectedCollectorAgent.state();
+        state.configure(Collections.singleton(codeSource(ObservedFixture.class)));
+        state.connectionOpened();
+        state.beginExecution("remote", "fixture.RemoteTest");
+        state.connectionOpened();
+        state.endExecution("remote");
+        state.beginExecution("local", "fixture.LocalTest");
+        state.endExecution("local");
+
+        assertTrue(state.reachedAnotherProcess("fixture.RemoteTest"));
+        assertFalse(state.reachedAnotherProcess("fixture.LocalTest"));
+        assertTrue(state.isSupported());
+    }
+
+    @Test
+    public void everyClientConnectMethodReportsToTheCollector() throws Exception {
+        Map<String, List<String>> expected = new HashMap<String, List<String>>();
+        expected.put("/java/net/Socket.class", Collections.singletonList("connect(Ljava/net/SocketAddress;I)V"));
+        expected.put(
+            "/sun/nio/ch/SocketChannelImpl.class",
+            Collections.singletonList("connect(Ljava/net/SocketAddress;)Z")
+        );
+        for (Map.Entry<String, List<String>> entry : expected.entrySet()) {
+            byte[] original;
+            try (InputStream input = Object.class.getResourceAsStream(entry.getKey())) {
+                original = readAllBytes(input);
+            }
+            Set<String> hooked = new HashSet<String>();
+            new ClassReader(AffectedClassInstrumenter.instrumentConnections(original)).accept(
+                new ClassVisitor(Opcodes.ASM9) {
+                    @Override
+                    public MethodVisitor visitMethod(
+                        int access,
+                        String name,
+                        String descriptor,
+                        String signature,
+                        String[] exceptions
+                    ) {
+                        return new MethodVisitor(Opcodes.ASM9) {
+                            @Override
+                            public void visitLdcInsn(Object value) {
+                                if ("connectionOpened".equals(value)) hooked.add(name + descriptor);
+                            }
+                        };
+                    }
+                },
+                0
+            );
+
+            assertTrue(entry.getKey() + hooked, hooked.containsAll(entry.getValue()));
+        }
     }
 
     @Test

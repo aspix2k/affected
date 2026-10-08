@@ -136,12 +136,12 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
         return enclosing;
     }
 
-    private boolean startedProcess(String testClass) {
-        if (AffectedCollectorAgent.startedProcess(testClass)) return true;
+    private boolean reachedAnotherProcess(String testClass) {
+        if (AffectedCollectorAgent.reachedAnotherProcess(testClass)) return true;
         Set<String> enclosing = enclosingClasses.get(testClass);
         if (enclosing == null) return false;
         for (String enclosingClass : enclosing) {
-            if (AffectedCollectorAgent.startedProcess(enclosingClass)) return true;
+            if (AffectedCollectorAgent.reachedAnotherProcess(enclosingClass)) return true;
         }
         return false;
     }
@@ -150,7 +150,7 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
         CollectorOutput current = output;
         if (current == null) return;
         try {
-            if (skippedClasses.contains(testClass) || startedProcess(testClass)) {
+            if (skippedClasses.contains(testClass) || reachedAnotherProcess(testClass)) {
                 current.writeUnknownMap(testClass);
                 return;
             }

@@ -103,7 +103,7 @@ final class AffectedJUnit4Bridge {
     private static void writeClassMap(String testClass) {
         if (testClass == null || output == null) return;
         try {
-            if (SKIPPED.contains(testClass) || AffectedCollectorAgent.startedProcess(testClass)) {
+            if (SKIPPED.contains(testClass) || AffectedCollectorAgent.reachedAnotherProcess(testClass)) {
                 output.writeUnknownMap(testClass);
             } else {
                 output.writeMap(testClass, AffectedCollectorAgent.dependencies(testClass));

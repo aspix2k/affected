@@ -39,6 +39,15 @@ public final class AffectedCollectorAgent {
     static final String CODE_SOURCES_PROPERTY = "affected.collector.codeSources";
     static final String TEST_CODE_SOURCES_PROPERTY = "affected.collector.testClasses";
     private static final String SELF_ATTACH_HELPER = "net.bytebuddy.agent.Attacher";
+    private static final Set<String> CONNECTING_CLASSES = Collections.unmodifiableSet(
+        new HashSet<String>(
+            Arrays.asList(
+                "java/net/Socket",
+                "sun/nio/ch/SocketChannelImpl",
+                "sun/nio/ch/AsynchronousSocketChannelImpl"
+            )
+        )
+    );
     private static final long[] THREAD_EXECUTION_IDS = new long[65_536];
     private static final CollectorState STATE = new CollectorState();
     private static volatile AffectedMavenConfig.ProjectConfig mavenConfig;
@@ -54,8 +63,8 @@ public final class AffectedCollectorAgent {
             STATE.configure(codeSources(), paths(TEST_CODE_SOURCES_PROPERTY));
             AffectedClassInstrumenter.initialize();
             instrumentation.addTransformer(new CollectorTransformer(STATE), false);
-            instrumentation.addTransformer(new ProcessStartTransformer(STATE), true);
-            instrumentation.retransformClasses(ProcessBuilder.class);
+            instrumentation.addTransformer(new JvmBoundaryTransformer(STATE), true);
+            instrumentation.retransformClasses(jvmBoundaryClasses());
         } catch (Throwable failure) {
             STATE.fail(failure);
         }
@@ -129,8 +138,23 @@ public final class AffectedCollectorAgent {
         }
     }
 
-    public static boolean startedProcess(String testClass) {
-        return STATE.startedProcess(testClass);
+    public static void connectionOpened() {
+        try {
+            STATE.connectionOpened();
+        } catch (Throwable failure) {
+            STATE.fail(failure);
+        }
+    }
+
+    public static boolean reachedAnotherProcess(String testClass) {
+        return STATE.reachedAnotherProcess(testClass);
+    }
+
+    private static Class<?>[] jvmBoundaryClasses() throws ClassNotFoundException {
+        List<Class<?>> classes = new ArrayList<Class<?>>();
+        classes.add(ProcessBuilder.class);
+        for (String name : CONNECTING_CLASSES) classes.add(Class.forName(name.replace('/', '.'), false, null));
+        return classes.toArray(new Class<?>[0]);
     }
 
     public static long currentExecutionId() {
@@ -270,10 +294,10 @@ public final class AffectedCollectorAgent {
         }
     }
 
-    static final class ProcessStartTransformer implements ClassFileTransformer {
+    static final class JvmBoundaryTransformer implements ClassFileTransformer {
         private final CollectorState state;
 
-        ProcessStartTransformer(CollectorState state) {
+        JvmBoundaryTransformer(CollectorState state) {
             this.state = state;
         }
 
@@ -285,9 +309,12 @@ public final class AffectedCollectorAgent {
             ProtectionDomain protectionDomain,
             byte[] classfileBuffer
         ) throws IllegalClassFormatException {
-            if (!"java/lang/ProcessBuilder".equals(className)) return null;
+            boolean connecting = CONNECTING_CLASSES.contains(className);
+            if (!connecting && !"java/lang/ProcessBuilder".equals(className)) return null;
             try {
-                return AffectedClassInstrumenter.instrumentProcessBuilder(classfileBuffer);
+                return connecting
+                    ? AffectedClassInstrumenter.instrumentConnections(classfileBuffer)
+                    : AffectedClassInstrumenter.instrumentProcessBuilder(classfileBuffer);
             } catch (Throwable failure) {
                 state.fail(failure);
                 return null;
@@ -309,7 +336,7 @@ public final class AffectedCollectorAgent {
             new ConcurrentHashMap<String, ExecutionContext>();
         private final ConcurrentMap<String, Set<String>> staticReferences =
             new ConcurrentHashMap<String, Set<String>>();
-        private final Set<String> processStarters =
+        private final Set<String> outOfProcess =
             Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
         private final ThreadLocal<ThreadState> threadStates =
             new ThreadLocal<ThreadState>() {
@@ -339,7 +366,7 @@ public final class AffectedCollectorAgent {
             catalog.clear();
             executions.clear();
             staticReferences.clear();
-            processStarters.clear();
+            outOfProcess.clear();
             threadStates.remove();
             codeSources = Collections.emptyMap();
             instrumentationSources = Collections.emptyMap();
@@ -515,17 +542,21 @@ public final class AffectedCollectorAgent {
 
         void processStarted(List<String> command) {
             if (command != null && command.contains(SELF_ATTACH_HELPER)) return;
-            ExecutionContext context = threadStates.get().current;
-            if (context != null && context.active.get()) {
-                processStarters.add(context.testClass);
-                return;
-            }
             if (executions.isEmpty()) throw new IllegalStateException("process started outside a test");
-            for (ExecutionContext active : executions.values()) processStarters.add(active.testClass);
+            connectionOpened();
         }
 
-        boolean startedProcess(String testClass) {
-            return processStarters.contains(testClass);
+        void connectionOpened() {
+            ExecutionContext context = threadStates.get().current;
+            if (context != null && context.active.get()) {
+                outOfProcess.add(context.testClass);
+                return;
+            }
+            for (ExecutionContext active : executions.values()) outOfProcess.add(active.testClass);
+        }
+
+        boolean reachedAnotherProcess(String testClass) {
+            return outOfProcess.contains(testClass);
         }
 
         void nativeMethod() {
@@ -645,7 +676,7 @@ public final class AffectedCollectorAgent {
             catalog.clear();
             executions.clear();
             staticReferences.clear();
-            processStarters.clear();
+            outOfProcess.clear();
             threadStates.remove();
             codeSources = Collections.emptyMap();
             instrumentationSources = Collections.emptyMap();
