@@ -76,6 +76,60 @@ class PythonProjectsTest {
     }
 
     @Test
+    fun `local packages needed only for tests or development are dependencies`() {
+        val root = workspace()
+        listOf("extra", "grouped", "uv-dev", "poetry-main", "poetry-dev", "poetry-group").forEach { name ->
+            packageAt(root, "libs/$name", "app-$name")
+        }
+        File(root, "libs/api").mkdirs()
+        File(root, "libs/api/pyproject.toml").writeText(
+            """
+            [project]
+            name = "app-api"
+            dependencies = ["httpx>=0.27"]
+
+            [project.optional-dependencies]
+            test = ["app-extra>=1", "pytest"]
+
+            [dependency-groups]
+            dev = ["app-grouped", { include-group = "lint" }]
+            lint = ["ruff"]
+
+            [tool.uv]
+            dev-dependencies = ["app-uv-dev[cli]"]
+
+            [tool.poetry.dependencies]
+            app-poetry-main = { path = "../poetry-main" }
+
+            [tool.poetry.dev-dependencies]
+            app-poetry-dev = "*"
+
+            [tool.poetry.group.test.dependencies]
+            app-poetry-group = { path = "../poetry-group", develop = true }
+            """.trimIndent(),
+        )
+
+        val api = PythonProjects.parse(root).single { it.id == "app-api" }
+
+        assertEquals(
+            listOf("extra", "grouped", "uv-dev", "poetry-main", "poetry-dev", "poetry-group")
+                .mapTo(HashSet()) { "${root.invariantSeparatorsPath}|app-$it" },
+            api.dependencies,
+        )
+    }
+
+    @Test
+    fun `a dependency matches a local package whatever separators and case its name uses`() {
+        val root = workspace()
+        packageAt(root, "libs/core", "App_Core")
+        packageAt(root, "libs/api", "app-api", dependencies = listOf("app.core>=1.0"))
+
+        val api = PythonProjects.parse(root).single { it.id == "app-api" }
+
+        assertEquals(setOf("${root.invariantSeparatorsPath}|App_Core"), api.dependencies)
+    }
+
+    @Test
     fun `a consumer is checked only when mypy is configured`() {
         val root = workspace()
         packageAt(root, "libs/typed", "typed-pkg", mypy = true)
