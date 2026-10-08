@@ -73,6 +73,22 @@ class VerificationReportTest : BasePlatformTestCase() {
         assertTrue(shown.all { it.content.isNotBlank() && it.title.isNotBlank() })
     }
 
+    fun testAVerificationFromTheGuardsStaysQuietExactlyWhenItPasses() {
+        val shown = ArrayList<Notification>()
+        project.messageBus.connect(testRootDisposable).subscribe(
+            Notifications.TOPIC,
+            object : Notifications {
+                override fun notify(notification: Notification) {
+                    shown += notification
+                }
+            },
+        )
+
+        val passed = runBlocking { verifyAndReport(project) }
+
+        assertEquals(shown.map { "${it.title}: ${it.content}" }.toString(), passed, shown.isEmpty())
+    }
+
     private companion object {
         const val FIRST_UNKNOWN = 3
         const val REPORTS = 4
