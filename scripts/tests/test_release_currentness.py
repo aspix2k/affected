@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import json
 import re
@@ -1339,6 +1340,47 @@ class MechanicalUpdateTest(unittest.TestCase):
             self.assertEqual('plugins { id("info.solidsoft.pitest") version "1.1.0"\n id("other") version "1.0.0" }\n', (root / "build.gradle.kts").read_text(encoding="utf-8"))
             self.assertIn("tomlj:2.2.0", (root / "core/build.gradle.kts").read_text(encoding="utf-8"))
             self.assertEqual("affected.studio.version=2026.2.1.8\nother=2026.1.4.8\n", (root / "gradle.properties").read_text(encoding="utf-8"))
+
+    KOTLIN_ENTRY = {"type": "gradle-plugin", "path": "build.gradle.kts", "name": "org.jetbrains.kotlin.jvm"}
+
+    def kotlin_tree(self, shim_version: str) -> dict[str, str]:
+        """Build the files a Kotlin plugin update has to move together."""
+        return {
+            "build.gradle.kts": 'plugins { kotlin("jvm") version "2.4.20" }\n',
+            currentness.CODEQL_KOTLIN_SHIM: f'if (details.requested.version != "{shim_version}") {{}}\n',
+            currentness.CODEQL_KOTLIN_PROBE: 'SOURCE_VERSION = "2.4.20"\n',
+            currentness.CI_CONTRACTS: f'CODEQL_KOTLIN_COMPAT_SHA256 = "{"a" * 64}"\nCODEQL_KOTLIN_PROBE_SHA256 = "{"b" * 64}"\n',
+        }
+
+    def test_kotlin_update_moves_the_codeql_shim_and_its_digests(self) -> None:
+        """The reviewed CodeQL compiler mapping follows the Kotlin plugin and stays pinned by digest."""
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            write_tree(root, self.kotlin_tree("2.4.20"))
+            update, _ = self.apply(root, stale_entry("kotlin", self.KOTLIN_ENTRY), "2.4.20", "2.4.21")
+            shim = (root / currentness.CODEQL_KOTLIN_SHIM).read_text(encoding="utf-8")
+            probe = (root / currentness.CODEQL_KOTLIN_PROBE).read_text(encoding="utf-8")
+            self.assertEqual('if (details.requested.version != "2.4.21") {}\n', shim)
+            self.assertEqual('SOURCE_VERSION = "2.4.21"\n', probe)
+            self.assertEqual(
+                f'CODEQL_KOTLIN_COMPAT_SHA256 = "{hashlib.sha256(shim.encode()).hexdigest()}"\n'
+                f'CODEQL_KOTLIN_PROBE_SHA256 = "{hashlib.sha256(probe.encode()).hexdigest()}"\n',
+                (root / currentness.CI_CONTRACTS).read_text(encoding="utf-8"),
+            )
+            self.assertIn(currentness.CODEQL_KOTLIN_FLAG, update.flags)
+            self.assertEqual(
+                sorted(["build.gradle.kts", currentness.CODEQL_KOTLIN_SHIM, currentness.CODEQL_KOTLIN_PROBE, currentness.CI_CONTRACTS]),
+                sorted(update.files),
+            )
+
+    def test_kotlin_update_refuses_a_shim_on_another_version(self) -> None:
+        """A shim that does not name the old version is left for a human instead of being guessed."""
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            write_tree(root, self.kotlin_tree("2.4.10"))
+            with self.assertRaisesRegex(currentness.ApplyError, "codeql-kotlin-compat"):
+                self.apply(root, stale_entry("kotlin", self.KOTLIN_ENTRY), "2.4.20", "2.4.21")
+            self.assertEqual('SOURCE_VERSION = "2.4.20"\n', (root / currentness.CODEQL_KOTLIN_PROBE).read_text(encoding="utf-8"))
 
     def test_workflow_pip_pin_action_sha_and_branch_comment(self) -> None:
         """Action SHAs move with their version comment; branch pins keep the branch name."""
