@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.23.2] - 2026-10-08
+
+### Fixed
+
+- "Check on base branch" for Gradle and Maven answers "unknown" when the build on the base never reached the tests (for example a clean checkout that lacks an untracked local file) instead of reporting the failure as already present before your change.
+
 ## [3.23.1] - 2026-10-08
 
 ### Fixed
@@ -853,7 +859,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.23.1...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.23.2...HEAD
+[3.23.2]: https://github.com/aspix2k/affected/compare/v3.23.1...v3.23.2
 [3.23.1]: https://github.com/aspix2k/affected/compare/v3.23.0...v3.23.1
 [3.23.0]: https://github.com/aspix2k/affected/compare/v3.22.1...v3.23.0
 [3.22.1]: https://github.com/aspix2k/affected/compare/v3.22.0...v3.22.1
