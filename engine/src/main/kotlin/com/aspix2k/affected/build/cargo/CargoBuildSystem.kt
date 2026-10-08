@@ -316,7 +316,7 @@ private fun cargoNextestCommands(
     val encodedFailFast = task.split('@').getOrNull(3)?.toBooleanStrictOrNull()
         ?: return listOf(cargoTestCommand(listOf("--workspace"), stopAfterFirstFailure))
     val failFast = stopAfterFirstFailure ?: encodedFailFast
-    val snapshot = cargoNextestSnapshot(task, snapshotRoot, failFast)
+    val snapshot = cargoNextestSnapshot(task, snapshotRoot, failFast, cargoNextestCarriedSettings(File(root), profile))
         ?: return listOf(cargoTestCommand(listOf("--workspace"), stopAfterFirstFailure))
     val doctestSelection = doctestPackages.distinct().let { packages ->
         if ("." in packages) listOf("--workspace") else packages.flatMap { listOf("-p", it) }

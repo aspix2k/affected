@@ -118,6 +118,30 @@ class CargoNextestCliAdapterConformanceTest {
     }
 
     @Test
+    fun `cargo-nextest keeps the retries the repository profile asks for`() = fixture { root ->
+        val marker = File(root, "flaky.marker")
+        File(root, ".config/nextest.toml").appendText("\n[profile.flaky]\nretries = 2\n")
+        File(root, "alpha/src/lib.rs").writeText(FLAKY_TEST)
+        fun run(profile: String): CommandResult {
+            marker.delete()
+            val commands = cargoCommands(
+                root.path,
+                listOf("affected-alpha:${cargoNextestTask(nativePlan(root, profile))}"),
+                stopAfterFirstFailure = true,
+                snapshotRoot = testSnapshotRoot,
+            ).take(1).map { it.copy(environment = it.environment + ("AFFECTED_FLAKY_MARKER" to marker.path)) }
+            return executeBatch(root, commands, stopAfterFirstFailure = true)
+        }
+
+        val strict = run("ci")
+        val retried = run("flaky")
+
+        assertFalse(strict.passed, strict.output)
+        assertTrue(retried.passed, retried.output)
+        assertContains(retried.semanticOutput, "FLAKY")
+    }
+
+    @Test
     fun `cargo-nextest full plan overrides a fail fast profile after a unit failure`() = fixture { root ->
         val source = File(root, "alpha/src/lib.rs")
         val marker = File(root, "full-plan.marker")
@@ -300,6 +324,21 @@ class CargoNextestCliAdapterConformanceTest {
                         std::env::var("AFFECTED_FAILURE_STRATEGY_MARKER").unwrap(),
                         "continued",
                     ).unwrap();
+                }
+            }
+        """.trimIndent()
+        val FLAKY_TEST = """
+            pub fn value() -> u32 { 1 }
+
+            #[cfg(test)]
+            mod tests {
+                #[test]
+                fn passes_on_the_second_attempt() {
+                    let marker = std::env::var("AFFECTED_FLAKY_MARKER").unwrap();
+                    if !std::path::Path::new(&marker).exists() {
+                        std::fs::write(&marker, "first attempt").unwrap();
+                        panic!("first attempt");
+                    }
                 }
             }
         """.trimIndent()
