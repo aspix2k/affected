@@ -149,8 +149,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 125
     env:
-      CARGO_NEXTEST_VERSION: "0.9.146"
-      CARGO_NEXTEST_SHA256: "682c21b777c333e96fd532e114d3a5a894e0729ab88d94c0a9f20f8419695428"
+      CARGO_NEXTEST_VERSION: "0.9.148"
+      CARGO_NEXTEST_SHA256: "223ba936714cc861a9cdedad5a8eb664dfdd69d6fbdf6cea6aa8184f523290dc"
       BAZELISK_VERSION: "1.29.0"
       BAZELISK_SHA256: "5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992"
       SQLC_VERSION: "1.31.1"
@@ -174,9 +174,9 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14.8"
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.11.0"
+          node-version: "26.11.1"
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: "10.0.401"
@@ -347,7 +347,7 @@ jobs:
 
       - name: Switch the real repository lane to Node LTS
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.REAL_REPOSITORY_NODE_VERSION }}
 

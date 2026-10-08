@@ -31,7 +31,7 @@ import javax.swing.JComponent
 
 private val mcpServerPlugin = PluginId.getId("com.intellij.mcpServer")
 
-private enum class McpPlugin(val statusKey: String?) {
+internal enum class McpPlugin(val statusKey: String?) {
     AVAILABLE(null),
     NOT_INSTALLED("agent.setup.status.not.installed"),
     DISABLED("agent.setup.status.plugin.disabled"),
@@ -66,11 +66,16 @@ private fun mcpPlugin(): McpPlugin = when {
     else -> McpPlugin.AVAILABLE
 }
 
-private class AgentSetupDialog(
+internal class AgentSetupDialog(
     private val project: Project,
     private val plugin: McpPlugin,
     private val target: String,
 ) : DialogWrapper(project) {
+
+    private val available = plugin == McpPlugin.AVAILABLE
+    private val hintKey = if (available) "agent.setup.hint.settings" else "agent.setup.hint.plugins"
+    private val openKey = if (available) "agent.setup.open.settings" else "agent.setup.open.plugins"
+    private val settingsId = if (available) "com.intellij.mcpserver.settings" else "preferences.pluginManager"
 
     init {
         title = AffectedBundle.message("agent.setup.title")
@@ -80,7 +85,7 @@ private class AgentSetupDialog(
 
     override fun createActions(): Array<Action> = arrayOf(okAction)
 
-    override fun createCenterPanel(): JComponent = panel {
+    public override fun createCenterPanel(): JComponent = panel {
         plugin.statusKey?.let { key -> row { label(AffectedBundle.message(key)) } }
         row { text(AffectedBundle.message(hintKey)) }
         row { button(AffectedBundle.message(openKey)) { openSettings() } }
@@ -113,11 +118,6 @@ private class AgentSetupDialog(
             }
         }
     }
-
-    private val available = plugin == McpPlugin.AVAILABLE
-    private val hintKey = if (available) "agent.setup.hint.settings" else "agent.setup.hint.plugins"
-    private val openKey = if (available) "agent.setup.open.settings" else "agent.setup.open.plugins"
-    private val settingsId = if (available) "com.intellij.mcpserver.settings" else "preferences.pluginManager"
 
     private fun openSettings() {
         ShowSettingsUtil.getInstance().showSettingsDialog(
