@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WRAPPER = ROOT / "gradlew"
 SHIM = ROOT / "scripts/codeql-kotlin-compat.init.gradle"
 COMPATIBILITY_VERSION = "2.4.10"
-SOURCE_VERSION = "2.4.20"
+SOURCE_VERSION = "2.4.21"
 MARKER = (
     "CodeQL Kotlin compatibility: analyzing "
     f"{SOURCE_VERSION} with {COMPATIBILITY_VERSION}"

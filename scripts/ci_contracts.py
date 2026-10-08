@@ -33,8 +33,8 @@ EXACT_IMPACT_JOBS = (
     "phpunit-versions",
 )
 NATIVE_IMPACT_JOBS = frozenset({"cross-platform-paths", "cli-native", "dotnet-sdks", "phpunit-versions"})
-CODEQL_KOTLIN_COMPAT_SHA256 = "73a5dd964566b450af31e4d870dd45e795d6f1fce27ba04443b7cfa138df6ddd"
-CODEQL_KOTLIN_PROBE_SHA256 = "1120008c8354f7a580198bd3becfe9b185c407e78f18fabdcadd9e4621a1cefe"
+CODEQL_KOTLIN_COMPAT_SHA256 = "e39456a1a93f9f704e0ec0ed578b48a8a5466ab70eb47b3464d71595a8de54b7"
+CODEQL_KOTLIN_PROBE_SHA256 = "2da34e9ea50b57e31b00567b0b493640ae008fe420c89d022bd95544346187e2"
 
 
 class CiContractError(RuntimeError):
