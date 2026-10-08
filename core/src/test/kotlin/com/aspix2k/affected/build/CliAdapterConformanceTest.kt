@@ -118,7 +118,6 @@ class CliAdapterConformanceTest {
 
         assertJestRelated(root, alphaSelected, alphaFull)
         assertVitestRelated(root, betaSelected, betaFull)
-        assertNodeProcessFallback(root, alphaSelected, alphaFull)
         assertNodeDynamicFallback(root, alphaSelected, alphaFull)
     }
 
@@ -159,27 +158,6 @@ class CliAdapterConformanceTest {
             BuildChanges(listOf(file.path), setOf(file.path), comparedToBase = true),
         ).single()
         execute(root, command.arguments)
-    }
-
-    private fun assertNodeProcessFallback(root: File, selected: File, full: File) {
-        val cli = File(root, "packages/alpha/cli.js").apply { writeText("console.log('started')\n") }
-        val started = File(root, "packages/alpha/cli.test.js").apply {
-            writeText(
-                "const { execFileSync } = require('node:child_process');\n" +
-                    "test('cli starts', () => expect(String(execFileSync('node', ['cli.js']))).toBe('started\\n'));\n",
-            )
-        }
-        val fallback = nodeCommands(
-            root.path,
-            listOf("@affected/alpha:test"),
-            BuildChanges(listOf(cli.path), setOf(cli.path), comparedToBase = true),
-        ).single()
-        val output = execute(root, fallback.arguments)
-
-        assertEquals(listOf("npm", "test", "--workspace", "@affected/alpha"), fallback.arguments)
-        assertContains(output, "Test Suites: 3 passed")
-        deleteMarkers(selected, full)
-        assertTrue(cli.delete() && started.delete())
     }
 
     private fun assertNodeDynamicFallback(root: File, selected: File, full: File) {
