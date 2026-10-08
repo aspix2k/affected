@@ -270,7 +270,9 @@ dropped, so Kotlin Multiplatform libraries do not become an empty plan.
 
 Cargo keeps the validated nextest profile, required version and executable
 identity, while the Affected failure strategy overrides profile `fail-fast`
-in the generated run snapshot. The same setting controls Cargo's native
+in the generated run snapshot. Retry, timeout and thread settings of the
+profile are read again at run time and written into that snapshot unchanged.
+The same setting controls Cargo's native
 `--no-fail-fast` flag for ordinary tests, fail-closed fallbacks and doctests.
 
 A `BuildSystem` registers through `com.aspix2k.affected.buildSystem`. Missing

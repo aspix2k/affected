@@ -1,0 +1,1 @@
+- Cargo: cargo-nextest profiles that set retries, flaky-result, test-threads, threads-required, slow-timeout, leak-timeout or global-timeout keep package selection, and those settings now apply to the run exactly as written; before, they forced the fallback to `cargo test`. Test groups, overrides, scripts, filters and extra runner arguments still do.

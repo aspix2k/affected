@@ -163,35 +163,6 @@ class CargoNextestTest {
     }
 
     @Test
-    fun `settings that change how tests run retain cargo test`() {
-        val settings = listOf(
-            "retries = 2",
-            "slow-timeout = { period = \"60s\", terminate-after = 2 }",
-            "test-threads = 1",
-            "threads-required = 2",
-            "leak-timeout = \"100ms\"",
-            "global-timeout = \"10m\"",
-        )
-
-        settings.forEach { setting ->
-            val config = "nextest-version = { required = '0.9.85' }\n[profile.default]\n$setting"
-            assertEquals(
-                CargoNextestPlan(CargoNextestMode.CARGO_TEST, null),
-                detectCargoNextest(workspace(config), VERSION, configurationOutput = CONFIGURATION),
-                setting,
-            )
-        }
-        assertEquals(
-            CargoNextestPlan(CargoNextestMode.CARGO_TEST, null),
-            detectCargoNextest(
-                workspace("nextest-version = { required = '0.9.85' }\n[test-groups.serial]\nmax-threads = 1"),
-                VERSION,
-                configurationOutput = CONFIGURATION,
-            ),
-        )
-    }
-
-    @Test
     fun `unsupported nextest settings retain cargo test`() {
         val configs = listOf(
             "nextest-version = { required = '0.9.85' }\n[script.setup]\ncommand = 'prepare'",
@@ -346,7 +317,7 @@ class CargoNextestTest {
 
     @Test
     fun `planned nextest execution falls back when the executable identity changes`() {
-        val root = createTempDirectory("cargo-nextest-runtime").toFile()
+        val root = createTempDirectory("cargo-nextest-provenance").toFile()
         val cargoHome = File(root, "cargo-home").apply { mkdirs() }
         val bin = File(root, "bin").apply { mkdirs() }
         val executable = File(bin, if (isWindows()) "cargo-nextest.exe" else "cargo-nextest")
@@ -372,7 +343,7 @@ class CargoNextestTest {
 
     @Test
     fun `planned nextest execution invokes the verified executable directly`() {
-        val root = createTempDirectory("cargo-nextest-provenance").toFile()
+        val root = createTempDirectory("cargo-nextest-runtime").toFile()
         val cargoHome = File(root, "cargo-home").apply { mkdirs() }
         val cargoHomeBin = File(cargoHome, "bin").apply { mkdirs() }
         executable(cargoHomeBin, "unverified")

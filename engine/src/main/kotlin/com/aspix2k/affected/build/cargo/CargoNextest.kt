@@ -66,20 +66,21 @@ private fun matchesDetailedVersion(lines: List<String>, version: NextestVersion)
         NEXTEST_DATE.matches(lines[3]) &&
         NEXTEST_HOST.matches(lines[4])
 
-internal fun cargoNextestValidationSnapshot(root: File, snapshotRoot: Path, requestedProfile: String?): File? =
-    readCargoNextestConfiguration(root, requestedProfile)
-        ?.let { config -> config.plan(CargoNextestMode.PACKAGES, maxOf(config.required, MIN_SUPPORTED_NEXTEST)) }
-        ?.let(::cargoNextestTask)
-        ?.let { cargoNextestSnapshot(it, snapshotRoot) }
+internal fun cargoNextestValidationSnapshot(root: File, snapshotRoot: Path, requestedProfile: String?): File? {
+    val config = readCargoNextestConfiguration(root, requestedProfile) ?: return null
+    val plan = config.plan(CargoNextestMode.PACKAGES, maxOf(config.required, MIN_SUPPORTED_NEXTEST))
+    return cargoNextestSnapshot(cargoNextestTask(plan), snapshotRoot, carried = config.carried)
+}
 
-private fun readCargoNextestConfiguration(root: File, requestedProfile: String?): NextestConfiguration? = runCatching {
+internal fun readCargoNextestConfiguration(root: File, requestedProfile: String?): NextestConfiguration? = runCatching {
     val config = File(root, ".config/nextest.toml")
     val parsed = Toml.parse(readNextestConfig(root, config) ?: return null)
     if (parsed.hasErrors()) return null
     val required = requiredVersion(parsed)?.takeIf { it.supportedRequired } ?: return null
     val profile = resolvedProfile(parsed, requestedProfile) ?: return null
     val failFast = resolvedFailFast(parsed, profile) ?: return null
-    NextestConfiguration(profile, required, failFast)
+    val carried = carriedNextestSettings(parsed, profile) ?: return null
+    NextestConfiguration(profile, required, failFast, carried)
 }.getOrNull()
 
 private fun readNextestConfig(root: File, config: File): String? {
@@ -177,6 +178,7 @@ private fun supportedNextestProfiles(config: TomlTable, profiles: TomlTable?): B
             profile.keySet().all { key ->
                 when (key) {
                     "fail-fast" -> profile.get(key) is Boolean
+                    in CARRIED_PROFILE_KEYS -> carriedNextestValue(profile.get(key)) != null
                     else -> key in REPORTING_PROFILE_KEYS
                 }
             }
@@ -212,6 +214,7 @@ internal fun cargoNextestSnapshot(
     task: String,
     snapshotRoot: Path,
     failFastOverride: Boolean? = null,
+    carried: String = "",
 ): File? = runCatching {
     val parts = task.split('@')
     if (parts.size != 6 || parts.first() !in setOf("nextest", CARGO_NEXTEST_WORKSPACE_TASK)) return null
@@ -221,12 +224,8 @@ internal fun cargoNextestSnapshot(
     val failFast = failFastOverride ?: encodedFailFast
     if (!EXECUTABLE_IDENTITY.matches(parts[4])) return null
     parts[5].toBooleanStrictOrNull() ?: return null
-    val content = """
-        nextest-version = { required = "$required" }
-
-        [profile.$profile]
-        fail-fast = $failFast
-    """.trimIndent() + "\n"
+    val content = "nextest-version = { required = \"$required\" }\n\n" +
+        "[profile.$profile]\nfail-fast = $failFast\n$carried"
     val id = MessageDigest.getInstance("SHA-256").digest(content.toByteArray(StandardCharsets.UTF_8))
         .joinToString("") { "%02x".format(it.toInt() and 0xff) }
     val realDirectory = secureNextestDirectory(snapshotRoot) ?: return null
@@ -272,7 +271,7 @@ private fun writeNextestSnapshot(
     }
 }
 
-private data class NextestVersion(val major: Int, val minor: Int, val patch: Int) : Comparable<NextestVersion> {
+internal data class NextestVersion(val major: Int, val minor: Int, val patch: Int) : Comparable<NextestVersion> {
     val supportedInstalled: Boolean get() = major == 0 && minor == 9 && patch >= 143
     val supportedRequired: Boolean get() = major == 0 && minor == 9 && patch >= 85
 
@@ -294,17 +293,18 @@ private data class NextestVersion(val major: Int, val minor: Int, val patch: Int
     }
 }
 
-private data class NextestConfiguration(
+internal data class NextestConfiguration(
     val profile: String,
     val required: NextestVersion,
     val failFast: Boolean,
+    val carried: String,
 ) {
     fun plan(mode: CargoNextestMode, executionRequired: NextestVersion): CargoNextestPlan =
         CargoNextestPlan(mode, profile, executionRequired.toString(), failFast)
 }
 
 private const val MAX_NEXTEST_CONFIG_BYTES = 64L * 1024L
-private const val MAX_NEXTEST_SNAPSHOT_BYTES = 1024L
+private const val MAX_NEXTEST_SNAPSHOT_BYTES = 4096L
 private const val CARGO_NEXTEST_WORKSPACE_TASK = "nextest-workspace"
 private const val TEST_EXECUTABLE_IDENTITY = "test"
 private val CARGO_TEST_PLAN = CargoNextestPlan(CargoNextestMode.CARGO_TEST, null)
