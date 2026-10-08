@@ -797,8 +797,8 @@ class CiContractsTest(unittest.TestCase):
             path = root / "scripts/codeql-kotlin-compat.init.gradle"
             path.write_text(
                 path.read_text(encoding="utf-8").replace(
-                    'details.requested.version != "2.4.21"',
-                    'details.requested.version != "2.4.22"',
+                    'details.requested.version != "',
+                    'details.requested.version != "0.',
                     1,
                 ),
                 encoding="utf-8",

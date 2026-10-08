@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -1633,6 +1634,35 @@ def propagate_prose(workspace: Workspace, update: Update) -> bool:
     return bool(changed)
 
 
+CODEQL_KOTLIN_SHIM = "scripts/codeql-kotlin-compat.init.gradle"
+CODEQL_KOTLIN_PROBE = "scripts/codeql_kotlin_compat_probe.py"
+CI_CONTRACTS = "scripts/ci_contracts.py"
+CODEQL_KOTLIN_FLAG = "CodeQL Kotlin shim moved; the CodeQL build must pass before release"
+
+
+def move_codeql_kotlin_shim(workspace: Workspace, update: Update) -> None:
+    """Move the CodeQL Kotlin shim, its probe and their pinned digests with the Kotlin plugin."""
+    pins = (
+        (CODEQL_KOTLIN_SHIM, 'details.requested.version != "{}"', "CODEQL_KOTLIN_COMPAT_SHA256"),
+        (CODEQL_KOTLIN_PROBE, 'SOURCE_VERSION = "{}"', "CODEQL_KOTLIN_PROBE_SHA256"),
+    )
+    contracts = workspace.read(CI_CONTRACTS)
+    for path, template, constant in pins:
+        text = workspace.read(path)
+        old = template.format(update.old)
+        if text.count(old) != 1:
+            raise ApplyError(f"expected exactly one {old!r} in {path}")
+        moved = text.replace(old, template.format(update.new))
+        digest = hashlib.sha256(moved.encode()).hexdigest()
+        contracts, count = re.subn(rf'^({constant} = ")[0-9a-f]{{64}}(")$', rf"\g<1>{digest}\g<2>", contracts, flags=re.MULTILINE)
+        if count != 1:
+            raise ApplyError(f"expected exactly one {constant} in {CI_CONTRACTS}")
+        workspace.write(path, moved)
+    workspace.write(CI_CONTRACTS, contracts)
+    if CODEQL_KOTLIN_FLAG not in update.flags:
+        update.flags.append(CODEQL_KOTLIN_FLAG)
+
+
 def apply_update(update: Update, workspace: Workspace, toolbox: Toolbox) -> None:
     """Rewrite one pin and regenerate what must move with it, or raise ApplyError."""
     edits = edits_for(update)
@@ -1646,6 +1676,8 @@ def apply_update(update: Update, workspace: Workspace, toolbox: Toolbox) -> None
         raise ApplyError(f"no occurrence of {update.identifier} was rewritten")
     if update.kind == "workflow-matrix":
         rewrite_config_entry(workspace, update)
+    if update.identifier == "kotlin":
+        move_codeql_kotlin_shim(workspace, update)
     if propagate_prose(workspace, update) and "support-matrix prose moved" not in update.flags:
         update.flags.append("support-matrix prose moved")
     if workspace.dry:
