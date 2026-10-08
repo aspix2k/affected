@@ -235,6 +235,28 @@ class CliAdapterConformanceTest {
         assertContains(dynamicFallback, "3 passed")
         assertTrue(dynamic.delete())
 
+        val manifest = File(root, "pyproject.toml")
+        val undeclared = manifest.readText()
+        manifest.appendText("dependencies = [\"pytest\"]\n")
+        listOf(
+            "from unittest import mock\n\ndef replaced():\n    return mock.patch('alpha.VALUE', 2)\n",
+            "from unittest.mock import patch as swap\n\ndef swapped():\n    return swap('alpha.VALUE', 2)\n",
+            "from pytest import importorskip as need\n\ndef needed():\n    return need('alpha')\n",
+            "def removed(monkeypatch):\n    monkeypatch.delattr('alpha.VALUE')\n",
+            "pytest_plugins = []\n",
+            "from unittest import TestLoader\n\ndef loaded():\n    return TestLoader().discover('.')\n",
+            "def loaded(loader):\n    return loader.loadTestsFromName('alpha')\n",
+            "import pytest as runner\n\ndef nested():\n    return runner.main(['packages'])\n",
+        ).forEach { source ->
+            val byName = File(root, "packages/alpha/tests/test_by_name.py")
+            byName.writeText(source + "\ndef test_it():\n    pass\n")
+            val byNameFallback = executeRelatedPytest(root, modules, alpha, alphaSource, adapter)
+            assertContains(byNameFallback, "Affected pytest: full fallback (dynamic-dependency)", message = source)
+            assertContains(byNameFallback, "4 passed", message = source)
+            assertTrue(byName.delete())
+        }
+        manifest.writeText(undeclared)
+
         val resource = File(root, "packages/alpha/schema.json").apply { writeText("{}") }
         val resourceFallback = executeRelatedPytest(root, modules, alpha, resource, adapter)
         assertContains(resourceFallback, "Affected pytest: full fallback (invalid-context)")
