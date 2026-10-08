@@ -33,7 +33,7 @@ buildscript {
 }
 
 plugins {
-    kotlin("jvm") version "2.4.20"
+    kotlin("jvm") version "2.4.21"
     id("org.jetbrains.intellij.platform") version "2.19.0"
     id("org.jetbrains.kotlinx.kover") version "0.9.11"
     id("info.solidsoft.pitest") version "1.19.0"
@@ -43,7 +43,7 @@ plugins {
 }
 
 group = "com.aspix2k"
-version = "3.23.2"
+version = "3.24.0"
 
 repositories {
     val mavenCentralMirror = "https://cache-redirector.jetbrains.com/repo1.maven.org/maven2"
