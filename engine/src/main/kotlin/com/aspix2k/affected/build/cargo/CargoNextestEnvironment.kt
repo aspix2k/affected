@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build.cargo
 
+import org.tomlj.Toml
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -15,12 +16,19 @@ internal fun cargoConfigurationExists(root: File, environment: Map<String, Strin
     val configuredCargoHome = normalized["CARGO_HOME"]?.takeIf(String::isNotBlank)?.let(::File)
     if (configuredCargoHome != null && !configuredCargoHome.isAbsolute) return true
     val cargoHome = configuredCargoHome ?: defaultCargoHome(normalized) ?: return true
-    return directories.any { directory ->
+    val files = directories.flatMap { directory ->
         listOf(File(directory, ".cargo/config.toml"), File(directory, ".cargo/config"))
-            .any { Files.exists(it.toPath(), LinkOption.NOFOLLOW_LINKS) }
-    } || listOf(File(cargoHome, "config.toml"), File(cargoHome, "config"))
-        .any { Files.exists(it.toPath(), LinkOption.NOFOLLOW_LINKS) }
+    } + listOf(File(cargoHome, "config.toml"), File(cargoHome, "config"))
+    return files.any { Files.exists(it.toPath(), LinkOption.NOFOLLOW_LINKS) && !harmlessCargoConfiguration(it) }
 }
+
+private fun harmlessCargoConfiguration(file: File): Boolean = runCatching {
+    val path = file.toPath()
+    val attributes = Files.readAttributes(path, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+    if (!attributes.isRegularFile || attributes.size() > MAX_CARGO_CONFIG_BYTES) return false
+    val parsed = Toml.parse(Files.readString(path))
+    !parsed.hasErrors() && HARMLESS_CARGO_TABLES.containsAll(parsed.keySet())
+}.getOrDefault(false)
 
 private fun unsafeCargoEnvironmentEntry(entry: Map.Entry<String, String>): Boolean =
     entry.value.isNotBlank() && (
@@ -145,4 +153,16 @@ private val CARGO_RUNNER_ENVIRONMENT = setOf(
     "RUSTC", "RUSTDOC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER",
     "CARGO_BUILD_RUSTC", "CARGO_BUILD_RUSTDOC", "CARGO_BUILD_RUSTC_WRAPPER",
     "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
+)
+
+private const val MAX_CARGO_CONFIG_BYTES = 256L * 1024L
+private val HARMLESS_CARGO_TABLES = setOf(
+    "net",
+    "http",
+    "registries",
+    "registry",
+    "term",
+    "cargo-new",
+    "future-incompat-report",
+    "credential-alias",
 )

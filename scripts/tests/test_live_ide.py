@@ -249,7 +249,7 @@ class ExpectationsTest(unittest.TestCase):
             calls.append(seconds)
             FakeMcp.replies["affected_verification_plan"] = answers[len(calls)]
 
-        planned = live_ide.plan(self.port, "session", "/p", [":core:test"], 5, pause)
+        planned = live_ide.plan(self.port, "session", "/p", [":core:test"], 120, pause)
         self.assertEqual([":core:test"], planned)
         self.assertEqual(2, len(calls))
 

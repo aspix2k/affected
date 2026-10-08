@@ -243,6 +243,43 @@ class CargoNextestTest {
     }
 
     @Test
+    fun `a Cargo config that only holds network, registry or terminal settings does not count`() {
+        val parent = createTempDirectory("cargo-config-harmless").toFile()
+        val root = File(parent, "workspace").apply { mkdirs() }
+        val cargoHome = File(parent, "cargo-home").apply { mkdirs() }
+        val environment = mapOf("CARGO_HOME" to cargoHome.path)
+        val config = File(cargoHome, "config.toml")
+
+        config.writeText(
+            """
+            [net]
+            git-fetch-with-cli = true
+
+            [registries.internal]
+            index = "sparse+https://registry.example.invalid/"
+
+            [term]
+            color = "always"
+            """.trimIndent(),
+        )
+        assertEquals(false, cargoConfigurationExists(root, environment))
+
+        listOf(
+            "[env]\nMODE = 'x'",
+            "[build]\ntarget-dir = 'out'",
+            "[target.x86_64-unknown-linux-gnu]\nrunner = 'wrap'",
+            "[alias]\nt = 'test'",
+            "[profile.test]\nopt-level = 3",
+            "include = 'other.toml'",
+            "[net]\nretry = 2\n[unstable]\nbuild-std = ['std']",
+            "[net",
+        ).forEach { content ->
+            config.writeText(content)
+            assertEquals(true, cargoConfigurationExists(root, environment), content)
+        }
+    }
+
+    @Test
     fun `Cargo runner environment is detected independently`() {
         val parent = createTempDirectory("cargo-environment").toFile()
         val root = File(parent, "workspace").apply { mkdirs() }
