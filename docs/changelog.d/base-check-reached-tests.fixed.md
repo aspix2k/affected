@@ -1,1 +1,0 @@
-- "Check on base branch" for Gradle and Maven answers "unknown" when the build on the base never reached the tests (for example a clean checkout that lacks an untracked local file) instead of reporting the failure as already present before your change.
