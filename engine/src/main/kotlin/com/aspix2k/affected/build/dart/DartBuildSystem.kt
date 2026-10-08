@@ -105,8 +105,25 @@ private fun dartWorkspaceModules(root: File, section: String): List<BuildModule>
     if (declared.any { directory -> !addDartWorkspaceMember(root, directory, modules) }) {
         return null
     }
-    return modules.values.toList().takeIf { it.isNotEmpty() }
+    return dartWorkspaceDependencies(root, modules.values.toList()).takeIf { it.isNotEmpty() }
         ?: listOf(dartRootModule(root).copy(hasTests = true))
+}
+
+private fun dartWorkspaceDependencies(root: File, modules: List<BuildModule>): List<BuildModule> {
+    val manifests = modules.associateWith { module ->
+        runCatching { File(module.contentRoots.single(), "pubspec.yaml").readText() }.getOrDefault("")
+    }
+    val ids = manifests.entries.mapNotNull { (module, text) ->
+        PACKAGE_NAME.find(text)?.groupValues?.get(1)?.let { it to module.id }
+    }.toMap()
+    val rootPath = root.invariantSeparatorsPath
+    return modules.map { module ->
+        val declared = DEPENDENCY_SECTION.findAll(manifests.getValue(module)).flatMap { section ->
+            DEPENDENCY_NAME.findAll(section.groupValues[1]).map { it.groupValues[1] }
+        }
+        val members = declared.mapNotNull(ids::get).filter { it != module.id }
+        module.copy(dependencies = members.mapTo(HashSet()) { "$rootPath|$it" })
+    }
 }
 
 private fun addDartWorkspaceMember(
@@ -206,6 +223,11 @@ private val PUB_WORKSPACE_RESOLUTION = Regex("""(?m)^resolution:[ \t]*workspace[
 private val FLUTTER_SDK = Regex("""(?m)^[ \t]*sdk:[ \t]*flutter[ \t]*$""")
 private val WORKSPACE_SECTION = Regex("""(?m)^workspace:\s*\n((?:[ \t]+.*\n?)*)""")
 private val WORKSPACE_PATH = Regex("""(?m)^[ \t]*-[ \t]+(?:\./)?([A-Za-z0-9][A-Za-z0-9_./-]*)[ \t]*$""")
+private val PACKAGE_NAME = Regex("""(?m)^name:[ \t]*["']?([A-Za-z0-9_]+)""")
+private val DEPENDENCY_SECTION = Regex(
+    """(?m)^(?:dependencies|dev_dependencies|dependency_overrides):[ \t]*\n((?:[ \t]+.*\n?|[ \t]*\n)*)""",
+)
+private val DEPENDENCY_NAME = Regex("""(?m)^[ \t]+([A-Za-z0-9_]+):""")
 private val UNPROVED_WORKSPACE = Regex("""[*?\[]|\*\*""")
 private val PACKAGE_PATH = Regex("""[A-Za-z0-9._\-]+(?:/[A-Za-z0-9._\-]+)*""")
 private val BUILD_RUNNER_DEPENDENCY = Regex("""(?m)^[ \t]*build_runner\s*:""")

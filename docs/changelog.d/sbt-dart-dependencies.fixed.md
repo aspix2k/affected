@@ -1,0 +1,1 @@
+- sbt and Dart: projects in an sbt build and members of a pub workspace had no dependencies between them, so the option to test dependent modules did nothing there. sbt `dependsOn(...)` and the `dependencies`, `dev_dependencies` and `dependency_overrides` of a workspace member now connect them.

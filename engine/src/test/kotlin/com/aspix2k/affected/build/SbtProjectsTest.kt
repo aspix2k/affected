@@ -54,6 +54,31 @@ class SbtProjectsTest {
     }
 
     @Test
+    fun `dependsOn makes a project depend on the named projects`() {
+        val root = module {
+            File(it, "build.sbt").writeText(
+                """
+                lazy val core = project
+                lazy val `test-kit` = project.in(file("kit")).dependsOn(core)
+                lazy val api = (project in file("api"))
+                  .settings(name := "api")
+                  .dependsOn(core % "compile->compile;test->test", `test-kit` % Test)
+                lazy val alone = project.settings(libraryDependencies += "org" % "core" % "1")
+                """.trimIndent(),
+            )
+            listOf("core", "alone").forEach { name -> File(it, name).mkdirs() }
+        }
+        val prefix = root.invariantSeparatorsPath
+
+        val modules = checkNotNull(sbtModules(root)).associateBy(BuildModule::id)
+
+        assertEquals(emptySet(), modules.getValue("core").dependencies)
+        assertEquals(setOf("$prefix|core"), modules.getValue("test-kit").dependencies)
+        assertEquals(setOf("$prefix|core", "$prefix|test-kit"), modules.getValue("api").dependencies)
+        assertEquals(emptySet(), modules.getValue("alone").dependencies)
+    }
+
+    @Test
     fun `build definition changes require the whole sbt workspace`() {
         val root = module { File(it, "build.sbt").writeText("lazy val alpha = project") }
         val build = File(root, "build.sbt")
