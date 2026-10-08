@@ -154,6 +154,7 @@ SCENARIOS = {
             tasks=("live:live-core:test",),
             dependent_tasks=("live:live-core:test", "live:live-app:test"),
             jdk=True,
+            regression=("return 1;", "return 2;"),
         ),
         Scenario(
             name="idea-go",

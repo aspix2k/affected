@@ -1,6 +1,7 @@
 package com.aspix2k.affected
 
 import com.intellij.execution.process.ProcessHandler
+import com.intellij.execution.process.ProcessOutputType
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.logger
@@ -144,6 +145,10 @@ internal suspend fun <T> withAffectedRun(
 internal class BaseCheckRun(val root: Path) : AbstractCoroutineContextElement(Key) {
     val commandStarted = AtomicBoolean()
 
+    fun record(marker: OutputMarker?) {
+        if (marker?.seen == true) commandStarted.set(true)
+    }
+
     companion object Key : CoroutineContext.Key<BaseCheckRun>
 }
 
@@ -248,6 +253,7 @@ internal class OwnedProcessExecution(
 internal class OwnedExternalTaskExecution(
     private val cancelTask: (ExternalSystemTaskId, () -> Unit, () -> Unit, () -> Unit) -> Boolean,
     private val onCancel: () -> Unit = {},
+    private val onOutput: (String) -> Unit = {},
 ) : AffectedOwnedSession {
 
     constructor(
@@ -278,6 +284,10 @@ internal class OwnedExternalTaskExecution(
 
         override fun onEnvironmentPrepared(id: ExternalSystemTaskId) {
             requestCancellation(id)
+        }
+
+        override fun onTaskOutput(id: ExternalSystemTaskId, text: String, processOutputType: ProcessOutputType) {
+            onOutput(text)
         }
 
         override fun onSuccess(projectPath: String, id: ExternalSystemTaskId) {
