@@ -117,8 +117,11 @@ public final class AffectedTestNgListener implements IInvokedMethodListener, ICl
     private void writeClassMap(String testClass) {
         if (testClass == null || output == null) return;
         try {
-            if (skipped.contains(testClass)) output.writeUnknownMap(testClass);
-            else output.writeMap(testClass, AffectedCollectorAgent.dependencies(testClass));
+            if (skipped.contains(testClass) || AffectedCollectorAgent.startedProcess(testClass)) {
+                output.writeUnknownMap(testClass);
+            } else {
+                output.writeMap(testClass, AffectedCollectorAgent.dependencies(testClass));
+            }
         } catch (Throwable failure) {
             AffectedCollectorAgent.markUnsupported();
             unsupported.set(true);

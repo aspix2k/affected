@@ -38,6 +38,7 @@ import java.util.stream.Stream;
 public final class AffectedCollectorAgent {
     static final String CODE_SOURCES_PROPERTY = "affected.collector.codeSources";
     static final String TEST_CODE_SOURCES_PROPERTY = "affected.collector.testClasses";
+    private static final String SELF_ATTACH_HELPER = "net.bytebuddy.agent.Attacher";
     private static final long[] THREAD_EXECUTION_IDS = new long[65_536];
     private static final CollectorState STATE = new CollectorState();
     private static volatile AffectedMavenConfig.ProjectConfig mavenConfig;
@@ -53,6 +54,8 @@ public final class AffectedCollectorAgent {
             STATE.configure(codeSources(), paths(TEST_CODE_SOURCES_PROPERTY));
             AffectedClassInstrumenter.initialize();
             instrumentation.addTransformer(new CollectorTransformer(STATE), false);
+            instrumentation.addTransformer(new ProcessStartTransformer(STATE), true);
+            instrumentation.retransformClasses(ProcessBuilder.class);
         } catch (Throwable failure) {
             STATE.fail(failure);
         }
@@ -116,6 +119,18 @@ public final class AffectedCollectorAgent {
 
     public static long executionId() {
         return STATE.executionId();
+    }
+
+    public static void processStarted(List<String> command) {
+        try {
+            STATE.processStarted(command);
+        } catch (Throwable failure) {
+            STATE.fail(failure);
+        }
+    }
+
+    public static boolean startedProcess(String testClass) {
+        return STATE.startedProcess(testClass);
     }
 
     public static long currentExecutionId() {
@@ -255,6 +270,31 @@ public final class AffectedCollectorAgent {
         }
     }
 
+    static final class ProcessStartTransformer implements ClassFileTransformer {
+        private final CollectorState state;
+
+        ProcessStartTransformer(CollectorState state) {
+            this.state = state;
+        }
+
+        @Override
+        public byte[] transform(
+            ClassLoader loader,
+            String className,
+            Class<?> classBeingRedefined,
+            ProtectionDomain protectionDomain,
+            byte[] classfileBuffer
+        ) throws IllegalClassFormatException {
+            if (!"java/lang/ProcessBuilder".equals(className)) return null;
+            try {
+                return AffectedClassInstrumenter.instrumentProcessBuilder(classfileBuffer);
+            } catch (Throwable failure) {
+                state.fail(failure);
+                return null;
+            }
+        }
+    }
+
     static final class CollectorState {
         private static final int MAX_CLASSES = 1_000_000;
         private final AtomicBoolean initialized = new AtomicBoolean();
@@ -269,6 +309,8 @@ public final class AffectedCollectorAgent {
             new ConcurrentHashMap<String, ExecutionContext>();
         private final ConcurrentMap<String, Set<String>> staticReferences =
             new ConcurrentHashMap<String, Set<String>>();
+        private final Set<String> processStarters =
+            Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
         private final ThreadLocal<ThreadState> threadStates =
             new ThreadLocal<ThreadState>() {
                 @Override
@@ -297,6 +339,7 @@ public final class AffectedCollectorAgent {
             catalog.clear();
             executions.clear();
             staticReferences.clear();
+            processStarters.clear();
             threadStates.remove();
             codeSources = Collections.emptyMap();
             instrumentationSources = Collections.emptyMap();
@@ -470,6 +513,21 @@ public final class AffectedCollectorAgent {
             return Long.MIN_VALUE;
         }
 
+        void processStarted(List<String> command) {
+            if (command != null && command.contains(SELF_ATTACH_HELPER)) return;
+            ExecutionContext context = threadStates.get().current;
+            if (context != null && context.active.get()) {
+                processStarters.add(context.testClass);
+                return;
+            }
+            if (executions.isEmpty()) throw new IllegalStateException("process started outside a test");
+            for (ExecutionContext active : executions.values()) processStarters.add(active.testClass);
+        }
+
+        boolean startedProcess(String testClass) {
+            return processStarters.contains(testClass);
+        }
+
         void nativeMethod() {
             fail(new IllegalStateException("production native method"));
         }
@@ -587,6 +645,7 @@ public final class AffectedCollectorAgent {
             catalog.clear();
             executions.clear();
             staticReferences.clear();
+            processStarters.clear();
             threadStates.remove();
             codeSources = Collections.emptyMap();
             instrumentationSources = Collections.emptyMap();

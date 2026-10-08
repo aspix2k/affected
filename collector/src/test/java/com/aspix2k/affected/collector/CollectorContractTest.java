@@ -384,6 +384,78 @@ public class CollectorContractTest {
     }
 
     @Test
+    public void aProcessStartedDuringATestMarksOnlyThatTestClass() throws Exception {
+        AffectedCollectorAgent.CollectorState state = AffectedCollectorAgent.state();
+        state.configure(Collections.singleton(codeSource(ObservedFixture.class)));
+        state.beginExecution("first", "fixture.StartsProcessTest");
+        state.processStarted(Arrays.asList("java", "-cp", "classes", "fixture.Tool"));
+        state.endExecution("first");
+        state.beginExecution("second", "fixture.MocksTest");
+        state.processStarted(Arrays.asList("java", "-cp", "agent.jar", "net.bytebuddy.agent.Attacher", "1"));
+        state.endExecution("second");
+
+        assertTrue(state.startedProcess("fixture.StartsProcessTest"));
+        assertFalse(state.startedProcess("fixture.MocksTest"));
+        assertTrue(state.isSupported());
+    }
+
+    @Test
+    public void aProcessStartedOnAnotherThreadMarksEveryRunningTestClass() throws Exception {
+        AffectedCollectorAgent.CollectorState state = AffectedCollectorAgent.state();
+        state.configure(Collections.singleton(codeSource(ObservedFixture.class)));
+        state.beginExecution("running", "fixture.RunningTest");
+        Thread starter = new Thread(() -> state.processStarted(Collections.singletonList("tool")));
+        starter.start();
+        starter.join();
+        state.endExecution("running");
+
+        assertTrue(state.startedProcess("fixture.RunningTest"));
+        assertTrue(state.isSupported());
+    }
+
+    @Test
+    public void aProcessStartedOutsideEveryTestFailsClosed() throws Exception {
+        AffectedCollectorAgent.CollectorState state = AffectedCollectorAgent.state();
+        state.configure(Collections.singleton(codeSource(ObservedFixture.class)));
+
+        AffectedCollectorAgent.processStarted(Collections.singletonList("tool"));
+
+        assertFalse(state.isSupported());
+    }
+
+    @Test
+    public void processBuilderReportsEveryStartThroughTheSystemClassLoader() throws Exception {
+        byte[] original;
+        try (InputStream input = Object.class.getResourceAsStream("/java/lang/ProcessBuilder.class")) {
+            original = readAllBytes(input);
+        }
+        Set<String> hooked = new HashSet<String>();
+        new ClassReader(AffectedClassInstrumenter.instrumentProcessBuilder(original)).accept(
+            new ClassVisitor(Opcodes.ASM9) {
+                @Override
+                public MethodVisitor visitMethod(
+                    int access,
+                    String name,
+                    String descriptor,
+                    String signature,
+                    String[] exceptions
+                ) {
+                    return new MethodVisitor(Opcodes.ASM9) {
+                        @Override
+                        public void visitLdcInsn(Object value) {
+                            if ("processStarted".equals(value)) hooked.add(name + descriptor);
+                        }
+                    };
+                }
+            },
+            0
+        );
+
+        assertTrue(hooked.toString(), hooked.contains("start()Ljava/lang/Process;"));
+        for (String method : hooked) assertTrue(method, method.startsWith("start("));
+    }
+
+    @Test
     public void staticCallGraphAddsTransitiveProductionDependencies() throws Exception {
         Path production = temporary.newFolder("static-production").toPath();
         writeClass(production, ObservedFixture.class);

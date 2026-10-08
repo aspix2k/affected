@@ -686,6 +686,39 @@ public class GradleInjectionTest {
         assertEquals(setOf("AlphaTest", "GammaTest", "VintageAlphaTest"), executedTests(project));
     }
 
+    @Test(timeout = 240_000L)
+    public void aTestThatRunsProductionCodeInAnotherJvmIsSelectedWithEveryChange() throws Exception {
+        Path project = temporary.newFolder("child-jvm-project").toPath();
+        Path baselineOutput = temporary.newFolder("child-jvm-baseline-output").toPath();
+        Path exactOutput = temporary.newFolder("child-jvm-exact-output").toPath();
+        writeFixture(project);
+        write(
+            project.resolve("src/main/java/fixture/Tool.java"),
+            "package fixture; public final class Tool { public static void main(String[] arguments) { " +
+                "System.out.print(Beta.value()); } }\n"
+        );
+        write(
+            project.resolve("src/test/java/fixture/ChildJvmTest.java"),
+            "package fixture; import org.junit.jupiter.api.Test; import static org.junit.jupiter.api.Assertions.*; " +
+                "public final class ChildJvmTest { @Test void child() throws Exception { " +
+                "String launcher = System.getProperty(\"java.home\") + \"/bin/java\"; " +
+                "Process process = new ProcessBuilder(launcher, \"-cp\", System.getProperty(\"java.class.path\"), " +
+                "\"fixture.Tool\").redirectErrorStream(true).start(); " +
+                "int value = process.getInputStream().read(); assertEquals(0, process.waitFor()); " +
+                "assertEquals('2', value); Executions.mark(\"ChildJvmTest\"); } }\n"
+        );
+
+        BuildResult baseline = run(project, baselineOutput);
+        assertComplete(baselineOutput, 7, baseline.getOutput());
+        promote(baselineOutput, project.resolve(".affected/maps"));
+        writeBeta(project, "int result = 2; return result;");
+        clearExecuted(project);
+
+        BuildResult exact = run(project, exactOutput);
+
+        assertEquals(exact.getOutput(), setOf("BetaTest", "DeltaTest", "ChildJvmTest"), executedTests(project));
+    }
+
     @Test(timeout = 120_000L)
     public void parallelClassesInOneWorkerKeepIndependentDependencies() throws Exception {
         Path project = temporary.newFolder("parallel-project").toPath();

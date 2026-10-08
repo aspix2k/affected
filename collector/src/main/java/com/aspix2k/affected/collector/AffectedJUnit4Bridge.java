@@ -103,8 +103,11 @@ final class AffectedJUnit4Bridge {
     private static void writeClassMap(String testClass) {
         if (testClass == null || output == null) return;
         try {
-            if (SKIPPED.contains(testClass)) output.writeUnknownMap(testClass);
-            else output.writeMap(testClass, AffectedCollectorAgent.dependencies(testClass));
+            if (SKIPPED.contains(testClass) || AffectedCollectorAgent.startedProcess(testClass)) {
+                output.writeUnknownMap(testClass);
+            } else {
+                output.writeMap(testClass, AffectedCollectorAgent.dependencies(testClass));
+            }
         } catch (Throwable failure) {
             AffectedCollectorAgent.markUnsupported();
             UNSUPPORTED.set(true);

@@ -59,6 +59,82 @@ final class AffectedClassInstrumenter {
         return writer.toByteArray();
     }
 
+    static byte[] instrumentProcessBuilder(byte[] bytes) {
+        if (bytes == null) return null;
+        ClassReader reader = new ClassReader(bytes);
+        ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+        reader.accept(new ProcessBuilderVisitor(writer), ClassReader.EXPAND_FRAMES);
+        return writer.toByteArray();
+    }
+
+    private static final class ProcessBuilderVisitor extends ClassVisitor {
+        private ProcessBuilderVisitor(ClassVisitor delegate) {
+            super(Opcodes.ASM9, delegate);
+        }
+
+        @Override
+        public MethodVisitor visitMethod(
+            int access,
+            String name,
+            String descriptor,
+            String signature,
+            String[] exceptions
+        ) {
+            MethodVisitor visitor = super.visitMethod(access, name, descriptor, signature, exceptions);
+            if (!"start".equals(name) || (access & Opcodes.ACC_STATIC) != 0) return visitor;
+            return new AdviceAdapter(Opcodes.ASM9, visitor, access, name, descriptor) {
+                @Override
+                protected void onMethodEnter() {
+                    Label begin = new Label();
+                    Label end = new Label();
+                    Label handler = new Label();
+                    Label done = new Label();
+                    visitTryCatchBlock(begin, end, handler, "java/lang/Throwable");
+                    visitLabel(begin);
+                    visitMethodInsn(
+                        Opcodes.INVOKESTATIC, CLASS_LOADER, "getSystemClassLoader", "()Ljava/lang/ClassLoader;", false);
+                    visitLdcInsn(AffectedCollectorAgent.class.getName());
+                    visitMethodInsn(
+                        Opcodes.INVOKEVIRTUAL, CLASS_LOADER, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;", false);
+                    visitLdcInsn("processStarted");
+                    push(1);
+                    newArray(Type.getType(Class.class));
+                    dup();
+                    push(0);
+                    visitLdcInsn(Type.getType(java.util.List.class));
+                    arrayStore(Type.getType(Class.class));
+                    visitMethodInsn(
+                        Opcodes.INVOKEVIRTUAL,
+                        CLASS,
+                        "getMethod",
+                        "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;",
+                        false);
+                    visitInsn(Opcodes.ACONST_NULL);
+                    push(1);
+                    newArray(Type.getType(Object.class));
+                    dup();
+                    push(0);
+                    loadThis();
+                    visitMethodInsn(
+                        Opcodes.INVOKEVIRTUAL, "java/lang/ProcessBuilder", "command", "()Ljava/util/List;", false);
+                    arrayStore(Type.getType(Object.class));
+                    visitMethodInsn(
+                        Opcodes.INVOKEVIRTUAL,
+                        "java/lang/reflect/Method",
+                        "invoke",
+                        "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
+                        false);
+                    pop();
+                    visitLabel(end);
+                    goTo(done);
+                    visitLabel(handler);
+                    pop();
+                    visitLabel(done);
+                }
+            };
+        }
+    }
+
     private static final class RunNotifierVisitor extends ClassVisitor {
         private static final String DESCRIPTION = "Lorg/junit/runner/Description;";
 
