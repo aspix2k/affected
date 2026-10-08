@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.23.1] - 2026-10-08
+
+### Fixed
+
+- "Set up for coding agents" opens again: the dialog failed with an internal error before it was shown.
+
 ## [3.23.0] - 2026-10-08
 
 ### Added
@@ -847,7 +853,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.23.0...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.23.1...HEAD
+[3.23.1]: https://github.com/aspix2k/affected/compare/v3.23.0...v3.23.1
 [3.23.0]: https://github.com/aspix2k/affected/compare/v3.22.1...v3.23.0
 [3.22.1]: https://github.com/aspix2k/affected/compare/v3.22.0...v3.22.1
 [3.22.0]: https://github.com/aspix2k/affected/compare/v3.21.0...v3.22.0
