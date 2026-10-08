@@ -1,0 +1,1 @@
+- Cargo: a cargo-nextest configuration that only sets output and report options (status levels, failure and success output, JUnit, archive, store) no longer forces the fallback to `cargo test`; settings that change how tests run (retries, timeouts, thread limits, test groups) still do.

@@ -138,6 +138,60 @@ class CargoNextestTest {
     }
 
     @Test
+    fun `settings that only shape the output or the reports keep package selection`() {
+        val root = workspace(
+            """
+            nextest-version = { required = "0.9.85" }
+            store = { dir = "target/nextest" }
+
+            [profile.default]
+            fail-fast = false
+            status-level = "pass"
+            final-status-level = "flaky"
+            failure-output = "immediate-final"
+            success-output = "never"
+
+            [profile.default.junit]
+            path = "junit.xml"
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            CargoNextestPlan(CargoNextestMode.PACKAGES, "default", "0.9.143", false),
+            detectCargoNextest(root, VERSION, configurationOutput = CONFIGURATION),
+        )
+    }
+
+    @Test
+    fun `settings that change how tests run retain cargo test`() {
+        val settings = listOf(
+            "retries = 2",
+            "slow-timeout = { period = \"60s\", terminate-after = 2 }",
+            "test-threads = 1",
+            "threads-required = 2",
+            "leak-timeout = \"100ms\"",
+            "global-timeout = \"10m\"",
+        )
+
+        settings.forEach { setting ->
+            val config = "nextest-version = { required = '0.9.85' }\n[profile.default]\n$setting"
+            assertEquals(
+                CargoNextestPlan(CargoNextestMode.CARGO_TEST, null),
+                detectCargoNextest(workspace(config), VERSION, configurationOutput = CONFIGURATION),
+                setting,
+            )
+        }
+        assertEquals(
+            CargoNextestPlan(CargoNextestMode.CARGO_TEST, null),
+            detectCargoNextest(
+                workspace("nextest-version = { required = '0.9.85' }\n[test-groups.serial]\nmax-threads = 1"),
+                VERSION,
+                configurationOutput = CONFIGURATION,
+            ),
+        )
+    }
+
+    @Test
     fun `unsupported nextest settings retain cargo test`() {
         val configs = listOf(
             "nextest-version = { required = '0.9.85' }\n[script.setup]\ncommand = 'prepare'",
