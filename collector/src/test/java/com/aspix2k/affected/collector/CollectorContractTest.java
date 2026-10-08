@@ -1,6 +1,7 @@
 package com.aspix2k.affected.collector;
 
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -28,7 +29,13 @@ import org.jetbrains.org.objectweb.asm.ClassVisitor;
 import org.jetbrains.org.objectweb.asm.MethodVisitor;
 import org.jetbrains.org.objectweb.asm.Opcodes;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.nio.channels.ServerSocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -424,36 +431,249 @@ public class CollectorContractTest {
     }
 
     @Test
-    public void aConnectionOpenedDuringATestMarksThatTestClassAndIsIgnoredBetweenTests() throws Exception {
+    public void aConnectionOpenedDuringATestMarksEveryRunningTestClass() throws Exception {
         AffectedCollectorAgent.CollectorState state = AffectedCollectorAgent.state();
         state.configure(Collections.singleton(codeSource(ObservedFixture.class)));
-        state.connectionOpened();
-        state.beginExecution("remote", "fixture.RemoteTest");
-        state.connectionOpened();
-        state.endExecution("remote");
+        state.projectCodeLoaded();
         state.beginExecution("local", "fixture.LocalTest");
         state.endExecution("local");
+        boolean local = state.reachedAnotherProcess("fixture.LocalTest");
+        state.beginExecution("remote", "fixture.RemoteTest");
+        try (Socket connection = new Socket()) {
+            Thread client = new Thread(() -> state.connectionOpened(connection, new InetSocketAddress("192.0.2.1", 80)));
+            client.start();
+            client.join();
+        }
+        state.endExecution("remote");
 
         assertTrue(state.reachedAnotherProcess("fixture.RemoteTest"));
-        assertFalse(state.reachedAnotherProcess("fixture.LocalTest"));
+        assertFalse(local);
         assertTrue(state.isSupported());
     }
 
     @Test
-    public void everyClientConnectMethodReportsToTheCollector() throws Exception {
-        Map<String, List<String>> expected = new HashMap<String, List<String>>();
-        expected.put("/java/net/Socket.class", Collections.singletonList("connect(Ljava/net/SocketAddress;I)V"));
-        expected.put(
-            "/sun/nio/ch/SocketChannelImpl.class",
-            Collections.singletonList("connect(Ljava/net/SocketAddress;)Z")
-        );
-        for (Map.Entry<String, List<String>> entry : expected.entrySet()) {
+    public void aConnectionLeftOpenMarksEveryLaterTestClassUntilItCloses() throws Exception {
+        AffectedCollectorAgent.CollectorState state = AffectedCollectorAgent.state();
+        state.configure(Collections.singleton(codeSource(ObservedFixture.class)));
+        state.projectCodeLoaded();
+        try (Socket pooled = new Socket()) {
+            state.beginExecution("opening", "fixture.OpeningTest");
+            state.connectionOpened(pooled, new InetSocketAddress("192.0.2.1", 80));
+            state.endExecution("opening");
+            state.beginExecution("reusing", "fixture.ReusingTest");
+            state.endExecution("reusing");
+        }
+        state.beginExecution("after", "fixture.AfterCloseTest");
+        state.endExecution("after");
+
+        assertTrue(state.reachedAnotherProcess("fixture.ReusingTest"));
+        assertFalse(state.reachedAnotherProcess("fixture.AfterCloseTest"));
+    }
+
+    @Test
+    public void aConnectionOpenedOutsideATestMarksTheClassesAroundItAndNoOthers() throws Exception {
+        AffectedCollectorAgent.CollectorState state = AffectedCollectorAgent.state();
+        state.configure(Collections.singleton(codeSource(ObservedFixture.class)));
+        state.projectCodeLoaded();
+        state.beginExecution("earlier", "fixture.EarlierTest");
+        state.endExecution("earlier");
+        boolean earlier = state.reachedAnotherProcess("fixture.EarlierTest");
+        state.beginExecution("before", "fixture.TeardownTest");
+        state.endExecution("before");
+        try (Socket teardown = new Socket()) {
+            state.connectionOpened(teardown, new InetSocketAddress("192.0.2.1", 80));
+        }
+        state.beginExecution("setup", "fixture.SetupTest");
+        state.endExecution("setup");
+        state.beginExecution("later", "fixture.LaterTest");
+        state.endExecution("later");
+
+        assertFalse(earlier);
+        assertTrue(state.reachedAnotherProcess("fixture.TeardownTest"));
+        assertTrue(state.reachedAnotherProcess("fixture.SetupTest"));
+        assertFalse(state.reachedAnotherProcess("fixture.LaterTest"));
+        assertTrue(state.isSupported());
+    }
+
+    @Test
+    public void aConnectionFromAnotherThreadDuringATestAlsoMarksTheNextClass() throws Exception {
+        AffectedCollectorAgent.CollectorState state = AffectedCollectorAgent.state();
+        state.configure(Collections.singleton(codeSource(ObservedFixture.class)));
+        state.projectCodeLoaded();
+        state.beginExecution("running", "fixture.RunningTest");
+        try (Socket setup = new Socket()) {
+            Thread other = new Thread(() -> state.connectionOpened(setup, new InetSocketAddress("192.0.2.1", 80)));
+            other.start();
+            other.join();
+        }
+        state.beginExecution("parallel", "fixture.ParallelSetupTest");
+        state.endExecution("parallel");
+        state.endExecution("running");
+        state.beginExecution("later", "fixture.LaterTest");
+        state.endExecution("later");
+
+        assertTrue(state.reachedAnotherProcess("fixture.RunningTest"));
+        assertTrue(state.reachedAnotherProcess("fixture.ParallelSetupTest"));
+        assertFalse(state.reachedAnotherProcess("fixture.LaterTest"));
+    }
+
+    @Test
+    public void aConnectionInTheSetupOrTeardownOfAParallelClassMarksThatClass() throws Exception {
+        AffectedCollectorAgent.CollectorState state = AffectedCollectorAgent.state();
+        state.configure(Collections.singleton(codeSource(ObservedFixture.class)));
+        state.projectCodeLoaded();
+        boolean[] beforeTeardown = new boolean[1];
+        Thread worker = new Thread(() -> {
+            try {
+                Socket closed = new Socket();
+                closed.close();
+                state.connectionOpened(closed, new InetSocketAddress("192.0.2.1", 80));
+                Thread intruder = new Thread(() -> {
+                    state.beginExecution("intruder", "fixture.IntruderTest");
+                    state.endExecution("intruder");
+                });
+                intruder.start();
+                intruder.join();
+                state.beginExecution("setup", "fixture.SetupTest");
+                state.endExecution("setup");
+                state.beginExecution("teardown", "fixture.TeardownTest");
+                state.endExecution("teardown");
+                beforeTeardown[0] = state.reachedAnotherProcess("fixture.TeardownTest");
+                state.connectionOpened(closed, new InetSocketAddress("192.0.2.1", 80));
+            } catch (IOException | InterruptedException failure) {
+                throw new IllegalStateException(failure);
+            }
+        });
+        worker.start();
+        worker.join();
+
+        assertTrue(state.reachedAnotherProcess("fixture.SetupTest"));
+        assertFalse(beforeTeardown[0]);
+        assertTrue(state.reachedAnotherProcess("fixture.TeardownTest"));
+        assertTrue(state.isSupported());
+    }
+
+    @Test
+    public void aConnectionALibraryOpensBeforeProjectCodeLoadsMarksClassesWhileItStaysOpen() throws Exception {
+        AffectedCollectorAgent.CollectorState state = AffectedCollectorAgent.state();
+        state.configure(Collections.singleton(codeSource(ObservedFixture.class)));
+        try (Socket shared = new Socket()) {
+            state.connectionOpened(shared, new InetSocketAddress("192.0.2.1", 80));
+            state.projectCodeLoaded();
+            state.beginExecution("first", "fixture.FirstTest");
+            state.endExecution("first");
+        }
+        state.beginExecution("second", "fixture.SecondTest");
+        state.endExecution("second");
+
+        assertTrue(state.reachedAnotherProcess("fixture.FirstTest"));
+        assertFalse(state.reachedAnotherProcess("fixture.SecondTest"));
+    }
+
+    @Test
+    public void onlyTheBuildToolItselfConnectsWithoutATrace() {
+        StackTraceElement socket = new StackTraceElement("java.net.Socket", "connect", "Socket.java", 1);
+        StackTraceElement hook = new StackTraceElement(
+            AffectedCollectorAgent.class.getName() + "$CollectorState", "connectionOpened", "AffectedCollectorAgent.java", 1);
+        StackTraceElement gradle = new StackTraceElement(
+            "org.gradle.internal.remote.internal.inet.TcpOutgoingConnector", "connect", "TcpOutgoingConnector.java", 1);
+        StackTraceElement worker = new StackTraceElement(
+            "worker.org.gradle.process.internal.worker.GradleWorkerMain", "main", "GradleWorkerMain.java", 1);
+        StackTraceElement surefire = new StackTraceElement(
+            "org.apache.maven.surefire.booter.ForkedBooter", "main", "ForkedBooter.java", 1);
+        StackTraceElement library = new StackTraceElement("com.example.SharedClient", "open", "SharedClient.java", 1);
+
+        assertTrue(AffectedCollectorAgent.buildToolConnecting(new StackTraceElement[] {hook, socket, gradle, worker}));
+        assertTrue(AffectedCollectorAgent.buildToolConnecting(new StackTraceElement[] {hook, socket, surefire}));
+        assertFalse(AffectedCollectorAgent.buildToolConnecting(new StackTraceElement[] {hook, socket, library, gradle}));
+        assertFalse(AffectedCollectorAgent.buildToolConnecting(new StackTraceElement[] {hook, socket}));
+    }
+
+    @Test
+    public void aConnectionToAListenerOfTheSameJvmStaysExact() throws Exception {
+        AffectedCollectorAgent.CollectorState state = AffectedCollectorAgent.state();
+        state.configure(Collections.singleton(codeSource(ObservedFixture.class)));
+        state.projectCodeLoaded();
+        InetAddress loopback = InetAddress.getByName("127.0.0.1");
+        int port;
+        try (ServerSocket listener = new ServerSocket(0, 1, loopback); Socket connection = new Socket()) {
+            port = listener.getLocalPort();
+            state.listenerBound(listener);
+            state.beginExecution("mock", "fixture.MockServerTest");
+            state.connectionOpened(connection, new InetSocketAddress(loopback, port));
+            state.endExecution("mock");
+            state.beginExecution("other-port", "fixture.OtherPortTest");
+            state.connectionOpened(connection, new InetSocketAddress(loopback, port == 1 ? 2 : port - 1));
+            state.endExecution("other-port");
+        }
+        state.beginExecution("closed", "fixture.ClosedListenerTest");
+        try (Socket connection = new Socket()) {
+            state.connectionOpened(connection, new InetSocketAddress(loopback, port));
+        }
+        state.endExecution("closed");
+
+        assertFalse(state.reachedAnotherProcess("fixture.MockServerTest"));
+        assertTrue(state.reachedAnotherProcess("fixture.OtherPortTest"));
+        assertTrue(state.reachedAnotherProcess("fixture.ClosedListenerTest"));
+    }
+
+    @Test
+    public void aListenerOnAnotherAddressDoesNotCoverALoopbackConnection() throws Exception {
+        AffectedCollectorAgent.CollectorState state = AffectedCollectorAgent.state();
+        state.configure(Collections.singleton(codeSource(ObservedFixture.class)));
+        state.projectCodeLoaded();
+        try (ServerSocketChannel listener = ServerSocketChannel.open()) {
+            try {
+                listener.bind(new InetSocketAddress(InetAddress.getByName("::1"), 0));
+            } catch (IOException unavailable) {
+                Assume.assumeNoException(unavailable);
+            }
+            int port = ((InetSocketAddress) listener.getLocalAddress()).getPort();
+            state.listenerBound(listener);
+            state.beginExecution("match", "fixture.SameAddressTest");
+            try (Socket connection = new Socket()) {
+                state.connectionOpened(connection, new InetSocketAddress(InetAddress.getByName("::1"), port));
+            }
+            state.endExecution("match");
+            state.beginExecution("mismatch", "fixture.OtherAddressTest");
+            try (Socket connection = new Socket()) {
+                state.connectionOpened(connection, new InetSocketAddress(InetAddress.getByName("127.0.0.1"), port));
+            }
+            state.endExecution("mismatch");
+        }
+
+        assertFalse(state.reachedAnotherProcess("fixture.SameAddressTest"));
+        assertTrue(state.reachedAnotherProcess("fixture.OtherAddressTest"));
+    }
+
+    @Test
+    public void everyConnectSendAndBindMethodOfTheJdkReportsToTheCollector() throws Exception {
+        Map<String, List<String>> hooks = new HashMap<String, List<String>>();
+        for (String name : Arrays.asList("java/net/Socket", "sun/nio/ch/SocketChannelImpl", "sun/nio/ch/AsynchronousSocketChannelImpl")) {
+            hooks.put(name, Arrays.asList("connectionOpened", "connect", "blockingConnect"));
+        }
+        for (String name : Arrays.asList("java/net/DatagramSocket", "sun/nio/ch/DatagramChannelImpl")) {
+            hooks.put(name, Arrays.asList("connectionOpened", "connect", "send"));
+        }
+        for (String name : Arrays.asList(
+            "java/net/ServerSocket", "sun/nio/ch/ServerSocketChannelImpl", "sun/nio/ch/AsynchronousServerSocketChannelImpl")) {
+            hooks.put(name, Arrays.asList("listenerBound", "bind"));
+        }
+        for (Map.Entry<String, List<String>> entry : hooks.entrySet()) {
+            String hook = entry.getValue().get(0);
+            List<String> methods = entry.getValue().subList(1, entry.getValue().size());
             byte[] original;
-            try (InputStream input = Object.class.getResourceAsStream(entry.getKey())) {
+            try (InputStream input = Object.class.getResourceAsStream("/" + entry.getKey() + ".class")) {
                 original = readAllBytes(input);
             }
+            byte[] instrumented = "listenerBound".equals(hook)
+                ? AffectedClassInstrumenter.instrumentListeners(original)
+                : hooks.get(entry.getKey()).contains("send")
+                    ? AffectedClassInstrumenter.instrumentDatagrams(original)
+                    : AffectedClassInstrumenter.instrumentConnections(original);
+            Set<String> expected = new HashSet<String>();
             Set<String> hooked = new HashSet<String>();
-            new ClassReader(AffectedClassInstrumenter.instrumentConnections(original)).accept(
+            new ClassReader(instrumented).accept(
                 new ClassVisitor(Opcodes.ASM9) {
                     @Override
                     public MethodVisitor visitMethod(
@@ -463,10 +683,12 @@ public class CollectorContractTest {
                         String signature,
                         String[] exceptions
                     ) {
+                        int skipped = Opcodes.ACC_STATIC | Opcodes.ACC_ABSTRACT | Opcodes.ACC_NATIVE;
+                        if (methods.contains(name) && (access & skipped) == 0) expected.add(name + descriptor);
                         return new MethodVisitor(Opcodes.ASM9) {
                             @Override
                             public void visitLdcInsn(Object value) {
-                                if ("connectionOpened".equals(value)) hooked.add(name + descriptor);
+                                if (hook.equals(value)) hooked.add(name + descriptor);
                             }
                         };
                     }
@@ -474,7 +696,8 @@ public class CollectorContractTest {
                 0
             );
 
-            assertTrue(entry.getKey() + hooked, hooked.containsAll(entry.getValue()));
+            assertFalse(entry.getKey(), expected.isEmpty());
+            assertEquals(entry.getKey(), expected, hooked);
         }
     }
 

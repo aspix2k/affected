@@ -17,6 +17,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -29,6 +30,8 @@ final class AffectedClassInstrumenter {
     private static final String THREAD = "java/lang/Thread";
     private static final Set<String> CONNECT_METHODS =
         Collections.unmodifiableSet(new HashSet<String>(Arrays.asList("connect", "blockingConnect")));
+    private static final Set<String> DATAGRAM_METHODS =
+        Collections.unmodifiableSet(new HashSet<String>(Arrays.asList("connect", "send")));
 
     private AffectedClassInstrumenter() {
     }
@@ -64,31 +67,46 @@ final class AffectedClassInstrumenter {
     }
 
     static byte[] instrumentProcessBuilder(byte[] bytes) {
-        return instrumentJvmBoundary(bytes, Collections.singleton("start"), "processStarted", true);
+        return instrumentJvmBoundary(bytes, Collections.singleton("start"), "processStarted", Argument.COMMAND);
     }
 
     static byte[] instrumentConnections(byte[] bytes) {
-        return instrumentJvmBoundary(bytes, CONNECT_METHODS, "connectionOpened", false);
+        return instrumentJvmBoundary(bytes, CONNECT_METHODS, "connectionOpened", Argument.SELF, Argument.ADDRESS);
     }
 
-    private static byte[] instrumentJvmBoundary(byte[] bytes, Set<String> methods, String hook, boolean command) {
+    static byte[] instrumentDatagrams(byte[] bytes) {
+        return instrumentJvmBoundary(bytes, DATAGRAM_METHODS, "connectionOpened", Argument.SELF, Argument.NONE);
+    }
+
+    static byte[] instrumentListeners(byte[] bytes) {
+        return instrumentJvmBoundary(bytes, Collections.singleton("bind"), "listenerBound", Argument.SELF);
+    }
+
+    private enum Argument {
+        COMMAND,
+        SELF,
+        ADDRESS,
+        NONE
+    }
+
+    private static byte[] instrumentJvmBoundary(byte[] bytes, Set<String> methods, String hook, Argument... arguments) {
         if (bytes == null) return null;
         ClassReader reader = new ClassReader(bytes);
         ClassWriter writer = new ClassWriter(reader, ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
-        reader.accept(new JvmBoundaryVisitor(writer, methods, hook, command), ClassReader.EXPAND_FRAMES);
+        reader.accept(new JvmBoundaryVisitor(writer, methods, hook, arguments), ClassReader.EXPAND_FRAMES);
         return writer.toByteArray();
     }
 
     private static final class JvmBoundaryVisitor extends ClassVisitor {
         private final Set<String> methods;
         private final String hook;
-        private final boolean command;
+        private final Argument[] arguments;
 
-        private JvmBoundaryVisitor(ClassVisitor delegate, Set<String> methods, String hook, boolean command) {
+        private JvmBoundaryVisitor(ClassVisitor delegate, Set<String> methods, String hook, Argument[] arguments) {
             super(Opcodes.ASM9, delegate);
             this.methods = methods;
             this.hook = hook;
-            this.command = command;
+            this.arguments = arguments;
         }
 
         @Override
@@ -117,12 +135,12 @@ final class AffectedClassInstrumenter {
                     visitMethodInsn(
                         Opcodes.INVOKEVIRTUAL, CLASS_LOADER, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;", false);
                     visitLdcInsn(hook);
-                    push(command ? 1 : 0);
+                    push(arguments.length);
                     newArray(Type.getType(Class.class));
-                    if (command) {
+                    for (int index = 0; index < arguments.length; index++) {
                         dup();
-                        push(0);
-                        visitLdcInsn(Type.getType(java.util.List.class));
+                        push(index);
+                        visitLdcInsn(Type.getType(arguments[index] == Argument.COMMAND ? List.class : Object.class));
                         arrayStore(Type.getType(Class.class));
                     }
                     visitMethodInsn(
@@ -132,14 +150,26 @@ final class AffectedClassInstrumenter {
                         "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;",
                         false);
                     visitInsn(Opcodes.ACONST_NULL);
-                    push(command ? 1 : 0);
+                    push(arguments.length);
                     newArray(Type.getType(Object.class));
-                    if (command) {
+                    for (int index = 0; index < arguments.length; index++) {
                         dup();
-                        push(0);
-                        loadThis();
-                        visitMethodInsn(
-                            Opcodes.INVOKEVIRTUAL, "java/lang/ProcessBuilder", "command", "()Ljava/util/List;", false);
+                        push(index);
+                        if (arguments[index] == Argument.ADDRESS && descriptor.startsWith("(Ljava/net/SocketAddress;")) {
+                            loadArg(0);
+                        } else if (arguments[index] == Argument.ADDRESS || arguments[index] == Argument.NONE) {
+                            visitInsn(Opcodes.ACONST_NULL);
+                        } else {
+                            loadThis();
+                            if (arguments[index] == Argument.COMMAND) {
+                                visitMethodInsn(
+                                    Opcodes.INVOKEVIRTUAL,
+                                    "java/lang/ProcessBuilder",
+                                    "command",
+                                    "()Ljava/util/List;",
+                                    false);
+                            }
+                        }
                         arrayStore(Type.getType(Object.class));
                     }
                     visitMethodInsn(
