@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.24.0] - 2026-10-08
+
+### Changed
+
+- Cargo: a cargo-nextest configuration that only sets output and report options (status levels, failure and success output, JUnit, archive, store) no longer forces the fallback to `cargo test`; settings that change how tests run (retries, timeouts, thread limits, test groups) still do.
+- Cargo: a `.cargo/config.toml` that only holds network, registry, terminal and similar settings no longer disables cargo-nextest package selection; any other table (build, target, env, alias, profile and so on) still does.
+- Node: IDE, editor and hosting directories in a package (`.idea`, `.vscode`, `.github`, `.gitlab`, `.husky`, `.circleci`, `.devcontainer`, `.changeset`) no longer switch off related-test selection; they are scanned like any other directory, so a dynamic import inside them still does.
+
 ## [3.23.2] - 2026-10-08
 
 ### Fixed
@@ -859,7 +867,8 @@ First release.
 - An MCP toolset giving AI agents the same analysis and execution.
 - Twelve interface languages.
 
-[Unreleased]: https://github.com/aspix2k/affected/compare/v3.23.2...HEAD
+[Unreleased]: https://github.com/aspix2k/affected/compare/v3.24.0...HEAD
+[3.24.0]: https://github.com/aspix2k/affected/compare/v3.23.2...v3.24.0
 [3.23.2]: https://github.com/aspix2k/affected/compare/v3.23.1...v3.23.2
 [3.23.1]: https://github.com/aspix2k/affected/compare/v3.23.0...v3.23.1
 [3.23.0]: https://github.com/aspix2k/affected/compare/v3.22.1...v3.23.0
