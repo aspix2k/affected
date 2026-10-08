@@ -332,6 +332,43 @@ class NodeTestSelectionTest {
     }
 
     @Test
+    fun `IDE, editor and hosting directories are scanned like any other and do not block exact selection`() {
+        val exact = exactJestWorkspace()
+        val alpha = File(exact.root, "packages/alpha")
+        File(alpha, ".idea/workspace.xml").apply { parentFile.mkdirs() }.writeText("<project/>")
+        File(alpha, ".github/workflows/ci.yml").apply { parentFile.mkdirs() }.writeText("on: push")
+        File(alpha, ".vscode/settings.json").apply { parentFile.mkdirs() }.writeText("{}")
+        File(alpha, ".husky/pre-commit").apply { parentFile.mkdirs() }.writeText("npm test")
+        File(alpha, ".github/scripts/label.js").apply { parentFile.mkdirs() }.writeText("export const label = 1")
+
+        val command = exactCommands(exact.fixture.root, "@app/alpha:test", exact.changed).single()
+
+        assertTrue("--findRelatedTests" in command.arguments, command.arguments.toString())
+    }
+
+    @Test
+    fun `a dynamic dependency inside a tooling directory still keeps the full package command`() {
+        val exact = exactJestWorkspace()
+        File(exact.root, "packages/alpha/.github/scripts/load.js").apply {
+            parentFile.mkdirs()
+            writeText("export const load = name => import(name)")
+        }
+
+        assertFull(exact.fixture, exact.changed)
+    }
+
+    @Test
+    fun `a change inside a tooling directory keeps the full package command`() {
+        val exact = exactJestWorkspace()
+        val script = File(exact.root, "packages/alpha/.github/scripts/label.js").apply {
+            parentFile.mkdirs()
+            writeText("export const label = 1")
+        }
+
+        assertFull(exact.fixture, script)
+    }
+
+    @Test
     fun `an unknown hidden source directory keeps the full package command`() {
         val exact = exactJestWorkspace()
         File(exact.root, "packages/alpha/.runtime/loader.js").apply {

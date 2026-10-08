@@ -294,7 +294,7 @@ private fun enqueueNodeDirectory(
 ): Boolean {
     val name = directory.fileName.toString()
     if (name in NODE_SCAN_IGNORED) return true
-    if (name.startsWith('.')) return false
+    if (name.startsWith('.') && name !in NODE_TOOLING_DIRECTORIES) return false
     if (depth >= MAX_NODE_DEPTH || queue.size >= MAX_NODE_DIRECTORIES) return false
     queue += directory to depth + 1
     return true
@@ -377,6 +377,16 @@ private val NODE_SCAN_IGNORED = setOf(
     "coverage",
     ".git",
     ".cache",
+)
+private val NODE_TOOLING_DIRECTORIES = setOf(
+    ".changeset",
+    ".circleci",
+    ".devcontainer",
+    ".github",
+    ".gitlab",
+    ".husky",
+    ".idea",
+    ".vscode",
 )
 private val NODE_GENERATED_DIRECTORIES = setOf("build", "out", "dist", "target")
 private val SUPPORTED_NODE_MANAGERS = setOf("npm", "yarn", "pnpm")

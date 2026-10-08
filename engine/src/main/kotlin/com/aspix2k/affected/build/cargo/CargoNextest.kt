@@ -177,7 +177,7 @@ private fun supportedNextestProfiles(config: TomlTable, profiles: TomlTable?): B
             profile.keySet().all { key ->
                 when (key) {
                     "fail-fast" -> profile.get(key) is Boolean
-                    else -> false
+                    else -> key in REPORTING_PROFILE_KEYS
                 }
             }
         } == true
@@ -309,7 +309,15 @@ private const val CARGO_NEXTEST_WORKSPACE_TASK = "nextest-workspace"
 private const val TEST_EXECUTABLE_IDENTITY = "test"
 private val CARGO_TEST_PLAN = CargoNextestPlan(CargoNextestMode.CARGO_TEST, null)
 private val MIN_SUPPORTED_NEXTEST = NextestVersion(0, 9, 143)
-private val SUPPORTED_ROOT_KEYS = setOf("nextest-version", "profile")
+private val SUPPORTED_ROOT_KEYS = setOf("nextest-version", "profile", "store")
+private val REPORTING_PROFILE_KEYS = setOf(
+    "status-level",
+    "final-status-level",
+    "failure-output",
+    "success-output",
+    "junit",
+    "archive",
+)
 private fun stripAnsi(text: String): String = ANSI_ESCAPE.replace(text, "")
 
 private val ANSI_ESCAPE = Regex("\u001B\\[[0-?]*[ -/]*[@-~]")
