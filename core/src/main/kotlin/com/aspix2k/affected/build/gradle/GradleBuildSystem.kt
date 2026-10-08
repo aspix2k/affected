@@ -3,6 +3,8 @@ package com.aspix2k.affected.build.gradle
 import com.aspix2k.affected.AffectedExternalRunBinding
 import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.AffectedSettings
+import com.aspix2k.affected.BaseCheckRun
+import com.aspix2k.affected.OutputMarker
 import com.aspix2k.affected.OwnedExternalTaskExecution
 import com.aspix2k.affected.affectedRunLabel
 import com.aspix2k.affected.build.BaseRuntimeBuildSystem
@@ -16,6 +18,7 @@ import com.aspix2k.affected.build.moduleDependencyKey
 import com.aspix2k.affected.build.requiredGradleFailureStrategyScript
 import com.aspix2k.affected.build.rootFallbackModule
 import com.aspix2k.affected.currentAffectedRunPresentation
+import com.aspix2k.affected.gradleTaskReached
 import com.aspix2k.affected.monitorGradleCancellation
 import com.aspix2k.affected.recordsDependencies
 import com.aspix2k.affected.runPreparedOwnedExternalTask
@@ -47,6 +50,7 @@ import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.util.execution.ParametersListUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import org.jetbrains.plugins.gradle.service.GradleInstallationManager
 import org.jetbrains.plugins.gradle.settings.GradleSettings
@@ -183,11 +187,14 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
         var binding: AffectedExternalRunBinding? = null
         val sessions = AffectedRunSessions.getInstance(project)
         val collector = AtomicReference<GradleCollectorRun?>()
+        val baseRun = currentCoroutineContext()[BaseCheckRun]
+        val reached = baseRun?.let { OutputMarker(gradleTaskReached(tasks)) }
         val execution = OwnedExternalTaskExecution(
             cancelTask = { id, onTerminated, onMonitoringStopped, onCancelAttemptsExhausted ->
                 cancelExternalTask(id, onTerminated, onMonitoringStopped, onCancelAttemptsExhausted)
             },
             onCancel = { collector.get()?.cancel() },
+            onOutput = { reached?.accept(it) },
         )
         lateinit var settings: ExternalSystemTaskExecutionSettings
         var passed = false
@@ -233,6 +240,7 @@ class GradleBuildSystem : ChangeAwareSuspendingBuildSystem, WorkspaceChangesBuil
             )
             return passed
         } finally {
+            baseRun?.record(reached)
             withContext(NonCancellable + Dispatchers.IO) {
                 runCatching { collector.get()?.complete(passed) }
             }

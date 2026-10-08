@@ -21,8 +21,7 @@ object BaseCheck {
 
     private val LOG = logger<BaseCheck>()
     private val RUN_TIMEOUT = 30.minutes
-    private val COMMAND_SYSTEMS = setOf("GO", "CARGO")
-    private val SUPPORTED_SYSTEMS = setOf("GRADLE", "MAVEN") + COMMAND_SYSTEMS
+    private val SUPPORTED_SYSTEMS = setOf("GRADLE", "MAVEN", "GO", "CARGO")
     private const val CACHE_DIRECTORY = "affected"
 
     private class BaseContext(
@@ -119,8 +118,7 @@ object BaseCheck {
             claim.isCancellationRequested() -> BaseRun.Skipped(BaseNotRun.STOPPED)
             passed == null -> BaseRun.Skipped(BaseNotRun.TIMED_OUT)
             !accepted -> BaseRun.Skipped(BaseNotRun.MODULE_MISSING)
-            !passed && group.systemId in COMMAND_SYSTEMS && !baseRun.commandStarted.get() ->
-                BaseRun.Skipped(BaseNotRun.COULD_NOT_RUN)
+            !passed && !baseRun.commandStarted.get() -> BaseRun.Skipped(BaseNotRun.COULD_NOT_RUN)
             else -> BaseRun.Finished(passed)
         }
     }

@@ -12,6 +12,7 @@ import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.project.Project
 import com.intellij.testFramework.ExtensionTestUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import kotlinx.coroutines.currentCoroutineContext
 import java.io.File
 import java.util.concurrent.ConcurrentLinkedQueue
 
@@ -49,6 +50,7 @@ class BaseCheckRunTest : BasePlatformTestCase() {
 
     private class RecordingMaven(
         private val root: File,
+        private val started: Boolean = true,
         private val passes: (String) -> Boolean,
     ) : SuspendingBuildSystem {
         val calls = ConcurrentLinkedQueue<Call>()
@@ -76,6 +78,7 @@ class BaseCheckRunTest : BasePlatformTestCase() {
 
         override suspend fun runAndWaitSuspending(project: Project, root: String, tasks: List<String>): Boolean {
             calls += Call(root, tasks, recordsDependencies())
+            if (started) currentCoroutineContext()[BaseCheckRun]?.commandStarted?.set(true)
             return passes(root)
         }
     }
@@ -190,6 +193,19 @@ class BaseCheckRunTest : BasePlatformTestCase() {
             missingCommit.verdicts.map(BaseGroupVerdict::run),
         )
         assertTrue(adapter.calls.isEmpty())
+    }
+
+    fun testAFailedBaseRunThatNeverReachedTheChecksIsUnknown() = runBoundedBlocking {
+        val repository = repository()
+        val adapter = RecordingMaven(repository.root, started = false) { false }
+        ExtensionTestUtil.maskExtensions(BUILD_SYSTEM_POINT, listOf(adapter), testRootDisposable)
+        val failed = group(File(repository.root, "mod-b"), "mod-b:test")
+
+        val report = BaseCheck.run(project, record(repository, failed, baseCommit = repository.base))
+
+        assertEquals(listOf(BaseRun.Skipped(BaseNotRun.COULD_NOT_RUN)), report.verdicts.map(BaseGroupVerdict::run))
+        assertEquals(listOf(BaseVerdict.UNKNOWN), report.verdicts.map(BaseGroupVerdict::verdict))
+        assertEquals(1, adapter.calls.size)
     }
 
     fun testTheCheckNeedsAFailedVerificationAndTheExclusiveSession() = runBoundedBlocking {

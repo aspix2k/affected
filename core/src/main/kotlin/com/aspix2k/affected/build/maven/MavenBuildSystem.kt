@@ -4,6 +4,8 @@ import com.aspix2k.affected.AffectedExternalRunBinding
 import com.aspix2k.affected.AffectedRunPresentation
 import com.aspix2k.affected.AffectedRunSessions
 import com.aspix2k.affected.AffectedSettings
+import com.aspix2k.affected.BaseCheckRun
+import com.aspix2k.affected.OutputMarker
 import com.aspix2k.affected.OwnedProcessExecution
 import com.aspix2k.affected.affectedRunLabel
 import com.aspix2k.affected.build.BuildChanges
@@ -15,6 +17,7 @@ import com.aspix2k.affected.build.isJvmTestSourceSet
 import com.aspix2k.affected.build.mavenInvocationArguments
 import com.aspix2k.affected.build.process.ProcessTreeTermination
 import com.aspix2k.affected.currentAffectedRunPresentation
+import com.aspix2k.affected.mavenTestsReached
 import com.aspix2k.affected.recordsDependencies
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.process.ProcessEvent
@@ -26,12 +29,14 @@ import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Key
 import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.util.execution.ParametersListUtil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import org.jetbrains.idea.maven.execution.MavenRunConfigurationType
 import org.jetbrains.idea.maven.execution.MavenRunnerParameters
@@ -66,7 +71,7 @@ private fun mavenRunResult(
     return MavenRunResult(exitCode == 0 && accepted && cleanupSafe, cleanupSafe)
 }
 
-private class MavenRunLifecycle(collector: AtomicReference<MavenCollectorRun?>) {
+private class MavenRunLifecycle(collector: AtomicReference<MavenCollectorRun?>, val reached: OutputMarker? = null) {
     val processTree = AtomicReference<ProcessTreeTermination?>()
     val launchQueued = AtomicBoolean()
     val terminal = CompletableDeferred<MavenRunResult>()
@@ -196,7 +201,8 @@ class MavenBuildSystem internal constructor(
         val recordsDependencies = recordsDependencies()
 
         val collector = AtomicReference<MavenCollectorRun?>()
-        val lifecycle = MavenRunLifecycle(collector)
+        val baseRun = currentCoroutineContext()[BaseCheckRun]
+        val lifecycle = MavenRunLifecycle(collector, baseRun?.let { OutputMarker(::mavenTestsReached) })
         val sessions = AffectedRunSessions.getInstance(project)
         var passed = false
         var cleanupSafe = true
@@ -236,6 +242,7 @@ class MavenBuildSystem internal constructor(
             cleanupSafe = lifecycle.cancelAndAwait()
             throw cancelled
         } finally {
+            baseRun?.record(lifecycle.reached)
             completion = completeMavenRun(lifecycle, collector, passed, cleanupSafe)
             sessions.unregister(lifecycle.execution)
         }
@@ -312,6 +319,10 @@ class MavenBuildSystem internal constructor(
                 }
                 lifecycle.execution.bind(handler)
                 handler.addProcessListener(object : ProcessListener {
+                    override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
+                        lifecycle.reached?.accept(event.text)
+                    }
+
                     override fun processTerminated(event: ProcessEvent) {
                         finish(mavenRunResult(termination, lifecycle.execution, event.exitCode))
                     }
