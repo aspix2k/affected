@@ -1,0 +1,1 @@
+- pytest: a test that reaches a project module by name instead of importing it (`mock.patch("pkg.module.name")`, an aliased `patch` or `importorskip`, `monkeypatch.delattr("pkg.module.name")`, `pytest_plugins`, `loadTestsFromName`, a nested `pytest.main`) could be left out of an exact run when that module changed; such projects now run the full plan.

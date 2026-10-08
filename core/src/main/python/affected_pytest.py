@@ -73,21 +73,29 @@ RISKY_CALLS = {
     "locals",
     "open",
     "patch",
+    "pytest_plugins",
     "setattr",
     "vars",
 }
 RISKY_ATTRIBUTES = {
+    "delattr",
+    "discover",
     "exec_module",
     "import_module",
     "importorskip",
     "load_module",
+    "loadTestsFromName",
+    "loadTestsFromNames",
     "module_from_spec",
     "open",
+    "patch",
     "read_bytes",
     "read_text",
     "setattr",
     "spec_from_file_location",
+    "syspath_prepend",
 }
+NESTED_RUNNERS = {"pytest", "unittest"}
 
 
 class Unsupported(Exception):
@@ -438,10 +446,11 @@ def import_edges(files, module_map, names_by_file):
 
 def reject_dynamic_syntax(tree):
     """Reject code paths that can load project sources outside static imports."""
+    runners = runner_aliases(tree)
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             module = imported_root(node)
-            if module in RISKY_MODULES:
+            if module in RISKY_MODULES or imports_risky_name(node):
                 raise Unsupported("dynamic-dependency")
         if isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name) and node.func.id in RISKY_CALLS:
@@ -462,6 +471,35 @@ def reject_dynamic_syntax(tree):
                 and node.attr == "path"
             ):
                 raise Unsupported("dynamic-dependency")
+            if node.attr == "main" and runner_name(node.value, runners):
+                raise Unsupported("dynamic-dependency")
+
+
+def imports_risky_name(node):
+    """Report a from-import that binds a risky callable, under any local name."""
+    if not isinstance(node, ast.ImportFrom):
+        return False
+    risky = RISKY_CALLS | RISKY_ATTRIBUTES
+    nested = node.level == 0 and node.module in NESTED_RUNNERS
+    return any(
+        alias.name in risky or (nested and alias.name == "main") for alias in node.names
+    )
+
+
+def runner_aliases(tree):
+    """Return the local names bound to the pytest and unittest modules."""
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in NESTED_RUNNERS:
+                    names.add(alias.asname or alias.name)
+    return names
+
+
+def runner_name(node, runners):
+    """Report whether an expression is a local name of a test runner module."""
+    return isinstance(node, ast.Name) and node.id in runners
 
 
 def imported_root(node):
