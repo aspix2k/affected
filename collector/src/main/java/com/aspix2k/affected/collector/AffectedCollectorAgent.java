@@ -4,10 +4,18 @@ import java.io.File;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
 import java.lang.instrument.Instrumentation;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.net.DatagramSocket;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.net.SocketAddress;
 import java.net.URI;
+import java.nio.channels.Channel;
+import java.nio.channels.NetworkChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -45,6 +53,23 @@ public final class AffectedCollectorAgent {
                 "java/net/Socket",
                 "sun/nio/ch/SocketChannelImpl",
                 "sun/nio/ch/AsynchronousSocketChannelImpl"
+            )
+        )
+    );
+    private static final Set<String> DATAGRAM_CLASSES = Collections.unmodifiableSet(
+        new HashSet<String>(Arrays.asList("java/net/DatagramSocket", "sun/nio/ch/DatagramChannelImpl"))
+    );
+    private static final List<String> JDK_PACKAGES =
+        Collections.unmodifiableList(Arrays.asList("java.", "javax.", "jdk.", "sun.", "com.sun."));
+    private static final List<String> BUILD_TOOL_PACKAGES = Collections.unmodifiableList(
+        Arrays.asList("org.gradle.", "worker.org.gradle.", "org.apache.maven.surefire.")
+    );
+    private static final Set<String> LISTENING_CLASSES = Collections.unmodifiableSet(
+        new HashSet<String>(
+            Arrays.asList(
+                "java/net/ServerSocket",
+                "sun/nio/ch/ServerSocketChannelImpl",
+                "sun/nio/ch/AsynchronousServerSocketChannelImpl"
             )
         )
     );
@@ -138,9 +163,17 @@ public final class AffectedCollectorAgent {
         }
     }
 
-    public static void connectionOpened() {
+    public static void connectionOpened(Object connection, Object address) {
         try {
-            STATE.connectionOpened();
+            STATE.connectionOpened(connection, address);
+        } catch (Throwable failure) {
+            STATE.fail(failure);
+        }
+    }
+
+    public static void listenerBound(Object listener) {
+        try {
+            STATE.listenerBound(listener);
         } catch (Throwable failure) {
             STATE.fail(failure);
         }
@@ -150,11 +183,36 @@ public final class AffectedCollectorAgent {
         return STATE.reachedAnotherProcess(testClass);
     }
 
-    private static Class<?>[] jvmBoundaryClasses() throws ClassNotFoundException {
+    private static Class<?>[] jvmBoundaryClasses() {
         List<Class<?>> classes = new ArrayList<Class<?>>();
         classes.add(ProcessBuilder.class);
-        for (String name : CONNECTING_CLASSES) classes.add(Class.forName(name.replace('/', '.'), false, null));
+        Set<String> names = new HashSet<String>(CONNECTING_CLASSES);
+        names.addAll(DATAGRAM_CLASSES);
+        names.addAll(LISTENING_CLASSES);
+        for (String name : names) {
+            try {
+                classes.add(Class.forName(name.replace('/', '.'), false, null));
+            } catch (ClassNotFoundException absent) {
+                continue;
+            }
+        }
         return classes.toArray(new Class<?>[0]);
+    }
+
+    static boolean buildToolConnecting(StackTraceElement[] stack) {
+        for (StackTraceElement frame : stack) {
+            String name = frame.getClassName();
+            if (name.startsWith(AffectedCollectorAgent.class.getName()) || startsWithAny(name, JDK_PACKAGES)) continue;
+            return startsWithAny(name, BUILD_TOOL_PACKAGES);
+        }
+        return false;
+    }
+
+    private static boolean startsWithAny(String name, List<String> prefixes) {
+        for (String prefix : prefixes) {
+            if (name.startsWith(prefix)) return true;
+        }
+        return false;
     }
 
     public static long currentExecutionId() {
@@ -273,6 +331,7 @@ public final class AffectedCollectorAgent {
                 }
                 boolean productionClass = state.observe(className, protectionDomain);
                 if (!productionClass && !state.shouldInstrument(protectionDomain)) return null;
+                state.projectCodeLoaded();
                 if (loader != null && !bridgeVisible(loader)) {
                     if (productionClass) state.fail(new IllegalStateException("collector bridge classloader"));
                     return null;
@@ -309,12 +368,18 @@ public final class AffectedCollectorAgent {
             ProtectionDomain protectionDomain,
             byte[] classfileBuffer
         ) throws IllegalClassFormatException {
-            boolean connecting = CONNECTING_CLASSES.contains(className);
-            if (!connecting && !"java/lang/ProcessBuilder".equals(className)) return null;
             try {
-                return connecting
-                    ? AffectedClassInstrumenter.instrumentConnections(classfileBuffer)
-                    : AffectedClassInstrumenter.instrumentProcessBuilder(classfileBuffer);
+                if (CONNECTING_CLASSES.contains(className)) {
+                    return AffectedClassInstrumenter.instrumentConnections(classfileBuffer);
+                }
+                if (DATAGRAM_CLASSES.contains(className)) {
+                    return AffectedClassInstrumenter.instrumentDatagrams(classfileBuffer);
+                }
+                if (LISTENING_CLASSES.contains(className)) {
+                    return AffectedClassInstrumenter.instrumentListeners(classfileBuffer);
+                }
+                if (!"java/lang/ProcessBuilder".equals(className)) return null;
+                return AffectedClassInstrumenter.instrumentProcessBuilder(classfileBuffer);
             } catch (Throwable failure) {
                 state.fail(failure);
                 return null;
@@ -338,6 +403,15 @@ public final class AffectedCollectorAgent {
             new ConcurrentHashMap<String, Set<String>>();
         private final Set<String> outOfProcess =
             Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+        private final Set<Endpoint> connections =
+            Collections.newSetFromMap(new ConcurrentHashMap<Endpoint, Boolean>());
+        private final Set<Endpoint> listeners =
+            Collections.newSetFromMap(new ConcurrentHashMap<Endpoint, Boolean>());
+        private volatile boolean projectCodeLoaded;
+        private final AtomicLong unattributedConnections = new AtomicLong();
+        private final AtomicLong attributedConnections = new AtomicLong();
+        private final ConcurrentMap<String, Long> connectionsBefore = new ConcurrentHashMap<String, Long>();
+        private final ConcurrentMap<String, Long> connectionsAfter = new ConcurrentHashMap<String, Long>();
         private final ThreadLocal<ThreadState> threadStates =
             new ThreadLocal<ThreadState>() {
                 @Override
@@ -367,6 +441,13 @@ public final class AffectedCollectorAgent {
             executions.clear();
             staticReferences.clear();
             outOfProcess.clear();
+            connections.clear();
+            listeners.clear();
+            projectCodeLoaded = false;
+            unattributedConnections.set(0L);
+            attributedConnections.set(0L);
+            connectionsBefore.clear();
+            connectionsAfter.clear();
             threadStates.remove();
             codeSources = Collections.emptyMap();
             instrumentationSources = Collections.emptyMap();
@@ -496,7 +577,16 @@ public final class AffectedCollectorAgent {
             if (executionId <= 0L) throw new IllegalStateException("execution id");
             ExecutionContext context = new ExecutionContext(token, testClass, executionId);
             if (executions.putIfAbsent(token, context) != null) throw new IllegalStateException("execution token");
-            threadStates.get().push(context);
+            long opened = unattributedConnections.get();
+            connectionsBefore.putIfAbsent(testClass, opened);
+            connectionsAfter.remove(testClass);
+            ThreadState thread = threadStates.get();
+            if (attributedConnections.getAndSet(opened) != opened || thread.connected || hasOpenConnection()) {
+                outOfProcess.add(testClass);
+            }
+            thread.connected = false;
+            thread.lastClass = testClass;
+            thread.push(context);
             publishExecutionId(executionId);
         }
 
@@ -542,21 +632,96 @@ public final class AffectedCollectorAgent {
 
         void processStarted(List<String> command) {
             if (command != null && command.contains(SELF_ATTACH_HELPER)) return;
-            if (executions.isEmpty()) throw new IllegalStateException("process started outside a test");
-            connectionOpened();
-        }
-
-        void connectionOpened() {
             ExecutionContext context = threadStates.get().current;
             if (context != null && context.active.get()) {
                 outOfProcess.add(context.testClass);
                 return;
             }
+            if (executions.isEmpty()) throw new IllegalStateException("process started outside a test");
             for (ExecutionContext active : executions.values()) outOfProcess.add(active.testClass);
         }
 
+        void projectCodeLoaded() {
+            projectCodeLoaded = true;
+        }
+
+        void listenerBound(Object listener) {
+            if (listener != null) listeners.add(new Endpoint(listener));
+        }
+
+        void connectionOpened(Object connection, Object address) {
+            if (connection == null || inProcess(address)) return;
+            if (!projectCodeLoaded) {
+                if (!buildToolConnecting(new Throwable().getStackTrace())) connections.add(new Endpoint(connection));
+                return;
+            }
+            ThreadState thread = threadStates.get();
+            if (thread.current == null || !thread.current.active.get()) {
+                unattributedConnections.incrementAndGet();
+                thread.connected = true;
+                if (thread.lastClass != null) outOfProcess.add(thread.lastClass);
+            }
+            connections.add(new Endpoint(connection));
+            for (ExecutionContext active : executions.values()) outOfProcess.add(active.testClass);
+        }
+
+        private boolean hasOpenConnection() {
+            Iterator<Endpoint> remembered = connections.iterator();
+            while (remembered.hasNext()) {
+                Object connection = remembered.next().get();
+                if (connection != null && open(connection)) return true;
+                remembered.remove();
+            }
+            return false;
+        }
+
+        private boolean inProcess(Object address) {
+            if (!(address instanceof InetSocketAddress)) return false;
+            InetSocketAddress target = (InetSocketAddress) address;
+            if (target.isUnresolved() || !target.getAddress().isLoopbackAddress()) return false;
+            Iterator<Endpoint> bindings = listeners.iterator();
+            while (bindings.hasNext()) {
+                Object listener = bindings.next().get();
+                if (listener == null || !open(listener)) {
+                    bindings.remove();
+                    continue;
+                }
+                InetSocketAddress bound = boundAddress(listener);
+                if (bound != null && bound.getPort() == target.getPort()
+                    && (bound.getAddress().isAnyLocalAddress() || bound.getAddress().equals(target.getAddress()))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static boolean open(Object endpoint) {
+            if (endpoint instanceof Socket) return !((Socket) endpoint).isClosed();
+            if (endpoint instanceof ServerSocket) return !((ServerSocket) endpoint).isClosed();
+            if (endpoint instanceof DatagramSocket) return !((DatagramSocket) endpoint).isClosed();
+            return !(endpoint instanceof Channel) || ((Channel) endpoint).isOpen();
+        }
+
+        private static InetSocketAddress boundAddress(Object listener) {
+            try {
+                SocketAddress address = listener instanceof ServerSocket
+                    ? ((ServerSocket) listener).getLocalSocketAddress()
+                    : listener instanceof NetworkChannel ? ((NetworkChannel) listener).getLocalAddress() : null;
+                return address instanceof InetSocketAddress ? (InetSocketAddress) address : null;
+            } catch (Exception closed) {
+                return null;
+            }
+        }
+
         boolean reachedAnotherProcess(String testClass) {
-            return outOfProcess.contains(testClass);
+            if (outOfProcess.contains(testClass)) return true;
+            Long before = connectionsBefore.get(testClass);
+            if (before == null) return false;
+            long opened = unattributedConnections.get();
+            Long finished = connectionsAfter.putIfAbsent(testClass, opened);
+            if (before == (finished == null ? opened : finished)) return false;
+            outOfProcess.add(testClass);
+            return true;
         }
 
         void nativeMethod() {
@@ -677,6 +842,13 @@ public final class AffectedCollectorAgent {
             executions.clear();
             staticReferences.clear();
             outOfProcess.clear();
+            connections.clear();
+            listeners.clear();
+            projectCodeLoaded = false;
+            unattributedConnections.set(0L);
+            attributedConnections.set(0L);
+            connectionsBefore.clear();
+            connectionsAfter.clear();
             threadStates.remove();
             codeSources = Collections.emptyMap();
             instrumentationSources = Collections.emptyMap();
@@ -791,6 +963,8 @@ public final class AffectedCollectorAgent {
             private ExecutionContext current;
             private ExecutionContext lastContext;
             private Class<?> lastType;
+            private String lastClass;
+            private boolean connected;
 
             private void push(ExecutionContext context) {
                 executions.push(context);
@@ -816,6 +990,27 @@ public final class AffectedCollectorAgent {
                 lastContext = context;
                 lastType = type;
                 return cache.seenTop(context.testClass, type);
+            }
+        }
+
+        private static final class Endpoint extends WeakReference<Object> {
+            private final int identity;
+
+            private Endpoint(Object referent) {
+                super(referent);
+                identity = System.identityHashCode(referent);
+            }
+
+            @Override
+            public int hashCode() {
+                return identity;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                if (this == other) return true;
+                Object referent = get();
+                return referent != null && other instanceof Endpoint && referent == ((Endpoint) other).get();
             }
         }
 

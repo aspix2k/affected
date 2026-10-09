@@ -732,6 +732,33 @@ public class GradleInjectionTest {
                 "try (java.net.Socket socket = new java.net.Socket(\"127.0.0.1\", Integer.getInteger(\"fixture.port\"))) { " +
                 "assertEquals('2', socket.getInputStream().read()); } Executions.mark(\"RemoteTest\"); } }\n"
         );
+        write(
+            project.resolve("src/test/java/fixture/RemoteChannelTest.java"),
+            "package fixture; import org.junit.jupiter.api.Test; import static org.junit.jupiter.api.Assertions.*; " +
+                "public final class RemoteChannelTest { @Test void remote() throws Exception { " +
+                "try (java.nio.channels.SocketChannel channel = java.nio.channels.SocketChannel.open(" +
+                "new java.net.InetSocketAddress(\"127.0.0.1\", Integer.getInteger(\"fixture.port\")))) { " +
+                "java.nio.ByteBuffer buffer = java.nio.ByteBuffer.allocate(1); channel.read(buffer); " +
+                "assertEquals('2', buffer.get(0)); } Executions.mark(\"RemoteChannelTest\"); } }\n"
+        );
+        write(
+            project.resolve("src/test/java/fixture/DatagramTest.java"),
+            "package fixture; import org.junit.jupiter.api.Test; " +
+                "public final class DatagramTest { @Test void datagram() throws Exception { " +
+                "try (java.net.DatagramSocket socket = new java.net.DatagramSocket()) { " +
+                "socket.send(new java.net.DatagramPacket(new byte[] {2}, 1, " +
+                "java.net.InetAddress.getByName(\"127.0.0.1\"), Integer.getInteger(\"fixture.port\"))); } " +
+                "Executions.mark(\"DatagramTest\"); } }\n"
+        );
+        write(
+            project.resolve("src/test/java/fixture/LoopbackTest.java"),
+            "package fixture; import org.junit.jupiter.api.Test; import static org.junit.jupiter.api.Assertions.*; " +
+                "public final class LoopbackTest { @Test void loopback() throws Exception { " +
+                "try (java.net.ServerSocket server = new java.net.ServerSocket(0); " +
+                "java.net.Socket client = new java.net.Socket(\"127.0.0.1\", server.getLocalPort()); " +
+                "java.net.Socket accepted = server.accept()) { accepted.getOutputStream().write('2'); " +
+                "assertEquals('2', client.getInputStream().read()); } Executions.mark(\"LoopbackTest\"); } }\n"
+        );
         try (java.net.ServerSocket server = new java.net.ServerSocket(0, 8, java.net.InetAddress.getByName("127.0.0.1"))) {
             Thread responder = new Thread(() -> {
                 while (!server.isClosed()) {
@@ -747,14 +774,18 @@ public class GradleInjectionTest {
             String port = "-Dfixture.port=" + server.getLocalPort();
 
             BuildResult baseline = run(project, baselineOutput, "testDebugUnitTest", true, port);
-            assertComplete(baselineOutput, 7, baseline.getOutput());
+            assertComplete(baselineOutput, 10, baseline.getOutput());
             promote(baselineOutput, project.resolve(".affected/maps"));
             writeBeta(project, "int result = 2; return result;");
             clearExecuted(project);
 
             BuildResult exact = run(project, exactOutput, "testDebugUnitTest", true, port);
 
-            assertEquals(exact.getOutput(), setOf("BetaTest", "DeltaTest", "RemoteTest"), executedTests(project));
+            assertEquals(
+                exact.getOutput(),
+                setOf("BetaTest", "DeltaTest", "RemoteTest", "RemoteChannelTest", "DatagramTest"),
+                executedTests(project)
+            );
         }
     }
 
