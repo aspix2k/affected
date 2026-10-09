@@ -136,11 +136,21 @@ public final class AffectedTestExecutionListener implements TestExecutionListene
         return enclosing;
     }
 
+    private boolean reachedAnotherProcess(String testClass) {
+        if (AffectedCollectorAgent.reachedAnotherProcess(testClass)) return true;
+        Set<String> enclosing = enclosingClasses.get(testClass);
+        if (enclosing == null) return false;
+        for (String enclosingClass : enclosing) {
+            if (AffectedCollectorAgent.reachedAnotherProcess(enclosingClass)) return true;
+        }
+        return false;
+    }
+
     private void writeClassMap(String testClass) {
         CollectorOutput current = output;
         if (current == null) return;
         try {
-            if (skippedClasses.contains(testClass)) {
+            if (skippedClasses.contains(testClass) || reachedAnotherProcess(testClass)) {
                 current.writeUnknownMap(testClass);
                 return;
             }
