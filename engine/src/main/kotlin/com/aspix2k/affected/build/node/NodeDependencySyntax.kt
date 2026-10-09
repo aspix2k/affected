@@ -18,6 +18,15 @@ internal fun hasDynamicNodeDependency(source: String): Boolean {
     return false
 }
 
+internal fun reachesNodeFilesWithoutImport(source: String): Boolean =
+    FILE_OR_PROCESS_ACCESS.containsMatchIn(
+        NAMED_FS_BINDINGS.replace(source) { match -> if (match.bindsOnlyFileWriters()) "" else match.value },
+    )
+
+private fun MatchResult.bindsOnlyFileWriters(): Boolean =
+    groupValues.drop(1).joinToString(",").split(',').map(String::trim).filter(String::isNotEmpty)
+        .all { binding -> binding.substringBefore(" as ").substringBefore(':').trim() in FILE_WRITERS }
+
 private fun String.hasImportMetaGlobAt(start: Int): Boolean {
     val meta = skipTrivia(start + "import".length) ?: return true
     if (!startsWith(".meta", meta)) return false
@@ -90,3 +99,32 @@ private fun String.hasSingleLiteralArgument(from: Int): Boolean {
     }
     return false
 }
+
+private val FILE_OR_PROCESS_ACCESS = Regex(
+    """["'`](?:node:)?(?:child_process|cluster|fs|fs/promises|vm|worker_threads)["'`]""" +
+        """|["'`]node:module["'`]""" +
+        """|["'`](?:cross-spawn|execa|nano-spawn|shelljs|tinyexec|zx)["'`]""" +
+        """|["'`](?:fast-glob|fs-extra|glob|globby|tinyglobby)["'`]""" +
+        """|\bnew\s+Worker\b|\btoMatchFileSnapshot\b|\bBun\s*\.|\bDeno\s*\.""",
+)
+private val NAMED_FS_BINDINGS = Regex(
+    """\bimport\s*\{([^}]*)\}\s*from\s*["'](?:node:)?fs(?:/promises)?["']""" +
+        """|\b(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require\(\s*["'](?:node:)?fs(?:/promises)?["']\s*\)""",
+)
+private val FILE_WRITERS = setOf(
+    "appendFile",
+    "appendFileSync",
+    "existsSync",
+    "mkdir",
+    "mkdirSync",
+    "mkdtemp",
+    "mkdtempSync",
+    "rm",
+    "rmSync",
+    "rmdir",
+    "rmdirSync",
+    "unlink",
+    "unlinkSync",
+    "writeFile",
+    "writeFileSync",
+)
