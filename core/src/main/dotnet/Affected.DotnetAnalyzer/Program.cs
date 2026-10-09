@@ -76,6 +76,9 @@ internal sealed class AssemblyAnalyzer : IDisposable
     [
         "System.Activator",
         "System.AppDomain",
+        "System.ComponentModel.Composition.",
+        "System.Composition.",
+        "System.Diagnostics.Process",
         "System.Environment",
         "System.IO.Directory",
         "System.IO.File",

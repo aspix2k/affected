@@ -1,0 +1,1 @@
+- Gradle and Maven exact selection: a test that talks to a process it did not start — a reused Gradle TestKit daemon, a server the build starts before the tests, a container — leaves no trace of the code running there. A test class that opens a client socket connection during its run is now selected with every change.
