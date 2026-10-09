@@ -1,0 +1,1 @@
+- Go: a package that uses another package only from its tests (`TestImports`, `XTestImports`) was not treated as depending on it, so its tests were not run as dependents when that package changed; this left out the usual end-to-end and integration test packages.

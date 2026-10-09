@@ -129,6 +129,110 @@ class KotlinToolchainCommandTest {
     }
 
     @Test
+    fun `module yaml dependencies connect the modules of a project`() {
+        val root = toolchainRoot()
+        File(root, "project.yaml").writeText("modules:\n  - ./app\n  - ./libs/core\n  - ./libs/jvm\n  - ./testing\n")
+        File(root, "common.module-template.yaml").writeText("test-dependencies:\n  - ./testing\n")
+        File(root, "app/module.yaml").apply {
+            parentFile.mkdirs()
+            writeText(
+                "product: jvm/app\n\napply:\n  - ../common.module-template.yaml\n\n" +
+                    "dependencies:\n  - ../libs/core: exported\n  - io.ktor:ktor-client-core:3.0.0\n\n" +
+                    "dependencies@jvm:\n  - \"../libs/jvm\"\n  - ../missing\n  - ../../outside\n",
+            )
+        }
+        File(root, "libs/core/module.yaml").apply {
+            parentFile.mkdirs()
+            writeText("product: jvm/lib\n\ntest-dependencies:\n  - ../../testing\n  - ../core\n")
+        }
+        File(root, "libs/jvm/module.yaml").apply {
+            parentFile.mkdirs()
+            writeText("product: jvm/lib\n\ndependencies:\n  - ../..\n")
+        }
+        File(root, "testing/module.yaml").apply {
+            parentFile.mkdirs()
+            writeText("product: jvm/lib\n\nsettings:\n  kotlin:\n    dependencies:\n      - ../app\n")
+        }
+
+        val modules = requireNotNull(kotlinToolchainModules(root)).associateBy(BuildModule::executionId)
+        val keys = modules.mapValues { it.value.key }
+
+        assertEquals(emptySet(), modules.getValue(".").dependencies)
+        assertEquals(
+            setOf(keys.getValue("libs/core"), keys.getValue("libs/jvm"), keys.getValue("testing")),
+            modules.getValue("app").dependencies,
+        )
+        assertEquals(setOf(keys.getValue("testing")), modules.getValue("libs/core").dependencies)
+        assertEquals(setOf(keys.getValue(".")), modules.getValue("libs/jvm").dependencies)
+        assertEquals(emptySet(), modules.getValue("testing").dependencies)
+    }
+
+    @Test
+    fun `module yaml dependencies are read through line endings, list styles and nested templates`() {
+        val root = toolchainRoot()
+        File(root, "project.yaml").writeText("modules:\n  - ./app\n  - ./core\n  - ./jvm\n  - ./testing\n")
+        File(root, "templates/base.module-template.yaml").apply {
+            parentFile.mkdirs()
+            writeText("test-dependencies:\n  - ../testing\n")
+        }
+        File(root, "common.module-template.yaml").writeText(
+            "apply:\n  - templates/base.module-template.yaml\n  - ./common.module-template.yaml\n",
+        )
+        File(root, "app/module.yaml").apply {
+            parentFile.mkdirs()
+            writeText(
+                "product: jvm/app\r\napply: # shared\r\n- ../common.module-template.yaml\r\n" +
+                    "dependencies:\r\n- \$libs.ktor\r\n# api\r\n- ../core # api\r\n" +
+                    "dependencies@ios_x:\r\n  - ../jvm:\r\n      exported: true\r\n",
+            )
+        }
+        listOf("core", "jvm", "testing").forEach { name ->
+            File(root, "$name/module.yaml").apply {
+                parentFile.mkdirs()
+                writeText("product: jvm/lib\n")
+            }
+        }
+
+        val modules = requireNotNull(kotlinToolchainModules(root)).associateBy(BuildModule::executionId)
+
+        assertEquals(
+            setOf("core", "jvm", "testing").mapTo(HashSet()) { modules.getValue(it).key },
+            modules.getValue("app").dependencies,
+        )
+    }
+
+    @Test
+    fun `a module yaml dependency that cannot be read connects the module to every other module`() {
+        val everything = listOf(
+            "dependencies: [../core]\n",
+            "dependencies:\n  - ../my lib\n",
+            "dependencies:\n  - ..\\core\n",
+            "apply:\n  - ../missing.module-template.yaml\n",
+        )
+        for (manifest in everything) {
+            val root = toolchainRoot()
+            File(root, "project.yaml").writeText("modules:\n  - ./app\n  - ./core\n")
+            File(root, "app/module.yaml").apply {
+                parentFile.mkdirs()
+                writeText("product: jvm/app\n$manifest")
+            }
+            File(root, "core/module.yaml").apply {
+                parentFile.mkdirs()
+                writeText("product: jvm/lib\n")
+            }
+
+            val modules = requireNotNull(kotlinToolchainModules(root)).associateBy(BuildModule::executionId)
+
+            assertEquals(
+                setOf(modules.getValue(".").key, modules.getValue("core").key),
+                modules.getValue("app").dependencies,
+                manifest,
+            )
+            assertEquals(emptySet(), modules.getValue("core").dependencies, manifest)
+        }
+    }
+
+    @Test
     fun `a glob in project yaml keeps the root module`() {
         val root = toolchainRoot()
         File(root, "project.yaml").writeText("modules:\n  - ./plugins/*\n")
