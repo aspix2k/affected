@@ -1,0 +1,1 @@
+- Pest: a changed file inside a test suite that is not a test — a base `TestCase.php`, a factory, a fixture, a trait — was passed to Pest as the only path to run, so the tests that use it were skipped. Only `*Test.php` and `.phpt` files are run by path now; any other change inside a suite runs the whole suite. A production change imported by such a file runs the whole suite too.
