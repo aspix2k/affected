@@ -38,6 +38,16 @@ import java.util.stream.Stream;
 public final class AffectedCollectorAgent {
     static final String CODE_SOURCES_PROPERTY = "affected.collector.codeSources";
     static final String TEST_CODE_SOURCES_PROPERTY = "affected.collector.testClasses";
+    private static final String SELF_ATTACH_HELPER = "net.bytebuddy.agent.Attacher";
+    private static final Set<String> CONNECTING_CLASSES = Collections.unmodifiableSet(
+        new HashSet<String>(
+            Arrays.asList(
+                "java/net/Socket",
+                "sun/nio/ch/SocketChannelImpl",
+                "sun/nio/ch/AsynchronousSocketChannelImpl"
+            )
+        )
+    );
     private static final long[] THREAD_EXECUTION_IDS = new long[65_536];
     private static final CollectorState STATE = new CollectorState();
     private static volatile AffectedMavenConfig.ProjectConfig mavenConfig;
@@ -53,6 +63,8 @@ public final class AffectedCollectorAgent {
             STATE.configure(codeSources(), paths(TEST_CODE_SOURCES_PROPERTY));
             AffectedClassInstrumenter.initialize();
             instrumentation.addTransformer(new CollectorTransformer(STATE), false);
+            instrumentation.addTransformer(new JvmBoundaryTransformer(STATE), true);
+            instrumentation.retransformClasses(jvmBoundaryClasses());
         } catch (Throwable failure) {
             STATE.fail(failure);
         }
@@ -116,6 +128,33 @@ public final class AffectedCollectorAgent {
 
     public static long executionId() {
         return STATE.executionId();
+    }
+
+    public static void processStarted(List<String> command) {
+        try {
+            STATE.processStarted(command);
+        } catch (Throwable failure) {
+            STATE.fail(failure);
+        }
+    }
+
+    public static void connectionOpened() {
+        try {
+            STATE.connectionOpened();
+        } catch (Throwable failure) {
+            STATE.fail(failure);
+        }
+    }
+
+    public static boolean reachedAnotherProcess(String testClass) {
+        return STATE.reachedAnotherProcess(testClass);
+    }
+
+    private static Class<?>[] jvmBoundaryClasses() throws ClassNotFoundException {
+        List<Class<?>> classes = new ArrayList<Class<?>>();
+        classes.add(ProcessBuilder.class);
+        for (String name : CONNECTING_CLASSES) classes.add(Class.forName(name.replace('/', '.'), false, null));
+        return classes.toArray(new Class<?>[0]);
     }
 
     public static long currentExecutionId() {
@@ -255,6 +294,34 @@ public final class AffectedCollectorAgent {
         }
     }
 
+    static final class JvmBoundaryTransformer implements ClassFileTransformer {
+        private final CollectorState state;
+
+        JvmBoundaryTransformer(CollectorState state) {
+            this.state = state;
+        }
+
+        @Override
+        public byte[] transform(
+            ClassLoader loader,
+            String className,
+            Class<?> classBeingRedefined,
+            ProtectionDomain protectionDomain,
+            byte[] classfileBuffer
+        ) throws IllegalClassFormatException {
+            boolean connecting = CONNECTING_CLASSES.contains(className);
+            if (!connecting && !"java/lang/ProcessBuilder".equals(className)) return null;
+            try {
+                return connecting
+                    ? AffectedClassInstrumenter.instrumentConnections(classfileBuffer)
+                    : AffectedClassInstrumenter.instrumentProcessBuilder(classfileBuffer);
+            } catch (Throwable failure) {
+                state.fail(failure);
+                return null;
+            }
+        }
+    }
+
     static final class CollectorState {
         private static final int MAX_CLASSES = 1_000_000;
         private final AtomicBoolean initialized = new AtomicBoolean();
@@ -269,6 +336,8 @@ public final class AffectedCollectorAgent {
             new ConcurrentHashMap<String, ExecutionContext>();
         private final ConcurrentMap<String, Set<String>> staticReferences =
             new ConcurrentHashMap<String, Set<String>>();
+        private final Set<String> outOfProcess =
+            Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
         private final ThreadLocal<ThreadState> threadStates =
             new ThreadLocal<ThreadState>() {
                 @Override
@@ -297,6 +366,7 @@ public final class AffectedCollectorAgent {
             catalog.clear();
             executions.clear();
             staticReferences.clear();
+            outOfProcess.clear();
             threadStates.remove();
             codeSources = Collections.emptyMap();
             instrumentationSources = Collections.emptyMap();
@@ -470,6 +540,25 @@ public final class AffectedCollectorAgent {
             return Long.MIN_VALUE;
         }
 
+        void processStarted(List<String> command) {
+            if (command != null && command.contains(SELF_ATTACH_HELPER)) return;
+            if (executions.isEmpty()) throw new IllegalStateException("process started outside a test");
+            connectionOpened();
+        }
+
+        void connectionOpened() {
+            ExecutionContext context = threadStates.get().current;
+            if (context != null && context.active.get()) {
+                outOfProcess.add(context.testClass);
+                return;
+            }
+            for (ExecutionContext active : executions.values()) outOfProcess.add(active.testClass);
+        }
+
+        boolean reachedAnotherProcess(String testClass) {
+            return outOfProcess.contains(testClass);
+        }
+
         void nativeMethod() {
             fail(new IllegalStateException("production native method"));
         }
@@ -587,6 +676,7 @@ public final class AffectedCollectorAgent {
             catalog.clear();
             executions.clear();
             staticReferences.clear();
+            outOfProcess.clear();
             threadStates.remove();
             codeSources = Collections.emptyMap();
             instrumentationSources = Collections.emptyMap();

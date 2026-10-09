@@ -514,6 +514,7 @@ class AffectedRunSessionsTest {
     private class RecordingCancellation(
         private val cancel: (ExternalSystemTaskId) -> Boolean,
     ) {
+        @Volatile
         private var termination: (() -> Unit)? = null
 
         @Suppress("UNUSED_PARAMETER")
@@ -523,11 +524,8 @@ class AffectedRunSessionsTest {
             onMonitoringStopped: () -> Unit,
             onCancelAttemptsExhausted: () -> Unit,
         ): Boolean {
-            val accepted = cancel(id)
-            if (accepted) {
-                termination = onTerminated
-            }
-            return accepted
+            termination = onTerminated
+            return cancel(id)
         }
 
         fun terminate() {

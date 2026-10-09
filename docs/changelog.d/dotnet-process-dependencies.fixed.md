@@ -1,0 +1,1 @@
+- .NET: a test that starts another project's program with `System.Diagnostics.Process`, or loads parts through MEF (`System.ComponentModel.Composition`, `System.Composition`), does not reference that code in its own assembly, so an exact run could leave the test out when the started or loaded project changed; such code now keeps the full plan.
