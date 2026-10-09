@@ -2,6 +2,9 @@ package com.aspix2k.affected.build.python
 
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.ManifestSearch
+import org.tomlj.Toml
+import org.tomlj.TomlArray
+import org.tomlj.TomlTable
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -25,10 +28,11 @@ object PythonProjects {
         }
         val names = described.map { it.name }.toSet()
         if (names.size != described.size) return emptyList()
+        val local = names.associateBy(::distributionName)
 
         return described.map { entry ->
             val dependencies = entry.dependencies
-                .filter { it in names }
+                .mapNotNull { local[distributionName(it)] }
                 .mapTo(HashSet()) { "$rootPath|$it" }
             val runnable = entry.hasTests || entry.typed
 
@@ -55,14 +59,15 @@ object PythonProjects {
 
     private fun describe(manifest: File, nestedRoots: Set<Path>): Described? {
         val directory = manifest.parentFile ?: return null
-        val lines = ManifestSearch.readText(manifest)?.lineSequence()?.toList() ?: return null
+        val text = ManifestSearch.readText(manifest) ?: return null
+        val lines = text.lineSequence().toList()
 
         val name = valueOf(lines, "name") ?: return null
 
         return Described(
             name = name,
             directory = directory.invariantSeparatorsPath,
-            dependencies = dependenciesOf(lines),
+            dependencies = dependenciesOf(lines) + groupedDependencies(text),
             hasTests = hasTests(directory, nestedRoots) ?: return null,
             typed = lines.any { it.trim().startsWith("[tool.mypy") } || File(directory, "mypy.ini").isFile,
         )
@@ -95,6 +100,24 @@ object PythonProjects {
         return result
     }
 
+    private fun groupedDependencies(text: String): Set<String> = runCatching {
+        val manifest = Toml.parse(text).takeUnless { it.hasErrors() } ?: return emptySet()
+        val poetry = manifest.get("tool.poetry") as? TomlTable
+        val poetryGroups = (poetry?.get("group") as? TomlTable)?.let { groups ->
+            groups.keySet().mapNotNull { (groups.get(listOf(it)) as? TomlTable)?.get("dependencies") }
+        }.orEmpty()
+        val poetryTables = listOf(poetry?.get("dependencies"), poetry?.get("dev-dependencies")) + poetryGroups
+        val groups = REQUIREMENT_GROUPS.mapNotNull { manifest.get(it) as? TomlTable }
+            .flatMap { group -> group.keySet().map { group.get(listOf(it)) } }
+        val requirements = (groups + manifest.get("tool.uv.dev-dependencies"))
+            .filterIsInstance<TomlArray>()
+            .flatMap { array -> array.toList().filterIsInstance<String>() }
+        val poetryNames = poetryTables.filterIsInstance<TomlTable>().flatMap { it.keySet() }
+        requirements.flatMapTo(HashSet(), ::namesIn) + poetryNames
+    }.getOrDefault(emptySet())
+
+    private fun distributionName(name: String): String = name.lowercase().replace(NAME_SEPARATORS, "-")
+
     private fun namesIn(fragment: String): List<String> = fragment
         .split(',')
         .map { it.trim().trim('[', ']').trim('"', '\'') }
@@ -117,4 +140,6 @@ object PythonProjects {
 
     private val DEPENDENCY_KEYS = listOf("dependencies =", "dependencies=", "install_requires =")
     private val TEST_DIRS = listOf("tests", "test")
+    private val REQUIREMENT_GROUPS = listOf("project.optional-dependencies", "dependency-groups")
+    private val NAME_SEPARATORS = Regex("[-_.]+")
 }
