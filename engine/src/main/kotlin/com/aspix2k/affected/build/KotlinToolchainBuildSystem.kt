@@ -132,8 +132,38 @@ internal fun kotlinToolchainModules(root: File): List<BuildModule>? {
             executionId = relative,
         )
     }
-    return modules.values.toList().takeIf { it.isNotEmpty() }
+    return kotlinToolchainDependencies(root, modules).takeIf { it.isNotEmpty() }
 }
+
+private fun kotlinToolchainDependencies(root: File, modules: Map<String, BuildModule>): List<BuildModule> {
+    val rootPath = root.toPath().toAbsolutePath().normalize()
+    return modules.map { (relative, module) ->
+        val declared = kotlinToolchainDeclaredModules(File(File(root, relative), "module.yaml"), HashSet())
+        val ids = declared?.mapNotNull { directory ->
+            val path = directory.toPath().toAbsolutePath().normalize()
+            if (!path.startsWith(rootPath)) return@mapNotNull null
+            modules[rootPath.relativize(path).joinToString("/").ifEmpty { "." }]?.id
+        } ?: modules.values.map(BuildModule::id)
+        module.copy(dependencies = ids.filter { it != module.id }.mapTo(HashSet()) { "${module.root}|$it" })
+    }
+}
+
+private fun kotlinToolchainDeclaredModules(manifest: File, seen: MutableSet<String>): List<File>? {
+    if (!seen.add(manifest.absoluteFile.normalize().invariantSeparatorsPath)) return emptyList()
+    val text = runCatching { manifest.readText() }.getOrNull()?.replace("\r\n", "\n") ?: return null
+    val own = kotlinToolchainPaths(manifest, text, DEPENDENCY_SECTION, MODULE_ENTRY) ?: return null
+    val templates = kotlinToolchainPaths(manifest, text, TEMPLATE_SECTION, TEMPLATE_ENTRY) ?: return null
+    return own + templates.flatMap { kotlinToolchainDeclaredModules(it, seen) ?: return null }
+}
+
+private fun kotlinToolchainPaths(manifest: File, text: String, section: Regex, entries: Regex): List<File>? =
+    section.findAll(text).toList().flatMap { block ->
+        if (block.groupValues[1].isNotEmpty()) return null
+        entries.findAll(block.groupValues[2]).toList().map { entry ->
+            if (!PATH_ENTRY_TAIL.matches(entry.groupValues[2])) return null
+            File(manifest.parentFile, entry.groupValues[1])
+        }
+    }
 
 internal fun kotlinToolchainRequiresWorkspace(root: String, changes: BuildChanges): Boolean {
     val rootPath = File(root).toPath().toAbsolutePath().normalize()
@@ -206,6 +236,12 @@ private fun kotlinToolchainSourceFile(file: File): Boolean =
 private val TOOLCHAIN_YAML = listOf("project.yaml", "module.yaml")
 private val GRADLE_SETTINGS = listOf("settings.gradle.kts", "settings.gradle")
 private val MODULES_SECTION = Regex("""(?m)^modules:\s*\n((?:[ \t]+.*\n?)*)""")
+private const val SECTION_BODY = """[ \t]*([^\s#][^\n]*)?(?:#[^\n]*)?\n((?:[ \t]+[^\n]*\n?|[-#][^\n]*\n?|[ \t]*\n)*)"""
+private val DEPENDENCY_SECTION = Regex("""(?m)^(?:test-)?dependencies(?:@[^\s:]+)?:$SECTION_BODY""")
+private val TEMPLATE_SECTION = Regex("""(?m)^apply:$SECTION_BODY""")
+private val MODULE_ENTRY = Regex("""(?m)^[ \t]*-[ \t]+["']?(\.{1,2}(?:/[^\s:"'#]*)?)([^\n]*)$""")
+private val TEMPLATE_ENTRY = Regex("""(?m)^[ \t]*-[ \t]+["']?([^\s:"'#]+)([^\n]*)$""")
+private val PATH_ENTRY_TAIL = Regex("""["']?[ \t]*(?::.*)?(?:#.*)?""")
 private val UNPROVED_TOOLCHAIN_MODULE = Regex("""[*?\[]|\*\*""")
 private val TOOLCHAIN_MODULE_PATH = Regex("""(?m)^[ \t]*-[ \t]+(?:\./)?([A-Za-z0-9][A-Za-z0-9_./-]*)[ \t]*$""")
 private val MODULE_NAME = Regex("""[A-Za-z0-9][A-Za-z0-9_./-]*""")
