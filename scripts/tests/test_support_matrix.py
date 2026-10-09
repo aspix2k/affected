@@ -660,7 +660,7 @@ class SupportMatrixTest(unittest.TestCase):
                 )
 
     def test_repository_product_verifier_matrix_has_all_governed_cells(self) -> None:
-        """Pin the complete production matrix and its exceptional descriptor state."""
+        """Pin the complete production matrix and its descriptor states."""
         root = Path(__file__).resolve().parents[2]
         matrix = support_matrix.validated(
             root,
@@ -673,14 +673,7 @@ class SupportMatrixTest(unittest.TestCase):
         self.assertEqual(18, len(cells))
         self.assertEqual(9, len({cell["product"] for cell in cells}))
         self.assertTrue(all(cell["maven"] == "unavailable" for cell in cells))
-        self.assertEqual(
-            ["unavailable"],
-            [
-                cell["gradle"]
-                for cell in cells
-                if cell["product"] == "dataspell" and cell["endpoint"] == "current"
-            ],
-        )
+        self.assertTrue(all(cell["gradle"] == "present" for cell in cells))
 
     def test_product_verifier_matrix_cli_emits_bounded_json(self) -> None:
         """Expose the validated cells without teaching the workflow the schema."""

@@ -116,7 +116,10 @@ tasks.jar {
         include("org/jetbrains/org/objectweb/asm/**")
     }
     manifest {
-        attributes("Premain-Class" to "com.aspix2k.affected.collector.AffectedCollectorAgent")
+        attributes(
+            "Premain-Class" to "com.aspix2k.affected.collector.AffectedCollectorAgent",
+            "Can-Retransform-Classes" to "true",
+        )
     }
 }
 
@@ -155,7 +158,10 @@ val mavenAgentJar = tasks.register<Jar>("mavenAgentJar") {
         include("org/jetbrains/org/objectweb/asm/**")
     }
     manifest {
-        attributes("Premain-Class" to "com.aspix2k.affected.collector.AffectedCollectorAgent")
+        attributes(
+            "Premain-Class" to "com.aspix2k.affected.collector.AffectedCollectorAgent",
+            "Can-Retransform-Classes" to "true",
+        )
     }
 }
 

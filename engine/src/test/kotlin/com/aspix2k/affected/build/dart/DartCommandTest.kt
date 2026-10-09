@@ -109,6 +109,36 @@ class DartCommandTest {
     }
 
     @Test
+    fun `a pub workspace member depends on the members its pubspec names`() {
+        val root = dartWorkspace()
+        File(root, "packages/alpha/pubspec.yaml").writeText(
+            "name: alpha_pkg\nresolution: workspace\nenvironment:\n  sdk: ^3.13.0\n",
+        )
+        File(root, "packages/beta/pubspec.yaml").writeText(
+            """
+            name: beta
+            resolution: workspace
+            environment:
+              sdk: ^3.13.0
+            dependencies:
+              path: ^1.9.0
+            dev_dependencies:
+              test: ^1.25.0
+              alpha_pkg:
+                path: ../alpha
+            """.trimIndent(),
+        )
+
+        val modules = requireNotNull(dartModules(root)).associateBy(BuildModule::id)
+
+        assertEquals(
+            setOf("${root.invariantSeparatorsPath}|packages/alpha"),
+            modules.getValue("packages/beta").dependencies,
+        )
+        assertEquals(emptySet(), modules.getValue("packages/alpha").dependencies)
+    }
+
+    @Test
     fun `a glob in the workspace list keeps the root command`() {
         val root = dartRoot(
             """

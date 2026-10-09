@@ -19,7 +19,7 @@ object GoPackages {
             val importPath = pkg.string("ImportPath") ?: return emptyList()
             val directory = pkg.string("Dir")?.normalizeSeparators() ?: return emptyList()
 
-            val imports = pkg.strings("Imports") ?: return emptyList()
+            val imports = IMPORT_FIELDS.flatMap { pkg.strings(it) ?: return emptyList() }
             val dependencies = imports
                 .filter { it in paths }
                 .mapTo(HashSet()) { "$root|$it" }
@@ -56,4 +56,6 @@ object GoPackages {
     }
 
     private fun String.normalizeSeparators(): String = replace('\\', '/')
+
+    private val IMPORT_FIELDS = listOf("Imports", "TestImports", "XTestImports")
 }

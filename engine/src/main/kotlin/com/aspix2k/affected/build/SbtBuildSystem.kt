@@ -86,11 +86,15 @@ internal fun sbtModules(root: File): List<BuildModule>? {
     if (!manifest.isRegularFileNoFollow()) return null
     val text = runCatching { manifest.readText() }.getOrNull() ?: return null
     if (UNPROVED_SBT_PROJECT.containsMatchIn(text)) return null
-    val declared = SBT_PROJECT.findAll(text).toList().map { sbtDeclaration(root, it) ?: return null }
+    val matches = SBT_PROJECT.findAll(text).toList()
+    val declared = matches.map { sbtDeclaration(root, it) ?: return null }
     if (declared.isEmpty()) return listOf(sbtRootModule(root))
-    if (declared.map { it.first }.distinct().size != declared.size) return null
+    val names = declared.map { it.first }
+    if (names.distinct().size != declared.size) return null
     val rootPath = root.invariantSeparatorsPath
-    return declared.map { (name, directory) ->
+    return declared.mapIndexed { index, (name, directory) ->
+        val end = matches.getOrNull(index + 1)?.range?.first ?: text.length
+        val depended = sbtDependencies(text.substring(matches[index].range.last + 1, end))
         val content = if (directory == ".") root else File(root, directory)
         BuildModule(
             id = name,
@@ -99,11 +103,17 @@ internal fun sbtModules(root: File): List<BuildModule>? {
             testTask = SbtTasks.TEST,
             compileTask = SbtTasks.COMPILE,
             hasTests = sbtHasTests(content),
+            dependencies = depended.filter { it in names && it != name }.mapTo(HashSet()) { "$rootPath|$it" },
             executionRoot = rootPath,
             executionId = name,
         )
     }
 }
+
+private fun sbtDependencies(declaration: String): Set<String> =
+    SBT_DEPENDS_ON.findAll(declaration).flatMapTo(HashSet()) { call ->
+        SBT_IDENTIFIER.findAll(call.groupValues[1]).map { it.value.removeSurrounding("`") }
+    }
 
 private fun sbtDeclaration(root: File, match: MatchResult): Pair<String, String>? {
     val name = match.groupValues[1].removeSurrounding("`")
@@ -127,6 +137,8 @@ internal fun sbtRequiresWorkspace(root: String, changes: BuildChanges): Boolean 
 private fun sbtSourceFile(file: File): Boolean =
     file.isFile && file.extension in setOf("scala", "java", "kt", "groovy")
 
+private val SBT_DEPENDS_ON = Regex("""\.\s*dependsOn\s*\(([^)]*)\)""")
+private val SBT_IDENTIFIER = Regex("""`[^`]+`|[A-Za-z_]\w*""")
 private val UNPROVED_SBT_PROJECT = Regex("""\b(?:Project|CrossProject|ProjectRef)\s*\(""")
 
 private val SBT_PROJECT = Regex(

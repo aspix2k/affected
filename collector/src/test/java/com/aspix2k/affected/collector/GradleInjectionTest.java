@@ -686,6 +686,78 @@ public class GradleInjectionTest {
         assertEquals(setOf("AlphaTest", "GammaTest", "VintageAlphaTest"), executedTests(project));
     }
 
+    @Test(timeout = 240_000L)
+    public void aTestThatRunsProductionCodeInAnotherJvmIsSelectedWithEveryChange() throws Exception {
+        Path project = temporary.newFolder("child-jvm-project").toPath();
+        Path baselineOutput = temporary.newFolder("child-jvm-baseline-output").toPath();
+        Path exactOutput = temporary.newFolder("child-jvm-exact-output").toPath();
+        writeFixture(project);
+        write(
+            project.resolve("src/main/java/fixture/Tool.java"),
+            "package fixture; public final class Tool { public static void main(String[] arguments) { " +
+                "System.out.print(Beta.value()); } }\n"
+        );
+        write(
+            project.resolve("src/test/java/fixture/ChildJvmTest.java"),
+            "package fixture; import org.junit.jupiter.api.Test; import static org.junit.jupiter.api.Assertions.*; " +
+                "public final class ChildJvmTest { @Test void child() throws Exception { " +
+                "String launcher = System.getProperty(\"java.home\") + \"/bin/java\"; " +
+                "Process process = new ProcessBuilder(launcher, \"-cp\", System.getProperty(\"java.class.path\"), " +
+                "\"fixture.Tool\").redirectErrorStream(true).start(); " +
+                "int value = process.getInputStream().read(); assertEquals(0, process.waitFor()); " +
+                "assertEquals('2', value); Executions.mark(\"ChildJvmTest\"); } }\n"
+        );
+
+        BuildResult baseline = run(project, baselineOutput);
+        assertComplete(baselineOutput, 7, baseline.getOutput());
+        promote(baselineOutput, project.resolve(".affected/maps"));
+        writeBeta(project, "int result = 2; return result;");
+        clearExecuted(project);
+
+        BuildResult exact = run(project, exactOutput);
+
+        assertEquals(exact.getOutput(), setOf("BetaTest", "DeltaTest", "ChildJvmTest"), executedTests(project));
+    }
+
+    @Test(timeout = 240_000L)
+    public void aTestThatTalksToARunningProcessIsSelectedWithEveryChange() throws Exception {
+        Path project = temporary.newFolder("running-process-project").toPath();
+        Path baselineOutput = temporary.newFolder("running-process-baseline-output").toPath();
+        Path exactOutput = temporary.newFolder("running-process-exact-output").toPath();
+        writeFixture(project);
+        write(
+            project.resolve("src/test/java/fixture/RemoteTest.java"),
+            "package fixture; import org.junit.jupiter.api.Test; import static org.junit.jupiter.api.Assertions.*; " +
+                "public final class RemoteTest { @Test void remote() throws Exception { " +
+                "try (java.net.Socket socket = new java.net.Socket(\"127.0.0.1\", Integer.getInteger(\"fixture.port\"))) { " +
+                "assertEquals('2', socket.getInputStream().read()); } Executions.mark(\"RemoteTest\"); } }\n"
+        );
+        try (java.net.ServerSocket server = new java.net.ServerSocket(0, 8, java.net.InetAddress.getByName("127.0.0.1"))) {
+            Thread responder = new Thread(() -> {
+                while (!server.isClosed()) {
+                    try (java.net.Socket client = server.accept()) {
+                        client.getOutputStream().write('2');
+                    } catch (java.io.IOException closed) {
+                        return;
+                    }
+                }
+            }, "affected-fixture-server");
+            responder.setDaemon(true);
+            responder.start();
+            String port = "-Dfixture.port=" + server.getLocalPort();
+
+            BuildResult baseline = run(project, baselineOutput, "testDebugUnitTest", true, port);
+            assertComplete(baselineOutput, 7, baseline.getOutput());
+            promote(baselineOutput, project.resolve(".affected/maps"));
+            writeBeta(project, "int result = 2; return result;");
+            clearExecuted(project);
+
+            BuildResult exact = run(project, exactOutput, "testDebugUnitTest", true, port);
+
+            assertEquals(exact.getOutput(), setOf("BetaTest", "DeltaTest", "RemoteTest"), executedTests(project));
+        }
+    }
+
     @Test(timeout = 120_000L)
     public void parallelClassesInOneWorkerKeepIndependentDependencies() throws Exception {
         Path project = temporary.newFolder("parallel-project").toPath();
@@ -1104,6 +1176,7 @@ public class GradleInjectionTest {
                 "    if (project.hasProperty('declaredInput')) inputs.dir('testData')\n" +
                 "    exclude '**/LegacyTest.class'\n" +
                 "    systemProperty 'fixture.executed', file('executed').absolutePath\n" +
+                "    systemProperty 'fixture.port', providers.systemProperty('fixture.port').getOrElse('0')\n" +
                 "    maxParallelForks = 2\n" +
                 "    forkEvery = 1\n" +
                 "    if (project.hasProperty('attributionParallel')) {\n" +
