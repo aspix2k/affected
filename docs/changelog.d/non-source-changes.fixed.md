@@ -1,0 +1,3 @@
+- Go, Ruby, Dart, Flutter, Swift, Xcode, sbt, Kotlin Toolchain, Ant, Make, Meson, Bazel, Buck2, Pants, dbt, sqlc and Atlas: a changed file that is not source code — test data, an embedded file, a resource, a template, an asset — was not counted as a change, so a branch that touched only such files planned nothing and passed. Any changed file inside a module now plans its tests, as it already did for Cargo, Node, Python, .NET, Composer, CMake, R and Deno.
+- A repository that mixes Gradle or Maven with another build: a changed file outside the Gradle or Maven source roots no longer plans the Gradle or Maven module around it; it plans the tests of the other project that contains it.
+- `.DS_Store`, `Thumbs.db` and `desktop.ini` are not counted as changes.

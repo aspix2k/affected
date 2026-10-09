@@ -6,7 +6,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 internal class SwiftBuildSystem(
     private val describe: (Workspace, String) -> String? = ::describeSwiftPackage,
-) : EngineBuildSystem, NamedSourceBuildSystem, TransitiveTestConsumersBuildSystem {
+) : EngineBuildSystem, NamedSourceBuildSystem, AllFileChangesBuildSystem, TransitiveTestConsumersBuildSystem {
 
     private data class Snapshot(val stamp: String, val modules: List<BuildModule>)
 

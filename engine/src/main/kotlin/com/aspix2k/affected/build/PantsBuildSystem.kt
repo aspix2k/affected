@@ -3,7 +3,7 @@ package com.aspix2k.affected.build
 import com.aspix2k.affected.build.process.CliCommand
 import java.io.File
 
-internal class PantsBuildSystem : EngineBuildSystem, NamedSourceBuildSystem {
+internal class PantsBuildSystem : EngineBuildSystem, NamedSourceBuildSystem, AllFileChangesBuildSystem {
 
     override val id: String = "PANTS"
 

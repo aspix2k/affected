@@ -55,7 +55,7 @@ object Verification {
     internal fun prepare(
         graph: ModuleGraph,
         changes: ChangeSet,
-        owners: Map<File, List<ModuleGraph.Node>> = changes.files.associateWith(graph::nodesFor),
+        owners: Map<File, List<ModuleGraph.Node>> = graph.owners(changes),
         testDependents: Boolean = false,
     ): PreparedPlans {
         val buildChanges = changes.toBuildChanges()

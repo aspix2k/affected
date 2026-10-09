@@ -3,7 +3,7 @@ package com.aspix2k.affected.build
 import com.aspix2k.affected.build.process.CliCommand
 import java.io.File
 
-internal class AtlasBuildSystem : EngineBuildSystem, NamedSourceBuildSystem {
+internal class AtlasBuildSystem : EngineBuildSystem, NamedSourceBuildSystem, AllFileChangesBuildSystem {
 
     override val id: String = "ATLAS"
 

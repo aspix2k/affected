@@ -28,6 +28,7 @@ object ProjectChanges {
                 comparedToBase = false,
                 uncovered = uncovered,
                 gitUsable = false,
+                outsideSources = outsideSources(project, files),
             )
         } else {
             ChangeSet(
@@ -39,6 +40,7 @@ object ProjectChanges {
                 uncovered = uncovered,
                 resolvedBranch = analyzer.resolvedBranch(),
                 mergeBase = analyzer.comparisonBase(),
+                outsideSources = outsideSources(project, files),
             )
         }
     }
@@ -77,6 +79,18 @@ object ProjectChanges {
             (local + analyzer.againstBase()).distinct(),
             (localUncovered + analyzer.againstBase(uncovers)).distinct(),
             analyzer,
+        )
+    }
+
+    private fun outsideSources(project: Project, files: List<File>): Set<File> {
+        val projectDir = project.basePath?.let(::File)
+        if (projectDir == null || !BuildSystems.includesAllFileChanges(project)) return emptySet()
+        return filesOutsideSources(
+            files,
+            projectDir,
+            BuildSystems.sourceExtensions(project),
+            BuildSystems.sourceFileNames(project),
+            sourceRoots(project, projectDir),
         )
     }
 

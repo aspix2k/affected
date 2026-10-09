@@ -5,7 +5,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
 
-internal class AntBuildSystem : EngineBuildSystem {
+internal class AntBuildSystem : EngineBuildSystem, AllFileChangesBuildSystem {
 
     override val id: String = "ANT"
 
