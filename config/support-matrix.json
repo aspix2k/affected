@@ -105,7 +105,7 @@
       "support": "platform",
       "since": "2025.3",
       "homeAdapters": ["RPROJECT", "PYTHON"],
-      "verifier": {"type": "DataSpell", "endpoints": [{"id": "minimum", "version": "2025.3.3", "build": "253.33813.68", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.1.3", "build": "261.26222.84", "gradle": "unavailable", "maven": "unavailable"}]},
+      "verifier": {"type": "DataSpell", "endpoints": [{"id": "minimum", "version": "2025.3.3", "build": "253.33813.68", "gradle": "present", "maven": "unavailable"}, {"id": "current", "version": "2026.1.3", "build": "261.26222.84", "gradle": "present", "maven": "unavailable"}]},
       "fixtures": ["src/main/resources/META-INF/plugin.xml"],
       "gates": [".github/workflows/ci.yml"]
     },
