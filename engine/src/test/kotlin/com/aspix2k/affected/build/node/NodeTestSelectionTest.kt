@@ -391,6 +391,51 @@ class NodeTestSelectionTest {
     }
 
     @Test
+    fun `a package that reads files or starts processes keeps the full package command`() {
+        listOf(
+            "import { execFileSync } from 'node:child_process'",
+            "const { fork } = require(\"child_process\")",
+            "import { Worker } from 'node:worker_threads'",
+            "import { readFileSync } from 'fs'",
+            "import { readFile } from 'node:fs/promises'",
+            "import vm from 'node:vm'",
+            "import { register } from 'node:module'",
+            "import { execa } from 'execa'",
+            "import { glob } from 'tinyglobby'",
+            "const worker = new Worker(url)",
+            "await expect(output).toMatchFileSnapshot('./expected.js')",
+        ).forEach { source ->
+            val workspace = exactJestWorkspace(extraSource = source)
+
+            assertTrue(reachesNodeFilesWithoutImport(source), source)
+            assertFull(workspace.fixture, workspace.changed)
+        }
+        assertFalse(reachesNodeFilesWithoutImport("import path from 'node:path'\nconst fs = options.fs"))
+        listOf(
+            "import { writeFileSync, mkdirSync as make } from 'node:fs'",
+            "const { writeFileSync, rmSync: remove } = require(\"fs\")",
+            "import { writeFile } from 'node:fs/promises'",
+        ).forEach { source -> assertFalse(reachesNodeFilesWithoutImport(source), source) }
+        listOf(
+            "import { writeFileSync, readFileSync as write } from 'node:fs'",
+            "const { writeFileSync, readFileSync: writeFile } = require('fs')",
+            "import { writeFileSync }, fs from 'node:fs'",
+            "import * as files from 'node:fs'",
+        ).forEach { source -> assertTrue(reachesNodeFilesWithoutImport(source), source) }
+    }
+
+    @Test
+    fun `a changed test file still runs alone when its package reads files`() {
+        val workspace = testFilesWorkspace("node --test")
+        workspace.fixture.source("alpha", "files.js", "import { readFileSync } from 'node:fs'")
+
+        assertEquals(
+            listOf("npm", "test", "--workspace", "@app/alpha", "--", "test/alpha.test.js"),
+            exactCommands(workspace.root, "@app/alpha:test", workspace.changed).single().arguments,
+        )
+    }
+
+    @Test
     fun `node test receives only changed test files for every manager`() {
         val npm = testFilesWorkspace("node --test")
         val pnpm = testFilesWorkspace("node --test").also { File(it.root, "pnpm-lock.yaml").writeText("") }

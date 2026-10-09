@@ -309,7 +309,8 @@ private fun safeNodeSource(source: Path, budget: NodeScanBudget): Boolean {
     budget.bytes += size
     if (size > MAX_NODE_FILE_BYTES || budget.bytes > MAX_NODE_TOTAL_BYTES) return false
     val text = runCatching { Files.readString(source, StandardCharsets.UTF_8) }.getOrNull() ?: return false
-    return !hasDynamicNodeDependency(text) && budget.references?.containsMatchIn(text) != true
+    if (hasDynamicNodeDependency(text)) return false
+    return budget.references?.let { !it.containsMatchIn(text) } ?: !reachesNodeFilesWithoutImport(text)
 }
 
 private val SIMPLE_VERSION = Regex("""[~^]?(\d+)\.\d+(?:\.\d+)?""")

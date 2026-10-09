@@ -6,6 +6,7 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -30,6 +31,25 @@ class CliNodeRunnersConformanceTest {
         )
         assertTrue(selected.isFile)
         assertTrue(full.isFile)
+    }
+
+    @Test
+    fun `Jest keeps the full package command when a test starts a project script`() = fixture("node") { root ->
+        execute(root, listOf("npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"))
+        File(root, "packages/alpha/cli.js").writeText("console.log('started')\n")
+        File(root, "packages/alpha/cli.test.js").writeText(
+            "const { execFileSync } = require('node:child_process');\n" +
+                "test('cli starts', () => expect(String(execFileSync('node', ['cli.js']))).toBe('started\\n'));\n",
+        )
+        val cli = File(root, "packages/alpha/cli.js")
+        val command = nodeCommands(
+            root.path,
+            listOf("@affected/alpha:test"),
+            BuildChanges(listOf(cli.path), setOf(cli.path), comparedToBase = true),
+        ).single()
+
+        assertEquals(listOf("npm", "test", "--workspace", "@affected/alpha"), command.arguments)
+        assertContains(execute(root, command.arguments), "Test Suites: 3 passed")
     }
 
     @Test
