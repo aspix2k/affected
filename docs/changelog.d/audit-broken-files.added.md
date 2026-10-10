@@ -1,0 +1,1 @@
+- Command line: `affected audit --break <path>` and `--sample <count>` break files on purpose, one at a time, and report every file whose breakage the planned checks let through while the full run catches it.

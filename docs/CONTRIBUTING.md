@@ -92,6 +92,22 @@ reported as a miss, so audit a base that is green. `--fail-fast` is refused.
 It costs a full run on top of the selected one and belongs in a scheduled job
 or on a share of pull requests, not on every push.
 
+A branch that breaks nothing passes both runs, so `audit` alone says little on
+healthy code. `audit --break <path>` (repeatable) and `audit --sample <count>`
+(tracked files picked at random) supply the breakage: each file in turn is
+overwritten with text no tool accepts, the planned checks for that change are
+run, and the file is restored. The verdict per file is `caught` when the
+planned checks fail, `refused` when the plan cannot claim success for that
+change, `unnoticed` when they pass and so does every test, and `MISSED` when
+they pass while the full run fails twice in a row — the selection would have
+let that change through. Only files that git tracks are broken, in a working
+tree without local changes and with tests that pass before anything is
+broken; the audit stops when a run leaves the tree changed. A killed process
+restores the file on exit; if it cannot, `git checkout` does. The cost is one
+full run up front and one more for every file whose breakage the planned
+checks do not notice — two when it looks like a miss — so keep `--sample`
+small where the tests are slow.
+
 A Gradle build in the repository root is read without the IDE by
 `GradleCommandLineBuildSystem`: it runs the wrapper (or `gradle`) once with an
 init script that writes projects, task names, typed `Test` tasks, source set

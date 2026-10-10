@@ -25,7 +25,11 @@ internal class Arguments(
     val testDependents: Boolean,
     val checkConsumers: Boolean,
     val stopAfterFirstFailure: Boolean,
-)
+    val broken: List<String> = emptyList(),
+    val sample: Int = 0,
+) {
+    val breaksFiles: Boolean get() = broken.isNotEmpty() || sample > 0
+}
 
 internal const val USAGE = """Usage: affected <plan|run|audit> --base <branch> [options]
 
@@ -39,57 +43,63 @@ internal const val USAGE = """Usage: affected <plan|run|audit> --base <branch> [
   --dependents         also test modules that depend on the changed ones
   --consumers          also compile direct consumers of changed API
   --fail-fast          stop after the first failed group (not with audit)
+  --break <path>       audit only: break this file on purpose and check that the
+                       planned checks notice whenever any test does; repeatable
+  --sample <count>     audit only: break that many tracked files picked at random
 """
 
 internal fun parse(arguments: List<String>): Arguments? {
     val command = arguments.firstOrNull()?.takeIf { it in setOf("plan", "run", "audit") } ?: return null
-    var directory = File("").absoluteFile
-    var baseBranch: String? = null
     val flags = HashSet<String>()
+    val values = HashMap<String, MutableList<String>>()
     val rest = arguments.drop(1).iterator()
     while (rest.hasNext()) {
         when (val argument = rest.next()) {
-            "--base" -> baseBranch = if (rest.hasNext()) rest.next() else return null
-            "--dir" -> directory = if (rest.hasNext()) File(rest.next()).absoluteFile.normalize() else return null
             "--dependents", "--consumers", "--fail-fast" -> flags += argument
+            "--base", "--dir", "--break", "--sample" ->
+                values.getOrPut(argument, ::mutableListOf) += if (rest.hasNext()) rest.next() else return null
             else -> return null
         }
     }
-    if (command == "audit" && "--fail-fast" in flags) return null
-    return Arguments(
+    val sample = values["--sample"]?.last()?.let { it.toIntOrNull()?.coerceAtLeast(0) ?: 0 }
+    val parsed = Arguments(
         command,
-        directory,
-        baseBranch?.takeIf(String::isNotBlank) ?: return null,
+        values["--dir"]?.last()?.let { File(it).absoluteFile.normalize() } ?: File("").absoluteFile,
+        values["--base"]?.last()?.takeIf(String::isNotBlank) ?: return null,
         "--dependents" in flags,
         "--consumers" in flags,
         "--fail-fast" in flags,
+        values["--break"].orEmpty(),
+        sample ?: 0,
     )
+    return parsed.takeUnless { sample == 0 || it.mixesCommands() }
 }
+
+private fun Arguments.mixesCommands(): Boolean =
+    if (command == "audit") stopAfterFirstFailure else breaksFiles
 
 internal fun execute(arguments: List<String>, out: PrintStream, err: PrintStream, cache: Path): Int {
     val parsed = parse(arguments) ?: return EXIT_USAGE.also { err.print(USAGE) }
     if (!parsed.directory.isDirectory) return EXIT_USAGE.also { err.println("Not a directory: ${parsed.directory}") }
-    val plan = Engine.plan(
-        EngineRequest(
-            parsed.directory,
-            parsed.baseBranch,
-            cache,
-            parsed.testDependents,
-            parsed.checkConsumers,
-            parsed.stopAfterFirstFailure,
-        ) { text, error -> (if (error) err else out).print(text) },
-    )
+    if (parsed.breaksFiles) return BrokenFileAudit(parsed, out, err, cache).run()
+    val plan = Engine.plan(parsed.request(cache) { text, error -> (if (error) err else out).print(text) })
     describe(plan, parsed, out)
     val blocker = plan.blocker
     if (blocker != null) err.println(explain(blocker, parsed, plan))
     val runnable = blocker == null || blocker == EngineBlocker.UNRESOLVED_CHANGES
     if (!runnable || parsed.command == "plan") return exitCode(passed = true, blocker)
-    if (parsed.command == "audit") return audit(plan, parsed, out, blocker)
+    return if (parsed.command == "audit") audit(plan, parsed, out, blocker) else run(plan, out, blocker)
+}
+
+private fun run(plan: EnginePlan, out: PrintStream, blocker: EngineBlocker?): Int {
     if (plan.plan.isEmpty) return exitCode(passed = true, blocker)
     val passed = runBlocking { Engine.run(plan) }
     out.println(if (passed) "\nAffected: all planned checks passed." else "\nAffected: checks failed.")
     return exitCode(passed, blocker)
 }
+
+internal fun Arguments.request(cache: Path, output: (String, Boolean) -> Unit): EngineRequest =
+    EngineRequest(directory, baseBranch, cache, testDependents, checkConsumers, stopAfterFirstFailure, output)
 
 private fun audit(plan: EnginePlan, arguments: Arguments, out: PrintStream, blocker: EngineBlocker?): Int {
     val audit = runBlocking { Engine.audit(plan) }
@@ -115,7 +125,7 @@ private fun describe(group: TaskGroup, arguments: Arguments): String {
     return "${group.systemId} in $root: ${group.tasks.joinToString(" ")}"
 }
 
-private fun exitCode(passed: Boolean, blocker: EngineBlocker?): Int = when {
+internal fun exitCode(passed: Boolean, blocker: EngineBlocker?): Int = when {
     !passed -> EXIT_FAILED
     blocker != null -> EXIT_BLOCKED
     else -> EXIT_PASSED
@@ -132,7 +142,7 @@ private fun describe(plan: EnginePlan, arguments: Arguments, out: PrintStream) {
     plan.plan.groups.forEach { out.println(describe(it, arguments)) }
 }
 
-private fun explain(blocker: EngineBlocker, arguments: Arguments, plan: EnginePlan): String = when (blocker) {
+internal fun explain(blocker: EngineBlocker, arguments: Arguments, plan: EnginePlan): String = when (blocker) {
     EngineBlocker.NOT_A_GIT_REPOSITORY ->
         "Affected: ${arguments.directory} is not a usable git repository, so the changes cannot be determined."
     EngineBlocker.NO_COMPARISON_BASE ->
