@@ -1,5 +1,6 @@
 package com.aspix2k.affected.cli
 
+import org.junit.Assume.assumeTrue
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream
@@ -37,6 +38,7 @@ class MainTest {
         assertNull(parse(listOf("run", "--base", "main", "--break", "index.js")))
         assertNull(parse(listOf("audit", "--base", "main", "--sample", "0")))
         assertNull(parse(listOf("audit", "--base", "main", "--learn")))
+        assertNull(parse(listOf("plan", "--base", "main", "--observe")))
         assertNull(parse(listOf("run", "--base", "main", "--report", "audit.json")))
     }
 
@@ -242,6 +244,18 @@ class MainTest {
 
         assertEquals(EXIT_USAGE, code)
         assertTrue("without local changes" in errors, errors)
+    }
+
+    @Test
+    fun `a file the tests read without being planned for it is found by watching them`() {
+        assumeTrue(tracerOnPath() != null)
+        val root = nestedRepository()
+
+        val (code, output, errors) = run(listOf("audit", "--base", "main", "--dir", root.path, "--observe"))
+
+        assertEquals(EXIT_MISSED, code, output + errors)
+        assertTrue("MISSED    shared.txt" in output, output)
+        assertTrue("broke 1 files" in output, output)
     }
 
     @Test

@@ -27,6 +27,7 @@ class EngineRequest(
     val checkConsumers: Boolean = false,
     val stopAfterFirstFailure: Boolean = false,
     val assumedChanges: List<String> = emptyList(),
+    val commandPrefix: List<String> = emptyList(),
     val output: (text: String, error: Boolean) -> Unit = { _, _ -> },
 )
 
@@ -52,13 +53,22 @@ class EnginePlan internal constructor(
     val changedFiles: List<File>,
     val unresolved: List<File>,
     val blocker: EngineBlocker?,
-    internal val testModules: List<ModuleInfo>,
-    internal val changes: BuildChanges,
-    internal val workspace: Workspace,
-    internal val present: List<EngineBuildSystem>,
+    val testModules: List<ModuleInfo>,
+    internal val execution: EngineExecution,
 ) {
+    internal val changes: BuildChanges get() = execution.changes
+    internal val workspace: Workspace get() = execution.workspace
+    internal val present: List<EngineBuildSystem> get() = execution.present
+
     val everyTest: Plan = TaskPlanner.plan(testModules, emptyList())
 }
+
+internal class EngineExecution(
+    val changes: BuildChanges,
+    val workspace: Workspace,
+    val present: List<EngineBuildSystem>,
+    val testsCovering: (String) -> Set<TaskKey>,
+)
 
 object Engine {
 
@@ -73,11 +83,13 @@ object Engine {
             { collected },
             request.output,
             host,
+            request.commandPrefix,
         )
         val present = EngineBuildSystems.all().filter { it.isPresent(workspace) }
         val graph =
             ModuleGraph(present.flatMap { system -> system.modules(workspace).map { ModuleGraph.Node(it, system) } })
-        val changes = collect(request, present, sourceRoots(request.directory, graph))
+        val collector = ChangeCollector(request, present, sourceRoots(request.directory, graph))
+        val changes = collector.collect()
         collected = changes.toBuildChanges()
         val plans = verificationPlans(graph, changes, graph.owners(changes), request.testDependents)
         val blocker = when {
@@ -97,9 +109,11 @@ object Engine {
             plans.unresolved,
             blocker,
             testModules,
-            collected,
-            workspace,
-            present,
+            EngineExecution(collected, workspace, present) { path ->
+                val alone = collector.alone(path)
+                verificationPlans(graph, alone, graph.owners(alone), request.testDependents).testsOnly.groups
+                    .flatMapTo(HashSet()) { group -> group.tasks.map { TaskKey(group.systemId, group.root, it) } }
+            },
         )
     }
 
@@ -108,6 +122,13 @@ object Engine {
 
     suspend fun runEveryTest(plan: EnginePlan): Boolean = plan.workspace.root != null &&
         failed(plan, plan.everyTest, stopAfterFirstFailure = false, narrowed = false).isEmpty()
+
+    fun testsCovering(plan: EnginePlan, path: String): Set<TaskKey> = plan.execution.testsCovering(path)
+
+    suspend fun runTests(plan: EnginePlan, module: ModuleInfo): Boolean {
+        val alone = TaskPlanner.plan(listOf(module), emptyList())
+        return failed(plan, alone, stopAfterFirstFailure = false, narrowed = false).isEmpty()
+    }
 
     suspend fun failedTestModules(plan: EnginePlan): List<ModuleInfo> =
         failed(plan, plan.everyTest, stopAfterFirstFailure = false, narrowed = false).flatMap { group ->
@@ -177,50 +198,61 @@ object Engine {
                 .mapNotNull { root -> root.takeIf { it.startsWith("$base/") }?.removePrefix("$base/") }
         }
     }
+}
 
-    private fun collect(
-        request: EngineRequest,
-        present: List<EngineBuildSystem>,
-        sourceRoots: Set<String>,
-    ): ChangeSet {
-        val includeAllFiles = present.any { it.capability<AllFileChangesBuildSystem>() != null }
-        val extensions =
-            present.flatMapTo(HashSet()) { it.sourceExtensions }.ifEmpty { ChangeAnalyzer.DEFAULT_EXTENSIONS }
-        val names = present.mapNotNull { it.capability<NamedSourceBuildSystem>() }
-            .flatMapTo(HashSet()) { it.sourceFileNames }
-        val declared = DeclaredDependencies.read(request.directory)
-        val analyzer = ChangeAnalyzer(
-            request.directory,
-            request.baseBranch,
-            extensions,
-            includeAllFiles,
-            sourceFileNames = names,
-            sourceRoots = if (includeAllFiles) emptySet() else sourceRoots,
-            declaredPaths = declared?.mapTo(HashSet()) { it.path },
-            assumedPaths = request.assumedChanges,
-        )
+private class ChangeCollector(
+    private val request: EngineRequest,
+    present: List<EngineBuildSystem>,
+    private val sourceRoots: Set<String>,
+) {
+    private val includeAllFiles = present.any { it.capability<AllFileChangesBuildSystem>() != null }
+    private val extensions =
+        present.flatMapTo(HashSet()) { it.sourceExtensions }.ifEmpty { ChangeAnalyzer.DEFAULT_EXTENSIONS }
+    private val names = present.mapNotNull { it.capability<NamedSourceBuildSystem>() }
+        .flatMapTo(HashSet()) { it.sourceFileNames }
+    private val declared = DeclaredDependencies.read(request.directory)
+    private val analyzer = ChangeAnalyzer(
+        request.directory,
+        request.baseBranch,
+        extensions,
+        includeAllFiles,
+        sourceFileNames = names,
+        sourceRoots = if (includeAllFiles) emptySet() else sourceRoots,
+        declaredPaths = declared?.mapTo(HashSet()) { it.path },
+        assumedPaths = request.assumedChanges,
+    )
+
+    fun collect(): ChangeSet {
         if (!analyzer.isUsable()) {
             return ChangeSet(emptyList(), emptySet(), emptySet(), comparedToBase = false, gitUsable = false)
         }
         val files = analyzer.againstBase()
-        return ChangeSet(
-            files,
-            analyzer.apiTouchedAmong(files),
-            analyzer.modifiedAgainstBase(),
+        return changeSet(files).copy(
+            apiTouched = analyzer.apiTouchedAmong(files),
+            exactSelectionEligible = analyzer.modifiedAgainstBase(),
             comparedToBase = analyzer.hasComparisonBase(),
             baseUnresolved = !analyzer.hasComparisonBase(),
             resolvedBranch = analyzer.resolvedBranch(),
             mergeBase = analyzer.comparisonBase(),
-            declaredOwners = declared?.let { dependencies ->
-                files.associateWith { DeclaredDependencies.owners(request.directory, dependencies, it) }
-            },
-            outsideSources = if (includeAllFiles) {
-                filesOutsideSources(files, request.directory, extensions, names, sourceRoots)
-            } else {
-                emptySet()
-            },
         )
     }
+
+    fun alone(path: String): ChangeSet = changeSet(analyzer.keepSources(listOf(path)))
+
+    private fun changeSet(files: List<File>): ChangeSet = ChangeSet(
+        files,
+        emptySet(),
+        emptySet(),
+        comparedToBase = true,
+        declaredOwners = declared?.let { dependencies ->
+            files.associateWith { DeclaredDependencies.owners(request.directory, dependencies, it) }
+        },
+        outsideSources = if (includeAllFiles) {
+            filesOutsideSources(files, request.directory, extensions, names, sourceRoots)
+        } else {
+            emptySet()
+        },
+    )
 }
 
 private fun hasUnsupportedBuild(root: File, graph: ModuleGraph): Boolean {

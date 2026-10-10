@@ -143,6 +143,19 @@ the file is committed. Where several modules share one run it tries them one
 at a time, which costs a run each, and a flaky test can add an entry that is
 not needed; an entry too many only plans more.
 
+`audit --observe` picks the files to break by watching the tests instead of
+guessing. On Linux with `strace` on the PATH it runs the tests of every module
+under `strace -f`, takes the tracked files they opened or executed, and keeps
+those whose change would not plan the tests that read them. Each such file is
+then broken: when the planned checks for that change fail it is `caught`,
+otherwise only the tests that read it are run, and a failure is a `MISSED`
+file with its module, ready for `--learn`. One traced run per module replaces
+a full run per sampled file. A module that fails on a broken file is run once
+more before the file counts as missed. What it cannot see: processes the test
+command does not start itself, so a build that hands the tests to a daemon; a
+relative path opened after the process changed its directory, which is read
+as relative to the module; and a path relative to a directory handle.
+
 `--report <path>` writes the result of either kind of audit as JSON: the
 number of planned and of all test tasks with the time each run took and the
 missed groups, or the verdict for every broken file with the modules that

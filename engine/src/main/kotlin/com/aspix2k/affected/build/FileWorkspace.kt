@@ -1,6 +1,7 @@
 package com.aspix2k.affected.build
 
 import com.aspix2k.affected.build.process.CliCommand
+import com.aspix2k.affected.build.process.CliStep
 import com.aspix2k.affected.build.process.CommandSequence
 import com.aspix2k.affected.build.process.CommandSequenceListener
 import com.aspix2k.affected.build.process.OutputKind
@@ -19,6 +20,7 @@ internal class FileWorkspace(
     private val collectedChanges: () -> BuildChanges,
     private val output: (String, Boolean) -> Unit,
     host: ProcessHost? = null,
+    private val commandPrefix: List<String> = emptyList(),
 ) : Workspace {
 
     override val root: File = directory
@@ -51,6 +53,14 @@ internal class FileWorkspace(
 
     override fun changes(): BuildChanges = collectedChanges()
 
+    private fun prefixed(steps: List<CliStep>): List<CliStep> = steps.map { step ->
+        if (step is CliCommand && commandPrefix.isNotEmpty()) {
+            step.copy(arguments = commandPrefix + step.arguments)
+        } else {
+            step
+        }
+    }
+
     private fun sequence(run: CommandRun, exit: CompletableDeferred<Int>): CommandSequence {
         val listener = object : CommandSequenceListener {
 
@@ -66,7 +76,7 @@ internal class FileWorkspace(
         return if (run.unresolvedMessage == null) {
             CommandSequence(
                 File(run.workingDirectory),
-                run.steps,
+                prefixed(run.steps),
                 listener,
                 processHost,
                 continueAfterFailure = run.continueAfterFailure,
@@ -74,7 +84,7 @@ internal class FileWorkspace(
         } else {
             CommandSequence(
                 File(run.workingDirectory),
-                run.steps,
+                prefixed(run.steps),
                 listener,
                 processHost,
                 run.unresolvedMessage,

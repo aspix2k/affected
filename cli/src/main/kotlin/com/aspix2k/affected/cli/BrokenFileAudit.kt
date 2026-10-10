@@ -4,6 +4,7 @@ import com.aspix2k.affected.DeclaredDependencies
 import com.aspix2k.affected.DeclaredDependency
 import com.aspix2k.affected.Engine
 import com.aspix2k.affected.EnginePlan
+import com.aspix2k.affected.ModuleInfo
 import com.aspix2k.affected.isProjectDocumentation
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -28,6 +29,11 @@ internal class BrokenFileAudit(
             err.println("Affected audit: ${DeclaredDependencies.LOCATION} cannot be read, so nothing is added to it.")
             return EXIT_USAGE
         }
+        val tracer = tracerOnPath()
+        if (arguments.audit.observe && tracer == null) {
+            err.println("Affected audit: --observe needs strace on the PATH.")
+            return EXIT_USAGE
+        }
         val files = files() ?: return EXIT_USAGE
         val clean = plan()
         clean.blocker?.let { blocker ->
@@ -38,14 +44,23 @@ internal class BrokenFileAudit(
             err.println("Affected audit: the tests fail before any file is broken, so nothing can be compared.")
             return EXIT_FAILED
         }
-        return audit(files, declared.orEmpty())
+        val readers = tracer?.takeIf { arguments.audit.observe }?.let {
+            ObservedReads(arguments, cache, it).unplanned(tracked()) ?: return EXIT_FAILED.also {
+                err.println("Affected audit: the tests fail under strace, or it may not trace here.")
+            }
+        }
+        return audit(files + readers?.keys.orEmpty(), declared.orEmpty(), readers.orEmpty())
     }
 
-    private fun audit(files: List<File>, declared: List<DeclaredDependency>): Int {
+    private fun audit(
+        files: List<File>,
+        declared: List<DeclaredDependency>,
+        readers: Map<File, List<ModuleInfo>>,
+    ): Int {
         val missed = ArrayList<DeclaredDependency>()
         val verdicts = LinkedHashMap<String, String>()
-        for (file in files) {
-            val verdict = verdict(file, missed)
+        for (file in files.distinct()) {
+            val verdict = broken(file) { verdict(file, readers[file], missed) }
             verdicts[relative(file)] = verdict.trim().lowercase()
             out.println("$verdict ${relative(file)}")
             if (!isClean()) {
@@ -64,39 +79,52 @@ internal class BrokenFileAudit(
         return if (missed.isEmpty()) EXIT_PASSED else EXIT_MISSED
     }
 
-    private fun verdict(file: File, missed: MutableList<DeclaredDependency>): String {
+    private fun broken(file: File, verdict: () -> String): String {
         val original = file.readBytes()
         val restore = Thread { file.writeBytes(original) }
         Runtime.getRuntime().addShutdownHook(restore)
         try {
             file.writeText(BROKEN)
-            val plan = plan()
-            return runBlocking {
-                when {
-                    plan.blocker != null -> REFUSED
-                    !Engine.run(plan) -> CAUGHT
-                    Engine.runEveryTest(plan) -> UNNOTICED
-                    else -> Engine.failedTestModules(plan).mapNotNull { module ->
-                        DeclaredDependencies.relativeRoot(arguments.directory, module.executionRoot)
-                            ?.let { DeclaredDependency(relative(file), module.systemId, it, module.executionId) }
-                    }.also(missed::addAll).let { if (it.isEmpty()) UNNOTICED else MISSED }
-                }
-            }
+            return verdict()
         } finally {
             restore.run()
             Runtime.getRuntime().removeShutdownHook(restore)
         }
     }
 
+    private fun verdict(file: File, readers: List<ModuleInfo>?, missed: MutableList<DeclaredDependency>): String {
+        val plan = plan()
+        return runBlocking {
+            when {
+                plan.blocker != null -> REFUSED
+                !Engine.run(plan) -> CAUGHT
+                readers != null -> {
+                    val failing = readers.filter { !Engine.runTests(plan, it) && !Engine.runTests(plan, it) }
+                    dependencies(file, failing, missed)
+                }
+                Engine.runEveryTest(plan) -> UNNOTICED
+                else -> dependencies(file, Engine.failedTestModules(plan), missed)
+            }
+        }
+    }
+
+    private fun dependencies(file: File, modules: List<ModuleInfo>, missed: MutableList<DeclaredDependency>): String =
+        modules.mapNotNull { module ->
+            DeclaredDependencies.relativeRoot(arguments.directory, module.executionRoot)
+                ?.let { DeclaredDependency(relative(file), module.systemId, it, module.executionId) }
+        }.also(missed::addAll).let { if (it.isEmpty()) UNNOTICED else MISSED }
+
     private fun isClean(): Boolean = git("status", "--porcelain")?.isBlank() == true
 
     private fun plan(): EnginePlan = Engine.plan(arguments.request(cache) { _, _ -> })
 
+    private fun tracked(): List<File> = git("ls-files", "-z").orEmpty().split('\u0000')
+        .filter(String::isNotEmpty)
+        .map { File(arguments.directory, it) }
+        .filter { it.isFile && !Files.isSymbolicLink(it.toPath()) }
+
     private fun files(): List<File>? {
-        val tracked = git("ls-files", "-z").orEmpty().split('\u0000')
-            .filter(String::isNotEmpty)
-            .map { File(arguments.directory, it) }
-            .filter { it.isFile && !Files.isSymbolicLink(it.toPath()) }
+        val tracked = tracked()
         val named = arguments.audit.broken.map { File(it).takeIf(File::isAbsolute) ?: File(arguments.directory, it) }
             .map(File::normalize)
         named.firstOrNull { it !in tracked }?.let {

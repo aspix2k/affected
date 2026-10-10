@@ -34,8 +34,9 @@ internal class AuditOptions(
     val sample: Int = 0,
     val learn: Boolean = false,
     val report: File? = null,
+    val observe: Boolean = false,
 ) {
-    val breaksFiles: Boolean get() = broken.isNotEmpty() || sample > 0
+    val breaksFiles: Boolean get() = broken.isNotEmpty() || sample > 0 || observe
 
     val isSet: Boolean get() = breaksFiles || learn || report != null
 }
@@ -56,6 +57,8 @@ internal const val USAGE = """Usage: affected <plan|run|audit> --base <branch> [
   --break <path>       audit only: break this file on purpose and check that the
                        planned checks notice whenever any test does; repeatable
   --sample <count>     audit only: break that many tracked files picked at random
+  --observe            audit only, Linux with strace: break the files the tests
+                       read although no change of them plans those tests
   --learn              with --break or --sample: declare every missed file as a
                        dependency of the tests that need it
   --report <path>      audit only: also write the result as JSON
@@ -68,7 +71,7 @@ internal fun parse(arguments: List<String>): Arguments? {
     val rest = arguments.drop(1).iterator()
     while (rest.hasNext()) {
         when (val argument = rest.next()) {
-            "--dependents", "--consumers", "--fail-fast", "--learn" -> flags += argument
+            "--dependents", "--consumers", "--fail-fast", "--learn", "--observe" -> flags += argument
             "--base", "--dir", "--break", "--sample", "--report", "--if-changed" ->
                 values.getOrPut(argument, ::mutableListOf) += if (rest.hasNext()) rest.next() else return null
             else -> return null
@@ -98,6 +101,7 @@ private fun auditOptions(flags: Set<String>, values: Map<String, List<String>>):
         sample ?: 0,
         "--learn" in flags,
         values["--report"]?.last()?.let { File(it).absoluteFile.normalize() },
+        "--observe" in flags,
     )
 }
 
@@ -140,7 +144,11 @@ private fun misplaced(arguments: Arguments): String? {
     }
 }
 
-internal fun Arguments.request(cache: Path, output: (String, Boolean) -> Unit): EngineRequest =
+internal fun Arguments.request(
+    cache: Path,
+    commandPrefix: List<String> = emptyList(),
+    output: (String, Boolean) -> Unit,
+): EngineRequest =
     EngineRequest(
         directory,
         baseBranch,
@@ -149,6 +157,7 @@ internal fun Arguments.request(cache: Path, output: (String, Boolean) -> Unit): 
         checkConsumers,
         stopAfterFirstFailure,
         assumed.map { File(it).relativeTo(directory).invariantSeparatorsPath },
+        commandPrefix,
         output,
     )
 
