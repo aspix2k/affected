@@ -33,6 +33,7 @@ class MainTest {
         assertNull(parse(listOf("plan", "--base", " ")))
         assertNull(parse(listOf("plan", "--base", "main", "--dir")))
         assertNull(parse(listOf("plan", "--base", "main", "--verbose")))
+        assertNull(parse(listOf("audit", "--base", "main", "--fail-fast")))
     }
 
     @Test
@@ -99,10 +100,43 @@ class MainTest {
         assertTrue(errors.isNotBlank())
     }
 
-    private fun repository(): File {
+    @Test
+    fun `audit reports a test that fails only in the full run`() {
+        val root = repository("first.test.js" to PASSING_TEST, "second.test.js" to FAILING_TEST)
+        File(root, "first.test.js").appendText("// changed\n")
+
+        val (code, output, errors) = run(listOf("audit", "--base", "main", "--dir", root.path))
+
+        assertEquals(EXIT_MISSED, code, output + errors)
+        assertTrue("Failed only in the full run:\n  NODE in ." in output, output)
+    }
+
+    @Test
+    fun `audit runs every test of a branch that plans nothing`() {
+        val root = repository("first.test.js" to FAILING_TEST)
+
+        val (code, output, errors) = run(listOf("audit", "--base", "main", "--dir", root.path))
+
+        assertEquals(EXIT_MISSED, code, output + errors)
+        assertTrue("the planned checks ran 0 tasks, the full run 1" in output, output)
+    }
+
+    @Test
+    fun `audit passes when the full run agrees with the planned checks`() {
+        val root = repository("first.test.js" to PASSING_TEST, "second.test.js" to PASSING_TEST)
+        File(root, "first.test.js").appendText("// changed\n")
+
+        val (code, output, errors) = run(listOf("audit", "--base", "main", "--dir", root.path))
+
+        assertEquals(EXIT_PASSED, code, output + errors)
+        assertTrue("The full run passed." in output, output)
+    }
+
+    private fun repository(vararg files: Pair<String, String>): File {
         val root = createTempDirectory("cli-repository").toFile().canonicalFile
         File(root, "package.json").writeText("""{"name":"demo","version":"1.0.0","scripts":{"test":"node --test"}}""")
         File(root, "index.js").writeText("module.exports = 1\n")
+        files.forEach { (name, text) -> File(root, name).writeText(text) }
         git(root, "init", "--quiet", "--initial-branch=main")
         git(root, "add", ".")
         git(root, "-c", "user.name=test", "-c", "user.email=test@example.invalid", "commit", "--quiet", "-m", "init")
@@ -121,5 +155,10 @@ class MainTest {
         val err = ByteArrayOutputStream()
         val code = execute(arguments, PrintStream(out), PrintStream(err), createTempDirectory("cli-cache"))
         return Triple(code, out.toString(), err.toString())
+    }
+
+    private companion object {
+        const val PASSING_TEST = "require('node:test')('passes', () => {})\n"
+        const val FAILING_TEST = "require('node:test')('fails', () => { throw new Error('broken') })\n"
     }
 }

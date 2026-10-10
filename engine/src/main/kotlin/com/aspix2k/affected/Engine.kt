@@ -36,12 +36,19 @@ enum class EngineBlocker {
     UNRESOLVED_CHANGES,
 }
 
+class EngineAudit internal constructor(
+    val failedInSelection: List<TaskGroup>,
+    val failedInFullRun: List<TaskGroup>,
+    val missed: List<TaskGroup>,
+)
+
 class EnginePlan internal constructor(
     val plan: Plan,
     val systems: List<BuildSystemSummary>,
     val changedFiles: List<File>,
     val unresolved: List<File>,
     val blocker: EngineBlocker?,
+    val everyTest: Plan,
     internal val changes: BuildChanges,
     internal val workspace: Workspace,
     internal val present: List<EngineBuildSystem>,
@@ -87,26 +94,56 @@ object Engine {
             changes.files,
             plans.unresolved,
             blocker,
+            TaskPlanner.plan(graph.all().filter { it.hasTests }.map { it.info() }, emptyList()),
             collected,
             workspace,
             present,
         )
     }
 
-    suspend fun run(plan: EnginePlan): Boolean {
-        val projectRoot = plan.workspace.root?.toPath() ?: return false
-        var passed = true
-        for (group in plan.plan.groups) {
+    suspend fun run(plan: EnginePlan): Boolean = plan.workspace.root != null &&
+        failed(plan, plan.plan, plan.workspace.stopAfterFirstFailure, narrowed = true).isEmpty()
+
+    suspend fun audit(plan: EnginePlan): EngineAudit {
+        val failedInSelection = failed(plan, plan.plan, stopAfterFirstFailure = false, narrowed = true)
+        val failedInFullRun = failed(plan, plan.everyTest, stopAfterFirstFailure = false, narrowed = false)
+        val explained = failedInSelection.flatMapTo(HashSet()) { group ->
+            group.tasks.map { TaskKey(group.systemId, group.root, it) }
+        }
+        val missed = failedInFullRun.mapNotNull { group ->
+            val unexplained = group.copy(
+                tasks = group.tasks.filterNot { TaskKey(group.systemId, group.root, it) in explained },
+            )
+            when (unexplained.tasks.size) {
+                0 -> null
+                group.tasks.size -> group
+                else -> unexplained.takeIf {
+                    failed(plan, Plan(listOf(it), 0, 0), stopAfterFirstFailure = false, narrowed = false).isNotEmpty()
+                }
+            }
+        }
+        return EngineAudit(failedInSelection, failedInFullRun, missed)
+    }
+
+    private suspend fun failed(
+        plan: EnginePlan,
+        tasks: Plan,
+        stopAfterFirstFailure: Boolean,
+        narrowed: Boolean,
+    ): List<TaskGroup> {
+        val projectRoot = plan.workspace.root?.toPath() ?: return tasks.groups
+        val failed = ArrayList<TaskGroup>()
+        for (group in tasks.groups) {
             val system = plan.present.firstOrNull { it.id == group.systemId }
             val groupPassed = system != null && group.runInPlannedExecutionRoot(projectRoot, onInvalid = {}) {
-                (system as? ChangeAwareEngineBuildSystem)
+                (system as? ChangeAwareEngineBuildSystem)?.takeIf { narrowed }
                     ?.runAndWait(plan.workspace, group.root, group.tasks, plan.changes)
                     ?: system.runAndWait(plan.workspace, group.root, group.tasks)
             }
-            passed = passed && groupPassed
-            if (!groupPassed && plan.workspace.stopAfterFirstFailure) break
+            if (!groupPassed) failed += group
+            if (!groupPassed && stopAfterFirstFailure) break
         }
-        return passed
+        return failed
     }
 
     private fun sourceRoots(directory: File, graph: ModuleGraph): Set<String> {
