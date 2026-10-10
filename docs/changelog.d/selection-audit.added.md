@@ -1,0 +1,1 @@
+- Command line: `affected audit --base <branch>` runs the planned checks and then every test, and exits with 3 when a test fails that the planned checks did not cover — a measured answer to whether the selection missed anything.

@@ -69,6 +69,7 @@ command-line front end:
 ./gradlew :cli:installDist
 cli/build/install/affected/bin/affected plan --base main
 cli/build/install/affected/bin/affected run --base main --dependents
+cli/build/install/affected/bin/affected audit --base main
 ```
 
 It exits with 0 when every planned check passed (or nothing needed to run),
@@ -77,6 +78,19 @@ the base branch cannot be compared with, or a changed source has no owning
 check) and 64 on wrong usage. The distribution carries the pytest, unittest,
 PHPUnit and .NET helpers in `agent/` next to `lib/`, where the adapters look
 for them, so those ecosystems select tests the same way the plugin does.
+
+`audit` measures the selection instead of trusting it. It runs the planned
+checks as `run` does, then every test task of every module with no narrowing,
+and compares the two: a group of the full run that failed while none of its
+tasks failed among the planned checks is a miss. When a failed group of the
+full run shares only some tasks with a failed planned check, the rest is run
+once more on its own to decide. It prints the misses and exits with 3, which
+takes precedence over 1 and 2; without a miss it exits as `run` does. Two
+limits: a planned task that fails hides further tests of the same task that
+fail only unnarrowed, and a test that already fails on the base branch is
+reported as a miss, so audit a base that is green. `--fail-fast` is refused.
+It costs a full run on top of the selected one and belongs in a scheduled job
+or on a share of pull requests, not on every push.
 
 A Gradle build in the repository root is read without the IDE by
 `GradleCommandLineBuildSystem`: it runs the wrapper (or `gradle`) once with an
