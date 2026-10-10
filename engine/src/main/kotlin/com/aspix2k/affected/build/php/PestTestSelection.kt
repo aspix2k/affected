@@ -65,7 +65,7 @@ private fun classifyPestChanges(root: Path, suites: List<Path>, files: List<Stri
         val suite = suites.singleOrNull { real.startsWith(it) }
         val relative = pestRelative(root, real)
         when {
-            suite != null && isPestExactTestFile(suite, real) -> selected += relative
+            suite != null && isPestSuiteFile(suite, real) && isPestTestName(real) -> selected += relative
             suite != null && isPestDatasetFile(suite, real) -> {
                 datasetNames += pestDatasetNames(real)
                 selected += relative
@@ -161,6 +161,7 @@ private fun pestClassConsumers(root: Path, suites: List<Path>, classes: Set<Stri
         require(files.size <= MAX_PEST_FILTER_FILES)
         for (file in files) {
             val used = pestImportedClasses(file, classes) ?: continue
+            require(isPestTestName(file))
             consumers += pestRelative(root, file)
             remaining.removeAll(used)
         }
@@ -234,6 +235,7 @@ private fun pestDatasetConsumers(root: Path, suites: List<Path>, names: Set<Stri
         require(files.size <= MAX_PEST_FILTER_FILES)
         for (file in files) {
             val used = pestDatasetUses(file, names) ?: continue
+            require(isPestTestName(file))
             consumers += pestRelative(root, file)
             remaining.removeAll(used)
         }
@@ -250,7 +252,7 @@ private fun collectPestTestFiles(suite: Path, directory: Path, found: MutableLis
         require(!Files.isSymbolicLink(path))
         when {
             Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS) -> collectPestTestFiles(suite, path, found)
-            Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) && isPestExactTestFile(suite, path) -> {
+            Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) && isPestSuiteFile(suite, path) -> {
                 require(found.size < MAX_PEST_FILTER_FILES)
                 found.add(path)
             }
@@ -264,7 +266,12 @@ private fun readPestPhp(file: Path): String? = runCatching {
     Files.readString(file)
 }.getOrNull()
 
-private fun isPestExactTestFile(suite: Path, file: Path): Boolean {
+private fun isPestTestName(file: Path): Boolean {
+    val name = file.fileName.toString()
+    return name.endsWith("Test.php") || name.endsWith(".phpt", ignoreCase = true)
+}
+
+private fun isPestSuiteFile(suite: Path, file: Path): Boolean {
     val name = file.fileName.toString()
     if (name in PEST_NON_EXACT_FILES) return false
     val relative = suite.relativize(file).joinToString("/")
