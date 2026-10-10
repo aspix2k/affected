@@ -34,6 +34,8 @@ class MainTest {
         assertNull(parse(listOf("plan", "--base", "main", "--dir")))
         assertNull(parse(listOf("plan", "--base", "main", "--verbose")))
         assertNull(parse(listOf("audit", "--base", "main", "--fail-fast")))
+        assertNull(parse(listOf("run", "--base", "main", "--break", "index.js")))
+        assertNull(parse(listOf("audit", "--base", "main", "--sample", "0")))
     }
 
     @Test
@@ -132,11 +134,80 @@ class MainTest {
         assertTrue("The full run passed." in output, output)
     }
 
-    private fun repository(vararg files: Pair<String, String>): File {
+    @Test
+    fun `a broken file that a test reads from outside its package is reported as missed and restored`() {
+        val root = nestedRepository()
+
+        val (code, output, errors) =
+            run(listOf("audit", "--base", "main", "--dir", root.path, "--break", "shared.txt"))
+
+        assertEquals(EXIT_MISSED, code, output + errors)
+        assertTrue("MISSED    shared.txt" in output, output)
+        assertEquals("shared\n", File(root, "shared.txt").readText())
+    }
+
+    @Test
+    fun `a broken file inside the package is caught or goes unnoticed by every test`() {
+        val root = nestedRepository()
+
+        val (code, output, errors) = run(
+            listOf("audit", "--base", "main", "--dir", root.path) +
+                listOf("--break", "web/index.js", "--break", "web/notes.txt"),
+        )
+
+        assertEquals(EXIT_PASSED, code, output + errors)
+        assertTrue("caught    web/index.js" in output, output)
+        assertTrue("unnoticed web/notes.txt" in output, output)
+        assertTrue("broke 2 files, the planned checks missed 0" in output, output)
+    }
+
+    @Test
+    fun `breaking files is refused in a working tree with local changes`() {
+        val root = nestedRepository()
+        File(root, "shared.txt").appendText("local\n")
+
+        val (code, _, errors) = run(listOf("audit", "--base", "main", "--dir", root.path, "--sample", "1"))
+
+        assertEquals(EXIT_USAGE, code)
+        assertTrue("without local changes" in errors, errors)
+    }
+
+    @Test
+    fun `a file that git does not track is never broken`() {
+        val root = nestedRepository()
+        val head = File(root, ".git/HEAD").readText()
+
+        val (code, _, errors) = run(listOf("audit", "--base", "main", "--dir", root.path, "--break", ".git/HEAD"))
+
+        assertEquals(EXIT_USAGE, code)
+        assertTrue("not a file that git tracks" in errors, errors)
+        assertEquals(head, File(root, ".git/HEAD").readText())
+    }
+
+    private fun nestedRepository(): File = committed(
+        "shared.txt" to "shared\n",
+        "web/package.json" to """{"name":"web","version":"1.0.0","scripts":{"test":"node --test"}}""",
+        "web/index.js" to "module.exports = 1\n",
+        "web/notes.txt" to "notes\n",
+        "web/first.test.js" to """
+            const assert = require('node:assert')
+            const fs = require('node:fs')
+            require('node:test')('reads', () => {
+                assert.equal(require('./index.js'), 1)
+                assert.equal(fs.readFileSync(__dirname + '/../shared.txt', 'utf8'), 'shared\n')
+            })
+        """.trimIndent(),
+    )
+
+    private fun repository(vararg files: Pair<String, String>): File = committed(
+        "package.json" to """{"name":"demo","version":"1.0.0","scripts":{"test":"node --test"}}""",
+        "index.js" to "module.exports = 1\n",
+        *files,
+    )
+
+    private fun committed(vararg files: Pair<String, String>): File {
         val root = createTempDirectory("cli-repository").toFile().canonicalFile
-        File(root, "package.json").writeText("""{"name":"demo","version":"1.0.0","scripts":{"test":"node --test"}}""")
-        File(root, "index.js").writeText("module.exports = 1\n")
-        files.forEach { (name, text) -> File(root, name).writeText(text) }
+        files.forEach { (name, text) -> File(root, name).apply { parentFile.mkdirs() }.writeText(text) }
         git(root, "init", "--quiet", "--initial-branch=main")
         git(root, "add", ".")
         git(root, "-c", "user.name=test", "-c", "user.email=test@example.invalid", "commit", "--quiet", "-m", "init")

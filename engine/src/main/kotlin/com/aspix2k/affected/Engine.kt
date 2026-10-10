@@ -99,6 +99,9 @@ object Engine {
     suspend fun run(plan: EnginePlan): Boolean = plan.workspace.root != null &&
         failed(plan, plan.plan, plan.workspace.stopAfterFirstFailure, narrowed = true).isEmpty()
 
+    suspend fun runEveryTest(plan: EnginePlan): Boolean = plan.workspace.root != null &&
+        failed(plan, plan.everyTest, stopAfterFirstFailure = false, narrowed = false).isEmpty()
+
     suspend fun audit(plan: EnginePlan): EngineAudit {
         val failedInSelection = failed(plan, plan.plan, stopAfterFirstFailure = false, narrowed = true)
         val failedInFullRun = failed(plan, plan.everyTest, stopAfterFirstFailure = false, narrowed = false)
