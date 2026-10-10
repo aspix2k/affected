@@ -26,6 +26,7 @@ class EngineRequest(
     val testDependents: Boolean = false,
     val checkConsumers: Boolean = false,
     val stopAfterFirstFailure: Boolean = false,
+    val assumedChanges: List<String> = emptyList(),
     val output: (text: String, error: Boolean) -> Unit = { _, _ -> },
 )
 
@@ -196,6 +197,7 @@ object Engine {
             sourceFileNames = names,
             sourceRoots = if (includeAllFiles) emptySet() else sourceRoots,
             declaredPaths = declared?.mapTo(HashSet()) { it.path },
+            assumedPaths = request.assumedChanges,
         )
         if (!analyzer.isUsable()) {
             return ChangeSet(emptyList(), emptySet(), emptySet(), comparedToBase = false, gitUsable = false)

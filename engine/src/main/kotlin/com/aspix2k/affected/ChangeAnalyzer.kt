@@ -23,6 +23,7 @@ constructor(
     private val excludedRoots: Set<String> = emptySet(),
     private val environment: Map<String, String> = System.getenv(),
     private val declaredPaths: Set<String>? = emptySet(),
+    private val assumedPaths: List<String> = emptyList(),
     private val checkCanceled: () -> Unit = {},
 ) {
 
@@ -59,7 +60,7 @@ constructor(
         }
         val untracked = gitFields("ls-files", "--others", "--exclude-standard", "-z")
             .filterNot { it.startsWith(IDE_DIRECTORY) || isUnderAny(it, excludedRoots) }
-        (committed.orEmpty() + local + untracked).distinct()
+        (committed.orEmpty() + local + untracked + assumedPaths).distinct()
     }
 
     private val hasHead: Boolean by lazy { run("rev-parse", "--verify", "-q", HEAD).exitCode == 0 }

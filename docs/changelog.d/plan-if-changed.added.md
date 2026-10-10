@@ -1,0 +1,1 @@
+- Command line: `affected plan --if-changed <path>` (and `run`) plans as if that file had changed, so the checks that cover a file are known before it is touched.

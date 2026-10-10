@@ -79,6 +79,14 @@ check) and 64 on wrong usage. The distribution carries the pytest, unittest,
 PHPUnit and .NET helpers in `agent/` next to `lib/`, where the adapters look
 for them, so those ecosystems select tests the same way the plugin does.
 
+`--if-changed <path>` (repeatable) plans or runs as if that file had changed
+on top of the real changes, through the same rules a real change goes through:
+it answers "which checks cover this file" before the file is touched, for a
+person or for a coding agent in a terminal. The file must exist. The answer
+can be wider than for the edit that follows, because nothing is known about
+the edit: test narrowing that depends on what was modified does not apply, and
+`--consumers` judges the file by its current declarations.
+
 `audit` measures the selection instead of trusting it. It runs the planned
 checks as `run` does, then every test task of every module with no narrowing,
 and compares the two: a group of the full run that failed while none of its
