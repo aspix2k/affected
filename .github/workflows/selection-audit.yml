@@ -1,0 +1,84 @@
+name: Selection audit
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "41 3 * * 6"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Audit / ${{ matrix.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        repository: [go-chi, cargo-bitflags, cargo-roxmltree-exclude]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.1"
+      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
+        with:
+          toolchain: "1.99.0"
+      - run: scripts/run_gradle.sh :cli:installDist
+      - name: Check out the pinned repository
+        env:
+          REPOSITORY: ${{ matrix.repository }}
+        run: |
+          set -euo pipefail
+          entry=$(jq -ec --arg id "$REPOSITORY" '.repositories[] | select(.id == $id)' conformance/real-repositories.json)
+          git init --quiet --initial-branch=main "$RUNNER_TEMP/audited"
+          git -C "$RUNNER_TEMP/audited" fetch --quiet --depth 1 "$(jq -er .url <<<"$entry")" "$(jq -er .sha <<<"$entry")"
+          git -C "$RUNNER_TEMP/audited" checkout --quiet -B main FETCH_HEAD
+      - name: Break files and compare the planned checks with the full run
+        run: |
+          set -euo pipefail
+          cli/build/install/affected/bin/affected audit --base main --dir "$RUNNER_TEMP/audited" --sample 10 2>&1 \
+            | tee selection-audit.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: selection-audit-${{ matrix.repository }}
+          path: selection-audit.txt
+          if-no-files-found: error
+
+  report:
+    name: Report scheduled failure
+    needs: [audit]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TITLE: "Scheduled selection audit failed"
+        run: |
+          set -euo pipefail
+          number=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number,title \
+            --jq '[.[] | select(.title == env.TITLE)][0].number // empty')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "Failed again: $RUN_URL"
+          else
+            gh issue create --title "$TITLE" --body "The scheduled run failed: $RUN_URL"
+          fi

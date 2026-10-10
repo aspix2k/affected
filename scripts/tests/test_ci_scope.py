@@ -182,7 +182,11 @@ class CiScopeTest(unittest.TestCase):
 
     def test_scheduled_only_workflows_start_no_expensive_gate(self) -> None:
         """Weekly-only workflows never run on pull requests, so editing them starts nothing."""
-        for path in (".github/workflows/mutation.yml", ".github/workflows/currentness.yml"):
+        for path in (
+            ".github/workflows/mutation.yml",
+            ".github/workflows/selection-audit.yml",
+            ".github/workflows/currentness.yml",
+        ):
             self.assertEqual(ci_scope.empty_scope(), ci_scope.scope_for([path]))
 
     def test_github_output_writes_lowercase_booleans(self) -> None:
