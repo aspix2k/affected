@@ -106,7 +106,9 @@ broken; the audit stops when a run leaves the tree changed. A killed process
 restores the file on exit; if it cannot, `git checkout` does. The cost is one
 full run up front and one more for every file whose breakage the planned
 checks do not notice — two when it looks like a miss — so keep `--sample`
-small where the tests are slow.
+small where the tests are slow. `selection-audit.yml` does this every week on
+pinned repositories from `conformance/real-repositories.json` and opens an
+issue when a file is missed.
 
 A dependency the adapters cannot see — a file a test reads from outside its
 module, a fixture another project owns — is declared in
