@@ -73,6 +73,31 @@ class MainTest {
     }
 
     @Test
+    fun `a file that has not changed plans its checks when it is assumed to`() {
+        val root = repository()
+
+        val (code, output, errors) =
+            run(listOf("plan", "--base", "main", "--dir", root.path, "--if-changed", "index.js"))
+
+        assertEquals(EXIT_PASSED, code, errors)
+        assertTrue("Changed files against main: 1\nAssumed to have changed: 1" in output, output)
+        assertTrue(Regex("NODE in \\.: \\S*:test").containsMatchIn(output), output)
+    }
+
+    @Test
+    fun `an assumed change outside the repository and one given to audit are refused`() {
+        val root = repository()
+
+        val (code, _, errors) =
+            run(listOf("plan", "--base", "main", "--dir", root.path, "--if-changed", "../other.js"))
+
+        assertEquals(EXIT_USAGE, code)
+        assertTrue("must be a file inside" in errors, errors)
+        assertEquals(EXIT_USAGE, run(listOf("plan", "--base", "main", "--dir", root.path, "--if-changed", ".")).first)
+        assertNull(parse(listOf("audit", "--base", "main", "--if-changed", "index.js")))
+    }
+
+    @Test
     fun `a branch without changes has nothing to run and passes`() {
         val (code, output, _) = run(listOf("run", "--base", "main", "--dir", repository().path))
 

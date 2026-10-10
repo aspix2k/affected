@@ -26,6 +26,7 @@ internal class Arguments(
     val checkConsumers: Boolean,
     val stopAfterFirstFailure: Boolean,
     val audit: AuditOptions = AuditOptions(),
+    val assumed: List<String> = emptyList(),
 )
 
 internal class AuditOptions(
@@ -51,6 +52,7 @@ internal const val USAGE = """Usage: affected <plan|run|audit> --base <branch> [
   --dependents         also test modules that depend on the changed ones
   --consumers          also compile direct consumers of changed API
   --fail-fast          stop after the first failed group (not with audit)
+  --if-changed <path>  plan or run as if this file had changed too; repeatable
   --break <path>       audit only: break this file on purpose and check that the
                        planned checks notice whenever any test does; repeatable
   --sample <count>     audit only: break that many tracked files picked at random
@@ -67,20 +69,24 @@ internal fun parse(arguments: List<String>): Arguments? {
     while (rest.hasNext()) {
         when (val argument = rest.next()) {
             "--dependents", "--consumers", "--fail-fast", "--learn" -> flags += argument
-            "--base", "--dir", "--break", "--sample", "--report" ->
+            "--base", "--dir", "--break", "--sample", "--report", "--if-changed" ->
                 values.getOrPut(argument, ::mutableListOf) += if (rest.hasNext()) rest.next() else return null
             else -> return null
         }
     }
     val audit = auditOptions(flags, values) ?: return null
+    val directory = values["--dir"]?.last()?.let { File(it).absoluteFile.normalize() } ?: File("").absoluteFile
     val parsed = Arguments(
         command,
-        values["--dir"]?.last()?.let { File(it).absoluteFile.normalize() } ?: File("").absoluteFile,
+        directory,
         values["--base"]?.last()?.takeIf(String::isNotBlank) ?: return null,
         "--dependents" in flags,
         "--consumers" in flags,
         "--fail-fast" in flags,
         audit,
+        values["--if-changed"].orEmpty().map { path ->
+            (File(path).takeIf(File::isAbsolute) ?: File(directory, path)).normalize().path
+        },
     )
     return parsed.takeUnless { it.mixesCommands() }
 }
@@ -96,7 +102,11 @@ private fun auditOptions(flags: Set<String>, values: Map<String, List<String>>):
 }
 
 private fun Arguments.mixesCommands(): Boolean =
-    if (command == "audit") stopAfterFirstFailure || audit.learn && !audit.breaksFiles else audit.isSet
+    if (command == "audit") {
+        stopAfterFirstFailure || assumed.isNotEmpty() || audit.learn && !audit.breaksFiles
+    } else {
+        audit.isSet
+    }
 
 internal fun execute(arguments: List<String>, out: PrintStream, err: PrintStream, cache: Path): Int {
     val parsed = parse(arguments) ?: return EXIT_USAGE.also { err.print(USAGE) }
@@ -122,6 +132,8 @@ private fun misplaced(arguments: Arguments): String? {
     val report = arguments.audit.report
     return when {
         !arguments.directory.isDirectory -> "Not a directory: ${arguments.directory}"
+        arguments.assumed.any { !File(it).startsWith(arguments.directory) || !File(it).isFile } ->
+            "A path given to --if-changed must be a file inside ${arguments.directory}"
         report != null && (report.isDirectory || report.startsWith(arguments.directory)) ->
             "The report must be a file outside ${arguments.directory}: $report"
         else -> null
@@ -129,7 +141,16 @@ private fun misplaced(arguments: Arguments): String? {
 }
 
 internal fun Arguments.request(cache: Path, output: (String, Boolean) -> Unit): EngineRequest =
-    EngineRequest(directory, baseBranch, cache, testDependents, checkConsumers, stopAfterFirstFailure, output)
+    EngineRequest(
+        directory,
+        baseBranch,
+        cache,
+        testDependents,
+        checkConsumers,
+        stopAfterFirstFailure,
+        assumed.map { File(it).relativeTo(directory).invariantSeparatorsPath },
+        output,
+    )
 
 private fun audit(plan: EnginePlan, arguments: Arguments, out: PrintStream, blocker: EngineBlocker?): Int {
     val audit = runBlocking { Engine.audit(plan) }
@@ -167,6 +188,7 @@ private fun describe(plan: EnginePlan, arguments: Arguments, out: PrintStream) {
     val systems = plan.systems.joinToString { "${it.id} (${it.modules})" }.ifEmpty { "none" }
     out.println("Build systems: $systems")
     out.println("Changed files against ${arguments.baseBranch}: ${plan.changedFiles.size}")
+    if (arguments.assumed.isNotEmpty()) out.println("Assumed to have changed: ${arguments.assumed.size}")
     if (plan.plan.isEmpty) {
         out.println("Nothing to run.")
         return
