@@ -27,6 +27,7 @@ internal class Arguments(
     val stopAfterFirstFailure: Boolean,
     val broken: List<String> = emptyList(),
     val sample: Int = 0,
+    val learn: Boolean = false,
 ) {
     val breaksFiles: Boolean get() = broken.isNotEmpty() || sample > 0
 }
@@ -46,6 +47,8 @@ internal const val USAGE = """Usage: affected <plan|run|audit> --base <branch> [
   --break <path>       audit only: break this file on purpose and check that the
                        planned checks notice whenever any test does; repeatable
   --sample <count>     audit only: break that many tracked files picked at random
+  --learn              with --break or --sample: declare every missed file as a
+                       dependency of the tests that need it
 """
 
 internal fun parse(arguments: List<String>): Arguments? {
@@ -55,7 +58,7 @@ internal fun parse(arguments: List<String>): Arguments? {
     val rest = arguments.drop(1).iterator()
     while (rest.hasNext()) {
         when (val argument = rest.next()) {
-            "--dependents", "--consumers", "--fail-fast" -> flags += argument
+            "--dependents", "--consumers", "--fail-fast", "--learn" -> flags += argument
             "--base", "--dir", "--break", "--sample" ->
                 values.getOrPut(argument, ::mutableListOf) += if (rest.hasNext()) rest.next() else return null
             else -> return null
@@ -71,12 +74,13 @@ internal fun parse(arguments: List<String>): Arguments? {
         "--fail-fast" in flags,
         values["--break"].orEmpty(),
         sample ?: 0,
+        "--learn" in flags,
     )
     return parsed.takeUnless { sample == 0 || it.mixesCommands() }
 }
 
 private fun Arguments.mixesCommands(): Boolean =
-    if (command == "audit") stopAfterFirstFailure else breaksFiles
+    if (command == "audit") stopAfterFirstFailure || learn && !breaksFiles else breaksFiles || learn
 
 internal fun execute(arguments: List<String>, out: PrintStream, err: PrintStream, cache: Path): Int {
     val parsed = parse(arguments) ?: return EXIT_USAGE.also { err.print(USAGE) }

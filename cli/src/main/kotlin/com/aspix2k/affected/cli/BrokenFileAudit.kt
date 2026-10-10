@@ -1,5 +1,7 @@
 package com.aspix2k.affected.cli
 
+import com.aspix2k.affected.DeclaredDependencies
+import com.aspix2k.affected.DeclaredDependency
 import com.aspix2k.affected.Engine
 import com.aspix2k.affected.EnginePlan
 import com.aspix2k.affected.isProjectDocumentation
@@ -21,6 +23,11 @@ internal class BrokenFileAudit(
             err.println("Affected audit: breaking files needs a git working tree without local changes.")
             return EXIT_USAGE
         }
+        val declared = DeclaredDependencies.read(arguments.directory)
+        if (arguments.learn && declared == null) {
+            err.println("Affected audit: ${DeclaredDependencies.LOCATION} cannot be read, so nothing is added to it.")
+            return EXIT_USAGE
+        }
         val files = files() ?: return EXIT_USAGE
         val clean = plan()
         clean.blocker?.let { blocker ->
@@ -31,21 +38,26 @@ internal class BrokenFileAudit(
             err.println("Affected audit: the tests fail before any file is broken, so nothing can be compared.")
             return EXIT_FAILED
         }
-        var missed = 0
+        val missed = ArrayList<DeclaredDependency>()
         for (file in files) {
-            val verdict = verdict(file)
+            val verdict = verdict(file, missed)
             out.println("$verdict ${relative(file)}")
-            if (verdict == MISSED) missed++
             if (!isClean()) {
                 err.println("Affected audit: the run changed files of the working tree, so it stops here.")
                 return EXIT_FAILED
             }
         }
-        out.println("\nAffected audit: broke ${files.size} files, the planned checks missed $missed.")
-        return if (missed == 0) EXIT_PASSED else EXIT_MISSED
+        val paths = missed.distinctBy { it.path }.size
+        out.println("\nAffected audit: broke ${files.size} files, the planned checks missed $paths.")
+        missed.forEach { out.println("  ${it.path} is needed by ${it.system} ${it.module} in ${it.root}") }
+        if (arguments.learn && missed.isNotEmpty()) {
+            DeclaredDependencies.write(arguments.directory, declared.orEmpty() + missed)
+            out.println("Declared in ${DeclaredDependencies.LOCATION}; commit it to keep these tests planned.")
+        }
+        return if (missed.isEmpty()) EXIT_PASSED else EXIT_MISSED
     }
 
-    private fun verdict(file: File): String {
+    private fun verdict(file: File, missed: MutableList<DeclaredDependency>): String {
         val original = file.readBytes()
         val restore = Thread { file.writeBytes(original) }
         Runtime.getRuntime().addShutdownHook(restore)
@@ -56,8 +68,11 @@ internal class BrokenFileAudit(
                 when {
                     plan.blocker != null -> REFUSED
                     !Engine.run(plan) -> CAUGHT
-                    Engine.runEveryTest(plan) || Engine.runEveryTest(plan) -> UNNOTICED
-                    else -> MISSED
+                    Engine.runEveryTest(plan) -> UNNOTICED
+                    else -> Engine.failedTestModules(plan).mapNotNull { module ->
+                        DeclaredDependencies.relativeRoot(arguments.directory, module.executionRoot)
+                            ?.let { DeclaredDependency(relative(file), module.systemId, it, module.executionId) }
+                    }.also(missed::addAll).let { if (it.isEmpty()) UNNOTICED else MISSED }
                 }
             }
         } finally {

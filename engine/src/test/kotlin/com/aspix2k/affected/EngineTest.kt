@@ -117,6 +117,55 @@ class EngineTest {
     }
 
     @Test
+    fun `a file declared as a dependency plans the tests of the declared module`() {
+        val root = packages()
+        DeclaredDependencies.write(root, listOf(DeclaredDependency("shared.txt", "NODE", "web", moduleOf(root, "web"))))
+        commit(root)
+
+        File(root, "shared.txt").writeText("two\n")
+
+        assertEquals(listOf(listOf("${moduleOf(root, "web")}:test")), tasks(root))
+    }
+
+    @Test
+    fun `a dependency on a module that no longer exists plans every test`() {
+        val root = packages()
+        DeclaredDependencies.write(root, listOf(DeclaredDependency("shared.txt", "NODE", "gone", "gone")))
+        commit(root)
+
+        File(root, "shared.txt").writeText("two\n")
+
+        assertEquals(2, tasks(root).flatten().size)
+    }
+
+    @Test
+    fun `declared dependencies that cannot be read plan every test for any change`() {
+        val root = packages()
+        File(root, DeclaredDependencies.LOCATION).apply { parentFile.mkdirs() }.writeText("{")
+        commit(root)
+
+        File(root, "shared.txt").writeText("two\n")
+
+        assertEquals(2, tasks(root).flatten().size)
+    }
+
+    private fun packages(): File {
+        val root = createTempDirectory("engine-declared").toFile().canonicalFile
+        for (name in listOf("web", "api")) {
+            File(root, "$name/package.json").apply { parentFile.mkdirs() }.writeText(MANIFEST.replace("demo", name))
+            File(root, "$name/index.js").writeText("module.exports = 1\n")
+        }
+        File(root, "shared.txt").writeText("one\n")
+        return root
+    }
+
+    private fun tasks(root: File): List<List<String>> = Engine.plan(request(root, "main")).plan.groups.map { it.tasks }
+
+    private fun moduleOf(root: File, directory: String): String =
+        Engine.plan(request(root, "main")).everyTest.groups.single { File(it.root) == File(root, directory) }
+            .tasks.single().removeSuffix(":test")
+
+    @Test
     fun `every project directory adapter counts any changed file inside a module`() {
         assertEquals(
             emptyList(),

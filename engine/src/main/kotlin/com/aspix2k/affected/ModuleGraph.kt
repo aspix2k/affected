@@ -95,10 +95,21 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
     }
 
     internal fun owners(changes: ChangeSet): Map<File, List<Node>> = changes.files.associateWith { file ->
-        if (file in changes.outsideSources) {
+        val containing = if (file in changes.outsideSources) {
             countingEveryFile.nodesFor(file).ifEmpty { nodesFor(file) }
         } else {
             nodesFor(file)
+        }
+        (containing + declaredOwners(changes, file)).distinct()
+    }
+
+    private fun declaredOwners(changes: ChangeSet, file: File): List<Node> {
+        val declared = changes.declaredOwners ?: return nodes.filter { it.hasTests }
+        return declared[file].orEmpty().flatMap { owner ->
+            nodes.filter { node ->
+                node.system.id == owner.system && node.module.executionId == owner.module &&
+                    File(node.module.executionRoot).invariantSeparatorsPath == owner.root
+            }.ifEmpty { nodes.filter { it.hasTests } }
         }
     }
 
