@@ -3,7 +3,7 @@ package com.aspix2k.affected.build
 import com.aspix2k.affected.build.process.CliCommand
 import java.io.File
 
-internal class SbtBuildSystem : EngineBuildSystem, WorkspaceChangesBuildSystem {
+internal class SbtBuildSystem : EngineBuildSystem, WorkspaceChangesBuildSystem, AllFileChangesBuildSystem {
 
     override val id: String = "SBT"
 

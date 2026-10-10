@@ -308,10 +308,23 @@ internal fun isCollectedSource(
 ): Boolean {
     if (isProjectDocumentation(path)) return false
     val fileName = path.substringAfterLast('/').substringAfterLast('\\')
+    if (fileName in DESKTOP_METADATA_NAMES) return false
     return includeAllFiles ||
         path.substringAfterLast('.', "").lowercase() in extensions ||
         fileName in names ||
         isUnderAny(path, sourceRoots)
+}
+
+internal fun filesOutsideSources(
+    files: Collection<File>,
+    projectDir: File,
+    extensions: Set<String>,
+    names: Set<String>,
+    sourceRoots: Set<String>,
+): Set<File> = files.filterTo(HashSet()) { file ->
+    val relative = runCatching { file.relativeTo(projectDir).invariantSeparatorsPath }
+        .getOrDefault(file.invariantSeparatorsPath)
+    !isCollectedSource(relative, includeAllFiles = false, extensions, names, sourceRoots)
 }
 
 private fun isUnderAny(path: String, roots: Set<String>): Boolean {
@@ -320,6 +333,8 @@ private fun isUnderAny(path: String, roots: Set<String>): Boolean {
         .takeWhile(String::isNotEmpty)
         .any(roots::contains)
 }
+
+private val DESKTOP_METADATA_NAMES = setOf(".DS_Store", "Thumbs.db", "desktop.ini")
 
 private val PROJECT_DOCUMENTATION_NAMES = setOf(
     "readme.md",

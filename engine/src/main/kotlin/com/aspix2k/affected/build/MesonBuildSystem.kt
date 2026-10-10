@@ -5,7 +5,7 @@ import com.google.gson.JsonParser
 import java.io.File
 import java.nio.file.Files
 
-internal class MesonBuildSystem : EngineBuildSystem, NamedSourceBuildSystem {
+internal class MesonBuildSystem : EngineBuildSystem, NamedSourceBuildSystem, AllFileChangesBuildSystem {
 
     override val id: String = "MESON"
 

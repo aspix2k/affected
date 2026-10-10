@@ -5,7 +5,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
 
-internal class Buck2BuildSystem : EngineBuildSystem, NamedSourceBuildSystem {
+internal class Buck2BuildSystem : EngineBuildSystem, NamedSourceBuildSystem, AllFileChangesBuildSystem {
 
     override val id: String = "BUCK2"
 

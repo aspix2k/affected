@@ -1,5 +1,6 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.AllFileChangesBuildSystem
 import com.aspix2k.affected.build.BuildChanges
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.BuildSystemTraits
@@ -87,6 +88,18 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
         val owners = scoped.ifEmpty { rooted }
         val deepest = owners.maxOfOrNull { File(it.module.root).toPath().nameCount } ?: return emptyList()
         return owners.filter { File(it.module.root).toPath().nameCount == deepest }.distinct()
+    }
+
+    private val countingEveryFile: ModuleGraph by lazy {
+        ModuleGraph(nodes.filter { it.system.capability<AllFileChangesBuildSystem>() != null })
+    }
+
+    internal fun owners(changes: ChangeSet): Map<File, List<Node>> = changes.files.associateWith { file ->
+        if (file in changes.outsideSources) {
+            countingEveryFile.nodesFor(file).ifEmpty { nodesFor(file) }
+        } else {
+            nodesFor(file)
+        }
     }
 
     fun nodeFor(file: File): Node? = nodesFor(file).firstOrNull()

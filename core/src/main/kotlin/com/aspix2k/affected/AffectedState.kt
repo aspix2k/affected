@@ -577,7 +577,7 @@ class AffectedState(
     private suspend fun analyze(): AffectedAnalysis = withContext(Dispatchers.Default) {
         val changes = ProjectChanges.collectSuspending(project)
         val graph = ModuleGraph.create(project)
-        val directOwners = changes.files.associateWith(graph::nodesFor)
+        val directOwners = graph.owners(changes)
         val owners = graph.ownersForChanges(changes.toBuildChanges(), directOwners)
 
         AffectedAnalysis(
@@ -604,7 +604,7 @@ internal fun affectedModules(graph: ModuleGraph, files: List<File>): List<Affect
     affectedModules(files.flatMap(graph::nodesFor))
 
 internal fun affectedModules(graph: ModuleGraph, changes: ChangeSet): List<AffectedModule> =
-    affectedModules(graph.ownersForChanges(changes.toBuildChanges()).values.flatten())
+    affectedModules(graph.ownersForChanges(changes.toBuildChanges(), graph.owners(changes)).values.flatten())
 
 private fun affectedModules(nodes: List<ModuleGraph.Node>): List<AffectedModule> =
     nodes

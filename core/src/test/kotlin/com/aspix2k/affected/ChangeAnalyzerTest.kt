@@ -243,6 +243,13 @@ internal class ChangeAnalyzerTest : GitRepositoryTest() {
     }
 
     @Test
+    fun `a file the desktop writes on its own is not a change`() {
+        listOf("assets/.DS_Store", "assets\\Thumbs.db", "desktop.ini").forEach { path ->
+            assertFalse(isCollectedSource(path, includeAllFiles = true, extensions = emptySet(), names = emptySet()))
+        }
+    }
+
+    @Test
     fun `windows separators still drop root documentation from all-file collection`() {
         assertTrue(isProjectDocumentation("README.md"))
         assertTrue(isProjectDocumentation("docs\\CHANGELOG.md"))
