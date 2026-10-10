@@ -25,11 +25,18 @@ internal class Arguments(
     val testDependents: Boolean,
     val checkConsumers: Boolean,
     val stopAfterFirstFailure: Boolean,
+    val audit: AuditOptions = AuditOptions(),
+)
+
+internal class AuditOptions(
     val broken: List<String> = emptyList(),
     val sample: Int = 0,
     val learn: Boolean = false,
+    val report: File? = null,
 ) {
     val breaksFiles: Boolean get() = broken.isNotEmpty() || sample > 0
+
+    val isSet: Boolean get() = breaksFiles || learn || report != null
 }
 
 internal const val USAGE = """Usage: affected <plan|run|audit> --base <branch> [options]
@@ -49,6 +56,7 @@ internal const val USAGE = """Usage: affected <plan|run|audit> --base <branch> [
   --sample <count>     audit only: break that many tracked files picked at random
   --learn              with --break or --sample: declare every missed file as a
                        dependency of the tests that need it
+  --report <path>      audit only: also write the result as JSON
 """
 
 internal fun parse(arguments: List<String>): Arguments? {
@@ -59,12 +67,12 @@ internal fun parse(arguments: List<String>): Arguments? {
     while (rest.hasNext()) {
         when (val argument = rest.next()) {
             "--dependents", "--consumers", "--fail-fast", "--learn" -> flags += argument
-            "--base", "--dir", "--break", "--sample" ->
+            "--base", "--dir", "--break", "--sample", "--report" ->
                 values.getOrPut(argument, ::mutableListOf) += if (rest.hasNext()) rest.next() else return null
             else -> return null
         }
     }
-    val sample = values["--sample"]?.last()?.let { it.toIntOrNull()?.coerceAtLeast(0) ?: 0 }
+    val audit = auditOptions(flags, values) ?: return null
     val parsed = Arguments(
         command,
         values["--dir"]?.last()?.let { File(it).absoluteFile.normalize() } ?: File("").absoluteFile,
@@ -72,20 +80,28 @@ internal fun parse(arguments: List<String>): Arguments? {
         "--dependents" in flags,
         "--consumers" in flags,
         "--fail-fast" in flags,
+        audit,
+    )
+    return parsed.takeUnless { it.mixesCommands() }
+}
+
+private fun auditOptions(flags: Set<String>, values: Map<String, List<String>>): AuditOptions? {
+    val sample = values["--sample"]?.last()?.let { it.toIntOrNull()?.takeIf { count -> count > 0 } ?: return null }
+    return AuditOptions(
         values["--break"].orEmpty(),
         sample ?: 0,
         "--learn" in flags,
+        values["--report"]?.last()?.let { File(it).absoluteFile.normalize() },
     )
-    return parsed.takeUnless { sample == 0 || it.mixesCommands() }
 }
 
 private fun Arguments.mixesCommands(): Boolean =
-    if (command == "audit") stopAfterFirstFailure || learn && !breaksFiles else breaksFiles || learn
+    if (command == "audit") stopAfterFirstFailure || audit.learn && !audit.breaksFiles else audit.isSet
 
 internal fun execute(arguments: List<String>, out: PrintStream, err: PrintStream, cache: Path): Int {
     val parsed = parse(arguments) ?: return EXIT_USAGE.also { err.print(USAGE) }
-    if (!parsed.directory.isDirectory) return EXIT_USAGE.also { err.println("Not a directory: ${parsed.directory}") }
-    if (parsed.breaksFiles) return BrokenFileAudit(parsed, out, err, cache).run()
+    misplaced(parsed)?.let { return EXIT_USAGE.also { _ -> err.println(it) } }
+    if (parsed.audit.breaksFiles) return BrokenFileAudit(parsed, out, err, cache).run()
     val plan = Engine.plan(parsed.request(cache) { text, error -> (if (error) err else out).print(text) })
     describe(plan, parsed, out)
     val blocker = plan.blocker
@@ -102,6 +118,16 @@ private fun run(plan: EnginePlan, out: PrintStream, blocker: EngineBlocker?): In
     return exitCode(passed, blocker)
 }
 
+private fun misplaced(arguments: Arguments): String? {
+    val report = arguments.audit.report
+    return when {
+        !arguments.directory.isDirectory -> "Not a directory: ${arguments.directory}"
+        report != null && (report.isDirectory || report.startsWith(arguments.directory)) ->
+            "The report must be a file outside ${arguments.directory}: $report"
+        else -> null
+    }
+}
+
 internal fun Arguments.request(cache: Path, output: (String, Boolean) -> Unit): EngineRequest =
     EngineRequest(directory, baseBranch, cache, testDependents, checkConsumers, stopAfterFirstFailure, output)
 
@@ -109,6 +135,7 @@ private fun audit(plan: EnginePlan, arguments: Arguments, out: PrintStream, bloc
     val audit = runBlocking { Engine.audit(plan) }
     out.println("\n" + summary(plan, audit))
     audit.missed.forEach { out.println("  ${describe(it, arguments)}") }
+    arguments.audit.report?.let { writeFullRunReport(it, plan, audit, arguments) }
     return if (audit.missed.isEmpty()) exitCode(audit.failedInSelection.isEmpty(), blocker) else EXIT_MISSED
 }
 
@@ -124,10 +151,11 @@ private fun summary(plan: EnginePlan, audit: EngineAudit): String {
     }
 }
 
-private fun describe(group: TaskGroup, arguments: Arguments): String {
-    val root = File(group.root).relativeToOrSelf(arguments.directory).invariantSeparatorsPath.ifEmpty { "." }
-    return "${group.systemId} in $root: ${group.tasks.joinToString(" ")}"
-}
+private fun describe(group: TaskGroup, arguments: Arguments): String =
+    "${group.systemId} in ${relativeRoot(group, arguments)}: ${group.tasks.joinToString(" ")}"
+
+internal fun relativeRoot(group: TaskGroup, arguments: Arguments): String =
+    File(group.root).relativeToOrSelf(arguments.directory).invariantSeparatorsPath.ifEmpty { "." }
 
 internal fun exitCode(passed: Boolean, blocker: EngineBlocker?): Int = when {
     !passed -> EXIT_FAILED

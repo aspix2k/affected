@@ -1,0 +1,1 @@
+- Command line: `affected audit --report <path>` writes the audit result as JSON — task counts, the time of the planned and of the full run, missed groups, or the verdict for every broken file.

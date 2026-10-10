@@ -37,6 +37,7 @@ class MainTest {
         assertNull(parse(listOf("run", "--base", "main", "--break", "index.js")))
         assertNull(parse(listOf("audit", "--base", "main", "--sample", "0")))
         assertNull(parse(listOf("audit", "--base", "main", "--learn")))
+        assertNull(parse(listOf("run", "--base", "main", "--report", "audit.json")))
     }
 
     @Test
@@ -115,6 +116,31 @@ class MainTest {
     }
 
     @Test
+    fun `audit writes what it compared and what it missed as JSON`() {
+        val root = repository("first.test.js" to PASSING_TEST, "second.test.js" to FAILING_TEST)
+        File(root, "first.test.js").appendText("// changed\n")
+        val report = File(createTempDirectory("cli-report").toFile(), "audit.json")
+
+        run(listOf("audit", "--base", "main", "--dir", root.path, "--report", report.path))
+
+        val text = report.readText()
+        assertTrue("\"mode\": \"full-run\"" in text, text)
+        assertTrue("\"plannedTasks\": 1" in text && "\"everyTestTasks\": 1" in text, text)
+        assertTrue("\"system\": \"NODE\"" in text && "\"fullRunMillis\"" in text, text)
+    }
+
+    @Test
+    fun `a report inside the audited repository is refused before anything runs`() {
+        val root = repository()
+
+        val (code, _, errors) =
+            run(listOf("audit", "--base", "main", "--dir", root.path, "--report", File(root, "audit.json").path))
+
+        assertEquals(EXIT_USAGE, code)
+        assertTrue("outside" in errors, errors)
+    }
+
+    @Test
     fun `audit runs every test of a branch that plans nothing`() {
         val root = repository("first.test.js" to FAILING_TEST)
 
@@ -167,14 +193,18 @@ class MainTest {
     fun `a broken file inside the package is caught or goes unnoticed by every test`() {
         val root = nestedRepository()
 
+        val report = File(createTempDirectory("cli-report").toFile(), "audit.json")
+
         val (code, output, errors) = run(
-            listOf("audit", "--base", "main", "--dir", root.path) +
+            listOf("audit", "--base", "main", "--dir", root.path, "--report", report.path) +
                 listOf("--break", "web/index.js", "--break", "web/notes.txt"),
         )
 
         assertEquals(EXIT_PASSED, code, output + errors)
         assertTrue("caught    web/index.js" in output, output)
         assertTrue("unnoticed web/notes.txt" in output, output)
+        assertTrue("\"verdict\": \"unnoticed\"" in report.readText(), report.readText())
+        assertTrue("\"caught\": 1" in report.readText(), report.readText())
         assertTrue("broke 2 files, the planned checks missed 0" in output, output)
     }
 

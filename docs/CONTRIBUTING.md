@@ -135,6 +135,15 @@ the file is committed. Where several modules share one run it tries them one
 at a time, which costs a run each, and a flaky test can add an entry that is
 not needed; an entry too many only plans more.
 
+`--report <path>` writes the result of either kind of audit as JSON: the
+number of planned and of all test tasks with the time each run took and the
+missed groups, or the verdict for every broken file with the modules that
+needed the missed ones. It is the input for a number over time — the share of
+breakages the selection let through and the time it saved. The path must be
+outside the audited repository, and nothing is written when the audit stops
+before it has compared anything. The full run comes second and reuses what the
+planned checks built, so the saved time it implies is a lower bound.
+
 A Gradle build in the repository root is read without the IDE by
 `GradleCommandLineBuildSystem`: it runs the wrapper (or `gradle`) once with an
 init script that writes projects, task names, typed `Test` tasks, source set
