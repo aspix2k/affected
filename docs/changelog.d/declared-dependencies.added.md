@@ -1,0 +1,1 @@
+- `.affected/dependencies.json` declares that a file is needed by the tests of a module the adapters cannot connect it to; a change of that file plans those tests in the command line and in the IDE. `affected audit --break … --learn` writes an entry for every file the planned checks missed.

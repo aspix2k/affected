@@ -36,6 +36,7 @@ class MainTest {
         assertNull(parse(listOf("audit", "--base", "main", "--fail-fast")))
         assertNull(parse(listOf("run", "--base", "main", "--break", "index.js")))
         assertNull(parse(listOf("audit", "--base", "main", "--sample", "0")))
+        assertNull(parse(listOf("audit", "--base", "main", "--learn")))
     }
 
     @Test
@@ -144,6 +145,22 @@ class MainTest {
         assertEquals(EXIT_MISSED, code, output + errors)
         assertTrue("MISSED    shared.txt" in output, output)
         assertEquals("shared\n", File(root, "shared.txt").readText())
+    }
+
+    @Test
+    fun `a missed file that was learned is caught by the next audit`() {
+        val root = nestedRepository()
+        val audit = listOf("audit", "--base", "main", "--dir", root.path, "--break", "shared.txt")
+
+        val (learned, output, errors) = run(audit + "--learn")
+        git(root, "add", "-A")
+        git(root, "-c", "user.name=test", "-c", "user.email=test@example.invalid", "commit", "--quiet", "-m", "learn")
+        val (code, verdicts, _) = run(audit)
+
+        assertEquals(EXIT_MISSED, learned, output + errors)
+        assertTrue("shared.txt is needed by NODE . in web" in output, output)
+        assertEquals(EXIT_PASSED, code, verdicts)
+        assertTrue("caught    shared.txt" in verdicts, verdicts)
     }
 
     @Test

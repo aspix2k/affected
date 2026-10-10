@@ -110,6 +110,31 @@ small where the tests are slow. `selection-audit.yml` does this every week on
 pinned repositories from `conformance/real-repositories.json` and opens an
 issue when a file is missed.
 
+A dependency the adapters cannot see — a file a test reads from outside its
+module, a fixture another project owns — is declared in
+`.affected/dependencies.json` at the repository root:
+
+```json
+{
+  "version": 1,
+  "dependencies": [
+    { "path": "shared.txt", "system": "NODE", "root": "web", "module": "." }
+  ]
+}
+```
+
+`path` is a file relative to the repository root, `root` the directory the
+module's tests run in (`.` for the repository root) and `module` its id there,
+both as `plan` prints them. A change of that file plans the tests of that
+module on top of whatever contains the file, in the command line and in the
+IDE. The file fails closed: when it cannot be read, any change plans every
+test, and an entry whose module no longer exists plans every test for its
+file. `audit --break … --learn` writes one entry for each test module that
+fails on a missed file, so a scheduled audit repairs the holes it finds once
+the file is committed. Where several modules share one run it tries them one
+at a time, which costs a run each, and a flaky test can add an entry that is
+not needed; an entry too many only plans more.
+
 A Gradle build in the repository root is read without the IDE by
 `GradleCommandLineBuildSystem`: it runs the wrapper (or `gradle`) once with an
 init script that writes projects, task names, typed `Test` tasks, source set

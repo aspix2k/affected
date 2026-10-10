@@ -22,6 +22,7 @@ constructor(
     private val sourceRoots: Set<String> = emptySet(),
     private val excludedRoots: Set<String> = emptySet(),
     private val environment: Map<String, String> = System.getenv(),
+    private val declaredPaths: Set<String>? = emptySet(),
     private val checkCanceled: () -> Unit = {},
 ) {
 
@@ -80,7 +81,8 @@ constructor(
     internal fun keepSources(paths: Collection<String>): List<File> {
         return paths
             .filter { path ->
-                isCollectedSource(path, includeAllFiles, sourceExtensions, sourceFileNames, sourceRoots)
+                declaredPaths == null || path in declaredPaths ||
+                    isCollectedSource(path, includeAllFiles, sourceExtensions, sourceFileNames, sourceRoots)
             }
             .map { File(projectDir, it) }
             .distinct()
@@ -306,7 +308,7 @@ internal fun isCollectedSource(
     names: Set<String>,
     sourceRoots: Set<String> = emptySet(),
 ): Boolean {
-    if (isProjectDocumentation(path)) return false
+    if (isProjectDocumentation(path) || path.replace('\\', '/') == DeclaredDependencies.LOCATION) return false
     val fileName = path.substringAfterLast('/').substringAfterLast('\\')
     if (fileName in DESKTOP_METADATA_NAMES) return false
     return includeAllFiles ||

@@ -48,11 +48,13 @@ class EnginePlan internal constructor(
     val changedFiles: List<File>,
     val unresolved: List<File>,
     val blocker: EngineBlocker?,
-    val everyTest: Plan,
+    internal val testModules: List<ModuleInfo>,
     internal val changes: BuildChanges,
     internal val workspace: Workspace,
     internal val present: List<EngineBuildSystem>,
-)
+) {
+    val everyTest: Plan = TaskPlanner.plan(testModules, emptyList())
+}
 
 object Engine {
 
@@ -83,13 +85,14 @@ object Engine {
             plans.unresolved.isNotEmpty() -> EngineBlocker.UNRESOLVED_CHANGES
             else -> null
         }
+        val testModules = graph.all().filter { it.hasTests }.map { it.info() }
         return EnginePlan(
             if (request.checkConsumers) plans.withConsumers else plans.testsOnly,
             graph.systemSummaries(),
             changes.files,
             plans.unresolved,
             blocker,
-            TaskPlanner.plan(graph.all().filter { it.hasTests }.map { it.info() }, emptyList()),
+            testModules,
             collected,
             workspace,
             present,
@@ -101,6 +104,16 @@ object Engine {
 
     suspend fun runEveryTest(plan: EnginePlan): Boolean = plan.workspace.root != null &&
         failed(plan, plan.everyTest, stopAfterFirstFailure = false, narrowed = false).isEmpty()
+
+    suspend fun failedTestModules(plan: EnginePlan): List<ModuleInfo> =
+        failed(plan, plan.everyTest, stopAfterFirstFailure = false, narrowed = false).flatMap { group ->
+            val modules = plan.testModules.filter { it.systemId == group.systemId }
+                .let { system -> system.filter { it.executionRoot == group.root }.ifEmpty { system } }
+            modules.singleOrNull()?.let(::listOf) ?: modules.filter { module ->
+                val alone = TaskPlanner.plan(listOf(module), emptyList())
+                failed(plan, alone, stopAfterFirstFailure = false, narrowed = false).isNotEmpty()
+            }
+        }
 
     suspend fun audit(plan: EnginePlan): EngineAudit {
         val failedInSelection = failed(plan, plan.plan, stopAfterFirstFailure = false, narrowed = true)
@@ -162,6 +175,7 @@ object Engine {
             present.flatMapTo(HashSet()) { it.sourceExtensions }.ifEmpty { ChangeAnalyzer.DEFAULT_EXTENSIONS }
         val names = present.mapNotNull { it.capability<NamedSourceBuildSystem>() }
             .flatMapTo(HashSet()) { it.sourceFileNames }
+        val declared = DeclaredDependencies.read(request.directory)
         val analyzer = ChangeAnalyzer(
             request.directory,
             request.baseBranch,
@@ -169,6 +183,7 @@ object Engine {
             includeAllFiles,
             sourceFileNames = names,
             sourceRoots = if (includeAllFiles) emptySet() else sourceRoots,
+            declaredPaths = declared?.mapTo(HashSet()) { it.path },
         )
         if (!analyzer.isUsable()) {
             return ChangeSet(emptyList(), emptySet(), emptySet(), comparedToBase = false, gitUsable = false)
@@ -182,6 +197,9 @@ object Engine {
             baseUnresolved = !analyzer.hasComparisonBase(),
             resolvedBranch = analyzer.resolvedBranch(),
             mergeBase = analyzer.comparisonBase(),
+            declaredOwners = declared?.let { dependencies ->
+                files.associateWith { DeclaredDependencies.owners(request.directory, dependencies, it) }
+            },
             outsideSources = if (includeAllFiles) {
                 filesOutsideSources(files, request.directory, extensions, names, sourceRoots)
             } else {

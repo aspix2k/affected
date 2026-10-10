@@ -29,6 +29,7 @@ object ProjectChanges {
                 uncovered = uncovered,
                 gitUsable = false,
                 outsideSources = outsideSources(project, files),
+                declaredOwners = declaredOwners(project, files),
             )
         } else {
             ChangeSet(
@@ -41,6 +42,7 @@ object ProjectChanges {
                 resolvedBranch = analyzer.resolvedBranch(),
                 mergeBase = analyzer.comparisonBase(),
                 outsideSources = outsideSources(project, files),
+                declaredOwners = declaredOwners(project, files),
             )
         }
     }
@@ -54,7 +56,11 @@ object ProjectChanges {
         val names = BuildSystems.sourceFileNames(project)
         val includeAllFiles = BuildSystems.includesAllFileChanges(project)
         val sourceRoots = if (includeAllFiles) emptySet() else sourceRoots(project, projectDir)
-        val accepts = { path: String -> isCollectedSource(path, includeAllFiles, extensions, names, sourceRoots) }
+        val declaredPaths = DeclaredDependencies.read(projectDir)?.mapTo(HashSet()) { it.path }
+        val accepts = { path: String ->
+            declaredPaths == null || path in declaredPaths ||
+                isCollectedSource(path, includeAllFiles, extensions, names, sourceRoots)
+        }
         val foreign = if (includeAllFiles) emptySet() else BuildSystems.languageExtensions() - extensions
         val uncovers = { path: String ->
             path.substringAfterLast('.', "").lowercase() in foreign && !accepts(path)
@@ -71,6 +77,7 @@ object ProjectChanges {
             excludedRoots = excludedRoots(project, projectDir),
             environment = EnvironmentUtil.getEnvironmentMap(),
             checkCanceled = ProgressManager::checkCanceled,
+            declaredPaths = declaredPaths,
         )
 
         if (!analyzer.isUsable()) return Triple(local, localUncovered, null)
@@ -80,6 +87,12 @@ object ProjectChanges {
             (localUncovered + analyzer.againstBase(uncovers)).distinct(),
             analyzer,
         )
+    }
+
+    private fun declaredOwners(project: Project, files: List<File>): Map<File, List<DeclaredOwner>>? {
+        val projectDir = project.basePath?.let(::File) ?: return emptyMap()
+        val declared = DeclaredDependencies.read(projectDir) ?: return null
+        return files.associateWith { DeclaredDependencies.owners(projectDir, declared, it) }
     }
 
     private fun outsideSources(project: Project, files: List<File>): Set<File> {

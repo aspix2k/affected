@@ -17,6 +17,7 @@ data class ChangeSet(
     val gitUsable: Boolean = true,
     val mergeBase: String? = null,
     val outsideSources: Set<File> = emptySet(),
+    val declaredOwners: Map<File, List<DeclaredOwner>>? = emptyMap(),
 )
 
 internal data class VerificationPlans(
