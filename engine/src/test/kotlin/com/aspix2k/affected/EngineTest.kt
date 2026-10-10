@@ -1,5 +1,8 @@
 package com.aspix2k.affected
 
+import com.aspix2k.affected.build.AllFileChangesBuildSystem
+import com.aspix2k.affected.build.EngineBuildSystems
+import com.aspix2k.affected.build.capability
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -64,6 +67,63 @@ class EngineTest {
         assertEquals(EngineBlocker.NOT_A_GIT_REPOSITORY, Engine.plan(request(root, "main")).blocker)
     }
 
+    @Test
+    fun `a changed file that is not source code still plans the tests of its project`() {
+        val root = createTempDirectory("engine-make").toFile().canonicalFile
+        File(root, "Makefile").writeText("test:\n\t./run-tests testdata/input.json\n")
+        File(root, "testdata/input.json").apply { parentFile.mkdirs() }.writeText("{}\n")
+        commit(root)
+        File(root, "testdata/input.json").writeText("{\"changed\": true}\n")
+
+        val plan = Engine.plan(request(root, "main"))
+
+        assertNull(plan.blocker)
+        assertEquals(listOf(File(root, "testdata/input.json")), plan.changedFiles)
+        assertEquals(listOf("MAKE"), plan.plan.groups.map { it.systemId })
+    }
+
+    @Test
+    fun `a changed file outside the source roots stays out of a project that collects by source root`() {
+        val root = createTempDirectory("engine-mixed").toFile().canonicalFile
+        File(root, "package.json").writeText(MANIFEST)
+        File(root, "pom.xml").writeText(POM)
+        File(root, "src/test/java/DemoTest.java").apply { parentFile.mkdirs() }.writeText("class DemoTest {}\n")
+        File(root, "src/test/resources/input.txt").apply { parentFile.mkdirs() }.writeText("one\n")
+        File(root, "notes.txt").writeText("one\n")
+        commit(root)
+
+        File(root, "notes.txt").writeText("two\n")
+        assertEquals(listOf("NODE"), Engine.plan(request(root, "main")).plan.groups.map { it.systemId })
+
+        File(root, "src/test/resources/input.txt").writeText("two\n")
+        assertEquals(
+            setOf("NODE", "MAVEN"),
+            Engine.plan(request(root, "main")).plan.groups.mapTo(HashSet()) { it.systemId },
+        )
+    }
+
+    @Test
+    fun `a changed file that only a project collecting by source root contains still plans its tests`() {
+        val root = createTempDirectory("engine-mixed-nested").toFile().canonicalFile
+        File(root, "web/package.json").apply { parentFile.mkdirs() }.writeText(MANIFEST)
+        File(root, "pom.xml").writeText(POM)
+        File(root, "src/test/java/DemoTest.java").apply { parentFile.mkdirs() }.writeText("class DemoTest {}\n")
+        File(root, "notes.txt").writeText("one\n")
+        commit(root)
+
+        File(root, "notes.txt").writeText("two\n")
+
+        assertEquals(listOf("MAVEN"), Engine.plan(request(root, "main")).plan.groups.map { it.systemId })
+    }
+
+    @Test
+    fun `every project directory adapter counts any changed file inside a module`() {
+        assertEquals(
+            emptyList(),
+            EngineBuildSystems.adapters().filter { it.capability<AllFileChangesBuildSystem>() == null }.map { it.id },
+        )
+    }
+
     private fun request(root: File, base: String) =
         EngineRequest(root, base, createTempDirectory("engine-cache"))
 
@@ -72,11 +132,15 @@ class EngineTest {
         File(root, "package.json").writeText(MANIFEST)
         File(root, "index.js").writeText("module.exports = 1\n")
         File(root, "index.test.js").writeText("require('./index.js')\n")
+        commit(root)
+        return root
+    }
+
+    private fun commit(root: File) {
         git(root, "init", "--quiet", "--initial-branch=main")
         git(root, "add", ".")
         git(root, "-c", "user.name=test", "-c", "user.email=test@example.invalid", "commit", "--quiet", "-m", "init")
         git(root, "checkout", "--quiet", "-b", "feature")
-        return root
     }
 
     private fun git(root: File, vararg arguments: String) {
@@ -86,6 +150,8 @@ class EngineTest {
     }
 
     private companion object {
+        const val POM = """<project><modelVersion>4.0.0</modelVersion>
+            <groupId>demo</groupId><artifactId>demo</artifactId><version>1</version></project>"""
         const val MANIFEST = """{"name":"demo","version":"1.0.0","scripts":{"test":"node --test"}}"""
     }
 }

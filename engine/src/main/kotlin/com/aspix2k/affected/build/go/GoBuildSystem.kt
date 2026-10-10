@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build.go
 
+import com.aspix2k.affected.build.AllFileChangesBuildSystem
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.EngineBuildSystem
 import com.aspix2k.affected.build.ManifestSearch
@@ -17,7 +18,7 @@ import com.aspix2k.affected.build.runBatchAndWait
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
-internal class GoBuildSystem : EngineBuildSystem {
+internal class GoBuildSystem : EngineBuildSystem, AllFileChangesBuildSystem {
 
     private data class Snapshot(val stamp: String, val modules: List<BuildModule>)
 

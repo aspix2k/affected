@@ -66,12 +66,7 @@ object Engine {
             ModuleGraph(present.flatMap { system -> system.modules(workspace).map { ModuleGraph.Node(it, system) } })
         val changes = collect(request, present, sourceRoots(request.directory, graph))
         collected = changes.toBuildChanges()
-        val plans = verificationPlans(
-            graph,
-            changes,
-            changes.files.associateWith(graph::nodesFor),
-            request.testDependents,
-        )
+        val plans = verificationPlans(graph, changes, graph.owners(changes), request.testDependents)
         val blocker = when {
             !changes.gitUsable -> EngineBlocker.NOT_A_GIT_REPOSITORY
             changes.baseUnresolved || changes.resolvedBranch != request.baseBranch ->
@@ -123,13 +118,16 @@ object Engine {
         sourceRoots: Set<String>,
     ): ChangeSet {
         val includeAllFiles = present.any { it.capability<AllFileChangesBuildSystem>() != null }
+        val extensions =
+            present.flatMapTo(HashSet()) { it.sourceExtensions }.ifEmpty { ChangeAnalyzer.DEFAULT_EXTENSIONS }
+        val names = present.mapNotNull { it.capability<NamedSourceBuildSystem>() }
+            .flatMapTo(HashSet()) { it.sourceFileNames }
         val analyzer = ChangeAnalyzer(
             request.directory,
             request.baseBranch,
-            present.flatMapTo(HashSet()) { it.sourceExtensions }.ifEmpty { ChangeAnalyzer.DEFAULT_EXTENSIONS },
+            extensions,
             includeAllFiles,
-            sourceFileNames = present.mapNotNull { it.capability<NamedSourceBuildSystem>() }
-                .flatMapTo(HashSet()) { it.sourceFileNames },
+            sourceFileNames = names,
             sourceRoots = if (includeAllFiles) emptySet() else sourceRoots,
         )
         if (!analyzer.isUsable()) {
@@ -144,6 +142,11 @@ object Engine {
             baseUnresolved = !analyzer.hasComparisonBase(),
             resolvedBranch = analyzer.resolvedBranch(),
             mergeBase = analyzer.comparisonBase(),
+            outsideSources = if (includeAllFiles) {
+                filesOutsideSources(files, request.directory, extensions, names, sourceRoots)
+            } else {
+                emptySet()
+            },
         )
     }
 }

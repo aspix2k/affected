@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build.dart
 
+import com.aspix2k.affected.build.AllFileChangesBuildSystem
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.EngineBuildSystem
 import com.aspix2k.affected.build.Workspace
@@ -12,7 +13,7 @@ import com.aspix2k.affected.build.runBatch
 import com.aspix2k.affected.build.runBatchAndWait
 import java.io.File
 
-internal class FlutterBuildSystem : EngineBuildSystem {
+internal class FlutterBuildSystem : EngineBuildSystem, AllFileChangesBuildSystem {
 
     override val id: String = "FLUTTER"
 

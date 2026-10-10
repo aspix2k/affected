@@ -4,7 +4,11 @@ import com.aspix2k.affected.build.process.CliCommand
 import java.io.File
 import java.nio.file.Files
 
-internal class BazelBuildSystem : EngineBuildSystem, WorkspaceChangesBuildSystem, NamedSourceBuildSystem {
+internal class BazelBuildSystem :
+    EngineBuildSystem,
+    WorkspaceChangesBuildSystem,
+    NamedSourceBuildSystem,
+    AllFileChangesBuildSystem {
 
     override val id: String = "BAZEL"
 

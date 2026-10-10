@@ -3,7 +3,10 @@ package com.aspix2k.affected.build
 import com.aspix2k.affected.build.process.CliCommand
 import java.io.File
 
-internal class KotlinToolchainBuildSystem : ChangeAwareEngineBuildSystem, WorkspaceChangesBuildSystem {
+internal class KotlinToolchainBuildSystem :
+    ChangeAwareEngineBuildSystem,
+    WorkspaceChangesBuildSystem,
+    AllFileChangesBuildSystem {
 
     override val id: String = "KOTLIN_TOOLCHAIN"
 

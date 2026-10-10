@@ -1,5 +1,6 @@
 package com.aspix2k.affected.build.xcode
 
+import com.aspix2k.affected.build.AllFileChangesBuildSystem
 import com.aspix2k.affected.build.BuildModule
 import com.aspix2k.affected.build.EngineBuildSystem
 import com.aspix2k.affected.build.NamedSourceBuildSystem
@@ -16,7 +17,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption
 
-internal class XcodeBuildSystem : EngineBuildSystem, NamedSourceBuildSystem {
+internal class XcodeBuildSystem : EngineBuildSystem, NamedSourceBuildSystem, AllFileChangesBuildSystem {
 
     override val id: String = "XCODE"
 

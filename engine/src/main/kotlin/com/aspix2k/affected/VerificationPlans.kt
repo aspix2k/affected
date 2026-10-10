@@ -16,6 +16,7 @@ data class ChangeSet(
     val resolvedBranch: String? = null,
     val gitUsable: Boolean = true,
     val mergeBase: String? = null,
+    val outsideSources: Set<File> = emptySet(),
 )
 
 internal data class VerificationPlans(
