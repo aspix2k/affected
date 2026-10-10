@@ -153,6 +153,54 @@ class ComposerPestCommandTest {
     }
 
     @Test
+    fun `a changed file that tests share keeps the full Pest suite`() {
+        for (shared in listOf("TestCase.php", "Support/Factory.php", "Fixtures/users.php", "Feature/Concerns.php")) {
+            val root = createTempDirectory("composer-pest-shared-file").toFile()
+            File(root, "package/tests/Feature").mkdirs()
+            File(root, "package/tests/Feature/HomeTest.php").writeText("<?php\n")
+            val changed = File(root, "package/tests/$shared").apply {
+                parentFile.mkdirs()
+                writeText("<?php\n")
+            }
+
+            val commands = composerCommands(
+                root.path,
+                listOf("package:${ComposerPackages.PEST}"),
+                listOf(module(root, "package", "package", ComposerPackages.PEST)),
+                changes(changed),
+            )
+
+            assertEquals(listOf("./package/tests"), commands.single().arguments.takeLast(1), shared)
+        }
+    }
+
+    @Test
+    fun `a production change keeps the full Pest suite when a shared file imports it`() {
+        val root = createTempDirectory("composer-pest-shared-consumer").toFile()
+        File(root, "package").mkdirs()
+        File(root, "package/composer.json").writeText(
+            """{"autoload":{"psr-4":{"App\\":"src/"}}}""",
+        )
+        File(root, "package/tests/Support").mkdirs()
+        File(root, "package/tests/FeatureTest.php").writeText("<?php\nuse App\\Service;\n")
+        File(root, "package/tests/OtherTest.php").writeText("<?php\n")
+        File(root, "package/tests/Support/Scenario.php").writeText("<?php\nuse App\\Service;\n")
+        val source = File(root, "package/src/Service.php").apply {
+            parentFile.mkdirs()
+            writeText("<?php\n")
+        }
+
+        val commands = composerCommands(
+            root.path,
+            listOf("package:${ComposerPackages.PEST}"),
+            listOf(module(root, "package", "package", ComposerPackages.PEST)),
+            changes(source),
+        )
+
+        assertEquals(listOf("./package/tests"), commands.single().arguments.takeLast(1))
+    }
+
+    @Test
     fun `a production change keeps the full Pest suite when nothing statically imports it`() {
         val root = createTempDirectory("composer-pest-src-full").toFile()
         File(root, "package").mkdirs()
@@ -340,8 +388,8 @@ class ComposerPestCommandTest {
         val root = createTempDirectory("composer-pest-multi-exact").toFile()
         File(root, "packages/a/tests").mkdirs()
         File(root, "packages/b/tests").mkdirs()
-        val first = File(root, "packages/a/tests/A.php").apply { writeText("<?php\n") }
-        val second = File(root, "packages/b/tests/B.php").apply { writeText("<?php\n") }
+        val first = File(root, "packages/a/tests/ATest.php").apply { writeText("<?php\n") }
+        val second = File(root, "packages/b/tests/BTest.php").apply { writeText("<?php\n") }
 
         val commands = composerCommands(
             root.path,
@@ -354,7 +402,7 @@ class ComposerPestCommandTest {
         )
 
         assertEquals(
-            listOf("./packages/a/tests/A.php", "./packages/b/tests/B.php"),
+            listOf("./packages/a/tests/ATest.php", "./packages/b/tests/BTest.php"),
             commands.single().arguments.takeLast(2),
         )
     }
