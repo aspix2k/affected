@@ -20,7 +20,7 @@ dependencies {
     implementation(project(":engine"))
     implementation(kotlin("stdlib"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
-    runtimeOnly("com.google.code.gson:gson:2.13.2")
+    implementation("com.google.code.gson:gson:2.13.2")
     runtimeOnly("net.java.dev.jna:jna:5.17.0")
     runtimeOnly("net.java.dev.jna:jna-platform:5.17.0")
 

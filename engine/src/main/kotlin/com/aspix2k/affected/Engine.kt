@@ -17,6 +17,7 @@ import com.aspix2k.affected.build.maven.MAVEN_SYSTEM_ID
 import com.aspix2k.affected.build.process.ProcessHost
 import java.io.File
 import java.nio.file.Path
+import java.util.concurrent.TimeUnit
 
 class EngineRequest(
     val directory: File,
@@ -40,6 +41,8 @@ class EngineAudit internal constructor(
     val failedInSelection: List<TaskGroup>,
     val failedInFullRun: List<TaskGroup>,
     val missed: List<TaskGroup>,
+    val selectionMillis: Long,
+    val fullRunMillis: Long,
 )
 
 class EnginePlan internal constructor(
@@ -116,8 +119,11 @@ object Engine {
         }
 
     suspend fun audit(plan: EnginePlan): EngineAudit {
+        val started = System.nanoTime()
         val failedInSelection = failed(plan, plan.plan, stopAfterFirstFailure = false, narrowed = true)
+        val selected = System.nanoTime()
         val failedInFullRun = failed(plan, plan.everyTest, stopAfterFirstFailure = false, narrowed = false)
+        val finished = System.nanoTime()
         val explained = failedInSelection.flatMapTo(HashSet()) { group ->
             group.tasks.map { TaskKey(group.systemId, group.root, it) }
         }
@@ -133,7 +139,13 @@ object Engine {
                 }
             }
         }
-        return EngineAudit(failedInSelection, failedInFullRun, missed)
+        return EngineAudit(
+            failedInSelection,
+            failedInFullRun,
+            missed,
+            TimeUnit.NANOSECONDS.toMillis(selected - started),
+            TimeUnit.NANOSECONDS.toMillis(finished - selected),
+        )
     }
 
     private suspend fun failed(

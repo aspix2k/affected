@@ -24,7 +24,7 @@ internal class BrokenFileAudit(
             return EXIT_USAGE
         }
         val declared = DeclaredDependencies.read(arguments.directory)
-        if (arguments.learn && declared == null) {
+        if (arguments.audit.learn && declared == null) {
             err.println("Affected audit: ${DeclaredDependencies.LOCATION} cannot be read, so nothing is added to it.")
             return EXIT_USAGE
         }
@@ -38,9 +38,15 @@ internal class BrokenFileAudit(
             err.println("Affected audit: the tests fail before any file is broken, so nothing can be compared.")
             return EXIT_FAILED
         }
+        return audit(files, declared.orEmpty())
+    }
+
+    private fun audit(files: List<File>, declared: List<DeclaredDependency>): Int {
         val missed = ArrayList<DeclaredDependency>()
+        val verdicts = LinkedHashMap<String, String>()
         for (file in files) {
             val verdict = verdict(file, missed)
+            verdicts[relative(file)] = verdict.trim().lowercase()
             out.println("$verdict ${relative(file)}")
             if (!isClean()) {
                 err.println("Affected audit: the run changed files of the working tree, so it stops here.")
@@ -50,10 +56,11 @@ internal class BrokenFileAudit(
         val paths = missed.distinctBy { it.path }.size
         out.println("\nAffected audit: broke ${files.size} files, the planned checks missed $paths.")
         missed.forEach { out.println("  ${it.path} is needed by ${it.system} ${it.module} in ${it.root}") }
-        if (arguments.learn && missed.isNotEmpty()) {
-            DeclaredDependencies.write(arguments.directory, declared.orEmpty() + missed)
+        if (arguments.audit.learn && missed.isNotEmpty()) {
+            DeclaredDependencies.write(arguments.directory, declared + missed)
             out.println("Declared in ${DeclaredDependencies.LOCATION}; commit it to keep these tests planned.")
         }
+        arguments.audit.report?.let { writeBrokenFilesReport(it, arguments.baseBranch, verdicts, missed) }
         return if (missed.isEmpty()) EXIT_PASSED else EXIT_MISSED
     }
 
@@ -90,14 +97,14 @@ internal class BrokenFileAudit(
             .filter(String::isNotEmpty)
             .map { File(arguments.directory, it) }
             .filter { it.isFile && !Files.isSymbolicLink(it.toPath()) }
-        val named = arguments.broken.map { File(it).takeIf(File::isAbsolute) ?: File(arguments.directory, it) }
+        val named = arguments.audit.broken.map { File(it).takeIf(File::isAbsolute) ?: File(arguments.directory, it) }
             .map(File::normalize)
         named.firstOrNull { it !in tracked }?.let {
             err.println("Affected audit: $it is not a file that git tracks in ${arguments.directory}.")
             return null
         }
         val sampled = tracked.filterNot { it in named || isProjectDocumentation(relative(it)) }.shuffled()
-        return (named + sampled.take(arguments.sample)).distinct()
+        return (named + sampled.take(arguments.audit.sample)).distinct()
     }
 
     private fun relative(file: File): String = file.relativeToOrSelf(arguments.directory).invariantSeparatorsPath
