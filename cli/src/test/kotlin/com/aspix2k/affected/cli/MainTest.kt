@@ -247,6 +247,25 @@ class MainTest {
     }
 
     @Test
+    fun `changes made by baseline tests stop the audit before it breaks a file`() {
+        val root = nestedRepository()
+        File(root, "web/first.test.js").writeText(
+            "require('node:fs').writeFileSync(__dirname + '/../shared.txt', 'changed\\n')\n",
+        )
+        git(root, "add", ".")
+        git(
+            root, "-c", "user.name=test", "-c", "user.email=test@example.invalid",
+            "commit", "--quiet", "-m", "test edits",
+        )
+
+        val (code, output, errors) = run(listOf("audit", "--base", "main", "--dir", root.path, "--break", "shared.txt"))
+
+        assertEquals(EXIT_FAILED, code, output + errors)
+        assertTrue("changed files" in errors, errors)
+        assertTrue("unnoticed" !in output, output)
+    }
+
+    @Test
     fun `a file the tests read without being planned for it is found by watching them`() {
         assumeTrue(tracerOnPath() != null)
         val root = nestedRepository()

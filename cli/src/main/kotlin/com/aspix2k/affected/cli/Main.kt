@@ -5,6 +5,7 @@ import com.aspix2k.affected.EngineAudit
 import com.aspix2k.affected.EngineBlocker
 import com.aspix2k.affected.EnginePlan
 import com.aspix2k.affected.EngineRequest
+import com.aspix2k.affected.EngineTestExecution
 import com.aspix2k.affected.TaskGroup
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -59,8 +60,8 @@ internal const val USAGE = """Usage: affected <plan|run|audit> --base <branch> [
   --sample <count>     audit only: break that many tracked files picked at random
   --observe            audit only, Linux with strace: break the files the tests
                        read although no change of them plans those tests
-  --learn              with --break or --sample: declare every missed file as a
-                       dependency of the tests that need it
+  --learn              with --break, --sample or --observe: declare every missed
+                       file as a dependency of the tests that need it
   --report <path>      audit only: also write the result as JSON
 """
 
@@ -157,7 +158,7 @@ internal fun Arguments.request(
         checkConsumers,
         stopAfterFirstFailure,
         assumed.map { File(it).relativeTo(directory).invariantSeparatorsPath },
-        commandPrefix,
+        EngineTestExecution(commandPrefix, rerunTests = command == "audit"),
         output,
     )
 

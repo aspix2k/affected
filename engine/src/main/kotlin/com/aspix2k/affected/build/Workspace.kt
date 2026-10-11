@@ -14,6 +14,8 @@ internal interface Workspace {
 
     val stopAfterFirstFailure: Boolean
 
+    val rerunTests: Boolean get() = false
+
     val helperAssets: Path?
 
     val processHost: ProcessHost

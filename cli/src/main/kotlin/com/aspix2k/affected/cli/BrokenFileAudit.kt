@@ -35,6 +35,17 @@ internal class BrokenFileAudit(
             return EXIT_USAGE
         }
         val files = files() ?: return EXIT_USAGE
+        baseline()?.let { return it }
+        val readers = tracer?.takeIf { arguments.audit.observe }?.let {
+            ObservedReads(arguments, cache, it).unplanned(tracked()) ?: return EXIT_FAILED.also {
+                err.println("Affected audit: the tests fail under strace, or it may not trace here.")
+            }
+        }
+        if (!isClean()) return changedByTests()
+        return audit((files + readers?.keys.orEmpty()).distinct(), declared.orEmpty(), readers.orEmpty())
+    }
+
+    private fun baseline(): Int? {
         val clean = plan()
         clean.blocker?.let { blocker ->
             err.println(explain(blocker, arguments, clean))
@@ -44,12 +55,12 @@ internal class BrokenFileAudit(
             err.println("Affected audit: the tests fail before any file is broken, so nothing can be compared.")
             return EXIT_FAILED
         }
-        val readers = tracer?.takeIf { arguments.audit.observe }?.let {
-            ObservedReads(arguments, cache, it).unplanned(tracked()) ?: return EXIT_FAILED.also {
-                err.println("Affected audit: the tests fail under strace, or it may not trace here.")
-            }
-        }
-        return audit(files + readers?.keys.orEmpty(), declared.orEmpty(), readers.orEmpty())
+        return if (!isClean()) changedByTests() else null
+    }
+
+    private fun changedByTests(): Int {
+        err.println("Affected audit: the tests changed files of the working tree, so it stops before breaking files.")
+        return EXIT_FAILED
     }
 
     private fun audit(
@@ -59,7 +70,7 @@ internal class BrokenFileAudit(
     ): Int {
         val missed = ArrayList<DeclaredDependency>()
         val verdicts = LinkedHashMap<String, String>()
-        for (file in files.distinct()) {
+        for (file in files) {
             val verdict = broken(file) { verdict(file, readers[file], missed) }
             verdicts[relative(file)] = verdict.trim().lowercase()
             out.println("$verdict ${relative(file)}")

@@ -4,6 +4,7 @@ import com.aspix2k.affected.build.process.CliCommand
 import com.aspix2k.affected.build.process.CliStep
 import com.aspix2k.affected.build.process.CommandSequence
 import com.aspix2k.affected.build.process.CommandSequenceListener
+import com.aspix2k.affected.build.process.DeferredCliCommand
 import com.aspix2k.affected.build.process.OutputKind
 import com.aspix2k.affected.build.process.ProcessHost
 import com.sun.jna.Platform
@@ -21,6 +22,7 @@ internal class FileWorkspace(
     private val output: (String, Boolean) -> Unit,
     host: ProcessHost? = null,
     private val commandPrefix: List<String> = emptyList(),
+    override val rerunTests: Boolean = false,
 ) : Workspace {
 
     override val root: File = directory
@@ -53,11 +55,11 @@ internal class FileWorkspace(
 
     override fun changes(): BuildChanges = collectedChanges()
 
-    private fun prefixed(steps: List<CliStep>): List<CliStep> = steps.map { step ->
-        if (step is CliCommand && commandPrefix.isNotEmpty()) {
-            step.copy(arguments = commandPrefix + step.arguments)
-        } else {
-            step
+    private fun prefixed(steps: List<CliStep>): List<CliStep> = if (commandPrefix.isEmpty()) {
+        steps
+    } else {
+        steps.map { step ->
+            DeferredCliCommand.command { step.resolve()?.let { it.copy(arguments = commandPrefix + it.arguments) } }
         }
     }
 

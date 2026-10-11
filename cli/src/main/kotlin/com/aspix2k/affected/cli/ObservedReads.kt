@@ -19,7 +19,9 @@ internal class ObservedReads(
         val byRealPath = tracked.associateBy { it.canonicalFile }
         val trace = Files.createTempFile("affected-trace", ".txt")
         try {
-            val prefix = listOf(tracer, "-f", "-qq", "-A", "-e", "trace=?open,openat,?openat2,execve", "-o", "$trace")
+            val prefix = listOf(
+                tracer, "-f", "-qq", "-z", "-yy", "-A", "-e", "trace=?open,openat,?openat2,execve", "-o", "$trace",
+            )
             val plan = Engine.plan(arguments.request(cache, prefix) { _, _ -> })
             val readers = LinkedHashMap<File, MutableList<ModuleInfo>>()
             for (module in plan.testModules) {
@@ -46,9 +48,10 @@ internal fun tracerOnPath(): String? = System.getenv("PATH").orEmpty().split(Fil
     .firstOrNull { it.isFile && it.canExecute() }?.path
 
 internal fun straceRead(line: String, workingDirectory: File): File? {
-    if (FAILED in line) return null
+    if (FAILED in line || !COMPLETED.containsMatchIn(line)) return null
     val match = OPENED.find(line) ?: EXECUTED.find(line) ?: return null
     if (match.groupValues.getOrNull(3).orEmpty().contains("O_WRONLY")) return null
+    DESCRIPTOR.find(line)?.groupValues?.get(1)?.let { return File(unescaped(it)) }
     val path = File(unescaped(match.groupValues[2]))
     return when {
         path.isAbsolute -> path
@@ -82,9 +85,14 @@ private fun unescaped(text: String): String {
 }
 
 private const val FAILED = ") = -1 "
+private val COMPLETED = Regex("""\) = \d+""")
+private val DESCRIPTOR = Regex("""\) = \d+<(/.*)>$""")
 private const val OCTAL_RADIX = 8
 private val OPENED =
-    Regex("""\bopen(?:at2?)?\((?:AT_FDCWD, |(\d+)(?:<[^>]*>)?, )?"((?:[^"\\]|\\.)*)", ([A-Z_|0-9x{}a-z=, ]+)""")
+    Regex(
+        """\bopen(?:at2?)?\((?:AT_FDCWD(?:<[^>]*>)?, |(\d+)(?:<[^>]*>)?, )?""" +
+            """"((?:[^"\\]|\\.)*)", ([A-Z_|0-9x{}a-z=, ]+)""",
+    )
 private val EXECUTED = Regex("""\bexecve\(()"((?:[^"\\]|\\.)*)"""")
 private val OCTAL = Regex("[0-7]{1,3}")
 private val ESCAPES = mapOf('n' to '\n'.code, 't' to '\t'.code, 'r' to '\r'.code, 'f' to 0x0c, 'v' to 0x0b)

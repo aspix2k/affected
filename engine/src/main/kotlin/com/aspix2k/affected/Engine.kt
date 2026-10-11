@@ -19,6 +19,8 @@ import java.io.File
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 
+class EngineTestExecution(val commandPrefix: List<String> = emptyList(), val rerunTests: Boolean = false)
+
 class EngineRequest(
     val directory: File,
     val baseBranch: String,
@@ -27,7 +29,7 @@ class EngineRequest(
     val checkConsumers: Boolean = false,
     val stopAfterFirstFailure: Boolean = false,
     val assumedChanges: List<String> = emptyList(),
-    val commandPrefix: List<String> = emptyList(),
+    val testExecution: EngineTestExecution = EngineTestExecution(),
     val output: (text: String, error: Boolean) -> Unit = { _, _ -> },
 )
 
@@ -83,7 +85,8 @@ object Engine {
             { collected },
             request.output,
             host,
-            request.commandPrefix,
+            request.testExecution.commandPrefix,
+            request.testExecution.rerunTests,
         )
         val present = EngineBuildSystems.all().filter { it.isPresent(workspace) }
         val graph =

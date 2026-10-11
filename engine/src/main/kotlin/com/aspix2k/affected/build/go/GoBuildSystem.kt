@@ -70,11 +70,11 @@ internal class GoBuildSystem : EngineBuildSystem, AllFileChangesBuildSystem {
     }
 
     override fun run(workspace: Workspace, root: String, tasks: List<String>) {
-        workspace.runBatch(root, goCommands(tasks), "Affected Go")
+        workspace.runBatch(root, goCommands(tasks, workspace.rerunTests), "Affected Go")
     }
 
     override suspend fun runAndWait(workspace: Workspace, root: String, tasks: List<String>): Boolean =
-        workspace.runBatchAndWait(root, goCommands(tasks), "Affected Go")
+        workspace.runBatchAndWait(root, goCommands(tasks, workspace.rerunTests), "Affected Go")
 
     private fun rootsOf(workspace: Workspace): List<File> =
         workspace.root?.let(::goProjectRoots).orEmpty()
@@ -93,10 +93,11 @@ internal fun goProjectRoots(base: File): List<File> =
 internal fun goManifest(root: File): File? =
     File(root, "go.mod").takeIf(File::isRegularFileNoFollow)
 
-internal fun goCommands(tasks: List<String>): List<CliCommand> {
+internal fun goCommands(tasks: List<String>, rerunTests: Boolean = false): List<CliCommand> {
     val grouped = tasks.groupBy({ it.substringAfterLast(':') }, { it.substringBeforeLast(':') })
     return grouped.map { (task, packages) ->
         val verb = if (task == GoPackages.COMPILE) "build" else "test"
-        CliCommand("go $verb", listOf("go", verb) + packages.map { if (it == ".") "./..." else it })
+        val fresh = if (verb == "test" && rerunTests) listOf("-count=1") else emptyList()
+        CliCommand("go $verb", listOf("go", verb) + fresh + packages.map { if (it == ".") "./..." else it })
     }
 }

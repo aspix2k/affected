@@ -10,6 +10,26 @@ class ObservedReadsTest {
     private val work = File("/repo/web")
 
     @Test
+    fun `decoded descriptors identify paths after cwd changes and relative directory opens`() {
+        assertEquals(
+            File("/repo/shared.txt"),
+            straceRead(
+                """42 openat(AT_FDCWD</repo/web/nested>, "../../shared.txt", O_RDONLY) = 3</repo/shared.txt>""", work,
+            ),
+        )
+        assertEquals(
+            File("/repo/data/input.txt"),
+            straceRead("""42 openat(7</repo/data>, "input.txt", O_RDONLY) = 8</repo/data/input.txt>""", work),
+        )
+    }
+
+    @Test
+    fun `unfinished opens and executions do not prove a successful read`() {
+        assertNull(straceRead("""42 openat(AT_FDCWD, "/repo/data.txt", O_RDONLY <unfinished ...>""", work))
+        assertNull(straceRead("""42 execve("/repo/tool", ["tool"], 0x123 <unfinished ...>""", work))
+    }
+
+    @Test
     fun `a file opened for reading or executed is a read`() {
         assertEquals(
             File("/repo/shared.txt"),

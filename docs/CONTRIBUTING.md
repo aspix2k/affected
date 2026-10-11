@@ -151,10 +151,16 @@ then broken: when the planned checks for that change fail it is `caught`,
 otherwise only the tests that read it are run, and a failure is a `MISSED`
 file with its module, ready for `--learn`. One traced run per module replaces
 a full run per sampled file. A module that fails on a broken file is run once
-more before the file counts as missed. What it cannot see: processes the test
-command does not start itself, so a build that hands the tests to a daemon; a
-relative path opened after the process changed its directory, which is read
-as relative to the module; and a path relative to a directory handle.
+more before the file counts as missed. Successful opens use the absolute path
+of the returned file descriptor, including after a directory change or an
+open relative to a directory handle. Audit passes disable Go's test-result
+cache with `-count=1`, including the repeat checks on a broken file.
+What it cannot see: processes the test command does not start itself, so a
+build that hands the tests to a daemon; tests that another build system serves
+from its result cache; and a relative executable started after changing the
+directory. Observed reads are evidence for that execution, rather than proof
+that no other file can affect the tests. If a baseline or observed test edits
+the working tree, the audit stops before breaking any file.
 
 `--report <path>` writes the result of either kind of audit as JSON: the
 number of planned and of all test tasks with the time each run took and the
