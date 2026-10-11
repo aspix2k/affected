@@ -1,0 +1,1 @@
+- Command line: `affected audit --observe` (Linux with `strace`) watches which tracked files the tests of each module read, and breaks only those whose change would not plan the tests that read them.
