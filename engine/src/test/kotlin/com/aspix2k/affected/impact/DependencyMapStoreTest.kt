@@ -2,7 +2,9 @@ package com.aspix2k.affected.impact
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.FileTime
 import java.nio.file.attribute.PosixFilePermission
+import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -191,6 +193,60 @@ class DependencyMapStoreTest : CollectorMapFixture() {
         Files.createDirectory(target)
         assertNull(store.read(taskKey))
     }
+
+    @Test
+    fun `reading all maps yields nothing for a root that is not a directory`() = withDirectory { root ->
+        val file = Files.writeString(root.resolve("file"), "x\n")
+
+        assertEquals(StoredMaps(emptyList(), 0), DependencyMapStore(file).readAll())
+    }
+
+    @Test
+    fun `reading all maps reports an unlistable directory as one unreadable map`() = withDirectory { root ->
+        val storeRoot = root.resolve("store")
+        DependencyMapStore(storeRoot).write(validMap)
+
+        withPermissions(storeRoot, setOf(PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_EXECUTE)) {
+            assertEquals(StoredMaps(emptyList(), 1), DependencyMapStore(storeRoot).readAll())
+        }
+    }
+
+    @Test
+    fun `reading all maps rejects a map stored under the name of another task`() = withDirectory { root ->
+        val storeRoot = root.resolve("store")
+        val store = DependencyMapStore(storeRoot)
+        store.write(validMap)
+        val stored = Files.list(storeRoot).use { it.toList() }.single()
+
+        Files.move(stored, storeRoot.resolve("map-${"0".repeat(64)}.map"))
+
+        assertEquals(StoredMaps(emptyList(), 1), store.readAll())
+    }
+
+    @Test
+    fun `reading all maps keeps readable maps with their modification time and counts every unreadable file`() =
+        withDirectory { root ->
+            val storeRoot = root.resolve("store")
+            val store = DependencyMapStore(storeRoot)
+            val other = complete(listOf(beta), listOf(record(testClass("BetaTest"), beta)))
+                .let { it.copy(identity = it.identity.copy(taskKey = "root|:lib|test")) }
+            val modified = Instant.parse("2026-02-03T04:05:06Z")
+            store.write(validMap)
+            store.write(other)
+            Files.list(storeRoot).use { stream ->
+                stream.forEach { Files.setLastModifiedTime(it, FileTime.from(modified)) }
+            }
+            Files.writeString(storeRoot.resolve("map-${"0".repeat(64)}.map"), "garbage\n")
+            Files.createDirectory(storeRoot.resolve("map-${"1".repeat(64)}.map"))
+            Files.writeString(storeRoot.resolve("map-${"2".repeat(64)}.map.tmp"), "garbage\n")
+            Files.writeString(storeRoot.resolve("notes.txt"), "garbage\n")
+
+            val stored = store.readAll()
+
+            assertEquals(setOf(validMap, other), stored.maps.map(PromotedMap::map).toSet())
+            assertEquals(listOf(modified, modified), stored.maps.map(PromotedMap::promotedAt))
+            assertEquals(2, stored.unreadable)
+        }
 
     @Test
     fun `a stored map is read back from a hand written file`() = withDirectory { root ->

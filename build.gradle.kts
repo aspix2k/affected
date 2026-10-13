@@ -503,7 +503,12 @@ pitest {
             "com.aspix2k.affected.AffectedSettings*",
         )
     )
-    excludedTestClasses.set(listOf("com.aspix2k.affected.*IntegrationTest"))
+    excludedTestClasses.set(
+        fileTree("src/test/kotlin")
+            .filter { "BasePlatformTestCase" in it.readText() }
+            .map { it.relativeTo(file("src/test/kotlin")).invariantSeparatorsPath }
+            .map { it.removeSuffix(".kt").replace('/', '.') },
+    )
     mutators.set(listOf("STRONGER"))
     outputFormats.set(listOf("XML", "HTML"))
     threads.set(4)
@@ -515,7 +520,7 @@ tasks.named<PitestTask>("pitest") {
 }
 
 changelog {
-    path = "docs/CHANGELOG.md"
+    path = file("docs/CHANGELOG.md").path
     repositoryUrl = "https://github.com/aspix2k/affected"
 }
 
