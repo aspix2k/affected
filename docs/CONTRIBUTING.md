@@ -200,8 +200,8 @@ unverifiable module. Any mention of the Failsafe plugin switches the goal to
 refused as unsupported.
 
 After clone, run `python3 scripts/local_gate.py install` so `core.hooksPath` is
-`.githooks`. `pre-commit` runs detekt, script tests, CI contracts and the
-analyzer policy. `pre-push` adds ShellCheck. This is the cheap half of CI, not
+`.githooks`. `pre-commit` runs detekt, script tests, CI contracts, the
+analyzer policy and the wording check of every changelog fragment. `pre-push` adds ShellCheck. This is the cheap half of CI, not
 `verifyPlugin` or the full test suite. Do not use `--no-verify`.
 
 `scripts/run_gradle.sh` seeds the wrapper zip, verifies SHA-256, then starts
