@@ -1174,11 +1174,7 @@ def discovered_pin_keys() -> set[str]:
 
 def dotnet_fixture_projects() -> list[Path]:
     """Return every public .NET fixture project governed by currentness."""
-    roots = (
-        ROOT / "conformance" / "cli-fixtures" / "dotnet",
-        ROOT / "conformance" / "cli-fixtures" / "dotnet-mtp-xunit4",
-    )
-    return sorted(file for root in roots for file in root.rglob("*.csproj"))
+    return sorted((ROOT / "conformance" / "cli-fixtures").rglob("*.csproj"))
 
 
 def exact_nuget_version(value: str) -> str:

@@ -112,7 +112,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         if: runner.os == 'Windows'
         with:
-          python-version: "3.14.8"
+          python-version: "3.15.0"
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - name: Run platform-specific core tests
@@ -155,10 +155,10 @@ jobs:
       BAZELISK_SHA256: "5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992"
       SQLC_VERSION: "1.31.1"
       SQLC_SHA256: "497ae4fcdfa64c5b0c311ffe4c2bd991e43991e82e5367792ed78bc2dca27354"
-      BUN_VERSION: "1.4.2"
+      BUN_VERSION: "1.4.3"
       COREPACK_VERSION: "0.36.0"
       REAL_REPOSITORY_NODE_VERSION: "24.21.0"
-      BUN_SHA256: "36368faef7527875d5ffa52e53cd48021741f2a83eb6208a8dd64068d422a913"
+      BUN_SHA256: "3e730528d89775f03f87f05c06787c4df4099d0a37f3f252e7b829cb23816e18"
       DENO_VERSION: "2.9.7"
       DENO_SHA256: "c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490"
     steps:
@@ -173,7 +173,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14.8"
+          python-version: "3.15.0"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "26.11.1"
@@ -182,8 +182,8 @@ jobs:
           dotnet-version: "10.0.401"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.27.1"
-      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
+          go-version: "1.27.2"
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         with:
           toolchain: "1.99.0"
       - name: Install cargo-nextest
@@ -296,7 +296,7 @@ jobs:
           chmod 0755 "$destination/deno"
           [[ "$("$destination/deno" --version | head -n 1)" == "deno $DENO_VERSION "* ]]
           printf '%s\n' "$destination" >> "$GITHUB_PATH"
-      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # master
+      - uses: ruby/setup-ruby@651ff0d62c5c79bed6d53ec518387aae20e72c1a # master
         with:
           ruby-version: "4.0.7"
           bundler: "4.0.22"
@@ -318,7 +318,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install cmake==4.4.4 pytest==9.1.1 ruff==0.16.10 uv==0.12.23
+          python -m pip install cmake==4.4.4 pytest==9.1.1 ruff==0.17.0 uv==0.13.0
           install_packages() {
             sudo timeout --kill-after=30s 2m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true update
             sudo timeout --kill-after=30s 15m apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::ForceIPv4=true install -y --no-install-recommends ant ant-optional meson ninja-build gcc make r-base r-cran-testthat
@@ -423,11 +423,11 @@ jobs:
           - php: "8.2"
             phpunit: "11.5.57"
           - php: "8.3"
-            phpunit: "12.5.38"
+            phpunit: "12.5.39"
           - php: "8.4"
             phpunit: "13.2.6"
           - php: "8.4"
-            phpunit: "13.4.1"
+            phpunit: "13.4.2"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
