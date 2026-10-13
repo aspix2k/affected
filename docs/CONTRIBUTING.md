@@ -87,6 +87,31 @@ can be wider than for the edit that follows, because nothing is known about
 the edit: test narrowing that depends on what was modified does not apply, and
 `--consumers` judges the file by its current declarations.
 
+`affected mcp [--dir <path>]` serves the same analysis to a coding agent that
+works without an IDE: a Model Context Protocol server on standard input and
+output with two tools, `affected_plan` and `affected_run`. Both take the base
+branch and, optionally, `if_changed`, `dependents` and `consumers`, run the
+command of the same name in the directory the server was started for (the
+working directory without `--dir`), and return its output with the meaning of
+the exit code as the last line. A result that is neither passed nor failed —
+blocked, or wrong arguments — is marked as an error. `affected_run` runs the
+tests of the repository and answers when they have finished: the server
+handles one request at a time and neither reports progress nor cancels, so
+give the tool a timeout as long as the slowest run. Of longer output it keeps
+the last 40,000 characters. An agent configuration names the launcher and the
+repository:
+
+```json
+{
+  "mcpServers": {
+    "affected": {
+      "command": "/path/to/affected/bin/affected",
+      "args": ["mcp", "--dir", "/path/to/repository"]
+    }
+  }
+}
+```
+
 `audit` measures the selection instead of trusting it. It runs the planned
 checks as `run` does, then every test task of every module with no narrowing,
 and compares the two: a group of the full run that failed while none of its

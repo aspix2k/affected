@@ -51,6 +51,10 @@ distributions {
     }
 }
 
+tasks.jar {
+    manifest { attributes("Implementation-Version" to rootProject.version) }
+}
+
 tasks.test {
     useJUnit()
     testLogging { events("passed", "failed", "skipped") }

@@ -1,0 +1,1 @@
+- Command line: `affected mcp` is a Model Context Protocol server on standard input and output, so a coding agent without an IDE can ask for the plan of a change, for the checks that cover a file, and run them.
