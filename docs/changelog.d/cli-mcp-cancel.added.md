@@ -1,0 +1,1 @@
+- Command line: a run started through `affected mcp` reports progress, no longer blocks other requests and stops when the agent cancels it.

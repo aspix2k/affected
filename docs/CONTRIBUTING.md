@@ -95,11 +95,13 @@ command of the same name in the directory the server was started for (the
 working directory without `--dir`), and return its output with the meaning of
 the exit code as the last line. A result that is neither passed nor failed —
 blocked, or wrong arguments — is marked as an error. `affected_run` runs the
-tests of the repository and answers when they have finished: the server
-handles one request at a time and neither reports progress nor cancels, so
-give the tool a timeout as long as the slowest run. Of longer output it keeps
-the last 40,000 characters. An agent configuration names the launcher and the
-repository:
+tests of the repository and answers when they have finished. Tool calls run
+one after another while the server keeps answering other requests: a call
+that carries a progress token gets a progress notification every ten seconds,
+and `notifications/cancelled` stops the run with its processes and sends no
+answer. When the input ends, the server finishes the calls it has and exits.
+Of longer output it keeps the last 40,000 characters. An agent configuration
+names the launcher and the repository:
 
 ```json
 {

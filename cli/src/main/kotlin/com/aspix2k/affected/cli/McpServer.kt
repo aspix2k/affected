@@ -12,29 +12,96 @@ import java.io.File
 import java.io.InputStream
 import java.io.PrintStream
 import java.nio.file.Path
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.FutureTask
+import java.util.concurrent.TimeUnit
 
 internal class McpServer(
     private val directory: File,
     private val cache: Path,
+    private val progressMillis: Long = PROGRESS_MILLIS,
     private val run: (List<String>, PrintStream) -> Int = { arguments, output ->
         execute(arguments, output, output, cache)
     },
 ) {
 
     fun serve(input: InputStream, output: PrintStream) {
-        input.bufferedReader().lineSequence().filter(String::isNotBlank).forEach { line ->
-            answer(line)?.let { output.print(GSON.toJson(it) + "\n") }
-            output.flush()
+        val session = Session(output)
+        try {
+            input.bufferedReader().lineSequence().filter(String::isNotBlank).forEach(session::receive)
+        } finally {
+            session.finish()
         }
     }
 
-    private fun answer(line: String): JsonObject? {
-        val message = runCatching { JsonParser.parseString(line) }.getOrNull()
-            ?: return failure(JsonNull.INSTANCE, PARSE_ERROR, "The message is not JSON")
-        val request = message as? JsonObject
-            ?: return failure(JsonNull.INSTANCE, INVALID_REQUEST, "The message is not a JSON object")
-        val id = request.get("id")?.takeUnless(JsonElement::isJsonNull) ?: return null
-        return respond(id, text(request.get("method")), request.get("params") as? JsonObject ?: JsonObject())
+    private inner class Session(private val output: PrintStream) {
+        private val calls = Executors.newSingleThreadExecutor()
+        private val ticker = Executors.newSingleThreadScheduledExecutor()
+        private val running = ConcurrentHashMap<JsonElement, FutureTask<Unit>>()
+
+        fun receive(line: String) {
+            val message = runCatching { JsonParser.parseString(line) }.getOrNull()
+                ?: return send(failure(JsonNull.INSTANCE, PARSE_ERROR, "The message is not JSON"))
+            val request = message as? JsonObject
+                ?: return send(failure(JsonNull.INSTANCE, INVALID_REQUEST, "The message is not a JSON object"))
+            val method = text(request.get("method"))
+            val parameters = request.get("params") as? JsonObject ?: JsonObject()
+            val id = request.get("id")?.takeUnless(JsonElement::isJsonNull)
+            when {
+                id == null -> if (method == "notifications/cancelled") {
+                    parameters.get("requestId")?.let(running::remove)?.cancel(true)
+                }
+                method == "tools/call" -> start(id, parameters)
+                else -> send(respond(id, method, parameters))
+            }
+        }
+
+        fun finish() {
+            calls.shutdown()
+            try {
+                calls.awaitTermination(Long.MAX_VALUE, TimeUnit.MILLISECONDS)
+            } finally {
+                ticker.shutdownNow()
+            }
+        }
+
+        private fun start(id: JsonElement, parameters: JsonObject) {
+            val tool = TOOLS.firstOrNull { it.name == text(parameters.get("name")) }
+                ?: return send(failure(id, INVALID_PARAMS, "Unknown tool"))
+            val task = FutureTask {
+                try {
+                    answer(id, tool, parameters)
+                } finally {
+                    running.remove(id)
+                }
+            }
+            if (running.putIfAbsent(id, task) != null) {
+                return send(failure(id, INVALID_REQUEST, "A call with this id is still running"))
+            }
+            calls.execute(task)
+        }
+
+        private fun answer(id: JsonElement, tool: Tool, parameters: JsonObject) {
+            var ticks = 0
+            val progress = (parameters.get("_meta") as? JsonObject)?.get("progressToken")?.let { token ->
+                val tick = Runnable { send(progress(token, ++ticks)) { running.containsKey(id) } }
+                ticker.scheduleAtFixedRate(tick, progressMillis, progressMillis, TimeUnit.MILLISECONDS)
+            }
+            val result = try {
+                call(tool, parameters.get("arguments") as? JsonObject ?: JsonObject())
+            } finally {
+                progress?.cancel(false)
+            }
+            send(success(id, result)) { running.remove(id) != null }
+        }
+
+        private fun send(message: JsonObject, wanted: () -> Boolean = { true }) = synchronized(output) {
+            if (wanted()) {
+                output.print(GSON.toJson(message) + "\n")
+                output.flush()
+            }
+        }
     }
 
     private fun respond(id: JsonElement, method: String?, parameters: JsonObject): JsonObject = when (method) {
@@ -42,10 +109,19 @@ internal class McpServer(
         "initialize" -> success(id, initialize(parameters))
         "ping" -> success(id, JsonObject())
         "tools/list" -> success(id, JsonObject().apply { add("tools", tools()) })
-        "tools/call" -> TOOLS.firstOrNull { it.name == text(parameters.get("name")) }
-            ?.let { success(id, call(it, parameters.get("arguments") as? JsonObject ?: JsonObject())) }
-            ?: failure(id, INVALID_PARAMS, "Unknown tool")
         else -> failure(id, METHOD_NOT_FOUND, "Method not found")
+    }
+
+    private fun progress(token: JsonElement, ticks: Int) = JsonObject().apply {
+        addProperty("jsonrpc", "2.0")
+        addProperty("method", "notifications/progress")
+        add(
+            "params",
+            JsonObject().apply {
+                add("progressToken", token)
+                addProperty("progress", ticks)
+            },
+        )
     }
 
     private fun initialize(parameters: JsonObject) = JsonObject().apply {
@@ -167,6 +243,7 @@ internal class McpServer(
         const val WRONG_ARGUMENTS = "base must be the name of a branch, if_changed a list of paths, " +
             "dependents and consumers true or false."
         const val MAX_TEXT = 40_000
+        const val PROGRESS_MILLIS = 10_000L
         const val PARSE_ERROR = -32700
         const val INVALID_REQUEST = -32600
         const val METHOD_NOT_FOUND = -32601
