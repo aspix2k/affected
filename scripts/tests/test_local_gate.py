@@ -24,7 +24,7 @@ class LocalGateTest(unittest.TestCase):
         """Detekt is the first local gate because it is what turns plugin CI red."""
         names = [name for name, _command, _timeout in local_gate.checks_for("commit")]
         self.assertEqual(
-            ["detekt", "script tests", "CI contracts", "analyzer policy"],
+            ["detekt", "script tests", "CI contracts", "analyzer policy", "changelog fragments"],
             names,
         )
         detekt = local_gate.checks_for("commit")[0][1]
@@ -36,6 +36,14 @@ class LocalGateTest(unittest.TestCase):
         commit = [name for name, _command, _timeout in local_gate.checks_for("commit")]
         push = [name for name, _command, _timeout in local_gate.checks_for("push")]
         self.assertEqual(commit + ["shell"], push)
+
+    def test_commit_checks_the_wording_of_every_changelog_fragment(self) -> None:
+        """Name each fragment explicitly so the check needs no base branch."""
+        command = local_gate.checks_for("commit")[4][1]
+        fragments = sorted(
+            str(path.relative_to(local_gate.ROOT)) for path in (local_gate.ROOT / "docs/changelog.d").glob("*.md")
+        )
+        self.assertEqual(["check", "--paths", *fragments], command[2:])
 
     def test_script_gate_includes_product_verifier_report_validation(self) -> None:
         """Run the promoted-artifact and report boundary tests before publication."""
