@@ -176,6 +176,20 @@ class AffectedMcpInputsTest {
     }
 
     @Test
+    fun `any existing file inside the project is accepted where the kind of source does not matter`() =
+        withProject { base ->
+            Files.writeString(base.resolve("Notes.md"), "x")
+
+            val view = AffectedMcpInputs.validateProjectFile(base.toString(), "Notes.md")
+
+            assertFalse(view.error)
+            assertEquals("Notes.md", view.data["file"])
+            fun reason(path: String) = AffectedMcpInputs.validateProjectFile(base.toString(), path).data["reason"]
+            assertEquals("file-not-found", reason("No.md"))
+            assertEquals("file-not-found", reason(".."))
+        }
+
+    @Test
     fun `paths that are empty missing outside the project or not JVM sources are rejected with a reason`() =
         withProject { base ->
             Files.writeString(base.resolve("Notes.md"), "x")
