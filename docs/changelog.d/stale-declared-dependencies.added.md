@@ -1,0 +1,1 @@
+- Command line: `affected plan`, `run` and `audit` list the entries of `.affected/dependencies.json` whose module they do not find and say when the file cannot be read. Both cases used to plan every test without a word.

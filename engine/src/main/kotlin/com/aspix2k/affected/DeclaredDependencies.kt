@@ -64,10 +64,12 @@ object DeclaredDependencies {
 
     internal fun owners(directory: File, dependencies: List<DeclaredDependency>, file: File): List<DeclaredOwner> {
         val path = runCatching { file.relativeTo(directory).invariantSeparatorsPath }.getOrNull()
-        return dependencies.filter { it.path == path }.map { dependency ->
-            val root = if (dependency.root == ROOT) directory else File(directory, dependency.root)
-            DeclaredOwner(dependency.system, root.invariantSeparatorsPath, dependency.module)
-        }
+        return dependencies.filter { it.path == path }.map { owner(directory, it) }
+    }
+
+    internal fun owner(directory: File, dependency: DeclaredDependency): DeclaredOwner {
+        val root = if (dependency.root == ROOT) directory else File(directory, dependency.root)
+        return DeclaredOwner(dependency.system, root.invariantSeparatorsPath, dependency.module)
     }
 
     fun relativeRoot(directory: File, root: String): String? =
