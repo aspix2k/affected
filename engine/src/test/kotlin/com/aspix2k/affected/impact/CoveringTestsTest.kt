@@ -96,6 +96,61 @@ class CoveringTestsTest : CollectorMapFixture() {
     }
 
     @Test
+    fun `tests and maps are ordered by system then task key then test class`() {
+        val app = promoted(
+            ":app:test",
+            listOf("com.acme.Repo"),
+            listOf("ZTest" to listOf("com.acme.Repo"), "ATest" to listOf("com.acme.Repo")),
+            unknown = listOf("XAll", "BAll"),
+        )
+        val lib = promoted(
+            ":lib:test",
+            listOf("com.acme.Repo"),
+            listOf("MTest" to listOf("com.acme.Repo")),
+            unknown = listOf("CAll"),
+        )
+        val maven = promoted("1-test", listOf("com.acme.Repo"), listOf("BTest" to listOf("com.acme.Repo")))
+
+        val result =
+            find(listOf(PromotedMaps("maven", StoredMaps(listOf(maven), 0), "collector-1"), gradle(lib, app)))
+
+        assertEquals(
+            listOf(
+                CoveringTest("gradle", "$ROOT|:app:test", "ATest"),
+                CoveringTest("gradle", "$ROOT|:app:test", "ZTest"),
+                CoveringTest("gradle", "$ROOT|:lib:test", "MTest"),
+                CoveringTest("maven", "$ROOT|1-test", "BTest"),
+            ),
+            result.recorded,
+        )
+        assertEquals(
+            listOf(
+                CoveringTest("gradle", "$ROOT|:app:test", "BAll"),
+                CoveringTest("gradle", "$ROOT|:app:test", "XAll"),
+                CoveringTest("gradle", "$ROOT|:lib:test", "CAll"),
+            ),
+            result.unknown,
+        )
+        assertEquals(
+            listOf(
+                MapReport("gradle", "$ROOT|:app:test", promotedAt, MapFreshness.FRESH),
+                MapReport("gradle", "$ROOT|:lib:test", promotedAt, MapFreshness.FRESH),
+                MapReport("maven", "$ROOT|1-test", promotedAt, MapFreshness.FRESH),
+            ),
+            result.maps,
+        )
+    }
+
+    @Test
+    fun `a fresh map that only has unknown tests still has no reason`() {
+        val result = find(listOf(gradle(stored(":app:test", "Repo" to emptyList(), unknown = listOf("AllTest")))))
+
+        assertNull(result.reason)
+        assertEquals(emptyList(), result.recorded)
+        assertEquals(listOf("AllTest"), result.unknown.map(CoveringTest::testClass))
+    }
+
+    @Test
     fun `a stale map next to a fresh one does not hide the fresh answer`() {
         val fresh = stored(":app:test", "Repo" to listOf("AppTest"))
         val stale =
@@ -133,16 +188,20 @@ class CoveringTestsTest : CollectorMapFixture() {
 
         assertEquals(RunTarget("/work/app", ":app:test"), target)
         assertNull(CoveringTestsFinder.runTarget("not-a-key"))
+        assertNull(CoveringTestsFinder.runTarget("|:app:test"))
+        assertNull(CoveringTestsFinder.runTarget("file:///work/app/|"))
+        assertEquals(RunTarget("/", "t"), CoveringTestsFinder.runTarget("file:///|t"))
         assertEquals(
             "./gradlew :app:test --tests 'a.BTest' --tests 'a.CTest\$Inner'",
             CoveringTestsFinder.command("gradle", ":app:test", listOf("a.BTest", "a.CTest\$Inner", "bad name;")),
         )
         assertEquals("mvn test -Dtest='a.BTest'", CoveringTestsFinder.command("maven", "test", listOf("a.BTest")))
         assertEquals(
-            "mvn verify -Dit.test='a.BIT'",
-            CoveringTestsFinder.command("maven", "integration-test", listOf("a.BIT")),
+            "mvn verify -Dit.test='a.BIT,a.CIT'",
+            CoveringTestsFinder.command("maven", "integration-test", listOf("a.BIT", "a.CIT")),
         )
         assertNull(CoveringTestsFinder.command("gradle", ":app:test", listOf("bad name")))
+        assertNull(CoveringTestsFinder.command("bazel", "test", listOf("a.BTest")))
     }
 
     @Test
@@ -201,7 +260,7 @@ class CoveringTestsTest : CollectorMapFixture() {
             identity = DependencyMapIdentity(
                 DEPENDENCY_MAP_SCHEMA_VERSION,
                 collector,
-                "file:///work/app/|$task",
+                "$ROOT|$task",
                 "runtime-1",
                 "input-1",
             ),
@@ -213,5 +272,9 @@ class CoveringTestsTest : CollectorMapFixture() {
             completedRunId = "run-1",
         )
         return PromotedMap(map, promotedAt)
+    }
+
+    private companion object {
+        const val ROOT = "file:///work/app/"
     }
 }

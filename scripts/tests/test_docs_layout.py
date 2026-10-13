@@ -38,7 +38,7 @@ class DocsLayoutTest(unittest.TestCase):
     def test_changelog_plugin_reads_docs_changelog(self) -> None:
         """patchPluginXml must not look for a root CHANGELOG.md."""
         build = (ROOT / "build.gradle.kts").read_text(encoding="utf-8")
-        self.assertIn('path = "docs/CHANGELOG.md"', build)
+        self.assertIn('path = file("docs/CHANGELOG.md").path', build)
 
     def test_tracked_markdown_relative_links_resolve(self) -> None:
         """Fail when a public markdown page points at a missing repository path."""
