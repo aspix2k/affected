@@ -80,13 +80,20 @@ internal class BrokenFileAudit(
             }
         }
         val paths = missed.distinctBy { it.path }.size
-        out.println("\nAffected audit: broke ${files.size} files, the planned checks missed $paths.")
-        missed.forEach { out.println("  ${it.path} is needed by ${it.system} ${it.module} in ${it.root}") }
+        val headline = "Affected audit: broke ${files.size} files, the planned checks missed $paths."
+        val needs = missed.map { "${it.path} is needed by ${it.system} ${it.module} in ${it.root}" }
+        out.println("\n" + headline)
+        needs.forEach { out.println("  $it") }
         if (arguments.audit.learn && missed.isNotEmpty()) {
             DeclaredDependencies.write(arguments.directory, declared + missed)
             out.println("Declared in ${DeclaredDependencies.LOCATION}; commit it to keep these tests planned.")
         }
         arguments.audit.report?.let { writeBrokenFilesReport(it, arguments.baseBranch, verdicts, missed) }
+        arguments.audit.summary?.let { file ->
+            val counts = verdicts.values.groupingBy { it }.eachCount().toSortedMap().entries
+                .joinToString("\n", prefix = "| Verdict | Files |\n|---|---|\n") { "| ${it.key} | ${it.value} |" }
+            appendSummary(file, arguments.baseBranch, listOf(headline, counts), needs)
+        }
         return if (missed.isEmpty()) EXIT_PASSED else EXIT_MISSED
     }
 

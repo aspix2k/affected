@@ -18,6 +18,7 @@ internal const val EXIT_FAILED = 1
 internal const val EXIT_BLOCKED = 2
 internal const val EXIT_MISSED = 3
 internal const val EXIT_USAGE = 64
+private const val MILLIS = 1000
 
 internal class Arguments(
     val command: String,
@@ -36,10 +37,11 @@ internal class AuditOptions(
     val learn: Boolean = false,
     val report: File? = null,
     val observe: Boolean = false,
+    val summary: File? = null,
 ) {
     val breaksFiles: Boolean get() = broken.isNotEmpty() || sample > 0 || observe
 
-    val isSet: Boolean get() = breaksFiles || learn || report != null
+    val isSet: Boolean get() = breaksFiles || learn || report != null || summary != null
 }
 
 internal const val USAGE = """Usage: affected <plan|run|audit> --base <branch> [options]
@@ -63,6 +65,8 @@ internal const val USAGE = """Usage: affected <plan|run|audit> --base <branch> [
   --learn              with --break, --sample or --observe: declare every missed
                        file as a dependency of the tests that need it
   --report <path>      audit only: also write the result as JSON
+  --summary <path>     audit only: also append the result as Markdown, which is
+                       what the job summary of GitHub Actions takes
 """
 
 internal fun parse(arguments: List<String>): Arguments? {
@@ -73,7 +77,7 @@ internal fun parse(arguments: List<String>): Arguments? {
     while (rest.hasNext()) {
         when (val argument = rest.next()) {
             "--dependents", "--consumers", "--fail-fast", "--learn", "--observe" -> flags += argument
-            "--base", "--dir", "--break", "--sample", "--report", "--if-changed" ->
+            "--base", "--dir", "--break", "--sample", "--report", "--summary", "--if-changed" ->
                 values.getOrPut(argument, ::mutableListOf) += if (rest.hasNext()) rest.next() else return null
             else -> return null
         }
@@ -103,6 +107,7 @@ private fun auditOptions(flags: Set<String>, values: Map<String, List<String>>):
         "--learn" in flags,
         values["--report"]?.last()?.let { File(it).absoluteFile.normalize() },
         "--observe" in flags,
+        values["--summary"]?.last()?.let { File(it).absoluteFile.normalize() },
     )
 }
 
@@ -134,13 +139,13 @@ private fun run(plan: EnginePlan, out: PrintStream, blocker: EngineBlocker?): In
 }
 
 private fun misplaced(arguments: Arguments): String? {
-    val report = arguments.audit.report
+    val inside = listOfNotNull(arguments.audit.report, arguments.audit.summary)
+        .firstOrNull { it.isDirectory || it.startsWith(arguments.directory) }
     return when {
         !arguments.directory.isDirectory -> "Not a directory: ${arguments.directory}"
         arguments.assumed.any { !File(it).startsWith(arguments.directory) || !File(it).isFile } ->
             "A path given to --if-changed must be a file inside ${arguments.directory}"
-        report != null && (report.isDirectory || report.startsWith(arguments.directory)) ->
-            "The report must be a file outside ${arguments.directory}: $report"
+        inside != null -> "The report and the summary must be files outside ${arguments.directory}: $inside"
         else -> null
     }
 }
@@ -164,13 +169,20 @@ internal fun Arguments.request(
 
 private fun audit(plan: EnginePlan, arguments: Arguments, out: PrintStream, blocker: EngineBlocker?): Int {
     val audit = runBlocking { Engine.audit(plan) }
-    out.println("\n" + summary(plan, audit))
-    audit.missed.forEach { out.println("  ${describe(it, arguments)}") }
+    val headline = headline(plan, audit)
+    val missed = audit.missed.map { describe(it, arguments) }
+    out.println("\n" + headline)
+    missed.forEach { out.println("  $it") }
     arguments.audit.report?.let { writeFullRunReport(it, plan, audit, arguments) }
+    arguments.audit.summary?.let { file ->
+        val planned = audit.selectionMillis / MILLIS
+        val took = "The planned checks took $planned s, the full run ${audit.fullRunMillis / MILLIS} s."
+        appendSummary(file, arguments.baseBranch, listOf(took, headline), missed)
+    }
     return if (audit.missed.isEmpty()) exitCode(audit.failedInSelection.isEmpty(), blocker) else EXIT_MISSED
 }
 
-private fun summary(plan: EnginePlan, audit: EngineAudit): String {
+private fun headline(plan: EnginePlan, audit: EngineAudit): String {
     val planned = plan.plan.groups.sumOf { it.tasks.size }
     val every = plan.everyTest.groups.sumOf { it.tasks.size }
     val scope = "the planned checks ran $planned tasks, the full run $every"
