@@ -137,7 +137,10 @@ both as `plan` prints them. A change of that file plans the tests of that
 module on top of whatever contains the file, in the command line and in the
 IDE. The file fails closed: when it cannot be read, any change plans every
 test, and an entry whose module no longer exists plans every test for its
-file. `audit --break … --learn` writes one entry for each test module that
+file. `plan`, `run` and `audit` report an unreadable file on standard error
+and list the entries whose module they do not find, so a renamed module does
+not quietly widen every run.
+`audit --break … --learn` writes one entry for each test module that
 fails on a missed file, so a scheduled audit repairs the holes it finds once
 the file is committed. Where several modules share one run it tries them one
 at a time, which costs a run each, and a flaky test can add an entry that is
