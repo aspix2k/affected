@@ -1,0 +1,1 @@
+- MCP: `affected_checks_for_file` returns the test tasks a change of one file would need, for every build system, before the file is edited. The instructions that **Set up for coding agents** writes mention it.

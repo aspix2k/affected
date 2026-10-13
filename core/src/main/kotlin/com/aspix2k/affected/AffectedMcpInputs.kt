@@ -31,6 +31,12 @@ object AffectedMcpInputs {
     }
 
     fun validateSourceFile(basePath: String, path: String): AffectedMcpView {
+        val file = validateProjectFile(basePath, path)
+        if (file.error || (file.data["file"] as String).substringAfterLast('.', "") in SOURCE_EXTENSIONS) return file
+        return sourceFileError("unsupported-file", "Only .kt and .java files can be looked up.")
+    }
+
+    fun validateProjectFile(basePath: String, path: String): AffectedMcpView {
         val requested = path.trim()
         val base = runCatching { Path.of(basePath).toRealPath() }.getOrNull()
             ?: return sourceFileError("no-base-path", "Project base path is unavailable.")
@@ -43,9 +49,6 @@ object AffectedMcpInputs {
             return sourceFileError("file-not-found", "File does not exist.")
         }
         if (!real.startsWith(base)) return sourceFileError("outside-project", "File is outside the project.")
-        if (real.fileName.toString().substringAfterLast('.', "") !in SOURCE_EXTENSIONS) {
-            return sourceFileError("unsupported-file", "Only .kt and .java files can be looked up.")
-        }
         val relative = base.relativize(real).joinToString("/")
         return AffectedMcpView(
             text = "File: $relative",

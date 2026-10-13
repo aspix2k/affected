@@ -415,12 +415,18 @@ def expect_run(port: int, session: str | None, project: str) -> str:
 
 
 def expectations(port: int, session: str | None, project: str, scenario: Scenario, timeout: float) -> list[str]:
-    """Check changed files, the plan, a passing run and, when configured, the dependents' plan and run."""
+    """Check changed files, the plan, the checks for the edited file, a passing run and the configured extras."""
     changed = ide_smoke.call(port, session, "affected_changed_files", project).get("files", [])
     report = [f"changed files: {', '.join(changed) or 'none'}"]
     if sorted(changed) != sorted(scenario.files):
         raise LiveIdeError(f"changed files are {changed}, expected {list(scenario.files)}")
     report.append(f"planned tasks: {', '.join(plan(port, session, project, scenario.tasks, timeout))}")
+    covering = ide_smoke.call(
+        port, session, "affected_checks_for_file", project, {"path": scenario.edited_file}
+    ).get("tasks", [])
+    report.append(f"checks for {scenario.edited_file}: {', '.join(covering) or 'none'}")
+    if not covering or not set(covering) <= set(scenario.tasks):
+        raise LiveIdeError(f"checks for {scenario.edited_file} are {covering}, expected some of {list(scenario.tasks)}")
     report.append(f"verification: {expect_run(port, session, project)}")
     if scenario.dependent_tasks:
         ide_smoke.call(port, session, "affected_configure", project, {"testDependents": True})
