@@ -1,5 +1,7 @@
 package com.aspix2k.affected.cli
 
+import com.aspix2k.affected.DeclaredDependencies
+import com.aspix2k.affected.DeclaredDependency
 import com.aspix2k.affected.Engine
 import com.aspix2k.affected.EngineAudit
 import com.aspix2k.affected.EngineBlocker
@@ -126,6 +128,7 @@ internal fun execute(arguments: List<String>, out: PrintStream, err: PrintStream
     describe(plan, parsed, out)
     val blocker = plan.blocker
     if (blocker != null) err.println(explain(blocker, parsed, plan))
+    explain(plan.staleDependencies)?.let(err::println)
     val runnable = blocker == null || blocker == EngineBlocker.UNRESOLVED_CHANGES
     if (!runnable || parsed.command == "plan") return exitCode(passed = true, blocker)
     return if (parsed.command == "audit") audit(plan, parsed, out, blocker) else run(plan, out, blocker)
@@ -234,6 +237,15 @@ internal fun explain(blocker: EngineBlocker, arguments: Arguments, plan: EngineP
             plan.unresolved.joinToString("\n") { file ->
                 "  ${file.relativeToOrSelf(arguments.directory).invariantSeparatorsPath}"
             }
+}
+
+internal fun explain(stale: List<DeclaredDependency>?): String? = when {
+    stale == null -> "Affected: ${DeclaredDependencies.LOCATION} cannot be read, so any change plans every test."
+    stale.isEmpty() -> null
+    else ->
+        "Affected: ${DeclaredDependencies.LOCATION} names modules that are not found here, " +
+            "so a change of these files plans every test:\n" +
+            stale.joinToString("\n") { "  ${it.path}: ${it.system} ${it.module} in ${it.root}" }
 }
 
 fun main(arguments: Array<String>) {

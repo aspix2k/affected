@@ -1,5 +1,7 @@
 package com.aspix2k.affected.cli
 
+import com.aspix2k.affected.DeclaredDependencies
+import com.aspix2k.affected.DeclaredDependency
 import org.junit.Assume.assumeTrue
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -130,6 +132,49 @@ class MainTest {
 
         assertEquals(EXIT_BLOCKED, code)
         assertTrue(errors.isNotBlank())
+    }
+
+    @Test
+    fun `a declared dependency on a module that no longer exists is named`() {
+        val root = repository(
+            ".affected/dependencies.json" to
+                """{"version":1,"dependencies":[{"path":"notes.txt","system":"NODE","root":"gone","module":"web"}]}""",
+        )
+
+        val (code, _, errors) = run(listOf("plan", "--base", "main", "--dir", root.path))
+
+        assertEquals(EXIT_PASSED, code, errors)
+        assertTrue("names modules that are not found here" in errors, errors)
+        assertTrue("  notes.txt: NODE web in gone" in errors, errors)
+    }
+
+    @Test
+    fun `a declared dependency on a module that exists adds nothing to the errors`() {
+        val root = repository("notes.txt" to "notes\n")
+        val module = Regex("NODE in \\.: (\\S*):test").find(
+            run(listOf("plan", "--base", "main", "--dir", root.path, "--if-changed", "index.js")).second,
+        )
+        DeclaredDependencies.write(
+            root,
+            listOf(DeclaredDependency("notes.txt", "NODE", ".", checkNotNull(module).groupValues[1])),
+        )
+
+        val (code, output, errors) =
+            run(listOf("plan", "--base", "main", "--dir", root.path, "--if-changed", "notes.txt"))
+
+        assertEquals(EXIT_PASSED, code, errors)
+        assertTrue(Regex("NODE in \\.: \\S*:test").containsMatchIn(output), output)
+        assertEquals("", errors)
+    }
+
+    @Test
+    fun `declared dependencies that cannot be read are reported`() {
+        val root = repository(".affected/dependencies.json" to "{")
+
+        val (code, _, errors) = run(listOf("plan", "--base", "main", "--dir", root.path))
+
+        assertEquals(EXIT_PASSED, code, errors)
+        assertTrue(".affected/dependencies.json cannot be read" in errors, errors)
     }
 
     @Test

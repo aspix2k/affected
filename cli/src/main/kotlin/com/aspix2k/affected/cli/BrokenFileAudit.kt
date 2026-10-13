@@ -51,6 +51,7 @@ internal class BrokenFileAudit(
             err.println(explain(blocker, arguments, clean))
             return EXIT_BLOCKED
         }
+        explain(clean.staleDependencies)?.let(err::println)
         if (!runBlocking { Engine.run(clean) && Engine.runEveryTest(clean) }) {
             err.println("Affected audit: the tests fail before any file is broken, so nothing can be compared.")
             return EXIT_FAILED
