@@ -42,6 +42,7 @@ class MainTest {
         assertNull(parse(listOf("audit", "--base", "main", "--learn")))
         assertNull(parse(listOf("plan", "--base", "main", "--observe")))
         assertNull(parse(listOf("run", "--base", "main", "--report", "audit.json")))
+        assertNull(parse(listOf("run", "--base", "main", "--summary", "audit.md")))
     }
 
     @Test
@@ -202,14 +203,60 @@ class MainTest {
     }
 
     @Test
-    fun `a report inside the audited repository is refused before anything runs`() {
+    fun `audit appends what it compared and what it missed as Markdown`() {
+        val root = repository("first.test.js" to PASSING_TEST, "second.test.js" to FAILING_TEST)
+        File(root, "first.test.js").appendText("// changed\n")
+        val summary = File(createTempDirectory("cli-summary").toFile(), "summary.md").apply { writeText("before\n") }
+
+        run(listOf("audit", "--base", "main", "--dir", root.path, "--summary", summary.path))
+
+        val text = summary.readText()
+        val took = "The planned checks took \\d+ s, the full run \\d+ s\\."
+        val expected = "before\n### Affected audit against `main`\n\n$took\n\n" +
+            "Affected audit: [^\n]* Failed only in the full run:\n\n- `NODE in \\.: \\S*:test`\n\n"
+        assertTrue(Regex(expected).matches(text), text)
+    }
+
+    @Test
+    fun `an audit that breaks files appends the verdicts and the missed files as Markdown`() {
+        val root = nestedRepository()
+        val summary = File(createTempDirectory("cli-summary").toFile(), "summary.md")
+
+        run(
+            listOf("audit", "--base", "main", "--dir", root.path, "--summary", summary.path) +
+                listOf("--break", "shared.txt", "--break", "web/index.js"),
+        )
+
+        assertEquals(
+            """
+            ### Affected audit against `main`
+
+            Affected audit: broke 2 files, the planned checks missed 1.
+
+            | Verdict | Files |
+            |---|---|
+            | caught | 1 |
+            | missed | 1 |
+
+            - `shared.txt is needed by NODE . in web`
+
+
+            """.trimIndent(),
+            summary.readText(),
+        )
+    }
+
+    @Test
+    fun `a report or a summary inside the audited repository is refused before anything runs`() {
         val root = repository()
 
-        val (code, _, errors) =
-            run(listOf("audit", "--base", "main", "--dir", root.path, "--report", File(root, "audit.json").path))
+        for (option in listOf("--report", "--summary")) {
+            val (code, _, errors) =
+                run(listOf("audit", "--base", "main", "--dir", root.path, option, File(root, "audit.out").path))
 
-        assertEquals(EXIT_USAGE, code)
-        assertTrue("outside" in errors, errors)
+            assertEquals(EXIT_USAGE, code)
+            assertTrue("outside" in errors, errors)
+        }
     }
 
     @Test
