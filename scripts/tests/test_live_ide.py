@@ -209,6 +209,7 @@ class ExpectationsTest(unittest.TestCase):
             "get_project_modules": tool({"modules": [{"name": "live-gradle.core"}, {"name": "live-gradle.app"}]}),
             "affected_changed_files": tool({"files": list(GRADLE.files)}),
             "affected_verification_plan": tool({"tasks": [":core:test"]}),
+            "affected_checks_for_file": tool({"tasks": [":core:test"]}),
             "affected_run_verification": tool({"passed": True}),
             "affected_configure": tool({"testDependents": True}),
         }
@@ -265,6 +266,13 @@ class ExpectationsTest(unittest.TestCase):
         report = live_ide.expectations(self.port, "session", "/p", scenario, 5)
         self.assertEqual("planned tasks with dependents: :core:test, :app:test", report[-2])
         self.assertEqual("verification with dependents: passed", report[-1])
+
+    def test_checks_for_the_edited_file_must_be_planned_tasks(self) -> None:
+        """Fail when the file alone plans nothing or a task the change itself does not."""
+        for tasks in ([], [":other:test"]):
+            FakeMcp.replies["affected_checks_for_file"] = tool({"tasks": tasks})
+            with self.assertRaisesRegex(live_ide.LiveIdeError, "checks for core/src/main/java/live/Core.java are"):
+                live_ide.expectations(self.port, "session", "/p", GRADLE, 1)
 
     def test_a_busy_ide_is_asked_again_until_the_run_starts(self) -> None:
         """Retry while the IDE refuses to start work, then return the outcome of the run."""
@@ -386,6 +394,7 @@ class RunScenarioTest(unittest.TestCase):
             "get_project_modules": tool({"modules": [{"name": "m"}]}),
             "affected_changed_files": tool({"files": ["packages/beta/beta.py"]}),
             "affected_verification_plan": tool({"tasks": ["affected-python-beta:test"]}),
+            "affected_checks_for_file": tool({"tasks": ["affected-python-beta:test"]}),
             "affected_run_verification": tool({"passed": True}),
         }
         self.server = HTTPServer(("127.0.0.1", 0), FakeMcp)

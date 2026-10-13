@@ -52,6 +52,7 @@ class AffectedToolsetTest {
                 "affected_doctor",
                 "affected_available_tasks",
                 "affected_tests_for_file",
+                "affected_checks_for_file",
                 "affected_configure",
             ),
             names,
@@ -65,6 +66,7 @@ class AffectedToolsetTest {
             "affected_doctor",
             "affected_available_tasks",
             "affected_tests_for_file",
+            "affected_checks_for_file",
         )
         for (method in tools) {
             val hints = method.getAnnotation(McpToolHints::class.java)

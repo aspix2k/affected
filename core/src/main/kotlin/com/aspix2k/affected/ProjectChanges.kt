@@ -50,6 +50,28 @@ object ProjectChanges {
     suspend fun collectSuspending(project: Project): ChangeSet =
         runInterruptible(Dispatchers.IO) { collect(project) }
 
+    suspend fun alone(project: Project, path: String): ChangeSet = runInterruptible(Dispatchers.IO) {
+        val projectDir = File(checkNotNull(project.basePath))
+        val everyFile = BuildSystems.includesAllFileChanges(project)
+        val declared = DeclaredDependencies.read(projectDir)?.mapTo(HashSet()) { it.path }
+        val counted = declared == null || path in declared || isCollectedSource(
+            path,
+            everyFile,
+            BuildSystems.sourceExtensions(project),
+            BuildSystems.sourceFileNames(project),
+            if (everyFile) emptySet() else sourceRoots(project, projectDir),
+        )
+        val files = listOfNotNull(File(projectDir, path).takeIf { counted })
+        ChangeSet(
+            files,
+            emptySet(),
+            emptySet(),
+            comparedToBase = true,
+            outsideSources = outsideSources(project, files),
+            declaredOwners = declaredOwners(project, files),
+        )
+    }
+
     private fun changedFiles(project: Project): Triple<List<File>, List<File>, ChangeAnalyzer?> {
         val projectDir = project.basePath?.let(::File) ?: return Triple(emptyList(), emptyList(), null)
         val extensions = BuildSystems.sourceExtensions(project)
