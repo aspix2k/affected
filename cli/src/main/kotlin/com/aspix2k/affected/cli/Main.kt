@@ -11,6 +11,9 @@ import com.aspix2k.affected.EngineTestExecution
 import com.aspix2k.affected.TaskGroup
 import kotlinx.coroutines.runBlocking
 import java.io.File
+import java.io.FileDescriptor
+import java.io.FileOutputStream
+import java.io.InputStream
 import java.io.PrintStream
 import java.nio.file.Path
 import kotlin.system.exitProcess
@@ -45,11 +48,14 @@ internal class AuditOptions(
 }
 
 internal const val USAGE = """Usage: affected <plan|run|audit> --base <branch> [options]
+       affected mcp [--dir <path>]
 
   plan                 print the checks the changes against the base branch need
   run                  run them and exit with 0 only when all passed
   audit                run them, then every test, and exit with 3 when a test
                        fails that the planned checks did not cover
+  mcp                  serve plan and run to a coding agent as the tools of an
+                       MCP server on standard input and output
 
   --base <branch>      branch to compare with (required)
   --dir <path>         repository directory (default: current directory)
@@ -236,7 +242,25 @@ internal fun explain(stale: List<DeclaredDependency>?): String? = when {
             stale.joinToString("\n") { "  ${it.path}: ${it.system} ${it.module} in ${it.root}" }
 }
 
+internal fun serve(arguments: List<String>, input: InputStream, out: PrintStream, err: PrintStream, cache: Path): Int {
+    val directory = when {
+        arguments.isEmpty() -> File("").absoluteFile
+        arguments.size == 2 && arguments[0] == "--dir" -> File(arguments[1]).absoluteFile.normalize()
+        else -> null
+    }
+    if (directory?.isDirectory != true) return EXIT_USAGE.also { err.print(USAGE) }
+    McpServer(directory, cache).serve(input, out)
+    return EXIT_PASSED
+}
+
 fun main(arguments: Array<String>) {
     val cache = Path.of(System.getProperty("user.home"), ".cache", "affected")
-    exitProcess(execute(arguments.asList(), System.out, System.err, cache))
+    val code = if (arguments.firstOrNull() == "mcp") {
+        val protocol = PrintStream(FileOutputStream(FileDescriptor.out), false, Charsets.UTF_8)
+        System.setOut(System.err)
+        serve(arguments.drop(1), System.`in`, protocol, System.err, cache)
+    } else {
+        execute(arguments.asList(), System.out, System.err, cache)
+    }
+    exitProcess(code)
 }
