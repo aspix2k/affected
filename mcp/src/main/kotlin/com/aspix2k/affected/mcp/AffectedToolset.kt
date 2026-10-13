@@ -243,6 +243,32 @@ class AffectedToolset : McpToolset {
     }
 
     @McpTool
+    @McpToolHints(readOnlyHint = McpToolHintValue.TRUE)
+    @McpDescription(
+        "Returns the test tasks that a change of one file of the project would need, for any build system, " +
+            "before the file is edited, whatever else has changed and whatever the consumers and dependents " +
+            "settings are. Runs no test; some build systems are asked for their modules."
+    )
+    suspend fun affected_checks_for_file(
+        @McpDescription("Path of an existing file inside the project, absolute or relative to the project base")
+        path: String,
+    ): McpToolCallResult {
+        val project = coroutineContext.project
+        val basePath = project.basePath ?: return noBasePath()
+        if (projectBusy(project)) return busy()
+        val validation = AffectedMcpInputs.validateProjectFile(basePath, path)
+        if (validation.error) return validation.toResult()
+        val file = validation.data["file"] as String
+        val prepared = Verification.covering(project, file)
+        val reason = when {
+            prepared.changedFiles == 0 -> "not-counted"
+            prepared.unresolvedFiles > 0 -> "no-owner"
+            else -> null
+        }
+        return AffectedMcpCoveringViews.checks(file, prepared.plan, reason).toResult()
+    }
+
+    @McpTool
     @McpToolHints(readOnlyHint = McpToolHintValue.FALSE, destructiveHint = McpToolHintValue.FALSE)
     @McpDescription(
         "Changes plugin settings: this project's base branch, consumer compilation, commit and push guards, " +

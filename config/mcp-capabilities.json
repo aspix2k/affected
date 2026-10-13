@@ -80,6 +80,12 @@
       "mcpOnly": true
     },
     {
+      "id": "checks-for-file",
+      "mcp": "affected_checks_for_file",
+      "kind": "read",
+      "mcpOnly": true
+    },
+    {
       "id": "configure",
       "mcp": "affected_configure",
       "kind": "mutating",
