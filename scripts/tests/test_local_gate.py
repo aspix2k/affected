@@ -45,6 +45,11 @@ class LocalGateTest(unittest.TestCase):
         )
         self.assertEqual(["check", "--paths", *fragments], command[2:])
 
+    def test_script_gate_runs_every_script_test_module(self) -> None:
+        """A test module that only CI runs fails after the push instead of before the commit."""
+        modules = sorted(f"scripts.tests.{path.stem}" for path in (local_gate.ROOT / "scripts/tests").glob("test_*.py"))
+        self.assertEqual(modules, sorted(local_gate.SCRIPT_TESTS))
+
     def test_script_gate_includes_product_verifier_report_validation(self) -> None:
         """Run the promoted-artifact and report boundary tests before publication."""
         script_command = local_gate.checks_for("commit")[1][1]
