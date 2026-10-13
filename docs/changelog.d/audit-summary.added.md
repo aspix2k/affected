@@ -1,1 +1,1 @@
-- Command line: `affected audit --summary <path>` appends the audit result as Markdown, which puts it on the run page in GitHub Actions through `$GITHUB_STEP_SUMMARY`.
+- Command line: `affected audit --summary <path>` appends the audit result as Markdown, which a build server can show on the page of the run.
