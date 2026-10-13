@@ -125,13 +125,18 @@ class EngineTest {
         File(root, "shared.txt").writeText("two\n")
 
         assertEquals(listOf(listOf("${moduleOf(root, "web")}:test")), tasks(root))
+        assertEquals(emptyList(), Engine.plan(request(root, "main")).staleDependencies)
     }
 
     @Test
     fun `a dependency on a module that no longer exists plans every test`() {
         val root = packages()
-        DeclaredDependencies.write(root, listOf(DeclaredDependency("shared.txt", "NODE", "gone", "gone")))
+        val gone = DeclaredDependency("shared.txt", "NODE", "gone", "gone")
+        val present = DeclaredDependency("other.txt", "NODE", "web", moduleOf(root, "web"))
+        DeclaredDependencies.write(root, listOf(gone, present))
         commit(root)
+
+        assertEquals(listOf(gone), Engine.plan(request(root, "main")).staleDependencies)
 
         File(root, "shared.txt").writeText("two\n")
 
@@ -147,6 +152,7 @@ class EngineTest {
         File(root, "shared.txt").writeText("two\n")
 
         assertEquals(2, tasks(root).flatten().size)
+        assertNull(Engine.plan(request(root, "main")).staleDependencies)
     }
 
     private fun packages(): File {

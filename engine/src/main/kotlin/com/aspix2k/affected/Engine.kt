@@ -56,6 +56,7 @@ class EnginePlan internal constructor(
     val unresolved: List<File>,
     val blocker: EngineBlocker?,
     val testModules: List<ModuleInfo>,
+    val staleDependencies: List<DeclaredDependency>?,
     internal val execution: EngineExecution,
 ) {
     internal val changes: BuildChanges get() = execution.changes
@@ -105,6 +106,9 @@ object Engine {
             else -> null
         }
         val testModules = graph.all().filter { it.hasTests }.map { it.info() }
+        val stale = collector.declared?.filter { dependency ->
+            graph.nodesFor(DeclaredDependencies.owner(request.directory, dependency)).isEmpty()
+        }
         return EnginePlan(
             if (request.checkConsumers) plans.withConsumers else plans.testsOnly,
             graph.systemSummaries(),
@@ -112,6 +116,7 @@ object Engine {
             plans.unresolved,
             blocker,
             testModules,
+            stale,
             EngineExecution(collected, workspace, present) { path ->
                 val alone = collector.alone(path)
                 verificationPlans(graph, alone, graph.owners(alone), request.testDependents).testsOnly.groups
@@ -213,7 +218,7 @@ private class ChangeCollector(
         present.flatMapTo(HashSet()) { it.sourceExtensions }.ifEmpty { ChangeAnalyzer.DEFAULT_EXTENSIONS }
     private val names = present.mapNotNull { it.capability<NamedSourceBuildSystem>() }
         .flatMapTo(HashSet()) { it.sourceFileNames }
-    private val declared = DeclaredDependencies.read(request.directory)
+    val declared = DeclaredDependencies.read(request.directory)
     private val analyzer = ChangeAnalyzer(
         request.directory,
         request.baseBranch,
