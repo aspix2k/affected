@@ -925,17 +925,15 @@ class MtpRuntimeProofTest {
 
 private fun writeNativeXunitProject(root: File, xunitVersion: String = "4.0.1") {
     val fixture = fixtureRoot().resolve("dotnet-mtp-xunit4")
+    val project = File(fixture, "Mtp.Tests/Mtp.Tests.csproj").readText()
+    val pinned = checkNotNull(Regex("Include=\"xunit\\.v3\" Version=\"\\[([^]]+)]").find(project)).groupValues[1]
     File(root, "global.json").writeText(File(fixture, "global.json").readText())
     File(root, "tests/App.Tests.csproj").apply {
         parentFile.mkdirs()
-        writeText(
-            File(fixture, "Mtp.Tests/Mtp.Tests.csproj").readText()
-                .replace("[4.0.1]", "[$xunitVersion]"),
-        )
+        writeText(project.replace("[$pinned]", "[$xunitVersion]"))
     }
     File(root, "tests/packages.lock.json").writeText(
-        File(fixture, "Mtp.Tests/packages.lock.json").readText()
-            .replace("4.0.1", xunitVersion),
+        File(fixture, "Mtp.Tests/packages.lock.json").readText().replace(pinned, xunitVersion),
     )
 }
 

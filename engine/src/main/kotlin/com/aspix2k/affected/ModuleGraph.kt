@@ -105,12 +105,12 @@ class ModuleGraph internal constructor(private val nodes: List<Node>) {
 
     private fun declaredOwners(changes: ChangeSet, file: File): List<Node> {
         val declared = changes.declaredOwners ?: return nodes.filter { it.hasTests }
-        return declared[file].orEmpty().flatMap { owner ->
-            nodes.filter { node ->
-                node.system.id == owner.system && node.module.executionId == owner.module &&
-                    File(node.module.executionRoot).invariantSeparatorsPath == owner.root
-            }.ifEmpty { nodes.filter { it.hasTests } }
-        }
+        return declared[file].orEmpty().flatMap { owner -> nodesFor(owner).ifEmpty { nodes.filter { it.hasTests } } }
+    }
+
+    internal fun nodesFor(owner: DeclaredOwner): List<Node> = nodes.filter { node ->
+        node.system.id == owner.system && node.module.executionId == owner.module &&
+            File(node.module.executionRoot).invariantSeparatorsPath == owner.root
     }
 
     fun nodeFor(file: File): Node? = nodesFor(file).firstOrNull()

@@ -44,6 +44,17 @@ def checks_for(mode: str) -> list[tuple[str, list[str], int]]:
         ("script tests", [python, "-m", "unittest", *SCRIPT_TESTS], 120),
         ("CI contracts", [python, str(ROOT / "scripts" / "ci_contracts.py"), "--check"], 30),
         ("analyzer policy", [str(ROOT / "scripts" / "quality.sh"), "analyzers"], 30),
+        (
+            "changelog fragments",
+            [
+                python,
+                str(ROOT / "scripts" / "changelog_fragments.py"),
+                "check",
+                "--paths",
+                *sorted(str(path.relative_to(ROOT)) for path in (ROOT / "docs" / "changelog.d").glob("*.md")),
+            ],
+            30,
+        ),
     ]
     if mode == "commit":
         return commit
