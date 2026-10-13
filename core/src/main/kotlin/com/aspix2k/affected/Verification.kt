@@ -52,6 +52,11 @@ object Verification {
         }
     }
 
+    suspend fun covering(project: Project, path: String): Prepared {
+        val changes = ProjectChanges.alone(project, path)
+        return withContext(Dispatchers.Default) { prepare(ModuleGraph.create(project), changes).testsOnly }
+    }
+
     internal fun prepare(
         graph: ModuleGraph,
         changes: ChangeSet,

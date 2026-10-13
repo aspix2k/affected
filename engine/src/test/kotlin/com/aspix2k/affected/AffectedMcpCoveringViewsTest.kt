@@ -78,4 +78,30 @@ class AffectedMcpCoveringViewsTest {
         maps: List<MapReport> = listOf(MapReport("gradle", taskKey, promotedAt, MapFreshness.FRESH)),
         reason: String? = null,
     ) = CoveringTestsResult(setOf("a.Repo"), recorded, unknown, maps, 0, reason)
+
+    @Test
+    fun `the checks for a file are its test tasks, or the reason why there are none`() {
+        val plan = Plan(listOf(TaskGroup("GRADLE", "/repo", listOf(":a:test"))), 1, 0)
+        val nothing = Plan(emptyList(), 0, 0)
+
+        val planned = AffectedMcpCoveringViews.checks("a/A.kt", plan, null)
+        val untested = AffectedMcpCoveringViews.checks("a/A.kt", nothing, null)
+        val unowned = AffectedMcpCoveringViews.checks("a/A.kt", nothing, "no-owner")
+        val ignored = AffectedMcpCoveringViews.checks("README.md", nothing, "not-counted")
+
+        assertFalse(planned.error)
+        assertEquals("A change of a/A.kt plans the tests of 1 module(s).", planned.text)
+        assertEquals(listOf(":a:test"), planned.data["tasks"])
+        assertEquals(
+            listOf(mapOf("systemId" to "GRADLE", "root" to "/repo", "tasks" to listOf(":a:test"))),
+            planned.data["groups"],
+        )
+        assertFalse(planned.data.containsKey("reason"))
+        assertEquals("A change of a/A.kt plans no test.", untested.text)
+        assertFalse(untested.error)
+        assertEquals("no-owner", unowned.data["reason"])
+        assertTrue(unowned.error)
+        assertEquals("not-counted", ignored.data["reason"])
+        assertFalse(ignored.error)
+    }
 }

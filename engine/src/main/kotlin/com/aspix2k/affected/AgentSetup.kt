@@ -4,6 +4,7 @@ object AgentSetup {
     const val RUN_VERIFICATION = "affected_run_verification"
     const val VERIFICATION_PLAN = "affected_verification_plan"
     const val CHANGED_FILES = "affected_changed_files"
+    const val CHECKS_FOR_FILE = "affected_checks_for_file"
     const val AGENTS_FILE = "AGENTS.md"
     const val CLAUDE_FILE = "CLAUDE.md"
     const val START_MARKER = "<!-- affected:agent-setup:start -->"
@@ -17,6 +18,7 @@ object AgentSetup {
         - Before finishing a task, call `$RUN_VERIFICATION` and wait for the result.
         - Treat `passed: false` as a failed task: read the `reason` and the failing output, fix it and call the tool again.
         - Call `$VERIFICATION_PLAN` to see what will run and `$CHANGED_FILES` to see what counts as changed.
+        - Call `$CHECKS_FOR_FILE` with a path to see which tests cover a file before you edit it.
         - Pass the absolute project directory as `projectPath`; the server asks for it when it cannot tell the project.
         - Do not run the whole test suite while these tools are available.
     """.trimIndent()

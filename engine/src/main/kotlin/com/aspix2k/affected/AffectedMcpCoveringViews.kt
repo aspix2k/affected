@@ -9,6 +9,24 @@ private const val COVERING_LIMITS = "Classes are matched by file name, so other 
 
 object AffectedMcpCoveringViews {
 
+    fun checks(file: String, plan: Plan, reason: String?): AffectedMcpView = AffectedMcpView(
+        text = when {
+            reason == "not-counted" -> "$file is not counted as a change, so editing it plans nothing."
+            reason == "no-owner" -> "No module that can be verified owns $file."
+            plan.isEmpty -> "A change of $file plans no test."
+            else -> "A change of $file plans the tests of ${plan.tested} module(s)."
+        },
+        data = mapOf(
+            "file" to file,
+            "tested" to plan.tested,
+            "tasks" to plan.groups.flatMap(TaskGroup::tasks),
+            "groups" to plan.groups.map { group ->
+                mapOf("systemId" to group.systemId, "root" to group.root, "tasks" to group.tasks)
+            },
+        ) + listOfNotNull(reason?.let { "reason" to it }),
+        error = reason == "no-owner",
+    )
+
     fun tests(file: String, result: CoveringTestsResult?): AffectedMcpView {
         if (result == null) {
             return AffectedMcpView(

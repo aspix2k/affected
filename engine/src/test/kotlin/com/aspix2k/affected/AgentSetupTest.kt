@@ -51,7 +51,12 @@ class AgentSetupTest {
     @Test
     fun `instructions reference the verification tools`() {
         assertEquals(
-            setOf(AgentSetup.RUN_VERIFICATION, AgentSetup.VERIFICATION_PLAN, AgentSetup.CHANGED_FILES),
+            setOf(
+                AgentSetup.RUN_VERIFICATION,
+                AgentSetup.VERIFICATION_PLAN,
+                AgentSetup.CHANGED_FILES,
+                AgentSetup.CHECKS_FOR_FILE,
+            ),
             AgentSetup.referencedTools,
         )
     }
