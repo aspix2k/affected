@@ -4,7 +4,12 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.PipedInputStream
+import java.io.PipedOutputStream
 import java.io.PrintStream
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -96,10 +101,10 @@ class McpServerTest {
     fun `arguments of the wrong shape and a base that reads as an option are tool errors`() {
         val results = exchange(
             repository(),
-            request("affected_plan", """{"if_changed":["index.js"]}"""),
-            request("affected_plan", """{"base":"main","if_changed":"index.js"}"""),
-            request("affected_plan", """{"base":"--all"}"""),
-            request("affected_plan", """[]"""),
+            request("affected_plan", """{"if_changed":["index.js"]}""", 1),
+            request("affected_plan", """{"base":"main","if_changed":"index.js"}""", 2),
+            request("affected_plan", """{"base":"--all"}""", 3),
+            request("affected_plan", """[]""", 4),
         ).map { it.result() }
 
         assertEquals(4, results.size)
@@ -125,9 +130,66 @@ class McpServerTest {
 
         val expected = "run --base main --dir /repository --if-changed a.kt --dependents --consumers"
         assertEquals(listOf(expected.split(' ')), seen)
-        assertTrue(responses[0].result().get("isError").asBoolean)
-        assertTrue("Affected stopped: java.lang.IllegalStateException: no git here" in text(responses[0].result()))
-        assertEquals(JsonObject(), responses[1].result())
+        val failed = responses.single { it.get("id").asInt == 1 }.result()
+        assertTrue(failed.get("isError").asBoolean)
+        assertTrue("Affected stopped: java.lang.IllegalStateException: no git here" in text(failed))
+        assertEquals(JsonObject(), responses.single { it.get("id").asInt == 2 }.result())
+    }
+
+    @Test
+    fun `a running call reports progress, lets other requests through and stops when it is cancelled`() {
+        val started = CountDownLatch(1)
+        val interrupted = CountDownLatch(1)
+        val server = McpServer(File("/repository"), createTempDirectory("mcp-cache"), progressMillis = 20) { _, _ ->
+            started.countDown()
+            try {
+                Thread.sleep(60_000)
+            } catch (stopped: InterruptedException) {
+                interrupted.countDown()
+                throw stopped
+            }
+            EXIT_PASSED
+        }
+
+        conversation(server) { send, next ->
+            send(RUN_WITH_PROGRESS)
+            assertTrue(started.await(10, TimeUnit.SECONDS))
+            val progress = next()
+            send(RUN_WITH_PROGRESS)
+            send("""{"jsonrpc":"2.0","id":2,"method":"ping"}""")
+            val answers = generateSequence(next).filter { it.has("id") }.take(2).toList()
+            send("""{"jsonrpc":"2.0","method":"notifications/cancelled","params":{}}""")
+            send("""{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1}}""")
+            assertTrue(interrupted.await(10, TimeUnit.SECONDS))
+            send("""{"jsonrpc":"2.0","id":3,"method":"ping"}""")
+            val last = generateSequence(next).first { it.has("id") }
+
+            assertEquals("notifications/progress", progress.get("method").asString)
+            assertEquals("p", progress.getAsJsonObject("params").get("progressToken").asString)
+            assertEquals(-32600, answers[0].getAsJsonObject("error").get("code").asInt)
+            assertEquals(2, answers[1].get("id").asInt)
+            assertEquals(3, last.get("id").asInt)
+        }
+    }
+
+    @Test
+    fun `cancelling a run stops the processes of its tests`() {
+        val root = repository()
+        val marker = "slow-${System.nanoTime()}.test.js"
+        val slow = "require('node:test')('slow', () => new Promise(done => setTimeout(done, 60000)))\n"
+        File(root, marker).writeText(slow)
+        git(root, "add", ".")
+        fun testing() = ProcessHandle.allProcesses().anyMatch { marker in it.info().commandLine().orElse("") }
+        fun wait(expected: Boolean) = generateSequence { Thread.sleep(200) }.take(150).any { testing() == expected }
+
+        conversation(McpServer(root, createTempDirectory("mcp-cache"))) { send, next ->
+            send(request("affected_run", """{"base":"main"}"""))
+            assertTrue(wait(true), "the test process never started")
+            send("""{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1}}""")
+            assertTrue(wait(false), "the test process outlived the cancellation")
+            send("""{"jsonrpc":"2.0","id":2,"method":"ping"}""")
+            assertEquals(2, next().get("id").asInt)
+        }
     }
 
     @Test
@@ -197,8 +259,31 @@ class McpServerTest {
     private fun text(result: JsonObject): String =
         result.getAsJsonArray("content").single().asJsonObject.get("text").asString
 
-    private fun request(tool: String, arguments: String): String =
-        """{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"$tool","arguments":$arguments}}"""
+    private fun request(tool: String, arguments: String, id: Int = 1): String =
+        """{"jsonrpc":"2.0","id":$id,"method":"tools/call","params":{"name":"$tool","arguments":$arguments}}"""
+
+    private fun conversation(server: McpServer, talk: ((String) -> Unit, () -> JsonObject) -> Unit) {
+        val requests = PipedOutputStream()
+        val answers = PipedInputStream(1 shl 16)
+        val output = PrintStream(PipedOutputStream(answers), true)
+        val input = PipedInputStream(requests)
+        val serving = thread(isDaemon = true) { server.serve(input, output) }
+        val reader = answers.bufferedReader()
+        try {
+            talk(
+                { line -> requests.write("$line\n".toByteArray()).also { requests.flush() } },
+                {
+                    val line = checkNotNull(reader.readLine()) { "The server closed its output" }
+                    JsonParser.parseString(line).asJsonObject
+                },
+            )
+        } finally {
+            requests.close()
+            serving.join(10_000)
+            output.close()
+        }
+        assertFalse(serving.isAlive)
+    }
 
     private fun exchange(root: File, vararg lines: String): List<JsonObject> =
         exchange(McpServer(root, createTempDirectory("mcp-cache")), *lines)
@@ -228,5 +313,10 @@ class McpServerTest {
         val process = ProcessBuilder(listOf("git") + arguments).directory(root).redirectErrorStream(true).start()
         val output = process.inputStream.bufferedReader().readText()
         assertEquals(0, process.waitFor(), output)
+    }
+
+    private companion object {
+        const val RUN_WITH_PROGRESS = """{"jsonrpc":"2.0","id":1,"method":"tools/call","params":""" +
+            """{"name":"affected_run","arguments":{"base":"main"},"_meta":{"progressToken":"p"}}}"""
     }
 }
