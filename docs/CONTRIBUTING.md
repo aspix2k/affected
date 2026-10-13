@@ -174,6 +174,11 @@ outside the audited repository, and nothing is written when the audit stops
 before it has compared anything. The full run comes second and reuses what the
 planned checks built, so the saved time it implies is a lower bound.
 
+`--summary <path>` appends the same result as Markdown — the headline, the
+time of both runs or the number of files for each verdict, and the missed
+groups or files. In GitHub Actions `--summary "$GITHUB_STEP_SUMMARY"` puts it
+on the page of the run. The path follows the rules of `--report`.
+
 A Gradle build in the repository root is read without the IDE by
 `GradleCommandLineBuildSystem`: it runs the wrapper (or `gradle`) once with an
 init script that writes projects, task names, typed `Test` tasks, source set

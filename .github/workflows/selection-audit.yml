@@ -49,8 +49,8 @@ jobs:
       - name: Break files and compare the planned checks with the full run
         run: |
           set -euo pipefail
-          cli/build/install/affected/bin/affected audit --base main --dir "$RUNNER_TEMP/audited" --sample 10 2>&1 \
-            | tee selection-audit.txt
+          cli/build/install/affected/bin/affected audit --base main --dir "$RUNNER_TEMP/audited" --sample 10 \
+            --summary "$GITHUB_STEP_SUMMARY" 2>&1 | tee selection-audit.txt
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

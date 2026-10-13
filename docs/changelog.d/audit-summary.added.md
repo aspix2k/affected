@@ -1,0 +1,1 @@
+- Command line: `affected audit --summary <path>` appends the audit result as Markdown, which a build server can show on the page of the run.

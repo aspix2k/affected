@@ -48,6 +48,13 @@ internal fun writeBrokenFilesReport(
         ),
     )
 
+internal fun appendSummary(summary: File, base: String, paragraphs: List<String>, items: List<String>) {
+    val list = items.joinToString("\n") { "- `${it.replace('`', '\'').replace('\n', ' ')}`" }
+    val sections = listOf("### Affected audit against `$base`") + paragraphs + list
+    summary.parentFile.mkdirs()
+    summary.appendText(sections.filter(String::isNotEmpty).joinToString("\n\n", postfix = "\n\n"))
+}
+
 private fun write(report: File, content: Map<String, Any?>) {
     report.parentFile.mkdirs()
     report.writeText(GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(content) + "\n")
